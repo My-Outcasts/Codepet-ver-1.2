@@ -140,16 +140,21 @@ export default function OverviewView() {
     return { stageN: now.n as number, stageName: now.name as string, phase: now.ph as string, total: NODES.length, prog, dept: pick.dept, task: pick.task };
   }, [tick]);
 
-  // ease the camera to look at a specific node (used by the "you are here" card)
+  // ease the camera to frame a node (used by the "you are here" card). Distance
+  // is RELATIVE to the node's settled position (the sim relaxes the layout to a
+  // different scale each run, so a fixed offset over/under-shoots). We look at
+  // the project→node midpoint so the "you are here" relationship is the framing.
   const flyTo = (nodeId: string) => {
     const fg = fgRef.current as any;
     if (!fg) return;
     const n = data.nodes.find((x) => x.id === nodeId);
-    if (!n) return;
+    if (!n || !Number.isFinite(n.x)) return;
     tookControlRef.current = true; // don't let a settle-time auto-fit override this
-    const r = Math.hypot(n.x, n.y, n.z) || 1;
-    const k = (r + 130) / r; // sit beyond the node, looking back at it (with context)
-    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, { x: n.x, y: n.y, z: n.z }, 800);
+    noteInteract(); // pause auto-rotate so the framed shot holds before resuming
+    const aspect = dims.w / Math.max(1, dims.h);
+    const k = 2.7 * Math.max(1, 1.2 / aspect); // camera at k× the node radius (pulls back on narrow panels)
+    const look = { x: n.x * 0.45, y: n.y * 0.45, z: n.z * 0.45 };
+    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
   };
 
   // gentle forces (positions are seeded)
@@ -277,7 +282,7 @@ export default function OverviewView() {
             backgroundColor="#000000"
             showNavInfo={false}
             controlType="orbit"
-            nodeVal={(n) => n.val}
+            nodeVal={(n) => (hoverId === n.id ? n.val * 1.7 : n.val)}
             nodeColor={(n) => (inFocus(n.id) ? n.color : DIM_NODE)}
             nodeOpacity={0.95}
             nodeResolution={18}
