@@ -284,8 +284,8 @@
   .kb-col{flex:1 1 0;min-width:248px;display:flex;flex-direction:column;min-height:0;background:var(--well);border:1px solid var(--hairline);border-radius:14px}
   .kb-colhead{flex:none;display:flex;align-items:center;gap:8px;padding:13px 14px 11px}
   .kb-dot{width:8px;height:8px;border-radius:50%;flex:none}
-  .kb-label{font-family:var(--pixel);font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--t-2)}
-  .kb-count{font-family:var(--pixel);font-size:9px;color:#fff;background:var(--t-4);border-radius:99px;padding:1px 7px;line-height:1.6}
+  .kb-label{font-family:var(--sans);font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--t-2)}
+  .kb-count{font-family:var(--sans);font-size:10.5px;font-weight:600;color:#fff;background:var(--t-4);border-radius:99px;padding:1px 8px;line-height:1.7}
   .kb-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:2px 12px 14px}
   .kb-list::-webkit-scrollbar{width:8px}.kb-list::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:99px}
   .kb-card{position:relative;overflow:hidden;flex:none;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:12px 13px 13px;box-shadow:var(--sh-s);cursor:pointer;transition:transform .14s ease,box-shadow .14s ease}
