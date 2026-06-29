@@ -262,34 +262,33 @@
   .deptcard .dc-task{font-size:12.5px;color:var(--t-3);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
   .deptcard .dc-foot{display:flex;align-items:baseline;gap:5px;margin-top:12px;font-size:12px;color:var(--t-4)}
   .deptcard .dc-count{font-family:var(--pixel);font-size:18px;font-weight:600;color:var(--t-2);line-height:1}
-  /* ===== Company: living world panorama ===== */
+  /* ===== Company: living world accordion ===== */
   .world-wrap{flex:1;min-height:0;position:relative;display:flex;align-items:stretch;padding:6px 26px 24px}
-  .world{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;scroll-behavior:smooth;border-radius:18px;box-shadow:var(--sh-m)}
-  .world::-webkit-scrollbar{height:9px}.world::-webkit-scrollbar-track{background:transparent}.world::-webkit-scrollbar-thumb{background:rgba(31,27,21,.22);border-radius:99px}
-  .land{position:relative;flex:0 0 clamp(290px,29vw,440px);scroll-snap-align:start;background-size:cover;background-position:center;cursor:pointer;overflow:hidden;border-right:1px solid rgba(0,0,0,.22);transition:filter .25s ease}
+  .world{flex:1;min-height:0;display:flex;overflow:hidden;border-radius:18px;box-shadow:var(--sh-m)}
+  /* all eight share the width (whole company visible); the hovered one expands */
+  .land{position:relative;flex:1 1 0;min-width:0;background-size:cover;background-position:center;cursor:pointer;overflow:hidden;border-right:1px solid rgba(0,0,0,.22);transition:flex .42s cubic-bezier(.4,0,.2,1),filter .25s ease}
   .land:last-child{border-right:none}
-  /* darken siblings while hovering the world so the focused region stands out */
-  .world:hover .land{filter:brightness(.74) saturate(.92)}
-  .world .land:hover{filter:none}
+  .world:hover .land{flex:0.62 1 0;filter:brightness(.7) saturate(.9)}
+  .world .land:hover{flex:3.4 1 0;filter:none}
   .land-scrim{position:absolute;inset:0;pointer-events:none;background:
     linear-gradient(180deg,rgba(8,7,16,.06) 0%,rgba(8,7,16,0) 26%,rgba(8,7,16,.66) 100%),
     linear-gradient(90deg,rgba(8,7,16,.16),transparent 14%,transparent 86%,rgba(8,7,16,.16))}
   .land::after{content:'';position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,transparent 56%,color-mix(in srgb,var(--lc) 36%,transparent));mix-blend-mode:multiply}
   .land:hover .land-scrim{box-shadow:inset 0 0 0 2px color-mix(in srgb,var(--lc) 72%,transparent)}
-  .land-flag{position:absolute;top:14px;right:14px;z-index:2;display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:#fff;background:rgba(8,7,16,.42);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:5px 10px 5px 9px;border-radius:99px;border:1px solid rgba(255,255,255,.16)}
+  .land-flag{position:absolute;top:13px;left:13px;z-index:2;display:inline-flex;align-items:center;gap:6px;font-size:10px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:#fff;background:rgba(8,7,16,.42);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:5px 9px;border-radius:99px;border:1px solid rgba(255,255,255,.16)}
   .land-flag i{width:6px;height:6px;border-radius:50%;background:var(--lc);box-shadow:0 0 8px var(--lc);flex:none}
-  .land-info{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:16px 18px 18px}
-  .land-head{display:flex;align-items:center;gap:11px;margin-bottom:9px}
-  .land-mono{font-family:var(--pixel);font-size:12px;color:#fff;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;border:1px solid;flex:none;box-shadow:0 2px 12px rgba(0,0,0,.4)}
-  .land-name{font-size:20px;font-weight:650;color:#fff;letter-spacing:-.3px;text-shadow:0 1px 10px rgba(0,0,0,.55)}
-  .land-task{font-size:13px;color:rgba(255,255,255,.92);line-height:1.42;text-shadow:0 1px 8px rgba(0,0,0,.55);max-width:94%;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-  .land-foot{display:flex;align-items:center;justify-content:space-between;margin-top:13px}
-  .land-count{font-size:12px;font-weight:600;color:#fff;background:rgba(8,7,16,.4);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:4px 11px}
-  .land-enter{font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:#fff;background:color-mix(in srgb,var(--lc) 82%,#0b0a12);border-radius:99px;padding:5px 13px;opacity:0;transform:translateY(3px);transition:opacity .18s ease,transform .18s ease}
+  .land-flag .lf-txt{max-width:0;opacity:0;overflow:hidden;white-space:nowrap;transition:max-width .3s ease,opacity .2s ease}
+  .land:hover .land-flag .lf-txt{max-width:80px;opacity:1}
+  .land-info{position:absolute;left:0;right:0;bottom:0;z-index:2;padding:14px 15px 15px}
+  .land-head{display:flex;align-items:center;gap:10px;margin-bottom:0}
+  .land-mono{font-family:var(--pixel);font-size:12px;color:#fff;width:32px;height:32px;border-radius:9px;display:grid;place-items:center;border:1px solid;flex:none;box-shadow:0 2px 12px rgba(0,0,0,.4)}
+  .land-name{font-size:18px;font-weight:650;color:#fff;letter-spacing:-.3px;text-shadow:0 1px 10px rgba(0,0,0,.55);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .land-task{font-size:13px;color:rgba(255,255,255,.92);line-height:1.4;text-shadow:0 1px 8px rgba(0,0,0,.55);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-height:0;opacity:0;margin-top:0;transition:max-height .38s ease,opacity .28s ease,margin-top .38s ease}
+  .land:hover .land-task{max-height:62px;opacity:1;margin-top:8px}
+  .land-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:11px}
+  .land-count{font-size:12px;font-weight:600;color:#fff;background:rgba(8,7,16,.4);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,.14);border-radius:99px;padding:4px 11px;white-space:nowrap}
+  .land-enter{font-size:11.5px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:#fff;background:color-mix(in srgb,var(--lc) 82%,#0b0a12);border-radius:99px;padding:5px 13px;white-space:nowrap;opacity:0;transform:translateY(3px);transition:opacity .18s ease,transform .18s ease}
   .land:hover .land-enter{opacity:1;transform:none}
-  .world-nav{position:absolute;top:50%;transform:translateY(-50%);z-index:6;width:38px;height:38px;border-radius:50%;background:var(--surface);border:1px solid var(--hairline);box-shadow:var(--sh-m);color:var(--t-2);font-size:21px;line-height:1;display:grid;place-items:center;cursor:pointer;transition:background .14s ease,transform .14s ease}
-  .world-nav:hover{background:var(--well);transform:translateY(-50%) scale(1.06)}
-  .world-nav.left{left:14px}.world-nav.right{right:14px}
   @media(max-width:680px){.taskgrid{grid-template-columns:1fr}}
   .taskcard{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--hairline);border-radius:16px;padding:15px 16px 16px;min-height:128px;display:flex;flex-direction:column;box-shadow:var(--sh-s);transition:transform .16s ease,box-shadow .16s ease}
   .taskcard:hover{transform:translateY(-3px);box-shadow:var(--sh-m)}
