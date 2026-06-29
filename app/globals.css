@@ -22,16 +22,14 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
-  body{font-family:var(--sans);color:var(--t-2);background:#E5E1D7;
-    background:radial-gradient(1100px 600px at 85% -5%, #ECE4D6 0%, rgba(236,228,214,0) 55%),
-               radial-gradient(900px 700px at -5% 105%, #E4E6DE 0%, rgba(228,231,222,0) 50%), #E7E2D7;
-    min-height:100vh;display:grid;place-items:center;padding:22px;-webkit-font-smoothing:antialiased}
+  body{font-family:var(--sans);color:var(--t-2);background:var(--page);
+    min-height:100vh;-webkit-font-smoothing:antialiased}
   .pixel{font-family:var(--pixel)}.mono{font-family:var(--mono)}
   ::-webkit-scrollbar{width:9px;height:9px}::-webkit-scrollbar-thumb{background:#D8D2C6;border-radius:9px;border:2px solid transparent;background-clip:padding-box}
 
-  /* ===== app window ===== */
-  .app{width:min(1240px,100%);height:min(840px,94vh);background:var(--page);border-radius:18px;overflow:hidden;
-    border:1px solid var(--hairline);box-shadow:var(--sh-l);display:flex;flex-direction:column;position:relative}
+  /* ===== app shell — full-screen web app ===== */
+  .app{width:100%;height:100vh;height:100dvh;background:var(--page);overflow:hidden;
+    display:flex;flex-direction:column;position:relative}
   .topbar{height:44px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;background:var(--surface-2);border-bottom:1px solid var(--hairline)}
   .traffic{display:flex;gap:8px}.traffic i{width:12px;height:12px;border-radius:50%}
   .traffic .r{background:#ED6A5E}.traffic .y{background:#F4BF50}.traffic .g{background:#61C554}
