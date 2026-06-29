@@ -77,7 +77,7 @@ export default function OverviewView() {
   const { data, adj } = useMemo(() => {
     const nodes: GNode[] = [];
     const links: GLink[] = [];
-    nodes.push({ id: 'project', name: 'Codepet', kind: 'project', color: '#F4F1FF', val: 22, x: 0, y: 0, z: 0 });
+    nodes.push({ id: 'project', name: 'Codepet', kind: 'project', color: '#D8D2F5', val: 12, x: 0, y: 0, z: 0 });
     DEPTS.forEach((d, di) => {
       const dHex = HEX[DCOL[d.k]] || HEX['--accent'];
       const alpha = STATUS_ALPHA[d.status] ?? 0.8;
@@ -151,7 +151,7 @@ export default function OverviewView() {
     if (!composer) return;
     // strength, radius, threshold — high threshold so only bright node cores
     // bloom (not the whole field, which washed the canvas to grey).
-    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.7, 0.28, 0.78);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.5, 0.26, 0.82);
     composer.addPass(bloom);
     bloomRef.current = bloom;
   }, [dims.w]);
@@ -199,14 +199,20 @@ export default function OverviewView() {
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
     const s = new SpriteText(n.name);
-    s.color = n.kind === 'project' ? '#FFFFFF' : '#EDEAFB';
-    s.textHeight = n.kind === 'project' ? 7 : 4;
+    s.color = '#FFFFFF';
+    s.textHeight = n.kind === 'project' ? 6 : 4;
     s.fontFace = 'Inter, system-ui, sans-serif';
     s.fontWeight = n.kind === 'project' ? '700' : '600';
-    s.strokeColor = 'rgba(8,6,18,0.9)';
-    s.strokeWidth = 1.6;
+    // a dark pill behind the text so labels stay legible over bright / bloomed
+    // nodes — the project label in particular sat invisibly on the white core.
+    (s as any).backgroundColor = n.kind === 'project' ? 'rgba(7,5,16,0.85)' : 'rgba(7,5,16,0.7)';
+    (s as any).padding = n.kind === 'project' ? 3 : 2;
+    (s as any).borderRadius = 3;
+    s.strokeColor = 'rgba(0,0,0,0.5)';
+    s.strokeWidth = 0.5;
     const radius = Math.cbrt(n.val) * 2.2;
-    (s as any).position.set(0, radius + 4, 0);
+    // lift the label clear of the node (and its bloom), more so for the project
+    (s as any).position.set(0, radius + (n.kind === 'project' ? 10 : 5), 0);
     return s;
   };
 
