@@ -286,7 +286,7 @@
   .lib-chip.on{color:#fff;background:var(--accent);border-color:var(--accent)}
   .lib-chip .n{font-size:10.5px;opacity:.75;font-variant-numeric:tabular-nums}
   .lib-count{margin-left:auto;font-size:12px;color:var(--t-4);font-variant-numeric:tabular-nums;white-space:nowrap}
-  .lib-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-content:start;padding:16px 26px 44px;max-width:920px}
+  .lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:16px;align-content:start;padding:16px 26px 44px}
   .lib-card{position:relative;display:flex;flex-direction:column;border:1px solid var(--hairline);border-radius:14px;background:var(--surface);overflow:hidden;cursor:pointer;box-shadow:var(--sh-s);transition:transform .16s ease,box-shadow .16s ease}
   .lib-card:hover{transform:translateY(-2px);box-shadow:var(--sh-m)}
   /* per-type tinted preview — hue passed in via --tint/--line/--ink-h (info-box house style) */
