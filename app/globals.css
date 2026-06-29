@@ -278,6 +278,22 @@
   .who.does{color:#fff;background:var(--accent)}
   .who.draft{color:var(--gold-deep);background:var(--gold-tint);border:1px solid var(--gold-line)}
   .who.you{color:var(--t-3);background:var(--well);border:1px solid var(--hairline)}
+  /* ===== Tasks: Kanban board ===== */
+  #v-tasks.on{display:flex;flex-direction:column;height:100%}
+  .kb-board{flex:1;min-height:0;display:flex;gap:14px;padding:14px 26px 18px;overflow-x:auto}
+  .kb-col{flex:1 1 0;min-width:248px;display:flex;flex-direction:column;min-height:0;background:var(--well);border:1px solid var(--hairline);border-radius:14px}
+  .kb-colhead{flex:none;display:flex;align-items:center;gap:8px;padding:13px 14px 11px}
+  .kb-dot{width:8px;height:8px;border-radius:50%;flex:none}
+  .kb-label{font-family:var(--pixel);font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--t-2)}
+  .kb-count{font-family:var(--pixel);font-size:9px;color:#fff;background:var(--t-4);border-radius:99px;padding:1px 7px;line-height:1.6}
+  .kb-list{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding:2px 12px 14px}
+  .kb-list::-webkit-scrollbar{width:8px}.kb-list::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:99px}
+  .kb-card{position:relative;overflow:hidden;flex:none;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:12px 13px 13px;box-shadow:var(--sh-s);cursor:pointer;transition:transform .14s ease,box-shadow .14s ease}
+  .kb-card:hover{transform:translateY(-2px);box-shadow:var(--sh-m)}
+  .kb-card>*{position:relative;z-index:1}
+  .kb-card .tc-glow{position:absolute;left:0;right:0;bottom:0;height:58%;background:linear-gradient(180deg,transparent,var(--gtint));opacity:.7;pointer-events:none}
+  .kb-title{font-size:13.5px;font-weight:600;color:var(--t-1);line-height:1.34;margin-bottom:12px}
+  .kb-empty{font-size:12px;color:var(--t-4);text-align:center;padding:20px 0}
   /* ===== Library: filter bar + preview grid ===== */
   .lib-bar{display:flex;align-items:center;gap:10px;padding:16px 26px 2px}
   .lib-filters{display:flex;flex-wrap:wrap;gap:7px}
