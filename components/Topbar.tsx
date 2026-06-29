@@ -13,8 +13,7 @@ export function Topbar() {
 
   return (
     <div className="topbar">
-      <span className="traffic"><i className="r" /><i className="y" /><i className="g" /></span>
-      <span className="proj">Codepet <span className="badge">macOS</span></span>
+      <span className="proj">Codepet</span>
       <button
         ref={ref}
         className={`tb-prof${open ? ' open' : ''}`}
