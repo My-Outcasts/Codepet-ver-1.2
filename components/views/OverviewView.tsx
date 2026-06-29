@@ -3,14 +3,19 @@
 // departments orbiting it, each branching into its tasks. Obsidian-graph-view
 // inspired, dark "map mode". Loaded client-only (three.js / WebGL).
 //
-// Nodes are seeded with deterministic 3D positions (project at the origin,
-// departments on a Fibonacci sphere, tasks clustered around their department).
-// This avoids the degenerate all-at-origin case where the symmetric many-body
-// force can't separate coincident nodes, and gives a clean layout immediately;
-// the live simulation then just relaxes it and reacts to dragging.
-import { useEffect, useMemo, useRef, useState } from 'react';
+// Nodes are seeded with deterministic 3D positions (project at origin,
+// departments on a Fibonacci sphere, tasks clustered around their department) to
+// avoid the degenerate all-at-origin case; the live simulation then relaxes it.
+//
+// Features: hover-highlight a node's neighborhood, bloom glow, responsive
+// auto-fit framing, and gentle idle auto-rotate.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph3D, { type ForceGraphMethods } from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
+import * as THREE from 'three';
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - addons ship without bundled types in some setups
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
@@ -23,6 +28,8 @@ const STATE_HEX: Record<string, string> = {
   'st-does': '#8B5CF6', 'st-draft': '#FDB022', 'st-you': '#3B82F6', 'st-done': '#34D399',
 };
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
+const DIM_NODE = 'rgba(150,150,170,0.09)';
+const DIM_LINK = 'rgba(150,150,170,0.03)';
 
 function rgba(hex: string, a: number) {
   const h = hex.replace('#', '');
@@ -40,14 +47,19 @@ interface GNode {
   dept?: Dept; task?: Task; sub?: string;
   x: number; y: number; z: number;
 }
-interface GLink { source: string; target: string; color: string; kind: 'pd' | 'dt'; active?: boolean; }
+interface GLink { source: string; target: string; color: string; hex: string; kind: 'pd' | 'dt'; active?: boolean; }
+
+const linkId = (x: unknown): string => (typeof x === 'object' && x ? (x as GNode).id : (x as string));
 
 export default function OverviewView() {
   const { openDept, runTask, tick } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
+  const bloomRef = useRef<any>(null);
+  const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [hoverId, setHoverId] = useState<string | null>(null);
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -62,7 +74,7 @@ export default function OverviewView() {
     return () => ro.disconnect();
   }, []);
 
-  const data = useMemo(() => {
+  const { data, adj } = useMemo(() => {
     const nodes: GNode[] = [];
     const links: GLink[] = [];
     nodes.push({ id: 'project', name: 'Codepet', kind: 'project', color: '#F4F1FF', val: 22, x: 0, y: 0, z: 0 });
@@ -72,7 +84,6 @@ export default function OverviewView() {
       const done = d.tasks.filter((t) => t.done).length;
       const total = d.tasks.length;
       const did = `dept:${d.k}`;
-      // Fibonacci-sphere placement around the project
       const yy = 1 - (di / (DEPTS.length - 1)) * 2;
       const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
       const th = GOLDEN * di;
@@ -83,12 +94,11 @@ export default function OverviewView() {
         sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
         x: dx, y: dy, z: dz,
       });
-      links.push({ source: 'project', target: did, color: rgba(dHex, 0.4), kind: 'pd', active: d.status === 'attention' });
+      links.push({ source: 'project', target: did, color: rgba(dHex, 0.4), hex: dHex, kind: 'pd', active: d.status === 'attention' });
       d.tasks.forEach((t, i) => {
         const st = taskState(t, true);
         const tHex = STATE_HEX[st.cls] || '#94A3B8';
         const tid = `task:${d.k}:${i}`;
-        // small sphere of tasks around the department node
         const tyy = 1 - ((i + 0.5) / total) * 2;
         const trr = Math.sqrt(Math.max(0, 1 - tyy * tyy));
         const tth = GOLDEN * (i + 1);
@@ -97,13 +107,22 @@ export default function OverviewView() {
           dept: d, task: t, sub: `${d.name} · ${st.label}`,
           x: dx + Math.cos(tth) * trr * TASK_R, y: dy + tyy * TASK_R, z: dz + Math.sin(tth) * trr * TASK_R,
         });
-        links.push({ source: did, target: tid, color: rgba(dHex, 0.16), kind: 'dt' });
+        links.push({ source: did, target: tid, color: rgba(dHex, 0.16), hex: dHex, kind: 'dt' });
       });
     });
-    return { nodes, links };
+    const adj = new Map<string, Set<string>>();
+    links.forEach((l) => {
+      if (!adj.has(l.source)) adj.set(l.source, new Set());
+      if (!adj.has(l.target)) adj.set(l.target, new Set());
+      adj.get(l.source)!.add(l.target);
+      adj.get(l.target)!.add(l.source);
+    });
+    return { data: { nodes, links }, adj };
   }, [tick]);
 
-  // gentle forces (positions are already seeded) + frame the camera
+  const inFocus = useCallback((id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id), [hoverId, adj]);
+
+  // gentle forces (positions are seeded)
   useEffect(() => {
     if (!dims.w) return;
     const fg = fgRef.current as any;
@@ -112,13 +131,68 @@ export default function OverviewView() {
       fg.d3Force('charge')?.strength(-90);
       fg.d3Force('link')?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36)).strength(0.25);
     } catch { /* forces not ready */ }
-    const frame = () => { const g = fgRef.current as any; if (g) g.cameraPosition({ x: 0, y: 0, z: 360 }, { x: 0, y: 0, z: 0 }, 800); };
-    const t1 = setTimeout(frame, 600);
-    const t2 = setTimeout(frame, 2600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [dims.w, data]);
 
-  const onEngineStop = () => { const g = fgRef.current as any; if (g) g.cameraPosition({ x: 0, y: 0, z: 360 }, { x: 0, y: 0, z: 0 }, 800); };
+  // responsive framing — fit on settle + on resize
+  useEffect(() => {
+    if (!dims.w) return;
+    if (bloomRef.current) bloomRef.current.setSize(dims.w, dims.h);
+    const t1 = setTimeout(() => fitView(), 500);
+    const t2 = setTimeout(() => fitView(), 2400);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dims.w, dims.h, data]);
+
+  // bloom glow (added once)
+  useEffect(() => {
+    if (!dims.w || bloomRef.current) return;
+    const fg = fgRef.current as any;
+    const composer = fg?.postProcessingComposer?.();
+    if (!composer) return;
+    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.55, 0.45, 0.2);
+    composer.addPass(bloom);
+    bloomRef.current = bloom;
+  }, [dims.w]);
+
+  // idle auto-rotate (pauses on interaction, resumes after ~3.5s idle)
+  const noteInteract = useCallback(() => {
+    const c = (fgRef.current as any)?.controls?.();
+    if (!c) return;
+    c.autoRotate = false;
+    if (idleRef.current) clearTimeout(idleRef.current);
+    idleRef.current = setTimeout(() => {
+      const cc = (fgRef.current as any)?.controls?.();
+      if (cc) cc.autoRotate = true;
+    }, 3500);
+  }, []);
+
+  useEffect(() => {
+    if (!dims.w) return;
+    const c = (fgRef.current as any)?.controls?.();
+    if (c) { c.autoRotate = true; c.autoRotateSpeed = 0.5; }
+    const el = wrapRef.current;
+    el?.addEventListener('pointermove', noteInteract);
+    el?.addEventListener('pointerdown', noteInteract);
+    el?.addEventListener('wheel', noteInteract, { passive: true });
+    return () => {
+      el?.removeEventListener('pointermove', noteInteract);
+      el?.removeEventListener('pointerdown', noteInteract);
+      el?.removeEventListener('wheel', noteInteract);
+    };
+  }, [dims.w, noteInteract]);
+
+  // The graph's world size is fixed (department orbit radius is constant), so a
+  // fixed camera distance reliably frames it — scaled by viewport aspect so the
+  // whole graph stays visible on narrower panels (e.g. when the chat is open).
+  const fitView = () => {
+    const fg = fgRef.current as any;
+    if (!fg) return;
+    const aspect = dims.w / Math.max(1, dims.h);
+    const dist = 360 * Math.max(1, 1.55 / aspect);
+    fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
+  };
+
+  const onEngineStop = () => fitView();
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
@@ -138,7 +212,7 @@ export default function OverviewView() {
     <section className="view on" style={{ position: 'absolute', inset: 0, background: '#0c0a17', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 22, left: 26, zIndex: 5, pointerEvents: 'none' }}>
         <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>Overview</h1>
-        <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>Your whole company as a living map — drag to orbit, scroll to zoom, click a node to open it.</div>
+        <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.</div>
       </div>
       <div style={{ position: 'absolute', bottom: 20, left: 26, zIndex: 5, display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: 'rgba(245,243,255,.7)', pointerEvents: 'none' }}>
         <Legend dot="#F4F1FF" label="Project" />
@@ -157,18 +231,32 @@ export default function OverviewView() {
             graphData={data}
             backgroundColor="#0c0a17"
             showNavInfo={false}
+            controlType="orbit"
             nodeVal={(n) => n.val}
-            nodeColor={(n) => n.color}
-            nodeOpacity={0.92}
+            nodeColor={(n) => (inFocus(n.id) ? n.color : DIM_NODE)}
+            nodeOpacity={0.95}
             nodeResolution={18}
             nodeRelSize={2.2}
             nodeThreeObjectExtend
             nodeThreeObject={nodeThreeObject}
+            onNodeHover={(n) => { setHoverId(n ? (n as GNode).id : null); noteInteract(); }}
             nodeLabel={(n) => `<div style="font:600 12px Inter,sans-serif;color:#fff;background:rgba(12,10,23,.92);border:1px solid rgba(255,255,255,.14);padding:6px 9px;border-radius:8px;max-width:240px">${n.name}${n.sub ? `<div style='font-weight:500;color:rgba(255,255,255,.6);margin-top:2px;font-size:11px'>${n.sub}</div>` : ''}</div>`}
-            linkColor={(l) => l.color}
-            linkWidth={(l) => (l.kind === 'pd' ? 1.1 : 0.4)}
-            linkDirectionalParticles={(l) => (l.active ? 3 : 0)}
-            linkDirectionalParticleWidth={1.6}
+            linkColor={(l) => {
+              if (!hoverId) return l.color;
+              const s = linkId(l.source), t = linkId(l.target);
+              return (s === hoverId || t === hoverId) ? rgba(l.hex, 0.9) : DIM_LINK;
+            }}
+            linkWidth={(l) => {
+              const s = linkId(l.source), t = linkId(l.target);
+              const hot = hoverId && (s === hoverId || t === hoverId);
+              return hot ? 2.4 : (l.kind === 'pd' ? 1.1 : 0.4);
+            }}
+            linkDirectionalParticles={(l) => {
+              const s = linkId(l.source), t = linkId(l.target);
+              if (hoverId && (s === hoverId || t === hoverId)) return 4;
+              return l.active ? 3 : 0;
+            }}
+            linkDirectionalParticleWidth={1.8}
             linkDirectionalParticleSpeed={0.006}
             enableNodeDrag
             cooldownTime={4000}
@@ -181,7 +269,7 @@ export default function OverviewView() {
                 if (n.task.done) openDept(n.dept.k);
                 else runTask(n.task, n.dept, n.task.who === 'you');
               } else if (n.kind === 'project') {
-                fgRef.current?.zoomToFit(700, 90);
+                fitView();
               }
             }}
           />
