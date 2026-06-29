@@ -263,23 +263,24 @@
   .deptcard .dc-foot{display:flex;align-items:baseline;gap:5px;margin-top:12px;font-size:12px;color:var(--t-4)}
   .deptcard .dc-count{font-family:var(--pixel);font-size:18px;font-weight:600;color:var(--t-2);line-height:1}
   /* ===== Company: mission-control list ===== */
-  .deptlist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:16px 26px 40px}
-  .deptrow{display:flex;align-items:center;gap:20px;padding:20px 26px;background:var(--surface);border:1px solid var(--hairline);border-radius:18px;box-shadow:var(--sh-s);cursor:pointer;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease}
+  .deptlist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:18px;padding:18px 26px 44px}
+  .deptrow{display:flex;align-items:stretch;min-height:200px;background:var(--surface);border:1px solid var(--hairline);border-radius:20px;box-shadow:var(--sh-s);cursor:pointer;overflow:hidden;transition:transform .14s ease,box-shadow .14s ease,border-color .14s ease}
   .deptrow:hover{transform:translateY(-2px);box-shadow:var(--sh-m);border-color:color-mix(in srgb,var(--rc) 50%,var(--hairline))}
-  .dr-thumb{position:relative;width:82px;height:82px;border-radius:17px;background-size:cover;background-position:center;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1);overflow:hidden}
-  .dr-badge{position:absolute;left:6px;bottom:6px;font-family:var(--pixel);font-size:10px;color:#fff;padding:2px 6px;border-radius:7px;border:1px solid rgba(255,255,255,.22);box-shadow:0 1px 4px rgba(0,0,0,.45)}
-  .dr-main{flex:1;min-width:0}
-  .dr-top{display:flex;align-items:center;gap:12px}
-  .dr-name{font-size:20px;font-weight:650;color:var(--t-1);letter-spacing:-.3px}
-  .dr-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;padding:4px 11px;border-radius:99px}
+  /* image panel — 40% of the card, full height */
+  .dr-img{flex:0 0 40%;position:relative;background-size:cover;background-position:center}
+  .dr-badge{position:absolute;left:14px;bottom:14px;font-family:var(--pixel);font-size:11px;color:#fff;padding:3px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.25);box-shadow:0 2px 7px rgba(0,0,0,.5)}
+  .dr-body{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;padding:26px 34px}
+  .dr-top{display:flex;align-items:center;gap:13px}
+  .dr-name{font-size:25px;font-weight:650;color:var(--t-1);letter-spacing:-.4px}
+  .dr-status{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;padding:4px 12px;border-radius:99px}
   .dr-status i{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
   .dr-status.attn{color:var(--rc);background:color-mix(in srgb,var(--rc) 13%,transparent)}
   .dr-status.ready{color:#0E9F6E;background:rgba(14,159,110,.1)}
   .dr-status.idle{color:var(--t-4);background:var(--well)}
-  .dr-task{font-size:14.5px;color:var(--t-3);margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .dr-right{display:flex;align-items:center;gap:24px;flex:none}
+  .dr-task{font-size:16px;color:var(--t-3);margin-top:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .dr-right{display:flex;flex-direction:column;align-items:flex-end;justify-content:center;gap:10px;flex:none;padding:26px 34px 26px 0}
   .dr-count{font-size:14px;color:var(--t-4);white-space:nowrap}
-  .dr-count b{font-family:var(--pixel);font-size:23px;color:var(--t-2);margin-right:4px}
+  .dr-count b{font-family:var(--pixel);font-size:30px;color:var(--t-2);margin-right:5px}
   .dr-open{font-size:13px;font-weight:600;color:var(--rc);opacity:0;transition:opacity .15s ease}
   .deptrow:hover .dr-open{opacity:1}
   @media(max-width:680px){.taskgrid{grid-template-columns:1fr}}

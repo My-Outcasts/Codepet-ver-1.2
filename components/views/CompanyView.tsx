@@ -29,10 +29,10 @@ export function CompanyView() {
           const st = STATUS[dep.status] || STATUS.ready;
           return (
             <div className="deptrow" key={dep.k} onClick={() => openDept(dep.k)} style={{ ['--rc' as string]: `var(${col})` }}>
-              <div className="dr-thumb" style={{ backgroundImage: `url('/covers/${dep.k}.png')` }}>
-                <span className="dr-badge" style={{ background: `color-mix(in srgb,var(${col}) 32%,#0b0a12)` }}>{dep.ab}</span>
+              <div className="dr-img" style={{ backgroundImage: `url('/covers/${dep.k}.png')` }}>
+                <span className="dr-badge" style={{ background: `color-mix(in srgb,var(${col}) 34%,#0b0a12)` }}>{dep.ab}</span>
               </div>
-              <div className="dr-main">
+              <div className="dr-body">
                 <div className="dr-top">
                   <span className="dr-name">{dep.name}</span>
                   <span className={`dr-status ${st.cls}`}><i />{st.label}</span>
