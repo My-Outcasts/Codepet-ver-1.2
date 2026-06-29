@@ -149,7 +149,9 @@ export default function OverviewView() {
     const fg = fgRef.current as any;
     const composer = fg?.postProcessingComposer?.();
     if (!composer) return;
-    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.55, 0.45, 0.2);
+    // strength, radius, threshold — high threshold so only bright node cores
+    // bloom (not the whole field, which washed the canvas to grey).
+    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.7, 0.28, 0.78);
     composer.addPass(bloom);
     bloomRef.current = bloom;
   }, [dims.w]);
@@ -209,7 +211,7 @@ export default function OverviewView() {
   };
 
   return (
-    <section className="view on" style={{ position: 'absolute', inset: 0, background: '#0c0a17', overflow: 'hidden' }}>
+    <section className="view on" style={{ position: 'absolute', inset: 0, background: '#070510', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', top: 22, left: 26, zIndex: 5, pointerEvents: 'none' }}>
         <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>Overview</h1>
         <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.</div>
@@ -229,7 +231,7 @@ export default function OverviewView() {
             width={dims.w}
             height={dims.h}
             graphData={data}
-            backgroundColor="#0c0a17"
+            backgroundColor="#070510"
             showNavInfo={false}
             controlType="orbit"
             nodeVal={(n) => n.val}
