@@ -51,7 +51,7 @@ export function ScreensViewer({ head, file, screens }: { head: string; file: str
   const [i, setI] = useState(0);
   const S = screens;
   const art = (s: any) => {
-    if (s.art === 'connect') return <div className="sa-mid"><div className="sa-card" style={{ textAlign: 'center' }}><div style={{ fontFamily: 'var(--pixel)', fontSize: 30, color: 'var(--accent)' }}>{'{ }'}</div><p style={{ marginTop: 6 }}>your-project</p></div></div>;
+    if (s.art === 'connect') return <div className="sa-mid"><div className="sa-card" style={{ textAlign: 'center' }}><div style={{ fontFamily: 'var(--sans)', fontSize: 30, color: 'var(--accent)' }}>{'{ }'}</div><p style={{ marginTop: 6 }}>your-project</p></div></div>;
     if (s.art === 'session') return <div className="sa-mid"><div className="sa-prog"><div className="ln"><span className="pd" />session started</div><div className="ln"><span className="pd" />watching edits…</div><div className="ln"><span className="pd" />3 concepts spotted</div></div><div className="sa-dots"><i className="on" /><i className="on" /><i /></div></div>;
     return <div className="sa-mid"><div className="sa-card"><h4>byte · recap</h4><p>You wired OAuth into the login flow and refactored the session store.</p><div className="sa-term"><span>OAuth</span><span>async/await</span><span>@EnvironmentObject</span></div></div></div>;
   };
