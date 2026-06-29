@@ -6,7 +6,7 @@ import React, { createContext, useContext, useCallback, useMemo, useRef, useStat
 import { DEPTS, type Dept, type Task, type LibItem } from './data';
 import { artMeta } from './helpers';
 
-export type View = 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
+export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
 
 export type Modal =
   | { kind: 'run'; task: Task; dept: Dept; walk?: boolean }

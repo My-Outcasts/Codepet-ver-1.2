@@ -12,7 +12,10 @@
   "dependencies": {
     "next": "^16.2.9",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "react-force-graph-3d": "^1.29.1",
+    "three": "^0.185.0",
+    "three-spritetext": "^1.10.0"
   },
   "devDependencies": {
     "@types/node": "22.10.0",

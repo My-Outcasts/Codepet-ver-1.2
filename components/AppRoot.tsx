@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { AppProvider, useApp } from '@/lib/store';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
@@ -15,13 +16,21 @@ import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
 import { EnvironmentView } from './views/EnvironmentView';
 
+// 3D graph view — client-only (three.js / WebGL), lazy-loaded so three.js
+// is fetched only when the Overview tab is opened.
+const OverviewView = dynamic(() => import('./views/OverviewView'), {
+  ssr: false,
+  loading: () => <div style={{ position: 'absolute', inset: 0, background: '#0c0a17', display: 'grid', placeItems: 'center', color: 'rgba(245,243,255,.5)', fontSize: 13 }}>Building your company map…</div>,
+});
+
 function Shell() {
   const { view, copilotCollapsed, toggleCopilot } = useApp();
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view]);
 
   const ActiveView =
-    view === 'home' ? <CompanyView />
+    view === 'overview' ? <OverviewView />
+    : view === 'home' ? <CompanyView />
     : view === 'roadmap' ? <RoadmapView />
     : view === 'dept' ? <DepartmentDetail />
     : view === 'tasks' ? <TasksView />
