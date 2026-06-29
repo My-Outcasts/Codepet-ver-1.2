@@ -17,8 +17,9 @@ import * as THREE from 'three';
 // @ts-ignore - addons ship without bundled types in some setups
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { useApp } from '@/lib/store';
-import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
+import { DEPTS, DCOL, NODES, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
+import { eff, stageTasks, stageProgress } from '@/lib/roadmap';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6', '--clay': '#FF8C42', '--teal': '#2DD4BF', '--gold': '#FDB022',
@@ -58,6 +59,7 @@ export default function OverviewView() {
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
   const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
 
@@ -122,6 +124,34 @@ export default function OverviewView() {
 
   const inFocus = useCallback((id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id), [hoverId, adj]);
 
+  // "You are here" — the live current stage + the single next action that owns
+  // it. eff()/stageTasks() read mutable DEPTS, so this recomputes on each tick.
+  const here = useMemo(() => {
+    const now = NODES.find((n: any) => eff(n) === 'now');
+    if (!now) return null;
+    const refs = stageTasks(now.n);
+    const prog = stageProgress(now.n);
+    const open = refs.filter((r) => !r.task.done);
+    // surface what needs the user first, then anything still in flight
+    const pick = open.find((r) => r.task.who === 'you')
+      || open.find((r) => r.task.who === 'draft')
+      || open[0] || refs[refs.length - 1];
+    if (!pick) return null;
+    return { stageN: now.n as number, stageName: now.name as string, phase: now.ph as string, total: NODES.length, prog, dept: pick.dept, task: pick.task };
+  }, [tick]);
+
+  // ease the camera to look at a specific node (used by the "you are here" card)
+  const flyTo = (nodeId: string) => {
+    const fg = fgRef.current as any;
+    if (!fg) return;
+    const n = data.nodes.find((x) => x.id === nodeId);
+    if (!n) return;
+    tookControlRef.current = true; // don't let a settle-time auto-fit override this
+    const r = Math.hypot(n.x, n.y, n.z) || 1;
+    const k = (r + 130) / r; // sit beyond the node, looking back at it (with context)
+    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, { x: n.x, y: n.y, z: n.z }, 800);
+  };
+
   // gentle forces (positions are seeded)
   useEffect(() => {
     if (!dims.w) return;
@@ -160,6 +190,7 @@ export default function OverviewView() {
 
   // idle auto-rotate (pauses on interaction, resumes after ~3.5s idle)
   const noteInteract = useCallback(() => {
+    tookControlRef.current = true;
     const c = (fgRef.current as any)?.controls?.();
     if (!c) return;
     c.autoRotate = false;
@@ -196,7 +227,7 @@ export default function OverviewView() {
     fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
   };
 
-  const onEngineStop = () => fitView();
+  const onEngineStop = () => { if (!tookControlRef.current) fitView(); };
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
@@ -224,6 +255,8 @@ export default function OverviewView() {
         <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>Overview</h1>
         <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.</div>
       </div>
+
+      {here && <HereCard here={here} onFocus={() => flyTo(`dept:${here.dept.k}`)} />}
       <div style={{ position: 'absolute', bottom: 20, left: 26, zIndex: 5, display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: 'rgba(245,243,255,.7)', pointerEvents: 'none' }}>
         <Legend dot="#F4F1FF" label="Project" />
         <Legend dot="#8B5CF6" label="byte does" />
@@ -288,6 +321,50 @@ export default function OverviewView() {
         )}
       </div>
     </section>
+  );
+}
+
+interface HereInfo {
+  stageN: number; stageName: string; phase: string; total: number;
+  prog: { done: number; total: number }; dept: Dept; task: Task;
+}
+
+// "You are here" breadcrumb — stage → department → next action. Fixed overlay
+// (camera-independent); clicking it eases the camera to that node.
+function HereCard({ here, onFocus }: { here: HereInfo; onFocus: () => void }) {
+  const dHex = HEX[DCOL[here.dept.k]] || HEX['--accent'];
+  const st = taskState(here.task, true);
+  const stHex = STATE_HEX[st.cls] || dHex;
+  const pct = here.prog.total ? Math.round((here.prog.done / here.prog.total) * 100) : 0;
+  return (
+    <div
+      onClick={onFocus}
+      title="Focus this on the map"
+      style={{
+        position: 'absolute', top: 92, left: 26, zIndex: 6, width: 286, padding: '13px 15px 14px',
+        background: 'rgba(16,14,28,0.72)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255,255,255,0.09)', borderRadius: 13, cursor: 'pointer',
+        boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
+      }}
+    >
+      <div style={{ fontSize: 10, letterSpacing: '1.4px', fontWeight: 600, color: 'rgba(245,243,255,.42)', textTransform: 'uppercase' }}>You are here</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: stHex, boxShadow: `0 0 8px ${stHex}`, flex: '0 0 auto' }} />
+        <span style={{ fontSize: 13.5, fontWeight: 650, color: '#F5F3FF', letterSpacing: '-.2px' }}>Stage {here.stageN}/{here.total} · {here.stageName}</span>
+      </div>
+      <div style={{ fontSize: 12, marginTop: 7, color: 'rgba(245,243,255,.55)' }}>
+        {here.phase} <span style={{ opacity: .45 }}>▸</span> <span style={{ color: dHex, fontWeight: 600 }}>{here.dept.name}</span>
+      </div>
+      <div style={{ fontSize: 12.5, marginTop: 5, color: 'rgba(245,243,255,.82)', display: 'flex', gap: 5 }}>
+        <span style={{ color: stHex }}>▸</span><span>{here.task.t}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 11 }}>
+        <div style={{ flex: 1, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.08)', overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: dHex, borderRadius: 3 }} />
+        </div>
+        <span style={{ fontSize: 11, color: 'rgba(245,243,255,.5)', whiteSpace: 'nowrap' }}>{here.prog.done} / {here.prog.total} this stage</span>
+      </div>
+    </div>
   );
 }
 
