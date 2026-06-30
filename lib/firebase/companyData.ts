@@ -62,7 +62,7 @@ export function envStateFromCatalog(): EnvState {
 }
 
 /** Apply a persisted env map back onto the ENV catalog singleton. */
-function applyEnvState(env: EnvState): void {
+export function applyEnvState(env: EnvState): void {
   for (const [category, items] of Object.entries(ENV)) {
     const saved = env[category];
     if (!saved) continue;
@@ -73,7 +73,7 @@ function applyEnvState(env: EnvState): void {
 }
 
 /** Merge persisted departments onto the DEPTS singleton (by department key). */
-function applyDepartments(departments: DepartmentDoc[]): void {
+export function applyDepartments(departments: DepartmentDoc[]): void {
   for (const loaded of departments) {
     const existing = DEPTS.find((d) => d.k === loaded.k);
     if (existing) Object.assign(existing, loaded);

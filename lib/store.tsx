@@ -24,6 +24,7 @@ import {
   persistRoadmapStage,
   envStateFromCatalog,
   completeOnboarding,
+  resetCompanyData,
 } from './firebase/companyData';
 import { personalizeCompany } from './ai/personalize';
 import type { CompanyBrief } from './firebase/schema';
@@ -111,6 +112,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
     } catch {}
   }, []);
+
+  // Sign-out reset (Phase 5.5). AppProvider mounts only while signed in (see Gate
+  // in AppRoot), so its unmount IS the sign-out boundary. Wipe the shared DEPTS/ENV
+  // singletons then, so one account's in-memory edits can never linger into the next
+  // account's session on the same browser — belt-and-suspenders alongside the
+  // reset-on-load in loadCompanyData.
+  useEffect(() => () => resetCompanyData(), []);
 
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
