@@ -2,11 +2,11 @@
 // Central app store. Mirrors the draft's mutate-then-rerender model: DEPTS / ENV
 // are mutated in place and a `tick` counter forces consumers to re-read. LIBRARY
 // lives here as the single source of shipped/approved deliverables.
-import React, { createContext, useContext, useCallback, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DEPTS, type Dept, type Task, type LibItem } from './data';
 import { artMeta } from './helpers';
 
-export type View = 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
+export type View = 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
 
 export type Modal =
   | { kind: 'run'; task: Task; dept: Dept; walk?: boolean }
@@ -28,6 +28,8 @@ interface AppState {
   toggleCopilot: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: () => void;
+  installed: boolean;
+  markInstalled: () => void;
   library: LibItem[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
@@ -79,6 +81,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [copilotCollapsed, setCopilotCollapsed] = useState(false);
   const [onboarding, setOnboarding] = useState(true); // always show on load
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    try { if (localStorage.getItem('codepet:installed') === '1') setInstalled(true); } catch {}
+  }, []);
+
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -101,6 +109,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
   const finishOnboarding = useCallback(() => setOnboarding(false), []);
+  const markInstalled = useCallback(() => {
+    setInstalled(true);
+    try { localStorage.setItem('codepet:installed', '1'); } catch {}
+  }, []);
 
   const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => setModal({ kind: 'run', task, dept, walk }), []);
   const viewItem = useCallback((item: LibItem) => setModal({ kind: 'view', item }), []);
@@ -126,10 +138,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AppState>(() => ({
     tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, library, modal, runTask,
+    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, markInstalled, library, modal, runTask,
     viewItem, closeModal, approveTask, toastMsg, toast,
   }), [tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, library, modal, runTask,
+    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, markInstalled, library, modal, runTask,
     viewItem, closeModal, approveTask, toastMsg, toast]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
