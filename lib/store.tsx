@@ -1,10 +1,27 @@
 'use client';
-// Central app store. Mirrors the draft's mutate-then-rerender model: DEPTS / ENV
-// are mutated in place and a `tick` counter forces consumers to re-read. LIBRARY
-// lives here as the single source of shipped/approved deliverables.
-import React, { createContext, useContext, useCallback, useMemo, useRef, useState } from 'react';
-import { DEPTS, type Dept, type Task, type LibItem } from './data';
+// Central app store. Keeps the draft's mutate-then-rerender model: DEPTS / ENV are
+// mutated in place and a `tick` counter forces consumers to re-read. Phase 2 adds
+// persistence: on load the DEPTS/ENV singletons are HYDRATED from Firestore and the
+// library is read into state; mutations (task approval, env toggle) write through to
+// Firestore. The useApp() API is unchanged except for the added toggleEnv action.
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta } from './helpers';
+import { useAuth } from './firebase/auth';
+import {
+  loadCompanyData,
+  persistApproval,
+  persistEnv,
+  envStateFromCatalog,
+} from './firebase/companyData';
 
 export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
 
@@ -32,6 +49,7 @@ interface AppState {
   viewItem: (item: LibItem) => void;
   closeModal: () => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
+  toggleEnv: (category: string, index: number) => void;
   toastMsg: string;
   toast: (msg: string) => void;
 }
@@ -43,80 +61,28 @@ export const useApp = (): AppState => {
   return v;
 };
 
-// seed a few pre-approved deliverables so the populated Library is visible
-function seedLibrary(): LibItem[] {
-  const out: LibItem[] = [];
-  [
-    'Build the Codepet landing page',
-    'Write the launch announcement post',
-    'Build the waitlist conversion email',
-    'Instrument the dual go/no-go signal',
-    'Set up the TestFlight beta',
-  ].forEach((title) => {
-    let t: Task | undefined, d: Dept | undefined;
-    DEPTS.forEach((dep) =>
-      dep.tasks.forEach((x) => {
-        if (x.t === title) {
-          t = x;
-          d = dep;
-        }
-      }),
-    );
-    if (!t || !d) return;
-    // mirror artType for the seeded item
-    const tt = t;
-    const type = tt.site
-      ? 'site'
-      : tt.screens
-        ? 'screens'
-        : tt.sheet
-          ? 'sheet'
-          : tt.pr
-            ? 'pr'
-            : tt.post
-              ? 'post'
-              : tt.email
-                ? 'email'
-                : tt.calendar
-                  ? 'calendar'
-                  : tt.legal
-                    ? 'legal'
-                    : tt.dms
-                      ? 'dms'
-                      : tt.checklist
-                        ? 'checklist'
-                        : tt.run === 'route'
-                          ? 'build'
-                          : tt.who === 'you'
-                            ? 'prep'
-                            : 'doc';
-    const { file, head, tag } = artMeta(tt, type);
-    out.push({
-      title: tt.t,
-      dept: d.name,
-      k: d.k,
-      ab: d.ab,
-      type,
-      out: tt.out,
-      file,
-      head,
-      tag,
-      site: tt.site,
-      screens: tt.screens,
-      sheet: tt.sheet,
-      post: tt.post,
-      email: tt.email,
-      calendar: tt.calendar,
-      legal: tt.legal,
-      dms: tt.dms,
-      checklist: tt.checklist,
-      pr: tt.pr,
-    });
-  });
-  return out;
+// Full-screen status panel shown while the company state hydrates from Firestore.
+function HydrateScreen() {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'var(--page)',
+        color: 'var(--t-3)',
+        fontSize: 13,
+      }}
+    >
+      Loading your company…
+    </div>
+  );
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { companyId } = useAuth();
+
   const [tick, setTick] = useState(0);
   const bump = useCallback(() => setTick((n) => n + 1), []);
 
@@ -129,9 +95,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  const libRef = useRef<LibItem[] | null>(null);
-  if (libRef.current === null) libRef.current = seedLibrary();
-  const library = libRef.current;
+  // Library is owned here as state, hydrated from Firestore.
+  const [library, setLibrary] = useState<LibItem[]>([]);
+  const [hydrated, setHydrated] = useState(false);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useCallback((msg: string) => {
@@ -139,6 +105,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToastMsg(''), 3400);
   }, []);
+
+  // Hydrate DEPTS/ENV (in place) + library from Firestore once the company is known.
+  // `hydrated` starts false and companyId only transitions null→uid once per session,
+  // so there's no need to reset it synchronously here.
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelled = false;
+    loadCompanyData(companyId)
+      .then(({ library: lib }) => {
+        if (cancelled) return;
+        setLibrary(lib);
+        bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
+        setHydrated(true);
+      })
+      .catch((err) => {
+        console.error('[store] hydrate failed', err);
+        if (!cancelled) setHydrated(true); // fail open to the seed rather than hang
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, bump]);
 
   const show = useCallback((v: View) => {
     setView(v);
@@ -192,15 +180,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         pr: t.pr,
       };
       t._item = item;
-      library.unshift(item);
+      setLibrary((prev) => [item, ...prev]);
       const next = d.tasks.find((x) => !x.done);
       bump();
       toast(
         (type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t,
       );
+      // Write-through (optimistic — the in-memory update already happened).
+      if (companyId) {
+        persistApproval(companyId, d, item, Date.now()).catch((err) => {
+          console.error('[store] persistApproval failed', err);
+          toast('Saved locally — sync failed');
+        });
+      }
       return { item, next };
     },
-    [library, bump, toast],
+    [companyId, bump, toast],
+  );
+
+  const toggleEnv = useCallback(
+    (category: string, index: number) => {
+      const item = ENV[category]?.[index];
+      if (!item) return;
+      item.s = item.s ? 0 : 1;
+      bump();
+      if (companyId) {
+        persistEnv(companyId, envStateFromCatalog()).catch((err) => {
+          console.error('[store] persistEnv failed', err);
+        });
+      }
+    },
+    [companyId, bump],
   );
 
   const value = useMemo<AppState>(
@@ -225,6 +235,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       viewItem,
       closeModal,
       approveTask,
+      toggleEnv,
       toastMsg,
       toast,
     }),
@@ -249,10 +260,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       viewItem,
       closeModal,
       approveTask,
+      toggleEnv,
       toastMsg,
       toast,
     ],
   );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={value}>{hydrated ? children : <HydrateScreen />}</Ctx.Provider>;
 }

@@ -4,13 +4,11 @@ import { ENV, ENV_CATS, ENV_META } from '@/lib/data';
 import { Byte } from '../Byte';
 
 export function EnvironmentView() {
-  const { bump, tick } = useApp();
+  const { toggleEnv, tick } = useApp();
   void tick;
 
-  const toggle = (k: string, i: number) => {
-    ENV[k][i].s = ENV[k][i].s ? 0 : 1;
-    bump();
-  };
+  // Route through the store so the change persists to Firestore.
+  const toggle = (k: string, i: number) => toggleEnv(k, i);
 
   const recs: Array<{ k: string; i: number; x: (typeof ENV)[string][number] }> = [];
   ['skills', 'connectors', 'agents'].forEach((k) =>
