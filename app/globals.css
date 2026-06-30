@@ -43,6 +43,13 @@
   --sh-m: 0 2px 5px rgba(31, 27, 21, 0.05), 0 10px 26px rgba(31, 27, 21, 0.06);
   --sh-l: 0 8px 20px rgba(31, 27, 21, 0.09), 0 30px 60px rgba(31, 27, 21, 0.09);
 }
+/* Pixel brand font — used only on the splash wordmark (the rest stays Google Sans). */
+@font-face {
+  font-family: 'Codepet Pixel';
+  src: url('/Minecraft.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
 * {
   box-sizing: border-box;
   margin: 0;
@@ -2415,31 +2422,67 @@ body {
   position: absolute;
   inset: 0;
   z-index: 60;
-  background:
-    linear-gradient(rgba(13, 5, 34, 0.52), rgba(13, 5, 34, 0.52)),
-    radial-gradient(135% 95% at 50% 46%, transparent 32%, rgba(13, 5, 34, 0.5) 100%),
-    url('/splash.png') center/cover no-repeat #1d1140;
+  background: #100a26;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: opacity 0.55s ease;
+  animation: fadeIn 0.7s ease both;
+}
+/* slow Ken Burns image layer */
+.splash::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/splash.jpg') center / cover no-repeat;
+  animation: kenburns 30s ease-in-out infinite alternate;
+}
+/* readability scrim */
+.splash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(rgba(13, 5, 34, 0.52), rgba(13, 5, 34, 0.52)),
+    radial-gradient(135% 95% at 50% 46%, transparent 32%, rgba(13, 5, 34, 0.5) 100%);
 }
 .splash.hide {
   opacity: 0;
   pointer-events: none;
 }
 .splash-in {
+  position: relative;
+  z-index: 2;
   text-align: center;
   transform: translateY(-6%);
   padding: 0 24px;
 }
 .splash-title {
-  font-family: var(--sans);
-  font-size: 74px;
+  animation:
+    riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both,
+    titleGlow 5s ease-in-out 1.4s infinite;
+}
+.splash-sub {
+  animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.32s both;
+}
+.splash-btn {
+  animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.48s both;
+}
+.splash-hint {
+  animation:
+    riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.66s both,
+    hintPulse 2.8s ease-in-out 1.6s infinite;
+}
+.splash-title {
+  font-family: 'Codepet Pixel', var(--sans);
+  font-size: 80px;
   color: #fff;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   line-height: 1;
   text-shadow:
     0 3px 0 rgba(34, 14, 64, 0.7),
@@ -2522,6 +2565,119 @@ body {
 .ob .skip-pre:hover {
   color: var(--accent-deep);
   border-color: var(--accent-line);
+}
+/* cinematic cold-open (step 0) — full-bleed hero */
+.ob-cold {
+  background-color: #100a26;
+  overflow: hidden;
+  align-items: stretch;
+  animation: fadeIn 0.7s ease both;
+}
+/* Ken Burns hero layer */
+.ob-cold::after {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/onboarding/ob-team.jpg') center / cover no-repeat;
+  animation: kenburns 32s ease-in-out infinite alternate;
+}
+/* readability scrim */
+.ob-cold::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(13, 5, 34, 0.9) 0%,
+      rgba(13, 5, 34, 0.72) 44%,
+      rgba(13, 5, 34, 0.3) 100%
+    ),
+    linear-gradient(0deg, rgba(13, 5, 34, 0.6) 0%, transparent 46%);
+}
+.ob-cold-in > * {
+  animation: riseIn 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.ob-cold-byte {
+  animation-delay: 0.12s;
+}
+.ob-cold-in h1 {
+  animation-delay: 0.24s;
+}
+.ob-cold-in p {
+  animation-delay: 0.38s;
+}
+.ob-cold-in .splash-btn {
+  animation-delay: 0.52s;
+}
+.ob-cold-meta {
+  animation-delay: 0.66s;
+}
+.ob-cold .skip-pre {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.ob-cold .skip-pre:hover {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
+}
+.ob-cold-in {
+  position: relative;
+  z-index: 2;
+  max-width: 580px;
+  margin: auto 0 auto clamp(40px, 9vw, 150px);
+  padding-right: 40px;
+}
+.ob-cold-byte {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+.ob-cold-in h1 {
+  font-family: var(--sans);
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.5px;
+  color: #fff;
+  text-shadow: 0 2px 30px rgba(12, 4, 36, 0.55);
+}
+.ob-cold-in p {
+  margin-top: 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(245, 243, 255, 0.82);
+  max-width: 520px;
+}
+.ob-cold-in p b {
+  color: #fff;
+}
+.ob-cold-in .splash-btn {
+  margin-top: 30px;
+}
+.ob-cold-meta {
+  margin-top: 22px;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: rgba(245, 243, 255, 0.55);
+}
+/* taller question screens (the project step) align to the top and scroll */
+.ob-body.tall {
+  justify-content: flex-start;
+  padding: 8px 0 24px;
+}
+.ob label .opt {
+  font-weight: 500;
+  color: var(--t-4);
+  font-size: 11.5px;
+  margin-left: 4px;
 }
 .obcard {
   width: 100%;
@@ -2634,10 +2790,25 @@ body {
   width: 42%;
   flex: none;
   display: flex;
+  overflow: hidden;
 }
 .ob-art span {
   flex: 1;
-  background: #1d1140 url('/splash.png') center 48% / cover no-repeat;
+  background-color: #100a26;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  animation:
+    obArtIn 0.6s ease,
+    kenburns 22s ease-in-out infinite alternate;
+}
+@keyframes obArtIn {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
 }
 /* form column — centered vertically, capped width */
 .ob-top {
@@ -5633,5 +5804,371 @@ body {
   }
   .jd-acts {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ===== splash & onboarding motion ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+/* slow cinematic drift on full-bleed art */
+@keyframes kenburns {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-1.2%, -1.6%);
+  }
+}
+/* breathing glow on the pixel wordmark (keeps base shadows, pulses the purple halo) */
+@keyframes titleGlow {
+  0%,
+  100% {
+    text-shadow:
+      0 3px 0 rgba(34, 14, 64, 0.7),
+      0 0 30px rgba(160, 120, 255, 0.45),
+      0 14px 40px rgba(12, 4, 36, 0.6);
+  }
+  50% {
+    text-shadow:
+      0 3px 0 rgba(34, 14, 64, 0.7),
+      0 0 52px rgba(168, 130, 255, 0.78),
+      0 14px 40px rgba(12, 4, 36, 0.6);
+  }
+}
+@keyframes hintPulse {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+/* per-step content entrance (re-keyed on step change in Onboarding.tsx) */
+.ob-body > * {
+  animation: riseIn 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.ob-body > h2 {
+  animation-delay: 0.04s;
+}
+.ob-body > p {
+  animation-delay: 0.12s;
+}
+.ob-body > :nth-child(n + 3) {
+  animation-delay: 0.2s;
+}
+
+/* micro-interactions */
+.splash-btn,
+.ob .btnlg {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.15s ease;
+}
+.obopt {
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    translate 0.16s ease;
+}
+.obopt:hover {
+  translate: 4px 0;
+}
+.obchip {
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.obchip:hover {
+  transform: translateY(-2px);
+}
+.obchip.sel {
+  transform: translateY(-1px);
+}
+
+/* ===== sign-in / sign-up ===== */
+.signin {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #0a0818;
+  overflow: hidden;
+  animation: fadeIn 0.6s ease both;
+}
+/* cosmic Ken Burns layer */
+.signin::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/auth.jpg') center / cover no-repeat;
+  animation: kenburns 34s ease-in-out infinite alternate;
+}
+/* vignette scrim so the card reads against the busy art */
+.signin::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    120% 90% at 50% 50%,
+    rgba(8, 6, 24, 0.34) 0%,
+    rgba(8, 6, 24, 0.74) 100%
+  );
+}
+.signin-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 394px;
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 20px;
+  padding: 34px 32px 28px;
+  box-shadow:
+    0 24px 70px rgba(6, 3, 28, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.12s both;
+}
+.signin-brand {
+  font-family: 'Codepet Pixel', var(--sans);
+  font-size: 30px;
+  letter-spacing: 1px;
+  line-height: 1;
+  color: var(--ink);
+}
+.signin-sub {
+  margin-top: 9px;
+  font-size: 14px;
+  color: var(--t-3);
+}
+.signin-warn {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--clay);
+}
+.signin-google {
+  margin-top: 22px;
+  width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.signin-google:hover:not(:disabled) {
+  background: var(--well);
+}
+.signin-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+.signin-or::before,
+.signin-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+.signin-or span {
+  font-size: 12px;
+  color: var(--t-4);
+}
+.signin-form {
+  display: grid;
+  gap: 10px;
+}
+.signin-input {
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.signin-input:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+.signin-submit {
+  height: 46px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(124, 58, 237, 0.35);
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.signin-submit:hover:not(:disabled) {
+  background: var(--accent-deep);
+  transform: translateY(-1px);
+}
+.signin-google:disabled,
+.signin-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.signin-error {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--rose);
+}
+.signin-toggle {
+  margin-top: 18px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--t-3);
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.signin-toggle:hover {
+  color: var(--accent-deep);
+}
+
+/* sign-out confirmation */
+.so-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  background: rgba(13, 5, 34, 0.42);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: fadeIn 0.18s ease;
+}
+.so-modal {
+  width: 360px;
+  max-width: 90vw;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  padding: 24px 24px 20px;
+  box-shadow: var(--sh-l);
+  animation: riseIn 0.3s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.so-modal h3 {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--t-1);
+  letter-spacing: -0.2px;
+}
+.so-modal p {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--t-3);
+}
+.so-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+.so-cancel,
+.so-confirm {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.so-cancel {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  color: var(--t-2);
+}
+.so-cancel:hover {
+  background: var(--well);
+}
+.so-confirm {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.32);
+}
+.so-confirm:hover {
+  background: var(--accent-deep);
+  transform: translateY(-1px);
+}
+.so-cancel:disabled,
+.so-confirm:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+/* respect reduced-motion: drop drift, glow, and slide; keep content visible */
+@media (prefers-reduced-motion: reduce) {
+  .signin,
+  .signin::before,
+  .signin-card,
+  .splash,
+  .splash::before,
+  .splash-title,
+  .splash-sub,
+  .splash-btn,
+  .splash-hint,
+  .ob-cold,
+  .ob-cold::after,
+  .ob-cold-in > *,
+  .ob-art span,
+  .ob-body > * {
+    animation: none !important;
+    translate: none !important;
+    opacity: 1 !important;
   }
 }

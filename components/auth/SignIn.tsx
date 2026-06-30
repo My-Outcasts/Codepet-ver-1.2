@@ -1,6 +1,6 @@
 'use client';
-// Auth gate UI. Minimalist, on the app's existing tokens. Google + email/password
-// per the launch decision. Shown whenever there's no signed-in user.
+// Auth gate UI. A cinematic, space-forward sign-in: full-bleed cosmic code-art
+// behind a refined card, matching the splash/onboarding. Google + email/password.
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '@/lib/firebase/auth';
 
@@ -39,134 +39,73 @@ export function SignIn() {
   }
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--page)',
-        padding: 24,
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 380,
-          background: 'var(--surface)',
-          border: '1px solid var(--hairline)',
-          borderRadius: 16,
-          padding: 32,
-        }}
-      >
-        <div
-          style={{
-            fontFamily: 'Google Sans Flex, sans-serif',
-            fontWeight: 600,
-            fontSize: 22,
-            color: 'var(--ink)',
-          }}
-        >
-          Codepet
-        </div>
-        <p style={{ marginTop: 6, fontSize: 14, color: 'var(--t-3)' }}>
+    <div className="signin">
+      <div className="signin-card">
+        <h1 className="signin-brand">Codepet</h1>
+        <p className="signin-sub">
           {mode === 'in' ? 'Sign in to your company.' : 'Create your company.'}
         </p>
 
         {!configured && (
-          <p style={{ marginTop: 16, fontSize: 13, color: 'var(--clay)' }}>
-            Firebase isn’t configured yet — add the NEXT_PUBLIC_FIREBASE_* keys to .env.local (see
-            .env.example).
+          <p className="signin-warn">
+            Firebase isn&rsquo;t configured yet — add the NEXT_PUBLIC_FIREBASE_* keys to .env.local
+            (see .env.example).
           </p>
         )}
 
         <button
           type="button"
+          className="signin-google"
           disabled={busy || !configured}
           onClick={() => run(signInWithGoogle)}
-          style={{
-            marginTop: 22,
-            width: '100%',
-            height: 44,
-            borderRadius: 10,
-            border: '1px solid var(--hairline)',
-            background: 'var(--surface)',
-            color: 'var(--ink)',
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: busy || !configured ? 'not-allowed' : 'pointer',
-          }}
         >
           Continue with Google
         </button>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '18px 0' }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--hairline)' }} />
-          <span style={{ fontSize: 12, color: 'var(--t-4)' }}>or</span>
-          <div style={{ flex: 1, height: 1, background: 'var(--hairline)' }} />
+        <div className="signin-or">
+          <span>or</span>
         </div>
 
-        <form onSubmit={onSubmit} style={{ display: 'grid', gap: 10 }}>
+        <form onSubmit={onSubmit} className="signin-form">
           {mode === 'up' && (
             <input
+              className="signin-input"
               type="text"
               placeholder="Your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={inputStyle}
             />
           )}
           <input
+            className="signin-input"
             type="email"
             required
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={inputStyle}
           />
           <input
+            className="signin-input"
             type="password"
             required
             minLength={6}
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={inputStyle}
           />
-          <button
-            type="submit"
-            disabled={busy || !configured}
-            style={{
-              height: 44,
-              borderRadius: 10,
-              border: 'none',
-              background: 'var(--accent)',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: busy || !configured ? 'not-allowed' : 'pointer',
-            }}
-          >
+          <button type="submit" className="signin-submit" disabled={busy || !configured}>
             {busy ? '…' : mode === 'in' ? 'Sign in' : 'Create company'}
           </button>
         </form>
 
-        {error && <p style={{ marginTop: 12, fontSize: 13, color: 'var(--rose)' }}>{error}</p>}
+        {error && <p className="signin-error">{error}</p>}
 
         <button
           type="button"
+          className="signin-toggle"
           onClick={() => {
             setMode(mode === 'in' ? 'up' : 'in');
             setError(null);
-          }}
-          style={{
-            marginTop: 18,
-            width: '100%',
-            background: 'none',
-            border: 'none',
-            color: 'var(--t-3)',
-            fontSize: 13,
-            cursor: 'pointer',
           }}
         >
           {mode === 'in' ? 'New here? Create a company' : 'Already have an account? Sign in'}
@@ -175,14 +114,3 @@ export function SignIn() {
     </div>
   );
 }
-
-const inputStyle: React.CSSProperties = {
-  height: 44,
-  padding: '0 14px',
-  borderRadius: 10,
-  border: '1px solid var(--hairline)',
-  background: 'var(--surface-2)',
-  color: 'var(--ink)',
-  fontSize: 14,
-  outline: 'none',
-};

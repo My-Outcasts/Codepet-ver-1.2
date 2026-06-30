@@ -1,9 +1,10 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { AppProvider, useApp } from '@/lib/store';
 import { AuthProvider, useAuth } from '@/lib/firebase/auth';
 import { SignIn } from './auth/SignIn';
+import { Splash } from './Splash';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
@@ -110,12 +111,25 @@ function AuthStatus({ label }: { label: string }) {
   );
 }
 
-// Gates the app on auth. Until Phase 2 the company data still comes from the
-// in-memory store; this just ensures every session is signed in and bootstrapped.
+// Gates the app on auth. A signed-out visitor sees the brand splash first, then
+// the sign-in screen. Once signed in and bootstrapped, the app mounts; onboarding
+// (inside Shell) shows only for users who haven't completed it.
 function Gate() {
   const { user, loading, bootstrapping } = useAuth();
+  const [splashSeen, setSplashSeen] = useState(false);
+  // After a deliberate sign-out (authed → not authed), return to the splash
+  // rather than the bare sign-in screen.
+  const wasAuthed = useRef(false);
+  useEffect(() => {
+    if (user) {
+      wasAuthed.current = true;
+    } else if (wasAuthed.current) {
+      wasAuthed.current = false;
+      setSplashSeen(false);
+    }
+  }, [user]);
   if (loading) return <AuthStatus label="Loading…" />;
-  if (!user) return <SignIn />;
+  if (!user) return splashSeen ? <SignIn /> : <Splash onContinue={() => setSplashSeen(true)} />;
   if (bootstrapping) return <AuthStatus label="Setting up your company…" />;
   return (
     <AppProvider>
