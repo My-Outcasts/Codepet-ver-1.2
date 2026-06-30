@@ -2410,25 +2410,61 @@ body {
   position: absolute;
   inset: 0;
   z-index: 60;
-  background:
-    linear-gradient(rgba(13, 5, 34, 0.52), rgba(13, 5, 34, 0.52)),
-    radial-gradient(135% 95% at 50% 46%, transparent 32%, rgba(13, 5, 34, 0.5) 100%),
-    url('/splash.jpg') center/cover no-repeat #1d1140;
+  background: #100a26;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: opacity 0.55s ease;
+  animation: fadeIn 0.7s ease both;
+}
+/* slow Ken Burns image layer */
+.splash::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/splash.jpg') center / cover no-repeat;
+  animation: kenburns 30s ease-in-out infinite alternate;
+}
+/* readability scrim */
+.splash::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(rgba(13, 5, 34, 0.52), rgba(13, 5, 34, 0.52)),
+    radial-gradient(135% 95% at 50% 46%, transparent 32%, rgba(13, 5, 34, 0.5) 100%);
 }
 .splash.hide {
   opacity: 0;
   pointer-events: none;
 }
 .splash-in {
+  position: relative;
+  z-index: 2;
   text-align: center;
   transform: translateY(-6%);
   padding: 0 24px;
+}
+.splash-title {
+  animation:
+    riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both,
+    titleGlow 5s ease-in-out 1.4s infinite;
+}
+.splash-sub {
+  animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.32s both;
+}
+.splash-btn {
+  animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.48s both;
+}
+.splash-hint {
+  animation:
+    riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.66s both,
+    hintPulse 2.8s ease-in-out 1.6s infinite;
 }
 .splash-title {
   font-family: 'Codepet Pixel', var(--sans);
@@ -2521,15 +2557,25 @@ body {
 /* cinematic cold-open (step 0) — full-bleed hero */
 .ob-cold {
   background-color: #100a26;
-  background-position: center;
-  background-size: cover;
-  background-repeat: no-repeat;
+  overflow: hidden;
   align-items: stretch;
+  animation: fadeIn 0.7s ease both;
 }
+/* Ken Burns hero layer */
+.ob-cold::after {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/onboarding/ob-team.jpg') center / cover no-repeat;
+  animation: kenburns 32s ease-in-out infinite alternate;
+}
+/* readability scrim */
 .ob-cold::before {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 1;
   background:
     linear-gradient(
       90deg,
@@ -2538,6 +2584,24 @@ body {
       rgba(13, 5, 34, 0.3) 100%
     ),
     linear-gradient(0deg, rgba(13, 5, 34, 0.6) 0%, transparent 46%);
+}
+.ob-cold-in > * {
+  animation: riseIn 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.ob-cold-byte {
+  animation-delay: 0.12s;
+}
+.ob-cold-in h1 {
+  animation-delay: 0.24s;
+}
+.ob-cold-in p {
+  animation-delay: 0.38s;
+}
+.ob-cold-in .splash-btn {
+  animation-delay: 0.52s;
+}
+.ob-cold-meta {
+  animation-delay: 0.66s;
 }
 .ob-cold .skip-pre {
   background: rgba(255, 255, 255, 0.14);
@@ -2714,6 +2778,7 @@ body {
   width: 42%;
   flex: none;
   display: flex;
+  overflow: hidden;
 }
 .ob-art span {
   flex: 1;
@@ -2721,11 +2786,13 @@ body {
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
-  animation: obArtIn 0.5s ease;
+  animation:
+    obArtIn 0.6s ease,
+    kenburns 22s ease-in-out infinite alternate;
 }
 @keyframes obArtIn {
   from {
-    opacity: 0.45;
+    opacity: 0.35;
   }
   to {
     opacity: 1;
@@ -5380,5 +5447,122 @@ body {
   }
   .jd-acts {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ===== splash & onboarding motion ===== */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes riseIn {
+  from {
+    opacity: 0;
+    translate: 0 16px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+/* slow cinematic drift on full-bleed art */
+@keyframes kenburns {
+  from {
+    transform: scale(1) translate(0, 0);
+  }
+  to {
+    transform: scale(1.08) translate(-1.2%, -1.6%);
+  }
+}
+/* breathing glow on the pixel wordmark (keeps base shadows, pulses the purple halo) */
+@keyframes titleGlow {
+  0%,
+  100% {
+    text-shadow:
+      0 3px 0 rgba(34, 14, 64, 0.7),
+      0 0 30px rgba(160, 120, 255, 0.45),
+      0 14px 40px rgba(12, 4, 36, 0.6);
+  }
+  50% {
+    text-shadow:
+      0 3px 0 rgba(34, 14, 64, 0.7),
+      0 0 52px rgba(168, 130, 255, 0.78),
+      0 14px 40px rgba(12, 4, 36, 0.6);
+  }
+}
+@keyframes hintPulse {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+/* per-step content entrance (re-keyed on step change in Onboarding.tsx) */
+.ob-body > * {
+  animation: riseIn 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.ob-body > h2 {
+  animation-delay: 0.04s;
+}
+.ob-body > p {
+  animation-delay: 0.12s;
+}
+.ob-body > :nth-child(n + 3) {
+  animation-delay: 0.2s;
+}
+
+/* micro-interactions */
+.splash-btn,
+.ob .btnlg {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    background 0.15s ease;
+}
+.obopt {
+  transition:
+    background 0.16s ease,
+    border-color 0.16s ease,
+    translate 0.16s ease;
+}
+.obopt:hover {
+  translate: 4px 0;
+}
+.obchip {
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+.obchip:hover {
+  transform: translateY(-2px);
+}
+.obchip.sel {
+  transform: translateY(-1px);
+}
+
+/* respect reduced-motion: drop drift, glow, and slide; keep content visible */
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash::before,
+  .splash-title,
+  .splash-sub,
+  .splash-btn,
+  .splash-hint,
+  .ob-cold,
+  .ob-cold::after,
+  .ob-cold-in > *,
+  .ob-art span,
+  .ob-body > * {
+    animation: none !important;
+    translate: none !important;
+    opacity: 1 !important;
   }
 }

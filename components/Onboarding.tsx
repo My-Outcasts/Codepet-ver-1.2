@@ -174,7 +174,7 @@ export function Onboarding() {
   // Step 0 — cinematic cold-open (full-bleed hero), distinct from the question screens.
   if (step === 0) {
     return (
-      <div className="ob ob-cold" style={{ backgroundImage: `url(${STEP_ART[0]})` }}>
+      <div className="ob ob-cold">
         <button className="skip-pre" onClick={enterApp}>
           Skip onboarding →
         </button>
@@ -467,7 +467,9 @@ export function Onboarding() {
               </button>
             )}
           </div>
-          <div className={`ob-body${tall ? ' tall' : ''}`}>{body}</div>
+          <div key={step} className={`ob-body${tall ? ' tall' : ''}`}>
+            {body}
+          </div>
           {foot}
         </div>
       </div>
