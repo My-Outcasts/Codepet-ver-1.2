@@ -29,7 +29,7 @@ interface AppState {
   onboarding: boolean;
   finishOnboarding: () => void;
   installed: boolean;
-  markInstalled: () => void;
+  setInstalled: (value: boolean) => void;
   library: LibItem[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
@@ -109,9 +109,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
   const finishOnboarding = useCallback(() => setOnboarding(false), []);
-  const markInstalled = useCallback(() => {
-    setInstalled(true);
-    try { localStorage.setItem('codepet:installed', '1'); } catch {}
+  const setInstalledFlag = useCallback((value: boolean) => {
+    setInstalled(value);
+    try {
+      if (value) localStorage.setItem('codepet:installed', '1');
+      else localStorage.removeItem('codepet:installed');
+    } catch {}
   }, []);
 
   const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => setModal({ kind: 'run', task, dept, walk }), []);
@@ -138,10 +141,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AppState>(() => ({
     tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, markInstalled, library, modal, runTask,
+    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, setInstalled: setInstalledFlag, library, modal, runTask,
     viewItem, closeModal, approveTask, toastMsg, toast,
   }), [tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, markInstalled, library, modal, runTask,
+    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, setInstalledFlag, library, modal, runTask,
     viewItem, closeModal, approveTask, toastMsg, toast]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
