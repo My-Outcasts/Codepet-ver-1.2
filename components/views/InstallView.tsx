@@ -27,6 +27,8 @@ export function InstallView() {
     }, 1600));
   };
 
+  const plur = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
   const packSkills = ENV.skills.filter((x) => x.rec).map((x) => x.n);
   const packAgents = ENV.agents.filter((x) => x.rec).map((x) => x.n);
   const connectors = ENV.connectors.filter((x) => x.n === 'GitHub' || x.n === 'Notion');
@@ -43,7 +45,7 @@ export function InstallView() {
         <div className="install">
           <div className="ins-hero">
             <Byte size="s56" className="cheer" />
-            <div className="ins-h-txt"><b>byte&apos;s awake and ready 🎉</b><span>{onSkills.length} skills · {onAgents.length} agents · {onConn.length} connectors active</span></div>
+            <div className="ins-h-txt"><b>byte's awake and ready 🎉</b><span>{plur(onSkills.length, 'skill')} · {plur(onAgents.length, 'agent')} · {plur(onConn.length, 'connector')} active</span></div>
           </div>
           <div className="ins-recap">
             <div className="ins-rcol"><div className="ins-rh">Skills</div>{onSkills.map((x) => <div className="ins-ri" key={x.n}><span className="ck">✓</span>{x.n}</div>)}</div>
@@ -61,7 +63,7 @@ export function InstallView() {
 
   return (
     <section className="view on" id="v-install">
-      <div className="vhead"><h1>Let&apos;s wake byte up</h1><div className="sub">One click sets up byte&apos;s toolkit so it can start building with you.</div></div>
+      <div className="vhead"><h1>Let's wake byte up</h1><div className="sub">One click sets up byte's toolkit so it can start building with you.</div></div>
       <div className="install">
         <div className="ins-hero">
           <Byte size="s56" className={s2 ? 'cheer' : ''} />
@@ -71,17 +73,17 @@ export function InstallView() {
           </div>
         </div>
 
-        <button className="ins-btn" disabled={started && !s2} onClick={runSetup}>
+        <button className="ins-btn" disabled={started} onClick={runSetup}>
           {!started ? '▶ Wake byte up' : !s2 ? 'Setting up…' : '✓ Toolkit ready'}
         </button>
 
         <div className={`ins-row${started ? ' on' : ''}${s1 ? ' ok' : ''}`}>
           <span className="ins-ic">{s1 ? '✓' : '○'}</span>
-          <div className="ins-meta"><b>Unpacking byte&apos;s toolkit…</b><span>pulling out the skills you need to build</span></div>
+          <div className="ins-meta"><b>Unpacking byte's toolkit…</b><span>pulling out the skills you need to build</span></div>
         </div>
 
         <div className={`ins-pack${s1 ? ' on' : ''}`}>
-          <div className="ins-pk-h">byte&apos;s toolkit ✨</div>
+          <div className="ins-pk-h">byte's toolkit ✨</div>
           <div className="ins-chips">
             {packSkills.map((n) => <span className="ins-chip s" key={n}>skill: {n}</span>)}
             {packAgents.map((n) => <span className="ins-chip a" key={n}>agent: {n}</span>)}
@@ -92,7 +94,7 @@ export function InstallView() {
 
         <div className={`ins-row${s1 ? ' on' : ''}${s2 ? ' ok' : ''}`}>
           <span className="ins-ic">{s2 ? '✓' : '○'}</span>
-          <div className="ins-meta"><b>byte&apos;s awake! 🎉</b><span>ready to track tokens + brainstorm with you</span></div>
+          <div className="ins-meta"><b>byte's awake! 🎉</b><span>ready to track tokens + brainstorm with you</span></div>
           {s2 && <span className="ins-tag">ready</span>}
         </div>
 
