@@ -21,6 +21,7 @@ import {
   loadCompanyData,
   persistApproval,
   persistEnv,
+  persistRoadmapStage,
   envStateFromCatalog,
   completeOnboarding,
 } from './firebase/companyData';
@@ -133,10 +134,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b, onboardedAt }) => {
+      .then(({ library: lib, brief: b, onboardedAt, roadmapStage }) => {
         if (cancelled) return;
         setLibrary(lib);
         setBrief(b);
+        // Restore the last-viewed roadmap stage (drawer stays closed — we restore
+        // position, not an open panel). Absent ⇒ keep the UI default.
+        if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
         // Show onboarding only to users who haven't done it. A non-empty brief
         // also counts as onboarded, so legacy users (saved a brief before the
         // `onboardedAt` stamp existed) aren't asked again.
@@ -161,10 +165,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDeptKey(k);
     setView('dept');
   }, []);
-  const selectStage = useCallback((n: number) => {
-    setSelStage(n);
-    setDrawerOpen(true);
-  }, []);
+  const selectStage = useCallback(
+    (n: number) => {
+      setSelStage(n);
+      setDrawerOpen(true);
+      // Persist the position (optimistic, non-blocking — the UI already moved).
+      if (companyId) {
+        persistRoadmapStage(companyId, n).catch((err) =>
+          console.error('[store] persistRoadmapStage failed', err),
+        );
+      }
+    },
+    [companyId],
+  );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
