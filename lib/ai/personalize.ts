@@ -17,10 +17,7 @@ import {
  * Personalize a freshly-onboarded company's department/task text. Returns the number
  * of departments changed (0 if nothing was personalized), so the caller can re-render.
  */
-export async function personalizeCompany(
-  companyId: string,
-  brief?: CompanyBrief,
-): Promise<number> {
+export async function personalizeCompany(companyId: string, brief?: CompanyBrief): Promise<number> {
   try {
     const res = await fetch('/api/personalize', {
       method: 'POST',
