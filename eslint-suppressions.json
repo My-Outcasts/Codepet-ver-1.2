@@ -23,11 +23,6 @@
       "count": 22
     }
   },
-  "components/views/EnvironmentView.tsx": {
-    "react-hooks/immutability": {
-      "count": 1
-    }
-  },
   "components/views/OverviewView.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 14
@@ -49,11 +44,6 @@
   "lib/roadmap.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 5
-    }
-  },
-  "lib/store.tsx": {
-    "react-hooks/refs": {
-      "count": 2
     }
   }
 }

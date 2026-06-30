@@ -85,7 +85,6 @@ function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) =>
 
 export function Onboarding() {
   const { onboarding, finishOnboarding, toast } = useApp();
-  const [splashGone, setSplashGone] = useState(false);
   const [step, setStep] = useState(0);
   const [data, setData] = useState<ObData>({
     name: '',
@@ -375,55 +374,26 @@ export function Onboarding() {
   }
 
   return (
-    <>
-      <div className="ob">
-        <button className="skip-pre" onClick={enterApp}>
-          Skip onboarding →
-        </button>
-        <div className="obcard">
-          <div className="ob-art">
-            <span />
+    <div className="ob">
+      <button className="skip-pre" onClick={enterApp}>
+        Skip onboarding →
+      </button>
+      <div className="obcard">
+        <div className="ob-art">
+          <span />
+        </div>
+        <div className="ob-main" id="obIn">
+          <div className="ob-top">
+            {step > 0 && step !== 6 && (
+              <button className="ob-back" onClick={() => setStep(Math.max(0, step - 1))}>
+                ← Back
+              </button>
+            )}
           </div>
-          <div className="ob-main" id="obIn">
-            <div className="ob-top">
-              {step > 0 && step !== 6 && (
-                <button className="ob-back" onClick={() => setStep(Math.max(0, step - 1))}>
-                  ← Back
-                </button>
-              )}
-            </div>
-            <div className="ob-body">{body}</div>
-            {foot}
-          </div>
+          <div className="ob-body">{body}</div>
+          {foot}
         </div>
       </div>
-      {!splashGone && (
-        <div
-          className="splash"
-          onClick={(e) => {
-            if ((e.target as HTMLElement).closest('.skip-pre')) return;
-            setSplashGone(true);
-          }}
-        >
-          <button
-            className="skip-pre"
-            onClick={(e) => {
-              e.stopPropagation();
-              enterApp();
-            }}
-          >
-            Skip →
-          </button>
-          <div className="splash-in">
-            <h1 className="splash-title pixel">Codepet</h1>
-            <p className="splash-sub">Let&apos;s learn how to run your company with AI.</p>
-            <button className="splash-btn" onClick={() => setSplashGone(true)}>
-              Let&apos;s go
-            </button>
-          </div>
-          <div className="splash-hint">click anywhere to begin</div>
-        </div>
-      )}
-    </>
+    </div>
   );
 }

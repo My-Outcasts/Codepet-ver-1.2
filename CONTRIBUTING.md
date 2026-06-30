@@ -27,11 +27,11 @@ npm run dev                         # → http://localhost:3000
   values are public (ask a maintainer); get your **own** `ANTHROPIC_API_KEY` from
   <https://console.anthropic.com>.
 
-| Variable | Needed for |
-| --- | --- |
-| `NEXT_PUBLIC_FIREBASE_*` (×6) | Firebase Auth + Firestore (client) |
-| `ANTHROPIC_API_KEY` | byte's live generation (server-side, **secret**) |
-| `NEXT_PUBLIC_SENTRY_DSN` | optional — error tracking |
+| Variable                      | Needed for                                       |
+| ----------------------------- | ------------------------------------------------ |
+| `NEXT_PUBLIC_FIREBASE_*` (×6) | Firebase Auth + Firestore (client)               |
+| `ANTHROPIC_API_KEY`           | byte's live generation (server-side, **secret**) |
+| `NEXT_PUBLIC_SENTRY_DSN`      | optional — error tracking                        |
 
 Full deploy/setup details are in [`DEPLOY.md`](./DEPLOY.md).
 
@@ -84,7 +84,7 @@ instrumentation*.ts Sentry (DSN-gated)
   500s with a Turbopack write error, `rm -rf .next` and restart.
 - **`eslint-suppressions.json`** baselines pre-existing lint violations (the
   mutate-in-place pattern). If you add code in that same pattern and lint errors on
-  the overflow, re-baseline with `npx eslint . --suppress-all`. Don't add *new*
+  the overflow, re-baseline with `npx eslint . --suppress-all`. Don't add _new_
   classes of violations.
 - **The Firebase project (`devpet-8f4b1`) is shared with the macOS app.** Never
   deploy `firestore.rules` that drops the iOS `users`/`feedback` rules — it's a

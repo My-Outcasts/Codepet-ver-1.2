@@ -48,6 +48,8 @@ export interface CompanyDoc {
   roles: Record<string, 'owner' | 'member'>;
   name: string;
   brief: CompanyBrief;
+  /** When onboarding was completed (or skipped). Absent ⇒ never onboarded. */
+  onboardedAt?: Millis;
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;

@@ -84,6 +84,8 @@ function applyDepartments(departments: DepartmentDoc[]): void {
 export interface CompanyData {
   library: LibItem[];
   brief: CompanyBrief;
+  /** When onboarding was completed; undefined ⇒ the user hasn't onboarded yet. */
+  onboardedAt?: number;
 }
 
 /**
@@ -110,16 +112,28 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     return item as LibItem;
   });
 
-  return { library, brief: (company?.brief ?? {}) as CompanyBrief };
+  return {
+    library,
+    brief: (company?.brief ?? {}) as CompanyBrief,
+    onboardedAt: company?.onboardedAt as number | undefined,
+  };
 }
 
-/** Persist the business brief captured during onboarding. */
-export async function saveBrief(companyId: string, brief: CompanyBrief): Promise<void> {
+/**
+ * Mark onboarding complete. Stamps `onboardedAt` so the wizard never shows again,
+ * and (when provided) persists the business brief captured during onboarding.
+ * Called for both "finish" and "skip" so the decision is remembered either way.
+ */
+export async function completeOnboarding(companyId: string, brief?: CompanyBrief): Promise<void> {
   const db = getDb();
-  await updateDoc(doc(db, paths.company(companyId)), {
-    brief: clean(brief),
-    updatedAt: Date.now(),
-  });
+  const now = Date.now();
+  const ref = doc(db, paths.company(companyId));
+  await updateDoc(
+    ref,
+    brief
+      ? { onboardedAt: now, updatedAt: now, brief: clean(brief) }
+      : { onboardedAt: now, updatedAt: now },
+  );
 }
 
 // ---- write-through ----
