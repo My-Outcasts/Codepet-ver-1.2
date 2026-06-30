@@ -33,7 +33,16 @@ export interface CompanyBrief {
   tech?: string;
   stage?: string;
   projectName?: string;
+  /** One-sentence description of the product (highest-signal field for byte). */
+  oneLiner?: string;
+  /** Free-form details: pitch, README, PRD notes, anything pasted. */
   notes?: string;
+  /** Website / repo / Figma link. */
+  link?: string;
+  /** Product categories (e.g. "Web app", "SaaS", "Dev tool"). */
+  categories?: string[];
+  /** Who the product is for (target user / customer). */
+  audience?: string;
 }
 
 /** Per-company toolkit state: category → item key → enabled. Mirrors ENV in data.ts. */

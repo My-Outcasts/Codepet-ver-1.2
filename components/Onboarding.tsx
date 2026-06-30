@@ -1,17 +1,35 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_TOTAL } from '@/lib/data';
+import { OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL } from '@/lib/data';
+import { Byte } from './Byte';
 
 interface ObData {
   name: string;
   role: string;
   roleLabel: string;
   tech: string;
-  proj: string;
   projName: string;
+  oneLiner: string;
+  proj: string; // free-form "paste anything" details
+  link: string;
+  categories: string[];
+  audience: string;
   stage: number;
 }
+
+// One cinematic scene per step (left panel art; step 0 is the full-bleed cold-open).
+const STEP_ART = [
+  '/onboarding/ob-team.jpg', // 0 cold-open
+  '/onboarding/ob-couch.jpg', // 1 name
+  '/onboarding/ob-chess.jpg', // 2 role
+  '/onboarding/ob-drummer.jpg', // 3 tech
+  '/onboarding/ob-observatory.jpg', // 4 project
+  '/onboarding/ob-isometric.jpg', // 5 stage
+  '/onboarding/ob-boardroom.jpg', // 6 analysis
+  '/onboarding/ob-team.jpg', // 7 summary
+];
+
 const AN_LINES = [
   'Reading what you told me…',
   'Mapping it across 8 departments',
@@ -91,8 +109,12 @@ export function Onboarding() {
     role: '',
     roleLabel: '',
     tech: '',
+    projName: '',
+    oneLiner: '',
     proj: '',
-    projName: 'Codepet',
+    link: '',
+    categories: [],
+    audience: '',
     stage: 2,
   });
   const [anShown, setAnShown] = useState(0);
@@ -122,6 +144,13 @@ export function Onboarding() {
   if (!onboarding) return null;
 
   const set = (patch: Partial<ObData>) => setData((d) => ({ ...d, ...patch }));
+  const toggleCat = (c: string) =>
+    setData((d) => ({
+      ...d,
+      categories: d.categories.includes(c)
+        ? d.categories.filter((x) => x !== c)
+        : [...d.categories, c],
+    }));
   const enterApp = () => finishOnboarding();
   const finish = () => {
     finishOnboarding({
@@ -130,7 +159,11 @@ export function Onboarding() {
       tech: OB_TECH.find(([, k]) => k === data.tech)?.[0],
       stage: OB_STAGES[data.stage],
       projectName: data.projName || undefined,
+      oneLiner: data.oneLiner || undefined,
       notes: data.proj || undefined,
+      link: data.link || undefined,
+      categories: data.categories.length ? data.categories : undefined,
+      audience: data.audience || undefined,
     });
     setTimeout(
       () => toast('Your roadmap is ready — byte mapped 9 steps across 8 departments.'),
@@ -138,18 +171,45 @@ export function Onboarding() {
     );
   };
 
+  // Step 0 — cinematic cold-open (full-bleed hero), distinct from the question screens.
+  if (step === 0) {
+    return (
+      <div className="ob ob-cold" style={{ backgroundImage: `url(${STEP_ART[0]})` }}>
+        <button className="skip-pre" onClick={enterApp}>
+          Skip onboarding →
+        </button>
+        <div className="ob-cold-in">
+          <div className="ob-cold-byte">
+            <Byte size="s28" />
+            <span>byte</span>
+          </div>
+          <h1>Let&apos;s build your company — not just your code.</h1>
+          <p>
+            I&apos;m byte. I&apos;ll run the whole company around your product, department by
+            department — and I do the work <b>with</b> you, so you always understand what&apos;s
+            happening.
+          </p>
+          <button className="splash-btn" onClick={() => setStep(1)}>
+            Let&apos;s go
+          </button>
+          <div className="ob-cold-meta">
+            About a minute · I map your roadmap across 8 departments · you approve every move
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const pct = Math.round(((step + 1) / OB_TOTAL) * 100);
 
   const Foot = ({
     label,
     onClick,
     disabled,
-    isFinish,
   }: {
     label: string;
     onClick: () => void;
     disabled?: boolean;
-    isFinish?: boolean;
   }) => (
     <div className="ob-foot">
       <div className="ob-prog">
@@ -168,39 +228,8 @@ export function Onboarding() {
   );
 
   let body: React.ReactNode, foot: React.ReactNode;
-  if (step === 0) {
-    body = (
-      <>
-        <h2>Hi, I&apos;m byte. Let&apos;s build your company — not just your code.</h2>
-        <p>
-          Most tools help you ship the product. I help you run the whole company around it,
-          department by department — and I do the work <b>with</b> you, so you always understand
-          what&apos;s happening.
-        </p>
-        <div className="val">
-          <div className="vrow">
-            <div className="vi">1</div>
-            <div>
-              <b>Tell me about you and what you&apos;re building.</b> Takes about a minute.
-            </div>
-          </div>
-          <div className="vrow">
-            <div className="vi">2</div>
-            <div>
-              <b>I map your roadmap</b> across all eight departments.
-            </div>
-          </div>
-          <div className="vrow">
-            <div className="vi">3</div>
-            <div>
-              <b>Then we work together</b> — I draft &amp; build, you approve every move.
-            </div>
-          </div>
-        </div>
-      </>
-    );
-    foot = <Foot label="Let's go" onClick={() => setStep(1)} />;
-  } else if (step === 1) {
+  let tall = false;
+  if (step === 1) {
     body = (
       <>
         <h2>First — what should I call you?</h2>
@@ -263,10 +292,11 @@ export function Onboarding() {
     );
     foot = <Foot label="Continue" disabled={!data.tech} onClick={() => setStep(4)} />;
   } else if (step === 4) {
+    tall = true;
     body = (
       <>
         <h2>Now — what are you building?</h2>
-        <p>A name and one line is plenty. I&apos;ll read the rest.</p>
+        <p>Just a name and one line is plenty. The rest helps me do sharper work.</p>
         <label>Project name</label>
         <input
           className="t"
@@ -275,9 +305,56 @@ export function Onboarding() {
           autoComplete="off"
           onChange={(e) => set({ projName: e.target.value })}
         />
-        <label>What is it? (or paste a link)</label>
+        <label>In one sentence, what is it?</label>
+        <input
+          className="t"
+          placeholder="A macOS companion that helps founders run their company with AI"
+          value={data.oneLiner}
+          autoComplete="off"
+          onChange={(e) => set({ oneLiner: e.target.value })}
+        />
+        <label>
+          What kind of product is it? <span className="opt">optional</span>
+        </label>
+        <div className="obchips">
+          {OB_CATEGORIES.map((c) => (
+            <div
+              key={c}
+              className={`obchip${data.categories.includes(c) ? ' sel' : ''}`}
+              onClick={() => toggleCat(c)}
+            >
+              {c}
+            </div>
+          ))}
+        </div>
+        <label>
+          Who&apos;s it for? <span className="opt">optional</span>
+        </label>
+        <input
+          className="t"
+          placeholder="e.g. solo founders shipping their first product"
+          value={data.audience}
+          autoComplete="off"
+          onChange={(e) => set({ audience: e.target.value })}
+        />
+        <label>
+          Link <span className="opt">optional — website, repo, or Figma</span>
+        </label>
+        <input
+          className="t"
+          type="url"
+          inputMode="url"
+          placeholder="https://"
+          value={data.link}
+          autoComplete="off"
+          onChange={(e) => set({ link: e.target.value })}
+        />
+        <label>
+          Anything else to read?{' '}
+          <span className="opt">optional — paste a pitch, README, or notes</span>
+        </label>
         <textarea
-          placeholder="A macOS companion that…"
+          placeholder="Paste anything that helps me understand the product…"
           value={data.proj}
           onChange={(e) => set({ proj: e.target.value })}
         />
@@ -370,7 +447,7 @@ export function Onboarding() {
         </div>
       </>
     );
-    foot = <Foot label="See my company" isFinish onClick={finish} />;
+    foot = <Foot label="See my company" onClick={finish} />;
   }
 
   return (
@@ -380,17 +457,17 @@ export function Onboarding() {
       </button>
       <div className="obcard">
         <div className="ob-art">
-          <span />
+          <span key={step} style={{ backgroundImage: `url(${STEP_ART[step]})` }} />
         </div>
         <div className="ob-main" id="obIn">
           <div className="ob-top">
-            {step > 0 && step !== 6 && (
+            {step !== 6 && (
               <button className="ob-back" onClick={() => setStep(Math.max(0, step - 1))}>
                 ← Back
               </button>
             )}
           </div>
-          <div className="ob-body">{body}</div>
+          <div className={`ob-body${tall ? ' tall' : ''}`}>{body}</div>
           {foot}
         </div>
       </div>

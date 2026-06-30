@@ -2511,6 +2511,91 @@ body {
   color: var(--accent-deep);
   border-color: var(--accent-line);
 }
+/* cinematic cold-open (step 0) — full-bleed hero */
+.ob-cold {
+  background-color: #100a26;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  align-items: stretch;
+}
+.ob-cold::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(13, 5, 34, 0.9) 0%,
+      rgba(13, 5, 34, 0.72) 44%,
+      rgba(13, 5, 34, 0.3) 100%
+    ),
+    linear-gradient(0deg, rgba(13, 5, 34, 0.6) 0%, transparent 46%);
+}
+.ob-cold .skip-pre {
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+.ob-cold .skip-pre:hover {
+  background: rgba(255, 255, 255, 0.26);
+  color: #fff;
+}
+.ob-cold-in {
+  position: relative;
+  z-index: 2;
+  max-width: 580px;
+  margin: auto 0 auto clamp(40px, 9vw, 150px);
+  padding-right: 40px;
+}
+.ob-cold-byte {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 22px;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+.ob-cold-in h1 {
+  font-family: var(--sans);
+  font-size: clamp(34px, 4vw, 52px);
+  line-height: 1.08;
+  letter-spacing: -0.5px;
+  color: #fff;
+  text-shadow: 0 2px 30px rgba(12, 4, 36, 0.55);
+}
+.ob-cold-in p {
+  margin-top: 20px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: rgba(245, 243, 255, 0.82);
+  max-width: 520px;
+}
+.ob-cold-in p b {
+  color: #fff;
+}
+.ob-cold-in .splash-btn {
+  margin-top: 30px;
+}
+.ob-cold-meta {
+  margin-top: 22px;
+  font-family: var(--sans);
+  font-size: 12px;
+  color: rgba(245, 243, 255, 0.55);
+}
+/* taller question screens (the project step) align to the top and scroll */
+.ob-body.tall {
+  justify-content: flex-start;
+  padding: 8px 0 24px;
+}
+.ob label .opt {
+  font-weight: 500;
+  color: var(--t-4);
+  font-size: 11.5px;
+  margin-left: 4px;
+}
 .obcard {
   width: 100%;
   height: 100%;
@@ -2625,7 +2710,19 @@ body {
 }
 .ob-art span {
   flex: 1;
-  background: #1d1140 url('/splash.png') center 48% / cover no-repeat;
+  background-color: #100a26;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  animation: obArtIn 0.5s ease;
+}
+@keyframes obArtIn {
+  from {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 1;
+  }
 }
 /* form column — centered vertically, capped width */
 .ob-top {

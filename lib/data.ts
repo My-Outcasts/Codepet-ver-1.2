@@ -993,6 +993,17 @@ export const OB_NOTES: string[] = [
   "I'll focus on scaling what already works.",
 ];
 export const OB_PHASES: string[] = ['About you', 'Your project', 'byte reads it', 'Your company'];
+// Quick-select product categories shown as chips on the project step.
+export const OB_CATEGORIES: string[] = [
+  'Web app',
+  'Mobile app',
+  'SaaS',
+  'Dev tool',
+  'AI / ML',
+  'Marketplace',
+  'Game',
+  'Other',
+];
 export const OB_TOTAL = 8;
 
 /* ===== department colors ===== */
