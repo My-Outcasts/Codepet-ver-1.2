@@ -185,7 +185,7 @@ function TypeOut({ text, onDone }: { text: string; onDone: () => void }) {
 type Stage = 'exec' | 'deliver' | 'revise' | 'result';
 
 export function ArtifactModal() {
-  const { modal, closeModal, approveTask, viewItem, runTask, show, toast } = useApp();
+  const { modal, closeModal, approveTask, viewItem, runTask, show, toast, brief } = useApp();
   const [stage, setStage] = useState<Stage>('exec');
   const [rev, setRev] = useState<string | null>(null);
   const [execKind, setExecKind] = useState<'task' | 'revise'>('task');
@@ -225,6 +225,7 @@ export function ArtifactModal() {
           taskTitle: tk.t,
           taskHint: tk.d || (typeof tk.out === 'string' ? tk.out.slice(0, 160) : undefined),
           deptName: dp.name,
+          brief,
         })
           .then((res) => {
             applyResult(tk, ty, res);
@@ -313,6 +314,7 @@ export function ArtifactModal() {
         deptName: d.name,
         reviseNote: note,
         current: currentDraft(t, type),
+        brief,
       })
         .then((res) => {
           applyResult(t, type, res);

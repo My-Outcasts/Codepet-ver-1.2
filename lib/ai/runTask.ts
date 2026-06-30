@@ -4,6 +4,7 @@
 // `text`, or a structured payload for post/email/legal. Attaches the signed-in
 // user's Firebase ID token so the route can authenticate the caller.
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
+import type { CompanyBrief } from '../firebase/schema';
 
 async function authHeader(): Promise<Record<string, string>> {
   if (!isFirebaseConfigured) return {};
@@ -22,6 +23,8 @@ export interface RunArgs {
   /** Revise pass: byte's feedback + the current draft to revise. */
   reviseNote?: string;
   current?: string;
+  /** The user's business brief, so byte writes from their real company. */
+  brief?: CompanyBrief;
 }
 
 export interface RunResult {

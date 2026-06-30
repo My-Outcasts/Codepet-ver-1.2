@@ -16,7 +16,13 @@ import {
 } from 'firebase/firestore';
 import { getDb } from './client';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from '../data';
-import { paths, type DepartmentDoc, type LibraryDoc, type EnvState } from './schema';
+import {
+  paths,
+  type DepartmentDoc,
+  type LibraryDoc,
+  type EnvState,
+  type CompanyBrief,
+} from './schema';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -77,11 +83,12 @@ function applyDepartments(departments: DepartmentDoc[]): void {
 // ---- load + hydrate ----
 export interface CompanyData {
   library: LibItem[];
+  brief: CompanyBrief;
 }
 
 /**
  * Load the company's persisted state and hydrate the DEPTS/ENV singletons in
- * place. Returns the library (which the store owns as React state).
+ * place. Returns the library + business brief (which the store owns as state).
  */
 export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   const db = getDb();
@@ -92,8 +99,8 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   ]);
 
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
-  const env = (companySnap.data()?.env ?? {}) as EnvState;
-  applyEnvState(env);
+  const company = companySnap.data();
+  applyEnvState((company?.env ?? {}) as EnvState);
 
   const library = libSnap.docs.map((d) => {
     // Strip persistence-only fields so the shape matches the in-app LibItem.
@@ -103,7 +110,16 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     return item as LibItem;
   });
 
-  return { library };
+  return { library, brief: (company?.brief ?? {}) as CompanyBrief };
+}
+
+/** Persist the business brief captured during onboarding. */
+export async function saveBrief(companyId: string, brief: CompanyBrief): Promise<void> {
+  const db = getDb();
+  await updateDoc(doc(db, paths.company(companyId)), {
+    brief: clean(brief),
+    updatedAt: Date.now(),
+  });
 }
 
 // ---- write-through ----

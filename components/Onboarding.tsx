@@ -125,7 +125,14 @@ export function Onboarding() {
   const set = (patch: Partial<ObData>) => setData((d) => ({ ...d, ...patch }));
   const enterApp = () => finishOnboarding();
   const finish = () => {
-    finishOnboarding();
+    finishOnboarding({
+      founderName: data.name || undefined,
+      role: data.roleLabel || undefined,
+      tech: OB_TECH.find(([, k]) => k === data.tech)?.[0],
+      stage: OB_STAGES[data.stage],
+      projectName: data.projName || undefined,
+      notes: data.proj || undefined,
+    });
     setTimeout(
       () => toast('Your roadmap is ready — byte mapped 9 steps across 8 departments.'),
       400,

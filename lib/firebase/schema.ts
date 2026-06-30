@@ -28,6 +28,7 @@ export interface UserDoc {
 
 /** Onboarding answers + derived business brief (see OB_* in lib/data.ts). */
 export interface CompanyBrief {
+  founderName?: string;
   role?: string;
   tech?: string;
   stage?: string;

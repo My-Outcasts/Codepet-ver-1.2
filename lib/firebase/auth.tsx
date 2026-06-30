@@ -16,6 +16,7 @@ import {
 } from 'firebase/auth';
 import { getFirebaseAuth, isFirebaseConfigured } from './client';
 import { ensureUserBootstrap } from './company';
+import { track } from '../analytics';
 
 interface AuthState {
   user: User | null;
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const unsub = onAuthStateChanged(getFirebaseAuth(), async (u) => {
       setUser(u);
       if (u) {
+        track('auth.signed_in', { providers: u.providerData.map((p) => p.providerId).join(',') });
         setBootstrapping(true);
         try {
           setCompanyId(await ensureUserBootstrap(u));

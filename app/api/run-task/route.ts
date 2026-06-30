@@ -135,10 +135,35 @@ interface RunTaskBody {
   deptName?: unknown;
   reviseNote?: unknown;
   current?: unknown;
+  brief?: unknown;
+}
+
+// Compose the user's persisted onboarding brief into company context so byte
+// writes from their real company. Falls back to the baseline when absent.
+function briefToContext(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const b = raw as Record<string, unknown>;
+  const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+  const name = str(b.projectName, 120);
+  const notes = str(b.notes, 600);
+  if (!name && !notes) return null;
+
+  const parts: string[] = [`The company is ${name || "the founder's product"}.`];
+  if (notes) parts.push(notes.endsWith('.') ? notes : `${notes}.`);
+  const who: string[] = [];
+  const role = str(b.role, 80);
+  const stage = str(b.stage, 80);
+  if (role) who.push(`a ${role.toLowerCase()}`);
+  if (stage) who.push(`at the ${stage.toLowerCase()} stage`);
+  if (who.length) parts.push(`The founder is ${who.join(', ')}.`);
+  const founderName = str(b.founderName, 80);
+  if (founderName) parts.push(`Their name is ${founderName}.`);
+  return parts.join(' ');
 }
 
 function buildPrompt(
   kind: Kind,
+  context: string,
   fields: {
     taskTitle: string;
     taskHint?: string;
@@ -149,7 +174,7 @@ function buildPrompt(
 ): string {
   const { taskTitle, taskHint, deptName, reviseNote, current } = fields;
   const lines = [
-    `Company context: ${CODEPET_CONTEXT}`,
+    `Company context: ${context}`,
     '',
     deptName ? `Department: ${deptName}` : null,
     `Task: ${taskTitle}`,
@@ -220,6 +245,7 @@ export async function POST(req: Request): Promise<Response> {
     current: typeof body.current === 'string' ? body.current.slice(0, 6000) : undefined,
   };
 
+  const context = briefToContext(body.brief) ?? CODEPET_CONTEXT;
   const { schema } = KINDS[kind];
   const client = new Anthropic({ apiKey });
 
@@ -232,7 +258,7 @@ export async function POST(req: Request): Promise<Response> {
         ? { effort: 'low', format: { type: 'json_schema', schema } }
         : { effort: 'low' },
       system: BYTE_SYSTEM,
-      messages: [{ role: 'user', content: buildPrompt(kind, fields) }],
+      messages: [{ role: 'user', content: buildPrompt(kind, context, fields) }],
     };
     const message = await client.messages.create(params);
 

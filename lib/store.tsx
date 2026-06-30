@@ -15,13 +15,16 @@ import React, {
 } from 'react';
 import { ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta } from './helpers';
+import { track } from './analytics';
 import { useAuth } from './firebase/auth';
 import {
   loadCompanyData,
   persistApproval,
   persistEnv,
   envStateFromCatalog,
+  saveBrief,
 } from './firebase/companyData';
+import type { CompanyBrief } from './firebase/schema';
 
 export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
 
@@ -42,7 +45,8 @@ interface AppState {
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
   onboarding: boolean;
-  finishOnboarding: () => void;
+  finishOnboarding: (brief?: CompanyBrief) => void;
+  brief: CompanyBrief;
   library: LibItem[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
@@ -95,8 +99,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  // Library is owned here as state, hydrated from Firestore.
+  // Library + business brief are owned here as state, hydrated from Firestore.
   const [library, setLibrary] = useState<LibItem[]>([]);
+  const [brief, setBrief] = useState<CompanyBrief>({});
   const [hydrated, setHydrated] = useState(false);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,9 +118,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib }) => {
+      .then(({ library: lib, brief: b }) => {
         if (cancelled) return;
         setLibrary(lib);
+        setBrief(b);
         bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
         setHydrated(true);
       })
@@ -143,12 +149,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
-  const finishOnboarding = useCallback(() => setOnboarding(false), []);
-
-  const runTask = useCallback(
-    (task: Task, dept: Dept, walk?: boolean) => setModal({ kind: 'run', task, dept, walk }),
-    [],
+  const finishOnboarding = useCallback(
+    (briefData?: CompanyBrief) => {
+      setOnboarding(false);
+      if (briefData) {
+        setBrief(briefData);
+        if (companyId) {
+          saveBrief(companyId, briefData).catch((err) =>
+            console.error('[store] saveBrief failed', err),
+          );
+        }
+      }
+    },
+    [companyId],
   );
+
+  const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => {
+    track('task.run', { dept: dept.k });
+    setModal({ kind: 'run', task, dept, walk });
+  }, []);
   const viewItem = useCallback((item: LibItem) => setModal({ kind: 'view', item }), []);
   const closeModal = useCallback(() => setModal(null), []);
 
@@ -183,6 +202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setLibrary((prev) => [item, ...prev]);
       const next = d.tasks.find((x) => !x.done);
       bump();
+      track('task.approved', { dept: d.k, type });
       toast(
         (type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t,
       );
@@ -229,6 +249,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleCopilot,
       onboarding,
       finishOnboarding,
+      brief,
       library,
       modal,
       runTask,
@@ -254,6 +275,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleCopilot,
       onboarding,
       finishOnboarding,
+      brief,
       library,
       modal,
       runTask,
