@@ -30,3 +30,6 @@ next-env.d.ts
 # vercel
 .vercel
 .env*
+
+# ...but keep the committed template
+!.env.example

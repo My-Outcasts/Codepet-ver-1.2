@@ -2,6 +2,8 @@
 import { useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { AppProvider, useApp } from '@/lib/store';
+import { AuthProvider, useAuth } from '@/lib/firebase/auth';
+import { SignIn } from './auth/SignIn';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
@@ -86,10 +88,43 @@ function Shell() {
   );
 }
 
-export default function AppRoot() {
+// A full-screen status panel shown while auth resolves or the company bootstraps.
+function AuthStatus({ label }: { label: string }) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'var(--page)',
+        color: 'var(--t-3)',
+        fontSize: 13,
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
+// Gates the app on auth. Until Phase 2 the company data still comes from the
+// in-memory store; this just ensures every session is signed in and bootstrapped.
+function Gate() {
+  const { user, loading, bootstrapping } = useAuth();
+  if (loading) return <AuthStatus label="Loading…" />;
+  if (!user) return <SignIn />;
+  if (bootstrapping) return <AuthStatus label="Setting up your company…" />;
   return (
     <AppProvider>
       <Shell />
     </AppProvider>
+  );
+}
+
+export default function AppRoot() {
+  return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
   );
 }
