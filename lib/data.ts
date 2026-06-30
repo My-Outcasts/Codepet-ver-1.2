@@ -1080,6 +1080,12 @@ export const ENV: Record<string, EnvItem[]> = {
     { n: 'Migrator', ab: 'Mg', d: 'Runs large, repetitive refactors safely.', s: 0 },
   ],
 };
+// Pristine deep-clone snapshots of the seed catalogs, captured at module load BEFORE
+// any runtime mutation. The data-access layer resets the mutable DEPTS/ENV singletons
+// to these on every sign-in, so one account's edits can never linger into another
+// account's session (per-account isolation for the in-memory layer).
+export const DEPTS_SEED: Dept[] = structuredClone(DEPTS);
+export const ENV_SEED: Record<string, EnvItem[]> = structuredClone(ENV);
 export const ENV_CATS: [string, string, string, string, string][] = [
   ['skills', 'Skills', 'sk', 'Add', 'Active'],
   ['connectors', 'Connectors', 'cn', 'Connect', 'Connected'],

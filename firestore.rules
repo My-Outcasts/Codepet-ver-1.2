@@ -53,16 +53,36 @@ service cloud.firestore {
         && request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)).data.memberIds;
     }
 
+    // Ownership must never change on an update — no escalating yourself to owner.
+    function ownershipUnchanged() {
+      return request.resource.data.ownerId == resource.data.ownerId;
+    }
+
     match /companies/{companyId} {
       // Creator must own the company by convention and list themselves as a member.
+      // ownerId/memberIds are pinned to the caller, so a company can only ever be
+      // created for the account that owns it.
       allow create: if signedIn()
         && companyId == request.auth.uid
         && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.memberIds is list
         && request.auth.uid in request.resource.data.memberIds;
 
-      allow read, update, delete: if ownsByConvention(companyId) || isMember(companyId);
+      allow read: if ownsByConvention(companyId) || isMember(companyId);
 
-      // Departments, library, and any future per-company subcollection.
+      // Owner (by convention) may edit company data and manage the member list, but
+      // can never reassign ownership. A non-owner member may edit data only — not
+      // ownerId and not the member list (no privilege escalation).
+      allow update: if (ownsByConvention(companyId) && ownershipUnchanged())
+        || (isMember(companyId)
+            && ownershipUnchanged()
+            && request.resource.data.memberIds == resource.data.memberIds);
+
+      // Only the owner can delete the whole company.
+      allow delete: if ownsByConvention(companyId);
+
+      // Departments, library, chat, and any future per-company subcollection — scoped
+      // to the company's owner/members. Deny-by-default keeps every other account out.
       match /{document=**} {
         allow read, write: if ownsByConvention(companyId) || isMember(companyId);
       }

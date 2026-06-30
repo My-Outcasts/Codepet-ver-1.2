@@ -5,7 +5,10 @@ import { Byte } from './Byte';
 const CHIPS = ['Start with Engineering', 'Draft my launch post', 'Open the roadmap'];
 
 export function Copilot() {
-  const { toggleCopilot, openDept, show } = useApp();
+  const { toggleCopilot, openDept, show, brief } = useApp();
+  // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
+  const founder = brief.founderName?.trim();
+  const company = brief.projectName?.trim() || 'your company';
 
   const onChip = (t: string) => {
     if (t.includes('Engineering')) openDept('eng');
@@ -21,7 +24,7 @@ export function Copilot() {
           <div className="pn">byte</div>
           <div className="st">
             <span className="d" />
-            guiding · Codepet
+            guiding · {company}
           </div>
         </div>
         <button
@@ -43,9 +46,8 @@ export function Copilot() {
       </div>
       <div className="cop-body">
         <div className="bub">
-          Welcome back, Nguyen. The brief&apos;s set — now we{' '}
-          <b>activate the departments that move Codepet fastest.</b> You&apos;re in the closed-beta
-          stretch.
+          Welcome back{founder ? `, ${founder}` : ''}. Your brief&apos;s set — now we{' '}
+          <b>activate the departments that move {company} fastest.</b>
         </div>
         <div className="bub">
           Three need you: <b>Engineering</b> (instrument the beta signal), <b>Marketing</b> (the
