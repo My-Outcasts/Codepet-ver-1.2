@@ -1,17 +1,35 @@
 'use client';
-// Central app store. Mirrors the draft's mutate-then-rerender model: DEPTS / ENV
-// are mutated in place and a `tick` counter forces consumers to re-read. LIBRARY
-// lives here as the single source of shipped/approved deliverables.
-import React, { createContext, useContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DEPTS, type Dept, type Task, type LibItem } from './data';
+// Central app store. Keeps the draft's mutate-then-rerender model: DEPTS / ENV are
+// mutated in place and a `tick` counter forces consumers to re-read. Phase 2 adds
+// persistence: on load the DEPTS/ENV singletons are HYDRATED from Firestore and the
+// library is read into state; mutations (task approval, env toggle) write through to
+// Firestore. The useApp() API is unchanged except for the added toggleEnv action.
+import React, {
+  createContext,
+  useContext,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta } from './helpers';
+import { track } from './analytics';
+import { useAuth } from './firebase/auth';
+import {
+  loadCompanyData,
+  persistApproval,
+  persistEnv,
+  envStateFromCatalog,
+  saveBrief,
+} from './firebase/companyData';
+import type { CompanyBrief } from './firebase/schema';
 
-export type View = 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
+export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
 
 export type Modal =
-  | { kind: 'run'; task: Task; dept: Dept; walk?: boolean }
-  | { kind: 'view'; item: LibItem }
-  | null;
+  { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
 
 interface AppState {
   tick: number;
@@ -27,7 +45,8 @@ interface AppState {
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
   onboarding: boolean;
-  finishOnboarding: () => void;
+  finishOnboarding: (brief?: CompanyBrief) => void;
+  brief: CompanyBrief;
   installed: boolean;
   setInstalled: (value: boolean) => void;
   library: LibItem[];
@@ -36,6 +55,7 @@ interface AppState {
   viewItem: (item: LibItem) => void;
   closeModal: () => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
+  toggleEnv: (category: string, index: number) => void;
   toastMsg: string;
   toast: (msg: string) => void;
 }
@@ -47,31 +67,28 @@ export const useApp = (): AppState => {
   return v;
 };
 
-// seed a few pre-approved deliverables so the populated Library is visible
-function seedLibrary(): LibItem[] {
-  const out: LibItem[] = [];
-  ['Build the Codepet landing page', 'Write the launch announcement post', 'Build the waitlist conversion email', 'Instrument the dual go/no-go signal', 'Set up the TestFlight beta']
-    .forEach((title) => {
-      let t: Task | undefined, d: Dept | undefined;
-      DEPTS.forEach((dep) => dep.tasks.forEach((x) => { if (x.t === title) { t = x; d = dep; } }));
-      if (!t || !d) return;
-      // mirror artType for the seeded item
-      const tt = t;
-      const type = tt.site ? 'site' : tt.screens ? 'screens' : tt.sheet ? 'sheet'
-        : tt.pr ? 'pr' : tt.post ? 'post' : tt.email ? 'email' : tt.calendar ? 'calendar'
-        : tt.legal ? 'legal' : tt.dms ? 'dms' : tt.checklist ? 'checklist'
-        : tt.run === 'route' ? 'build' : tt.who === 'you' ? 'prep' : 'doc';
-      const { file, head, tag } = artMeta(tt, type);
-      out.push({
-        title: tt.t, dept: d.name, k: d.k, ab: d.ab, type, out: tt.out, file, head, tag,
-        site: tt.site, screens: tt.screens, sheet: tt.sheet, post: tt.post, email: tt.email,
-        calendar: tt.calendar, legal: tt.legal, dms: tt.dms, checklist: tt.checklist, pr: tt.pr,
-      });
-    });
-  return out;
+// Full-screen status panel shown while the company state hydrates from Firestore.
+function HydrateScreen() {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        display: 'grid',
+        placeItems: 'center',
+        background: 'var(--page)',
+        color: 'var(--t-3)',
+        fontSize: 13,
+      }}
+    >
+      Loading your company…
+    </div>
+  );
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
+  const { companyId } = useAuth();
+
   const [tick, setTick] = useState(0);
   const bump = useCallback(() => setTick((n) => n + 1), []);
 
@@ -90,9 +107,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  const libRef = useRef<LibItem[] | null>(null);
-  if (libRef.current === null) libRef.current = seedLibrary();
-  const library = libRef.current;
+  // Library + business brief are owned here as state, hydrated from Firestore.
+  const [library, setLibrary] = useState<LibItem[]>([]);
+  const [brief, setBrief] = useState<CompanyBrief>({});
+  const [hydrated, setHydrated] = useState(false);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useCallback((msg: string) => {
@@ -101,14 +119,58 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toastTimer.current = setTimeout(() => setToastMsg(''), 3400);
   }, []);
 
-  const show = useCallback((v: View) => { setView(v); }, []);
-  const openDept = useCallback((k: string) => { setDeptKey(k); setView('dept'); }, []);
-  const selectStage = useCallback((n: number) => { setSelStage(n); setDrawerOpen(true); }, []);
+  // Hydrate DEPTS/ENV (in place) + library from Firestore once the company is known.
+  // `hydrated` starts false and companyId only transitions null→uid once per session,
+  // so there's no need to reset it synchronously here.
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelled = false;
+    loadCompanyData(companyId)
+      .then(({ library: lib, brief: b }) => {
+        if (cancelled) return;
+        setLibrary(lib);
+        setBrief(b);
+        bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
+        setHydrated(true);
+      })
+      .catch((err) => {
+        console.error('[store] hydrate failed', err);
+        if (!cancelled) setHydrated(true); // fail open to the seed rather than hang
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, bump]);
+
+  const show = useCallback((v: View) => {
+    setView(v);
+  }, []);
+  const openDept = useCallback((k: string) => {
+    setDeptKey(k);
+    setView('dept');
+  }, []);
+  const selectStage = useCallback((n: number) => {
+    setSelStage(n);
+    setDrawerOpen(true);
+  }, []);
   const closeStage = useCallback(() => setDrawerOpen(false), []);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
-  const finishOnboarding = useCallback(() => setOnboarding(false), []);
+  const finishOnboarding = useCallback(
+    (briefData?: CompanyBrief) => {
+      setOnboarding(false);
+      if (briefData) {
+        setBrief(briefData);
+        if (companyId) {
+          saveBrief(companyId, briefData).catch((err) =>
+            console.error('[store] saveBrief failed', err),
+          );
+        }
+      }
+    },
+    [companyId],
+  );
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
     try {
@@ -117,35 +179,133 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
-  const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => setModal({ kind: 'run', task, dept, walk }), []);
+  const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => {
+    track('task.run', { dept: dept.k });
+    setModal({ kind: 'run', task, dept, walk });
+  }, []);
   const viewItem = useCallback((item: LibItem) => setModal({ kind: 'view', item }), []);
   const closeModal = useCallback(() => setModal(null), []);
 
-  const approveTask = useCallback((t: Task, d: Dept, type: string) => {
-    t.done = true;
-    d.pend = Math.max(0, (d.pend || 0) - 1);
-    if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
-    const { file, head, tag } = artMeta(t, type);
-    const item: LibItem = {
-      title: t.t, dept: d.name, k: d.k, ab: d.ab, type, out: t.out, file, head, tag,
-      site: t.site, screens: t.screens, sheet: t.sheet, post: t.post, email: t.email,
-      calendar: t.calendar, legal: t.legal, dms: t.dms, checklist: t.checklist, pr: t.pr,
-    };
-    t._item = item;
-    library.unshift(item);
-    const next = d.tasks.find((x) => !x.done);
-    bump();
-    toast((type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t);
-    return { item, next };
-  }, [library, bump, toast]);
+  const approveTask = useCallback(
+    (t: Task, d: Dept, type: string) => {
+      t.done = true;
+      d.pend = Math.max(0, (d.pend || 0) - 1);
+      if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
+      const { file, head, tag } = artMeta(t, type);
+      const item: LibItem = {
+        title: t.t,
+        dept: d.name,
+        k: d.k,
+        ab: d.ab,
+        type,
+        out: t.out,
+        file,
+        head,
+        tag,
+        site: t.site,
+        screens: t.screens,
+        sheet: t.sheet,
+        post: t.post,
+        email: t.email,
+        calendar: t.calendar,
+        legal: t.legal,
+        dms: t.dms,
+        checklist: t.checklist,
+        pr: t.pr,
+      };
+      t._item = item;
+      setLibrary((prev) => [item, ...prev]);
+      const next = d.tasks.find((x) => !x.done);
+      bump();
+      track('task.approved', { dept: d.k, type });
+      toast(
+        (type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t,
+      );
+      // Write-through (optimistic — the in-memory update already happened).
+      if (companyId) {
+        persistApproval(companyId, d, item, Date.now()).catch((err) => {
+          console.error('[store] persistApproval failed', err);
+          toast('Saved locally — sync failed');
+        });
+      }
+      return { item, next };
+    },
+    [companyId, bump, toast],
+  );
 
-  const value = useMemo<AppState>(() => ({
-    tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, setInstalled: setInstalledFlag, library, modal, runTask,
-    viewItem, closeModal, approveTask, toastMsg, toast,
-  }), [tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, installed, setInstalledFlag, library, modal, runTask,
-    viewItem, closeModal, approveTask, toastMsg, toast]);
+  const toggleEnv = useCallback(
+    (category: string, index: number) => {
+      const item = ENV[category]?.[index];
+      if (!item) return;
+      item.s = item.s ? 0 : 1;
+      bump();
+      if (companyId) {
+        persistEnv(companyId, envStateFromCatalog()).catch((err) => {
+          console.error('[store] persistEnv failed', err);
+        });
+      }
+    },
+    [companyId, bump],
+  );
 
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  const value = useMemo<AppState>(
+    () => ({
+      tick,
+      bump,
+      view,
+      show,
+      deptKey,
+      openDept,
+      selStage,
+      drawerOpen,
+      selectStage,
+      closeStage,
+      copilotCollapsed,
+      toggleCopilot,
+      onboarding,
+      finishOnboarding,
+      brief,
+      installed,
+      setInstalled: setInstalledFlag,
+      library,
+      modal,
+      runTask,
+      viewItem,
+      closeModal,
+      approveTask,
+      toggleEnv,
+      toastMsg,
+      toast,
+    }),
+    [
+      tick,
+      bump,
+      view,
+      show,
+      deptKey,
+      openDept,
+      selStage,
+      drawerOpen,
+      selectStage,
+      closeStage,
+      copilotCollapsed,
+      toggleCopilot,
+      onboarding,
+      finishOnboarding,
+      brief,
+      installed,
+      setInstalledFlag,
+      library,
+      modal,
+      runTask,
+      viewItem,
+      closeModal,
+      approveTask,
+      toggleEnv,
+      toastMsg,
+      toast,
+    ],
+  );
+
+  return <Ctx.Provider value={value}>{hydrated ? children : <HydrateScreen />}</Ctx.Provider>;
 }
