@@ -15,7 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { getDb } from './client';
-import { DEPTS, ENV, type Dept, type Task, type LibItem } from '../data';
+import { DEPTS, ENV, DEPTS_SEED, ENV_SEED, type Dept, type Task, type LibItem } from '../data';
 import {
   paths,
   type DepartmentDoc,
@@ -80,6 +80,27 @@ function applyDepartments(departments: DepartmentDoc[]): void {
   }
 }
 
+/**
+ * Reset the mutable DEPTS/ENV singletons to their pristine seed, in place (element
+ * references are preserved, so views holding them keep working). Called at the start
+ * of every hydration so an account always loads from a clean baseline — no task
+ * approvals, env toggles, or other edits can leak in from a previously signed-in
+ * account on the same browser.
+ */
+export function resetCompanyData(): void {
+  DEPTS.forEach((dept, i) => {
+    const seed = DEPTS_SEED[i];
+    if (seed) Object.assign(dept, structuredClone(seed));
+  });
+  for (const category of Object.keys(ENV)) {
+    const seedItems = ENV_SEED[category] ?? [];
+    ENV[category].forEach((item, i) => {
+      const seed = seedItems[i];
+      if (seed) Object.assign(item, structuredClone(seed));
+    });
+  }
+}
+
 // ---- load + hydrate ----
 export interface CompanyData {
   library: LibItem[];
@@ -93,6 +114,8 @@ export interface CompanyData {
  * place. Returns the library + business brief (which the store owns as state).
  */
 export async function loadCompanyData(companyId: string): Promise<CompanyData> {
+  // Start from a clean per-account baseline before applying this account's data.
+  resetCompanyData();
   const db = getDb();
   const [deptSnap, libSnap, companySnap] = await Promise.all([
     getDocs(collection(db, paths.departments(companyId))),
