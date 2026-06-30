@@ -3,12 +3,65 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { DEPTS, reviseSite, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
-import { generateDeliverable } from '@/lib/ai/runTask';
+import { runByteTask, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
 import { ArtifactViewer } from './viewers';
 
-// Plain-text deliverables byte writes live via the Claude API (Phase 3).
-// Rich types (post/email/site/...) still use their authored payloads for now.
-const LIVE_TYPES = new Set(['doc', 'prep']);
+// Deliverable types byte generates live via the Claude API (Phase 3). Plain-text
+// (doc/prep) come back as text; post/email/legal come back as structured payloads.
+// The remaining types (site/sheet/screens/calendar/dms/checklist/pr) still use
+// their authored payloads.
+const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal']);
+
+function liveKind(type: string): DeliverableKind | null {
+  if (type === 'doc' || type === 'prep') return 'text';
+  if (type === 'post' || type === 'email' || type === 'legal') return type;
+  return null;
+}
+
+// The current draft byte revises against (structured payloads serialized to JSON).
+function currentDraft(t: Task, type: string): string {
+  if (type === 'post') return JSON.stringify(t.post ?? {});
+  if (type === 'email') return JSON.stringify(t.email ?? {});
+  if (type === 'legal') return JSON.stringify(t.legal ?? {});
+  return typeof t.out === 'string' ? t.out : '';
+}
+
+// Apply byte's result onto the task, merging structured payloads with the
+// presentational defaults the viewers expect (author/stats/from/updated).
+function applyResult(t: Task, type: string, res: RunResult): void {
+  if (type === 'post' && res.payload) {
+    const p = res.payload as { variants?: Array<{ label: string; body: string }> };
+    if (p.variants?.length) {
+      t.post = {
+        author: t.post?.author ?? 'byte',
+        handle: t.post?.handle ?? '@codepet',
+        stats: t.post?.stats ?? { replies: 18, reposts: 34, likes: 210 },
+        variants: p.variants,
+      };
+    }
+  } else if (type === 'email' && res.payload) {
+    const e = res.payload as Record<string, unknown>;
+    t.email = {
+      from: t.email?.from ?? 'byte',
+      fromAddr: t.email?.fromAddr ?? 'hello@code-pet.com',
+      subject: e.subject,
+      preheader: e.preheader,
+      body: e.body,
+      cta: e.cta,
+      seq: e.seq,
+    };
+  } else if (type === 'legal' && res.payload) {
+    const l = res.payload as Record<string, unknown>;
+    t.legal = {
+      docTitle: l.docTitle,
+      updated: t.legal?.updated ?? 'Draft · for your review',
+      sections: l.sections,
+      flag: l.flag,
+    };
+  } else if (typeof res.text === 'string' && res.text) {
+    t.out = res.text;
+  }
+}
 
 function Phx({ a }: { a: number }) {
   const ph = (i: number, label: string) => (
@@ -158,21 +211,23 @@ export function ArtifactModal() {
       setPicked('');
       setGenStatus('idle');
 
-      // For plain-text deliverables, byte writes the real thing via the Claude
-      // API while the execute log animates. On failure we fall back to the
-      // authored draft so the loop never dead-ends.
+      // byte generates the real deliverable via the Claude API while the execute
+      // log animates. On failure we fall back to the authored draft so the loop
+      // never dead-ends.
       const tk = modal.task;
       const dp = modal.dept;
       const ty = artType(tk, modal.walk);
-      if (LIVE_TYPES.has(ty)) {
+      const kind = liveKind(ty);
+      if (kind) {
         setGenStatus('loading');
-        generateDeliverable({
+        runByteTask({
+          kind,
           taskTitle: tk.t,
           taskHint: tk.d || (typeof tk.out === 'string' ? tk.out.slice(0, 160) : undefined),
           deptName: dp.name,
         })
-          .then((text) => {
-            if (text) tk.out = text;
+          .then((res) => {
+            applyResult(tk, ty, res);
             setGenStatus('done');
           })
           .catch((err) => {
@@ -242,12 +297,36 @@ export function ArtifactModal() {
 
   const sendRevision = () => {
     const note = reviseNote.trim() || picked || 'Tighten it up';
-    if (type === 'site') t.site = reviseSite(t.site || '', note);
-    else t.out = reviseText(t.out, note);
     setRev(note);
     setExecKind('revise');
     setDeliverReady(false);
     setStage('exec');
+
+    const kind = liveKind(type);
+    if (kind) {
+      // byte runs another live pass, revising the current draft against the note.
+      setGenStatus('loading');
+      runByteTask({
+        kind,
+        taskTitle: t.t,
+        taskHint: t.d,
+        deptName: d.name,
+        reviseNote: note,
+        current: currentDraft(t, type),
+      })
+        .then((res) => {
+          applyResult(t, type, res);
+          setGenStatus('done');
+        })
+        .catch((err) => {
+          console.error('[byte] live revise failed', err);
+          setGenStatus('error');
+        });
+    } else {
+      // Non-live types (site/sheet/...) still use the local mock revise.
+      if (type === 'site') t.site = reviseSite(t.site || '', note);
+      else t.out = reviseText(t.out, note);
+    }
   };
 
   const onApprove = () => {
@@ -372,8 +451,29 @@ export function ArtifactModal() {
               )}
             </div>
           </div>
+        ) : LIVE_TYPES.has(type) && genStatus === 'loading' ? (
+          <div className="artifact">
+            <div className="art-body" style={{ whiteSpace: 'pre-wrap' }}>
+              <span style={{ color: 'var(--t-3)' }}>
+                byte is writing this live with Claude…
+                <span className="cursor" />
+              </span>
+            </div>
+          </div>
         ) : (
-          <ViewerOnce item={item} onReady={() => setDeliverReady(true)} />
+          <>
+            {LIVE_TYPES.has(type) && genStatus === 'done' && (
+              <div style={{ fontSize: 12, color: 'var(--accent-deep)', marginBottom: 10 }}>
+                ✦ Written live by byte · Claude
+              </div>
+            )}
+            {LIVE_TYPES.has(type) && genStatus === 'error' && (
+              <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
+                Couldn’t reach byte just now — showing the saved draft.
+              </div>
+            )}
+            <ViewerOnce item={item} onReady={() => setDeliverReady(true)} />
+          </>
         )}
       </>
     );

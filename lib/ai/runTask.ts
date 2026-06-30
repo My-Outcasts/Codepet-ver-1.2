@@ -1,11 +1,23 @@
 'use client';
 // Client helper for the live task loop. Calls the server route (which holds the
-// Anthropic key) and returns byte's generated deliverable text.
+// Anthropic key) and returns byte's generated deliverable — plain text for
+// `text`, or a structured payload for post/email/legal.
 
-export interface GenerateArgs {
+export type DeliverableKind = 'text' | 'post' | 'email' | 'legal';
+
+export interface RunArgs {
+  kind: DeliverableKind;
   taskTitle: string;
   taskHint?: string;
   deptName?: string;
+  /** Revise pass: byte's feedback + the current draft to revise. */
+  reviseNote?: string;
+  current?: string;
+}
+
+export interface RunResult {
+  text?: string;
+  payload?: unknown;
 }
 
 export class GenerateError extends Error {
@@ -15,7 +27,7 @@ export class GenerateError extends Error {
   }
 }
 
-export async function generateDeliverable(args: GenerateArgs): Promise<string> {
+export async function runByteTask(args: RunArgs): Promise<RunResult> {
   const res = await fetch('/api/run-task', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -25,6 +37,5 @@ export async function generateDeliverable(args: GenerateArgs): Promise<string> {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new GenerateError(data.error || `http_${res.status}`);
   }
-  const data = (await res.json()) as { text?: string };
-  return (data.text ?? '').trim();
+  return (await res.json()) as RunResult;
 }
