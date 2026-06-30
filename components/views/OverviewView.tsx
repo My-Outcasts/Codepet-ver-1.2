@@ -79,7 +79,7 @@ const linkId = (x: unknown): string =>
   typeof x === 'object' && x ? (x as GNode).id : (x as string);
 
 export default function OverviewView() {
-  const { openDept, runTask, tick } = useApp();
+  const { openDept, runTask, tick, brief } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
@@ -109,7 +109,7 @@ export default function OverviewView() {
     const links: GLink[] = [];
     nodes.push({
       id: 'project',
-      name: 'Codepet',
+      name: brief.projectName?.trim() || 'Your company',
       kind: 'project',
       color: '#D8D2F5',
       val: 12,
@@ -181,7 +181,7 @@ export default function OverviewView() {
       adj.get(l.target)!.add(l.source);
     });
     return { data: { nodes, links }, adj };
-  }, [tick]);
+  }, [tick, brief.projectName]);
 
   const inFocus = useCallback(
     (id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id),
