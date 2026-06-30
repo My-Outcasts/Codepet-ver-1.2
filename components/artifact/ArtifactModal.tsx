@@ -3,7 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { DEPTS, reviseSite, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
+import { generateDeliverable } from '@/lib/ai/runTask';
 import { ArtifactViewer } from './viewers';
+
+// Plain-text deliverables byte writes live via the Claude API (Phase 3).
+// Rich types (post/email/site/...) still use their authored payloads for now.
+const LIVE_TYPES = new Set(['doc', 'prep']);
 
 function Phx({ a }: { a: number }) {
   const ph = (i: number, label: string) => (
@@ -137,6 +142,8 @@ export function ArtifactModal() {
   );
   const [reviseNote, setReviseNote] = useState('');
   const [picked, setPicked] = useState('');
+  // Live-generation status for plain-text deliverables (Phase 3).
+  const [genStatus, setGenStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
 
   // (re)initialize when a run modal opens for a task
   const task = modal?.kind === 'run' ? modal.task : null;
@@ -149,6 +156,30 @@ export function ArtifactModal() {
       setApproved(null);
       setReviseNote('');
       setPicked('');
+      setGenStatus('idle');
+
+      // For plain-text deliverables, byte writes the real thing via the Claude
+      // API while the execute log animates. On failure we fall back to the
+      // authored draft so the loop never dead-ends.
+      const tk = modal.task;
+      const dp = modal.dept;
+      const ty = artType(tk, modal.walk);
+      if (LIVE_TYPES.has(ty)) {
+        setGenStatus('loading');
+        generateDeliverable({
+          taskTitle: tk.t,
+          taskHint: tk.d || (typeof tk.out === 'string' ? tk.out.slice(0, 160) : undefined),
+          deptName: dp.name,
+        })
+          .then((text) => {
+            if (text) tk.out = text;
+            setGenStatus('done');
+          })
+          .catch((err) => {
+            console.error('[byte] live generation failed', err);
+            setGenStatus('error');
+          });
+      }
     }
   }, [modal, task]);
 
@@ -319,7 +350,26 @@ export function ArtifactModal() {
               <span dangerouslySetInnerHTML={{ __html: item.tag }} />
             </div>
             <div className="art-body" style={{ whiteSpace: 'pre-wrap' }}>
-              <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
+              {LIVE_TYPES.has(type) && genStatus === 'loading' ? (
+                <span style={{ color: 'var(--t-3)' }}>
+                  byte is writing this live with Claude…
+                  <span className="cursor" />
+                </span>
+              ) : (
+                <>
+                  {LIVE_TYPES.has(type) && genStatus === 'done' && (
+                    <div style={{ fontSize: 12, color: 'var(--accent-deep)', marginBottom: 10 }}>
+                      ✦ Written live by byte · Claude
+                    </div>
+                  )}
+                  {LIVE_TYPES.has(type) && genStatus === 'error' && (
+                    <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
+                      Couldn’t reach byte just now — showing the saved draft.
+                    </div>
+                  )}
+                  <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
+                </>
+              )}
             </div>
           </div>
         ) : (
