@@ -18,6 +18,7 @@ import { DepartmentDetail } from './views/DepartmentDetail';
 import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
 import { EnvironmentView } from './views/EnvironmentView';
+import { InstallView } from './views/InstallView';
 
 // 3D graph view — client-only (three.js / WebGL), lazy-loaded so three.js
 // is fetched only when the Overview tab is opened.
@@ -60,6 +61,8 @@ function Shell() {
       <TasksView />
     ) : view === 'library' ? (
       <LibraryView />
+    ) : view === 'install' ? (
+      <InstallView />
     ) : (
       <EnvironmentView />
     );

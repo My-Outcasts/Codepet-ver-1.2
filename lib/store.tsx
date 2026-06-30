@@ -26,7 +26,8 @@ import {
 } from './firebase/companyData';
 import type { CompanyBrief } from './firebase/schema';
 
-export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
+export type View =
+  'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
 
 export type Modal =
   { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
@@ -47,6 +48,8 @@ interface AppState {
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
   brief: CompanyBrief;
+  installed: boolean;
+  setInstalled: (value: boolean) => void;
   library: LibItem[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
@@ -99,6 +102,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
+    } catch {}
+  }, []);
+
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -171,6 +182,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [companyId],
   );
+  const setInstalledFlag = useCallback((value: boolean) => {
+    setInstalled(value);
+    try {
+      if (value) localStorage.setItem('codepet:installed', '1');
+      else localStorage.removeItem('codepet:installed');
+    } catch {}
+  }, []);
 
   const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => {
     track('task.run', { dept: dept.k });
@@ -258,6 +276,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       onboarding,
       finishOnboarding,
       brief,
+      installed,
+      setInstalled: setInstalledFlag,
       library,
       modal,
       runTask,
@@ -284,6 +304,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       onboarding,
       finishOnboarding,
       brief,
+      installed,
+      setInstalledFlag,
       library,
       modal,
       runTask,

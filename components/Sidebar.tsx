@@ -85,7 +85,7 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
 ];
 
 export function Sidebar() {
-  const { view, show, library, tick } = useApp();
+  const { view, show, library, tick, installed } = useApp();
   void tick; // re-read mutable DEPTS/ENV on each store change
   const envPending = ['skills', 'connectors', 'agents'].reduce(
     (a, k) => a + ENV[k].filter((x) => !x.s).length,
@@ -111,6 +111,18 @@ export function Sidebar() {
         return item(n.view, n.label, n.icon, c || undefined);
       })}
       <div className="grp">Your setup</div>
+      <div className={`nav${view === 'install' ? ' on' : ''}`} onClick={() => show('install')}>
+        <svg className="ic" viewBox="0 0 20 20" fill="none">
+          <path
+            d="M11 2L4 11h5l-1 7 7-9h-5l1-7z"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinejoin="round"
+          />
+        </svg>
+        <span>First install</span>
+        {installed ? <span className="nav-ck">✓</span> : <span className="nav-dot" />}
+      </div>
       {item(
         'env',
         'Environment',
