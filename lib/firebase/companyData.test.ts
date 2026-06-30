@@ -3,9 +3,10 @@ import {
   envStateFromCatalog,
   resetCompanyData,
   applyPersonalization,
+  validStage,
   type PersonalizedDept,
 } from './companyData';
-import { ENV, ENV_CATS, DEPTS, DEPTS_SEED, ENV_SEED } from '../data';
+import { ENV, ENV_CATS, DEPTS, DEPTS_SEED, ENV_SEED, NODES } from '../data';
 
 describe('envStateFromCatalog', () => {
   it('snapshots every catalog category as a name→boolean map', () => {
@@ -117,5 +118,23 @@ describe('applyPersonalization (Phase 5.3 seed templating)', () => {
     expect(dept.need).toBe(seed.need); // blanks didn't overwrite
     expect(dept.byte).toBe(seed.byte);
     expect(changed.map((d) => d.k)).not.toContain('__nope__');
+  });
+});
+
+describe('validStage (Phase 5.4 roadmap position)', () => {
+  it('accepts every real roadmap node number', () => {
+    for (const node of NODES) {
+      expect(validStage(node.n)).toBe(node.n);
+    }
+  });
+
+  it('rejects out-of-range, non-number, and missing values (falls back to default)', () => {
+    expect(validStage(0)).toBeUndefined();
+    expect(validStage(9999)).toBeUndefined();
+    expect(validStage(-1)).toBeUndefined();
+    expect(validStage('6')).toBeUndefined();
+    expect(validStage(null)).toBeUndefined();
+    expect(validStage(undefined)).toBeUndefined();
+    expect(validStage(NaN)).toBeUndefined();
   });
 });

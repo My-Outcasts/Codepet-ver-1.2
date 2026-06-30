@@ -15,7 +15,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { getDb } from './client';
-import { DEPTS, ENV, DEPTS_SEED, ENV_SEED, type Dept, type Task, type LibItem } from '../data';
+import { DEPTS, ENV, DEPTS_SEED, ENV_SEED, byN, type Dept, type Task, type LibItem } from '../data';
 import {
   paths,
   type DepartmentDoc,
@@ -107,6 +107,13 @@ export interface CompanyData {
   brief: CompanyBrief;
   /** When onboarding was completed; undefined ⇒ the user hasn't onboarded yet. */
   onboardedAt?: number;
+  /** Last-selected roadmap stage; undefined ⇒ none saved (use the UI default). */
+  roadmapStage?: number;
+}
+
+/** A persisted roadmap stage is only usable if it maps to a real node. */
+export function validStage(raw: unknown): number | undefined {
+  return typeof raw === 'number' && byN(raw) ? raw : undefined;
 }
 
 /**
@@ -139,7 +146,16 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     library,
     brief: (company?.brief ?? {}) as CompanyBrief,
     onboardedAt: company?.onboardedAt as number | undefined,
+    roadmapStage: validStage(company?.roadmapStage),
   };
+}
+
+/** Persist the user's current roadmap position so they return to where they left off. */
+export async function persistRoadmapStage(companyId: string, stage: number): Promise<void> {
+  await updateDoc(doc(getDb(), paths.company(companyId)), {
+    roadmapStage: stage,
+    updatedAt: Date.now(),
+  });
 }
 
 /**
