@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { Byte } from '../Byte';
 import {
@@ -21,6 +21,7 @@ export function InstallView() {
   const [cmd, setCmd] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = async () => {
     const [c, t, s] = await Promise.all([getCapability(), getToolkit(), getStatus()]);
@@ -29,6 +30,7 @@ export function InstallView() {
     if (c.mode === 'remote') setCmd(await getInstallCommand(t.map((i) => i.id)));
   };
   useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
 
   const ids = toolkit.map((i) => i.id);
   const installedSet = new Set(status.filter((s) => s.installed).map((s) => s.id));
@@ -36,20 +38,31 @@ export function InstallView() {
 
   const run = async () => {
     setBusy(true);
-    const res = await installToolkit(ids);
-    if (res.ok) setResults(res.results);
-    await refresh();
-    setBusy(false);
+    try {
+      const res = await installToolkit(ids);
+      if (res.ok) setResults(res.results);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
   };
   const remove = async () => {
     setBusy(true);
-    await uninstallToolkit(ids);
-    setResults(null);
-    await refresh();
-    setBusy(false);
+    try {
+      await uninstallToolkit(ids);
+      setResults(null);
+      await refresh();
+    } finally {
+      setBusy(false);
+    }
   };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {}
   };
 
   const statusClass = (s: string) => (s === 'error' ? ' err' : ' done');
