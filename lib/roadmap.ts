@@ -2,7 +2,10 @@
 // state off DEPTS, so they must be called on each render (post-mutation).
 import { DEPTS, STAGE_TASKS, NODES, byN, type Dept, type Task } from './data';
 
-export interface StageTaskRef { dept: Dept; task: Task; }
+export interface StageTaskRef {
+  dept: Dept;
+  task: Task;
+}
 
 export function stageTasks(num: number): StageTaskRef[] {
   return (STAGE_TASKS[num] || [])
@@ -31,8 +34,8 @@ export function isStageDone(s: any): boolean {
 export function eff(n: any): 'done' | 'locked' | 'now' | 'next' {
   if (isStageDone(n)) return 'done';
   if (!n.deps.every((d: number) => isStageDone(byN(d)))) return 'locked';
-  const active = NODES
-    .filter((x: any) => !isStageDone(x) && x.deps.every((d: number) => isStageDone(byN(d))))
-    .sort((a: any, b: any) => a.n - b.n)[0];
+  const active = NODES.filter(
+    (x: any) => !isStageDone(x) && x.deps.every((d: number) => isStageDone(byN(d))),
+  ).sort((a: any, b: any) => a.n - b.n)[0];
   return active && active.n === n.n ? 'now' : 'next';
 }
