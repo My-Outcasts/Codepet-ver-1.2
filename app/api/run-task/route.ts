@@ -9,6 +9,8 @@
 // All kinds support a revise pass (reviseNote + current draft).
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
+import { briefToContext } from '@/lib/ai/brief';
+import { loadServerBrief } from '@/lib/firebase/serverBrief';
 
 export const runtime = 'nodejs';
 
@@ -136,82 +138,6 @@ interface RunTaskBody {
   reviseNote?: unknown;
   current?: unknown;
   brief?: unknown;
-}
-
-// Compose the user's persisted onboarding brief into company context so byte
-// writes from their real company. Falls back to the baseline when absent.
-function briefToContext(raw: unknown): string | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const b = raw as Record<string, unknown>;
-  const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
-  const name = str(b.projectName, 120);
-  const oneLiner = str(b.oneLiner, 240);
-  const notes = str(b.notes, 800);
-  const categories = Array.isArray(b.categories)
-    ? b.categories.filter((c): c is string => typeof c === 'string').slice(0, 6)
-    : [];
-  const audience = str(b.audience, 160);
-  const link = str(b.link, 200);
-  if (!name && !oneLiner && !notes) return null;
-
-  const parts: string[] = [`The company is ${name || "the founder's product"}.`];
-  if (oneLiner) parts.push(oneLiner.endsWith('.') ? oneLiner : `${oneLiner}.`);
-  if (categories.length) parts.push(`It is a ${categories.join(' / ').toLowerCase()} product.`);
-  if (audience) parts.push(`It's for ${audience}.`);
-  if (notes) parts.push(notes.endsWith('.') ? notes : `${notes}.`);
-  if (link) parts.push(`Reference: ${link}.`);
-  const who: string[] = [];
-  const role = str(b.role, 80);
-  const stage = str(b.stage, 80);
-  if (role) who.push(`a ${role.toLowerCase()}`);
-  if (stage) who.push(`at the ${stage.toLowerCase()} stage`);
-  if (who.length) parts.push(`The founder is ${who.join(', ')}.`);
-  const founderName = str(b.founderName, 80);
-  if (founderName) parts.push(`Their name is ${founderName}.`);
-  return parts.join(' ');
-}
-
-// ---- server-side brief loading (trust the account, not the client) ----
-// We read the caller's own company doc from Firestore over REST, authorized by THEIR
-// ID token, so the read is subject to the same security rules — no service account
-// needed, and the brief is always the one persisted under the signed-in account.
-interface FsValue {
-  stringValue?: string;
-  integerValue?: string;
-  doubleValue?: number;
-  booleanValue?: boolean;
-  arrayValue?: { values?: FsValue[] };
-  mapValue?: { fields?: Record<string, FsValue> };
-}
-
-function fsToJs(v: FsValue | undefined): unknown {
-  if (!v) return undefined;
-  if (v.stringValue !== undefined) return v.stringValue;
-  if (v.integerValue !== undefined) return Number(v.integerValue);
-  if (v.doubleValue !== undefined) return v.doubleValue;
-  if (v.booleanValue !== undefined) return v.booleanValue;
-  if (v.arrayValue) return (v.arrayValue.values ?? []).map(fsToJs);
-  if (v.mapValue) {
-    const out: Record<string, unknown> = {};
-    const fields = v.mapValue.fields ?? {};
-    for (const k of Object.keys(fields)) out[k] = fsToJs(fields[k]);
-    return out;
-  }
-  return undefined;
-}
-
-async function loadServerBrief(uid: string, idToken: string): Promise<unknown> {
-  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-  if (!projectId) return null;
-  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/companies/${encodeURIComponent(uid)}?mask.fieldPaths=brief`;
-  try {
-    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { fields?: { brief?: FsValue } };
-    return fsToJs(json.fields?.brief);
-  } catch {
-    return null;
-  }
 }
 
 function buildPrompt(
