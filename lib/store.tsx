@@ -9,9 +9,7 @@ import { artMeta } from './helpers';
 export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env';
 
 export type Modal =
-  | { kind: 'run'; task: Task; dept: Dept; walk?: boolean }
-  | { kind: 'view'; item: LibItem }
-  | null;
+  { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
 
 interface AppState {
   tick: number;
@@ -48,24 +46,73 @@ export const useApp = (): AppState => {
 // seed a few pre-approved deliverables so the populated Library is visible
 function seedLibrary(): LibItem[] {
   const out: LibItem[] = [];
-  ['Build the Codepet landing page', 'Write the launch announcement post', 'Build the waitlist conversion email', 'Instrument the dual go/no-go signal', 'Set up the TestFlight beta']
-    .forEach((title) => {
-      let t: Task | undefined, d: Dept | undefined;
-      DEPTS.forEach((dep) => dep.tasks.forEach((x) => { if (x.t === title) { t = x; d = dep; } }));
-      if (!t || !d) return;
-      // mirror artType for the seeded item
-      const tt = t;
-      const type = tt.site ? 'site' : tt.screens ? 'screens' : tt.sheet ? 'sheet'
-        : tt.pr ? 'pr' : tt.post ? 'post' : tt.email ? 'email' : tt.calendar ? 'calendar'
-        : tt.legal ? 'legal' : tt.dms ? 'dms' : tt.checklist ? 'checklist'
-        : tt.run === 'route' ? 'build' : tt.who === 'you' ? 'prep' : 'doc';
-      const { file, head, tag } = artMeta(tt, type);
-      out.push({
-        title: tt.t, dept: d.name, k: d.k, ab: d.ab, type, out: tt.out, file, head, tag,
-        site: tt.site, screens: tt.screens, sheet: tt.sheet, post: tt.post, email: tt.email,
-        calendar: tt.calendar, legal: tt.legal, dms: tt.dms, checklist: tt.checklist, pr: tt.pr,
-      });
+  [
+    'Build the Codepet landing page',
+    'Write the launch announcement post',
+    'Build the waitlist conversion email',
+    'Instrument the dual go/no-go signal',
+    'Set up the TestFlight beta',
+  ].forEach((title) => {
+    let t: Task | undefined, d: Dept | undefined;
+    DEPTS.forEach((dep) =>
+      dep.tasks.forEach((x) => {
+        if (x.t === title) {
+          t = x;
+          d = dep;
+        }
+      }),
+    );
+    if (!t || !d) return;
+    // mirror artType for the seeded item
+    const tt = t;
+    const type = tt.site
+      ? 'site'
+      : tt.screens
+        ? 'screens'
+        : tt.sheet
+          ? 'sheet'
+          : tt.pr
+            ? 'pr'
+            : tt.post
+              ? 'post'
+              : tt.email
+                ? 'email'
+                : tt.calendar
+                  ? 'calendar'
+                  : tt.legal
+                    ? 'legal'
+                    : tt.dms
+                      ? 'dms'
+                      : tt.checklist
+                        ? 'checklist'
+                        : tt.run === 'route'
+                          ? 'build'
+                          : tt.who === 'you'
+                            ? 'prep'
+                            : 'doc';
+    const { file, head, tag } = artMeta(tt, type);
+    out.push({
+      title: tt.t,
+      dept: d.name,
+      k: d.k,
+      ab: d.ab,
+      type,
+      out: tt.out,
+      file,
+      head,
+      tag,
+      site: tt.site,
+      screens: tt.screens,
+      sheet: tt.sheet,
+      post: tt.post,
+      email: tt.email,
+      calendar: tt.calendar,
+      legal: tt.legal,
+      dms: tt.dms,
+      checklist: tt.checklist,
+      pr: tt.pr,
     });
+  });
   return out;
 }
 
@@ -93,44 +140,119 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toastTimer.current = setTimeout(() => setToastMsg(''), 3400);
   }, []);
 
-  const show = useCallback((v: View) => { setView(v); }, []);
-  const openDept = useCallback((k: string) => { setDeptKey(k); setView('dept'); }, []);
-  const selectStage = useCallback((n: number) => { setSelStage(n); setDrawerOpen(true); }, []);
+  const show = useCallback((v: View) => {
+    setView(v);
+  }, []);
+  const openDept = useCallback((k: string) => {
+    setDeptKey(k);
+    setView('dept');
+  }, []);
+  const selectStage = useCallback((n: number) => {
+    setSelStage(n);
+    setDrawerOpen(true);
+  }, []);
   const closeStage = useCallback(() => setDrawerOpen(false), []);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
   const finishOnboarding = useCallback(() => setOnboarding(false), []);
 
-  const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => setModal({ kind: 'run', task, dept, walk }), []);
+  const runTask = useCallback(
+    (task: Task, dept: Dept, walk?: boolean) => setModal({ kind: 'run', task, dept, walk }),
+    [],
+  );
   const viewItem = useCallback((item: LibItem) => setModal({ kind: 'view', item }), []);
   const closeModal = useCallback(() => setModal(null), []);
 
-  const approveTask = useCallback((t: Task, d: Dept, type: string) => {
-    t.done = true;
-    d.pend = Math.max(0, (d.pend || 0) - 1);
-    if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
-    const { file, head, tag } = artMeta(t, type);
-    const item: LibItem = {
-      title: t.t, dept: d.name, k: d.k, ab: d.ab, type, out: t.out, file, head, tag,
-      site: t.site, screens: t.screens, sheet: t.sheet, post: t.post, email: t.email,
-      calendar: t.calendar, legal: t.legal, dms: t.dms, checklist: t.checklist, pr: t.pr,
-    };
-    t._item = item;
-    library.unshift(item);
-    const next = d.tasks.find((x) => !x.done);
-    bump();
-    toast((type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t);
-    return { item, next };
-  }, [library, bump, toast]);
+  const approveTask = useCallback(
+    (t: Task, d: Dept, type: string) => {
+      t.done = true;
+      d.pend = Math.max(0, (d.pend || 0) - 1);
+      if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
+      const { file, head, tag } = artMeta(t, type);
+      const item: LibItem = {
+        title: t.t,
+        dept: d.name,
+        k: d.k,
+        ab: d.ab,
+        type,
+        out: t.out,
+        file,
+        head,
+        tag,
+        site: t.site,
+        screens: t.screens,
+        sheet: t.sheet,
+        post: t.post,
+        email: t.email,
+        calendar: t.calendar,
+        legal: t.legal,
+        dms: t.dms,
+        checklist: t.checklist,
+        pr: t.pr,
+      };
+      t._item = item;
+      library.unshift(item);
+      const next = d.tasks.find((x) => !x.done);
+      bump();
+      toast(
+        (type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t,
+      );
+      return { item, next };
+    },
+    [library, bump, toast],
+  );
 
-  const value = useMemo<AppState>(() => ({
-    tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, library, modal, runTask,
-    viewItem, closeModal, approveTask, toastMsg, toast,
-  }), [tick, bump, view, show, deptKey, openDept, selStage, drawerOpen, selectStage, closeStage,
-    copilotCollapsed, toggleCopilot, onboarding, finishOnboarding, library, modal, runTask,
-    viewItem, closeModal, approveTask, toastMsg, toast]);
+  const value = useMemo<AppState>(
+    () => ({
+      tick,
+      bump,
+      view,
+      show,
+      deptKey,
+      openDept,
+      selStage,
+      drawerOpen,
+      selectStage,
+      closeStage,
+      copilotCollapsed,
+      toggleCopilot,
+      onboarding,
+      finishOnboarding,
+      library,
+      modal,
+      runTask,
+      viewItem,
+      closeModal,
+      approveTask,
+      toastMsg,
+      toast,
+    }),
+    [
+      tick,
+      bump,
+      view,
+      show,
+      deptKey,
+      openDept,
+      selStage,
+      drawerOpen,
+      selectStage,
+      closeStage,
+      copilotCollapsed,
+      toggleCopilot,
+      onboarding,
+      finishOnboarding,
+      library,
+      modal,
+      runTask,
+      viewItem,
+      closeModal,
+      approveTask,
+      toastMsg,
+      toast,
+    ],
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -28,19 +28,40 @@ export function CompanyView() {
           const task = dep.tasks?.[0]?.t || 'All clear';
           const st = STATUS[dep.status] || STATUS.ready;
           return (
-            <div className="deptrow" key={dep.k} onClick={() => openDept(dep.k)} style={{ ['--rc' as string]: `var(${col})` }}>
+            <div
+              className="deptrow"
+              key={dep.k}
+              onClick={() => openDept(dep.k)}
+              style={{ ['--rc' as string]: `var(${col})` }}
+            >
               <div className="dr-img" style={{ backgroundImage: `url('/covers/${dep.k}.png')` }}>
-                <span className="dr-badge" style={{ background: `color-mix(in srgb,var(${col}) 34%,#0b0a12)` }}>{dep.ab}</span>
+                <span
+                  className="dr-badge"
+                  style={{ background: `color-mix(in srgb,var(${col}) 34%,#0b0a12)` }}
+                >
+                  {dep.ab}
+                </span>
               </div>
               <div className="dr-body">
                 <div className="dr-top">
                   <span className="dr-name">{dep.name}</span>
-                  <span className={`dr-status ${st.cls}`}><i />{st.label}</span>
+                  <span className={`dr-status ${st.cls}`}>
+                    <i />
+                    {st.label}
+                  </span>
                 </div>
                 <div className="dr-task">{task}</div>
               </div>
               <div className="dr-right">
-                <span className="dr-count">{dep.pend ? <><b>{dep.pend}</b> to do</> : 'All clear'}</span>
+                <span className="dr-count">
+                  {dep.pend ? (
+                    <>
+                      <b>{dep.pend}</b> to do
+                    </>
+                  ) : (
+                    'All clear'
+                  )}
+                </span>
                 <span className="dr-open">Open</span>
               </div>
             </div>

@@ -3,7 +3,8 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Codepet — your AI building companion',
-  description: "Run your whole company with AI, department by department. byte drafts and builds with you — you approve every move.",
+  description:
+    'Run your whole company with AI, department by department. byte drafts and builds with you — you approve every move.',
 };
 
 export const viewport: Viewport = {

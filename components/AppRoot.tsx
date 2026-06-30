@@ -20,33 +20,64 @@ import { EnvironmentView } from './views/EnvironmentView';
 // is fetched only when the Overview tab is opened.
 const OverviewView = dynamic(() => import('./views/OverviewView'), {
   ssr: false,
-  loading: () => <div style={{ position: 'absolute', inset: 0, background: '#0c0a17', display: 'grid', placeItems: 'center', color: 'rgba(245,243,255,.5)', fontSize: 13 }}>Building your company map…</div>,
+  loading: () => (
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        background: '#0c0a17',
+        display: 'grid',
+        placeItems: 'center',
+        color: 'rgba(245,243,255,.5)',
+        fontSize: 13,
+      }}
+    >
+      Building your company map…
+    </div>
+  ),
 });
 
 function Shell() {
   const { view, copilotCollapsed, toggleCopilot } = useApp();
   const mainRef = useRef<HTMLElement>(null);
-  useEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view]);
+  useEffect(() => {
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [view]);
 
   const ActiveView =
-    view === 'overview' ? <OverviewView />
-    : view === 'home' ? <CompanyView />
-    : view === 'roadmap' ? <RoadmapView />
-    : view === 'dept' ? <DepartmentDetail />
-    : view === 'tasks' ? <TasksView />
-    : view === 'library' ? <LibraryView />
-    : <EnvironmentView />;
+    view === 'overview' ? (
+      <OverviewView />
+    ) : view === 'home' ? (
+      <CompanyView />
+    ) : view === 'roadmap' ? (
+      <RoadmapView />
+    ) : view === 'dept' ? (
+      <DepartmentDetail />
+    ) : view === 'tasks' ? (
+      <TasksView />
+    ) : view === 'library' ? (
+      <LibraryView />
+    ) : (
+      <EnvironmentView />
+    );
 
   return (
     <div className="app">
       <Topbar />
       <div className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}`}>
         <Sidebar />
-        <main className="main" id="main" ref={mainRef}>{ActiveView}</main>
+        <main className="main" id="main" ref={mainRef}>
+          {ActiveView}
+        </main>
         <Copilot />
       </div>
-      <button className={`cop-open${copilotCollapsed ? ' show' : ''}`} aria-label="Open byte chat" onClick={() => toggleCopilot(false)}>
-        <Byte size="s28" />Ask byte
+      <button
+        className={`cop-open${copilotCollapsed ? ' show' : ''}`}
+        aria-label="Open byte chat"
+        onClick={() => toggleCopilot(false)}
+      >
+        <Byte size="s28" />
+        Ask byte
       </button>
       <Onboarding />
       <Toast />
