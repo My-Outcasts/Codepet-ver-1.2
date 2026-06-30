@@ -5548,6 +5548,174 @@ body {
   transform: translateY(-1px);
 }
 
+/* ===== sign-in / sign-up ===== */
+.signin {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #0a0818;
+  overflow: hidden;
+  animation: fadeIn 0.6s ease both;
+}
+/* cosmic Ken Burns layer */
+.signin::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/auth.jpg') center / cover no-repeat;
+  animation: kenburns 34s ease-in-out infinite alternate;
+}
+/* vignette scrim so the card reads against the busy art */
+.signin::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: radial-gradient(
+    120% 90% at 50% 50%,
+    rgba(8, 6, 24, 0.34) 0%,
+    rgba(8, 6, 24, 0.74) 100%
+  );
+}
+.signin-card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 394px;
+  background: var(--surface);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 20px;
+  padding: 34px 32px 28px;
+  box-shadow:
+    0 24px 70px rgba(6, 3, 28, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.12s both;
+}
+.signin-brand {
+  font-family: 'Codepet Pixel', var(--sans);
+  font-size: 30px;
+  letter-spacing: 1px;
+  line-height: 1;
+  color: var(--ink);
+}
+.signin-sub {
+  margin-top: 9px;
+  font-size: 14px;
+  color: var(--t-3);
+}
+.signin-warn {
+  margin-top: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--clay);
+}
+.signin-google {
+  margin-top: 22px;
+  width: 100%;
+  height: 46px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+.signin-google:hover:not(:disabled) {
+  background: var(--well);
+}
+.signin-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+}
+.signin-or::before,
+.signin-or::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+.signin-or span {
+  font-size: 12px;
+  color: var(--t-4);
+}
+.signin-form {
+  display: grid;
+  gap: 10px;
+}
+.signin-input {
+  height: 46px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.signin-input:focus {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+.signin-submit {
+  height: 46px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(124, 58, 237, 0.35);
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.signin-submit:hover:not(:disabled) {
+  background: var(--accent-deep);
+  transform: translateY(-1px);
+}
+.signin-google:disabled,
+.signin-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.signin-error {
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--rose);
+}
+.signin-toggle {
+  margin-top: 18px;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--t-3);
+  font-family: var(--sans);
+  font-size: 13px;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.signin-toggle:hover {
+  color: var(--accent-deep);
+}
+
 /* sign-out confirmation */
 .so-overlay {
   position: fixed;
@@ -5628,6 +5796,9 @@ body {
 
 /* respect reduced-motion: drop drift, glow, and slide; keep content visible */
 @media (prefers-reduced-motion: reduce) {
+  .signin,
+  .signin::before,
+  .signin-card,
   .splash,
   .splash::before,
   .splash-title,
