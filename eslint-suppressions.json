@@ -1,0 +1,59 @@
+{
+  "components/Onboarding.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    },
+    "react-hooks/static-components": {
+      "count": 7
+    }
+  },
+  "components/artifact/ArtifactModal.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "react-hooks/immutability": {
+      "count": 1
+    },
+    "react-hooks/set-state-in-effect": {
+      "count": 3
+    }
+  },
+  "components/artifact/viewers.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 22
+    }
+  },
+  "components/views/EnvironmentView.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    }
+  },
+  "components/views/OverviewView.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 14
+    }
+  },
+  "components/views/RoadmapView.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "react-hooks/static-components": {
+      "count": 2
+    }
+  },
+  "lib/data.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 23
+    }
+  },
+  "lib/roadmap.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    }
+  },
+  "lib/store.tsx": {
+    "react-hooks/refs": {
+      "count": 2
+    }
+  }
+}
