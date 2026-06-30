@@ -25,12 +25,14 @@
 ### Task 1: Bundled toolkit content + manifest
 
 **Files:**
+
 - Create: `toolkit/manifest.mjs`
 - Create: `toolkit/skills/prd-writer/SKILL.md`
 - Create: `toolkit/skills/code-review/SKILL.md`
 - Create: `toolkit/agents/test-writer.md`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces: `toolkit/manifest.mjs` exporting `TOOLKIT` — an array of
   `{ id: string, name: string, type: 'skill'|'agent', source: string, desc: string }`.
@@ -44,9 +46,27 @@ Create `toolkit/manifest.mjs`:
 // The bundled, real Claude Code toolkit Codepet installs into ~/.claude.
 // `id` is a kebab-case slug; `source` is relative to the repo `toolkit/` dir.
 export const TOOLKIT = [
-  { id: 'prd-writer',  name: 'PRD writer',  type: 'skill', source: 'skills/prd-writer/SKILL.md',  desc: 'Turn a rough idea into a structured product spec.' },
-  { id: 'code-review', name: 'Code review', type: 'skill', source: 'skills/code-review/SKILL.md', desc: 'Review a diff for bugs before it ships.' },
-  { id: 'test-writer', name: 'Test Writer', type: 'agent', source: 'agents/test-writer.md',        desc: 'A subagent that writes tests for new code.' },
+  {
+    id: 'prd-writer',
+    name: 'PRD writer',
+    type: 'skill',
+    source: 'skills/prd-writer/SKILL.md',
+    desc: 'Turn a rough idea into a structured product spec.',
+  },
+  {
+    id: 'code-review',
+    name: 'Code review',
+    type: 'skill',
+    source: 'skills/code-review/SKILL.md',
+    desc: 'Review a diff for bugs before it ships.',
+  },
+  {
+    id: 'test-writer',
+    name: 'Test Writer',
+    type: 'agent',
+    source: 'agents/test-writer.md',
+    desc: 'A subagent that writes tests for new code.',
+  },
 ];
 ```
 
@@ -65,6 +85,7 @@ description: Use when turning a rough product idea into a structured PRD — cla
 Turn a rough idea into a short, structured product requirements doc.
 
 ## Process
+
 1. Identify the user and the job they're hiring this for.
 2. State the problem in one sentence.
 3. List in-scope requirements and explicit non-goals (YAGNI).
@@ -89,6 +110,7 @@ description: Use when reviewing a diff before it ships — checks correctness, e
 Review the current diff for correctness and clarity.
 
 ## Checklist
+
 - Correctness: does it do what the change intends? Off-by-one, null/empty, error paths.
 - Edge cases: boundary inputs, concurrency, failure modes.
 - Clarity: names match behavior; no dead code; no accidental scope creep.
@@ -109,6 +131,7 @@ description: Writes focused tests for new or changed code. Use proactively after
 You are a test-writing specialist. Given a change, write the smallest set of tests that verify its real behavior — not mocks.
 
 Guidelines:
+
 - Cover the happy path plus the edge cases that matter (empty, boundary, error).
 - One behavior per test; clear names that describe the behavior.
 - Match the project's existing test framework and style.
@@ -120,9 +143,11 @@ Output only the test code and where it should live.
 - [ ] **Step 5: Verify the manifest loads and sources exist**
 
 Run:
+
 ```bash
 node -e "import('./toolkit/manifest.mjs').then(m=>{const fs=require('fs');for(const i of m.TOOLKIT){if(!fs.existsSync('toolkit/'+i.source))throw new Error('missing '+i.source);}console.log('OK',m.TOOLKIT.length,'items, all sources present');})"
 ```
+
 Expected: `OK 3 items, all sources present`
 
 - [ ] **Step 6: Commit**
@@ -139,6 +164,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 2: Installer core + tests + test script
 
 **Files:**
+
 - Create: `lib/installer/manifest.mjs`
 - Create: `lib/installer/paths.mjs`
 - Create: `lib/installer/capability.mjs`
@@ -148,6 +174,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Modify: `package.json` (add `"test"` script)
 
 **Interfaces:**
+
 - Consumes: `TOOLKIT` from `toolkit/manifest.mjs` (Task 1).
 - Produces (imported by Tasks 3 & 4):
   - `manifest.mjs`: `TOOLKIT`, `ALL_IDS: string[]`, `itemsByIds(ids: string[])` (throws on unknown), `validateIds(ids: unknown) => string[]` (throws on unknown/malformed).
@@ -211,8 +238,9 @@ export function targetPath(item, claudeDir) {
 
 /** The managed target to remove on uninstall (dir for skills, file for agents). */
 export function managedTarget(item, claudeDir) {
-  if (item.type === 'skill') return { kind: 'dir',  path: path.join(claudeDir, 'skills', item.id) };
-  if (item.type === 'agent') return { kind: 'file', path: path.join(claudeDir, 'agents', `${item.id}.md`) };
+  if (item.type === 'skill') return { kind: 'dir', path: path.join(claudeDir, 'skills', item.id) };
+  if (item.type === 'agent')
+    return { kind: 'file', path: path.join(claudeDir, 'agents', `${item.id}.md`) };
   throw new Error(`Unknown item type: ${item.type}`);
 }
 
@@ -230,7 +258,16 @@ Create `lib/installer/capability.mjs`:
 import os from 'node:os';
 
 /** Decide whether this server can install onto the user's machine. */
-export function detectCapability(env = process.env, getHome = () => { try { return os.homedir(); } catch { return ''; } }) {
+export function detectCapability(
+  env = process.env,
+  getHome = () => {
+    try {
+      return os.homedir();
+    } catch {
+      return '';
+    }
+  },
+) {
   if (env.CODEPET_REMOTE === '1') return { mode: 'remote', reason: 'CODEPET_REMOTE' };
   if (env.VERCEL) return { mode: 'remote', reason: 'VERCEL' };
   const home = env.CODEPET_CLAUDE_DIR || getHome();
@@ -384,7 +421,10 @@ test('remote when there is no home dir', () => {
   assert.equal(detectCapability({}, () => '').mode, 'remote');
 });
 test('buildInstallCommand emits the CLI line', () => {
-  assert.equal(buildInstallCommand(['prd-writer', 'code-review']), 'node scripts/install-toolkit.mjs prd-writer code-review');
+  assert.equal(
+    buildInstallCommand(['prd-writer', 'code-review']),
+    'node scripts/install-toolkit.mjs prd-writer code-review',
+  );
 });
 ```
 
@@ -413,9 +453,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 3: Server actions
 
 **Files:**
+
 - Create: `app/actions/install.ts`
 
 **Interfaces:**
+
 - Consumes: `lib/installer/*` (Task 2).
 - Produces (called by `InstallView`, Task 5), all async:
   - `getCapability() => {mode,reason}`
@@ -483,9 +525,11 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 4: CLI wrapper (fallback / paste command)
 
 **Files:**
+
 - Create: `scripts/install-toolkit.mjs`
 
 **Interfaces:**
+
 - Consumes: `lib/installer/install.mjs`, `lib/installer/paths.mjs`, `lib/installer/manifest.mjs` (Task 2).
 - Produces: a CLI invoked as `node scripts/install-toolkit.mjs <id…>` (no args = all ids). This is exactly the string `buildInstallCommand` emits.
 
@@ -522,12 +566,14 @@ process.exit(results.some((r) => r.status === 'error') ? 1 : 0);
 - [ ] **Step 2: Verify the CLI installs into a temp dir (keeps real ~/.claude clean)**
 
 Run:
+
 ```bash
 rm -rf /tmp/codepet-cli && CODEPET_CLAUDE_DIR=/tmp/codepet-cli node scripts/install-toolkit.mjs prd-writer test-writer && \
 test -f /tmp/codepet-cli/skills/prd-writer/SKILL.md && test -f /tmp/codepet-cli/agents/test-writer.md && \
 echo "CLI OK: files created" && \
 CODEPET_CLAUDE_DIR=/tmp/codepet-cli node scripts/install-toolkit.mjs prd-writer | grep -q skipped && echo "CLI OK: idempotent"
 ```
+
 Expected: prints the two `✓ … (created)` lines, then `CLI OK: files created`, then `CLI OK: idempotent`.
 
 - [ ] **Step 3: Commit**
@@ -544,11 +590,13 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 5: Rewire InstallView to the real installer (+ store, CSS)
 
 **Files:**
+
 - Modify: `lib/store.tsx` (replace `markInstalled` with `setInstalled`)
 - Modify: `components/views/InstallView.tsx` (full rewrite of the data layer)
 - Modify: `app/globals.css` (add `.ins-cmd*` and `.ins-row.err` rules)
 
 **Interfaces:**
+
 - Consumes: the server actions from `app/actions/install.ts` (Task 3); `useApp()` from the store.
 - Produces: the working install view (local: real per-item report + uninstall; remote: copy command).
 
@@ -565,22 +613,24 @@ In the `AppState` interface, replace the line `markInstalled: () => void;` with:
 Replace the `markInstalled` callback definition:
 
 ```tsx
-  const markInstalled = useCallback(() => {
-    setInstalled(true);
-    try { localStorage.setItem('codepet:installed', '1'); } catch {}
-  }, []);
+const markInstalled = useCallback(() => {
+  setInstalled(true);
+  try {
+    localStorage.setItem('codepet:installed', '1');
+  } catch {}
+}, []);
 ```
 
 with:
 
 ```tsx
-  const setInstalledFlag = useCallback((value: boolean) => {
-    setInstalled(value);
-    try {
-      if (value) localStorage.setItem('codepet:installed', '1');
-      else localStorage.removeItem('codepet:installed');
-    } catch {}
-  }, []);
+const setInstalledFlag = useCallback((value: boolean) => {
+  setInstalled(value);
+  try {
+    if (value) localStorage.setItem('codepet:installed', '1');
+    else localStorage.removeItem('codepet:installed');
+  } catch {}
+}, []);
 ```
 
 (The `const [installed, setInstalled] = useState(false);` state line stays as-is — `setInstalledFlag` wraps the raw setter.)
@@ -597,14 +647,25 @@ import { useEffect, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { Byte } from '../Byte';
 import {
-  getCapability, getToolkit, getStatus,
-  installToolkit, uninstallToolkit, getInstallCommand,
+  getCapability,
+  getToolkit,
+  getStatus,
+  installToolkit,
+  uninstallToolkit,
+  getInstallCommand,
 } from '@/app/actions/install';
 
 type Cap = { mode: 'local' | 'remote'; reason: string };
 type Item = { id: string; name: string; type: 'skill' | 'agent'; source: string; desc: string };
 type Status = { id: string; installed: boolean; target: string };
-type Result = { id: string; name: string; type: string; target: string; status: string; error?: string };
+type Result = {
+  id: string;
+  name: string;
+  type: string;
+  target: string;
+  status: string;
+  error?: string;
+};
 
 export function InstallView() {
   const { setInstalled, show } = useApp();
@@ -618,11 +679,15 @@ export function InstallView() {
 
   const refresh = async () => {
     const [c, t, s] = await Promise.all([getCapability(), getToolkit(), getStatus()]);
-    setCap(c); setToolkit(t); setStatus(s);
+    setCap(c);
+    setToolkit(t);
+    setStatus(s);
     setInstalled(s.some((x) => x.installed));
     if (c.mode === 'remote') setCmd(await getInstallCommand(t.map((i) => i.id)));
   };
-  useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    refresh();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ids = toolkit.map((i) => i.id);
   const installedSet = new Set(status.filter((s) => s.installed).map((s) => s.id));
@@ -643,7 +708,11 @@ export function InstallView() {
     setBusy(false);
   };
   const copy = async () => {
-    try { await navigator.clipboard.writeText(cmd); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+    try {
+      await navigator.clipboard.writeText(cmd);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {}
   };
 
   const statusClass = (s: string) => (s === 'error' ? ' err' : ' done');
@@ -672,22 +741,61 @@ export function InstallView() {
           </div>
         </div>
 
-        {cap === null && <div className="ins-row on"><span className="ins-ic">○</span><div className="ins-meta"><b>Checking your environment…</b></div></div>}
+        {cap === null && (
+          <div className="ins-row on">
+            <span className="ins-ic">○</span>
+            <div className="ins-meta">
+              <b>Checking your environment…</b>
+            </div>
+          </div>
+        )}
 
         {cap?.mode === 'local' && (
           <>
-            {!allInstalled
-              ? <button className="ins-btn" disabled={busy} onClick={run}>{busy ? 'Installing…' : '▶ Wake byte up'}</button>
-              : <button className="ins-btn" disabled={busy} onClick={remove}>{busy ? 'Removing…' : 'Uninstall toolkit'}</button>}
+            {!allInstalled ? (
+              <button className="ins-btn" disabled={busy} onClick={run}>
+                {busy ? 'Installing…' : '▶ Wake byte up'}
+              </button>
+            ) : (
+              <button className="ins-btn" disabled={busy} onClick={remove}>
+                {busy ? 'Removing…' : 'Uninstall toolkit'}
+              </button>
+            )}
 
-            {(results ?? toolkit.map((i) => ({ id: i.id, name: i.name, type: i.type, target: '', status: installedSet.has(i.id) ? 'installed' : 'pending' } as Result))).map((r) => (
-              <div className={`ins-row on${r.status === 'pending' ? '' : statusClass(r.status)}`} key={r.id}>
-                <span className="ins-ic">{r.status === 'pending' ? '○' : statusIcon(r.status)}</span>
+            {(
+              results ??
+              toolkit.map(
+                (i) =>
+                  ({
+                    id: i.id,
+                    name: i.name,
+                    type: i.type,
+                    target: '',
+                    status: installedSet.has(i.id) ? 'installed' : 'pending',
+                  }) as Result,
+              )
+            ).map((r) => (
+              <div
+                className={`ins-row on${r.status === 'pending' ? '' : statusClass(r.status)}`}
+                key={r.id}
+              >
+                <span className="ins-ic">
+                  {r.status === 'pending' ? '○' : statusIcon(r.status)}
+                </span>
                 <div className="ins-meta">
-                  <b>{r.name} <span className="ins-kind">{r.type}</span></b>
-                  <span>{r.status === 'error' ? r.error : (r.target || `will install to ~/.claude/${r.type === 'skill' ? 'skills' : 'agents'}`)}</span>
+                  <b>
+                    {r.name} <span className="ins-kind">{r.type}</span>
+                  </b>
+                  <span>
+                    {r.status === 'error'
+                      ? r.error
+                      : r.target ||
+                        `will install to ~/.claude/${r.type === 'skill' ? 'skills' : 'agents'}`}
+                  </span>
                 </div>
-                {r.status !== 'pending' && <span className={`ins-tag${r.status === 'error' ? ' err' : ''}`}>{r.status}</span>}
+                {r.status !== 'pending' && (
+                  <span className={`ins-tag${r.status === 'error' ? ' err' : ''}`}>{r.status}</span>
+                )}
               </div>
             ))}
           </>
@@ -695,8 +803,15 @@ export function InstallView() {
 
         {cap?.mode === 'remote' && (
           <div className="ins-cmd">
-            <div className="ins-cmd-h">Run this from your Codepet repo to install byte's toolkit:</div>
-            <div className="ins-cmd-box"><code>{cmd}</code><button className="ins-cmd-copy" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button></div>
+            <div className="ins-cmd-h">
+              Run this from your Codepet repo to install byte's toolkit:
+            </div>
+            <div className="ins-cmd-box">
+              <code>{cmd}</code>
+              <button className="ins-cmd-copy" onClick={copy}>
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -711,7 +826,9 @@ export function InstallView() {
           </div>
         </div>
 
-        <button className="ins-skip" onClick={() => show('env')}>Skip → see the full Environment</button>
+        <button className="ins-skip" onClick={() => show('env')}>
+          Skip → see the full Environment
+        </button>
       </div>
     </section>
   );
@@ -723,16 +840,71 @@ export function InstallView() {
 In `app/globals.css`, append after the existing `.ins-link:hover` rule (end of the install block):
 
 ```css
-  .ins-kind{font-family:var(--pixel);font-size:8px;letter-spacing:.4px;text-transform:uppercase;color:var(--t-4);background:var(--well);border:1px solid var(--hairline);border-radius:5px;padding:1px 5px;vertical-align:middle;margin-left:6px}
-  .ins-row.err{border-color:var(--clay-line);background:var(--clay-tint)}
-  .ins-row.err .ins-ic{color:var(--clay)}
-  .ins-tag.err{background:var(--clay-tint);color:var(--clay)}
-  .ins-cmd{margin-bottom:9px}
-  .ins-cmd-h{font-size:12.5px;color:var(--t-3);margin-bottom:8px}
-  .ins-cmd-box{display:flex;align-items:center;gap:10px;background:#1F1B15;border:1px solid var(--hairline);border-radius:10px;padding:11px 13px}
-  .ins-cmd-box code{flex:1;font-family:var(--mono,monospace);font-size:12.5px;color:#E7ECF2;overflow-x:auto;white-space:nowrap}
-  .ins-cmd-copy{flex:none;font-size:12px;font-weight:600;border:1px solid var(--accent-line);background:var(--surface);color:var(--accent-deep);border-radius:8px;padding:6px 13px;cursor:pointer}
-  .ins-cmd-copy:hover{background:var(--accent);border-color:var(--accent);color:#fff}
+.ins-kind {
+  font-family: var(--pixel);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--t-4);
+  background: var(--well);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  padding: 1px 5px;
+  vertical-align: middle;
+  margin-left: 6px;
+}
+.ins-row.err {
+  border-color: var(--clay-line);
+  background: var(--clay-tint);
+}
+.ins-row.err .ins-ic {
+  color: var(--clay);
+}
+.ins-tag.err {
+  background: var(--clay-tint);
+  color: var(--clay);
+}
+.ins-cmd {
+  margin-bottom: 9px;
+}
+.ins-cmd-h {
+  font-size: 12.5px;
+  color: var(--t-3);
+  margin-bottom: 8px;
+}
+.ins-cmd-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1f1b15;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 11px 13px;
+}
+.ins-cmd-box code {
+  flex: 1;
+  font-family: var(--mono, monospace);
+  font-size: 12.5px;
+  color: #e7ecf2;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.ins-cmd-copy {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--accent-line);
+  background: var(--surface);
+  color: var(--accent-deep);
+  border-radius: 8px;
+  padding: 6px 13px;
+  cursor: pointer;
+}
+.ins-cmd-copy:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 ```
 
 (If `--clay-line`/`--clay-tint`/`--clay`/`--mono` are absent, confirm they exist in `:root`; the codebase defines `--clay`, `--clay-tint`, `--clay-line`. Use `monospace` if `--mono` is undefined.)
@@ -773,6 +945,7 @@ ls -R /tmp/codepet-verify
 kill $DEV 2>/dev/null
 git checkout -- package.json package-lock.json 2>/dev/null
 ```
+
 Expected: `RESULT TAGS:` lists `created` for each item (3 tags); the `ls -R` shows `/tmp/codepet-verify/skills/prd-writer/SKILL.md`, `/tmp/codepet-verify/skills/code-review/SKILL.md`, `/tmp/codepet-verify/agents/test-writer.md`. Real `~/.claude` is untouched.
 
 - [ ] **Step 6: Commit**

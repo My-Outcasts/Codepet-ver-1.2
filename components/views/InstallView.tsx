@@ -3,14 +3,25 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { Byte } from '../Byte';
 import {
-  getCapability, getToolkit, getStatus,
-  installToolkit, uninstallToolkit, getInstallCommand,
+  getCapability,
+  getToolkit,
+  getStatus,
+  installToolkit,
+  uninstallToolkit,
+  getInstallCommand,
 } from '@/app/actions/install';
 
 type Cap = { mode: 'local' | 'remote'; reason: string };
 type Item = { id: string; name: string; type: 'skill' | 'agent'; source: string; desc: string };
 type Status = { id: string; installed: boolean; target: string };
-type Result = { id: string; name: string; type: string; target: string; status: string; error?: string };
+type Result = {
+  id: string;
+  name: string;
+  type: string;
+  target: string;
+  status: string;
+  error?: string;
+};
 
 export function InstallView() {
   const { setInstalled, show } = useApp();
@@ -25,13 +36,22 @@ export function InstallView() {
 
   const refresh = async () => {
     const [c, t, s] = await Promise.all([getCapability(), getToolkit(), getStatus()]);
-    setCap(c as Cap); setToolkit(t as Item[]); setStatus(s as Status[]);
+    setCap(c as Cap);
+    setToolkit(t as Item[]);
+    setStatus(s as Status[]);
     // store `installed` = "any toolkit item installed" (coarse); the view uses `allInstalled` for the full-set gate
     setInstalled(s.some((x) => x.installed));
     if (c.mode === 'remote') setCmd(await getInstallCommand(t.map((i) => i.id)));
   };
-  useEffect(() => { refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => { if (copyTimer.current) clearTimeout(copyTimer.current); }, []);
+  useEffect(() => {
+    refresh();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(
+    () => () => {
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+    },
+    [],
+  );
 
   const ids = toolkit.map((i) => i.id);
   const installedSet = new Set(status.filter((s) => s.installed).map((s) => s.id));
@@ -92,22 +112,61 @@ export function InstallView() {
           </div>
         </div>
 
-        {cap === null && <div className="ins-row on"><span className="ins-ic">○</span><div className="ins-meta"><b>Checking your environment…</b></div></div>}
+        {cap === null && (
+          <div className="ins-row on">
+            <span className="ins-ic">○</span>
+            <div className="ins-meta">
+              <b>Checking your environment…</b>
+            </div>
+          </div>
+        )}
 
         {cap?.mode === 'local' && (
           <>
-            {!allInstalled
-              ? <button className="ins-btn" disabled={busy} onClick={run}>{busy ? 'Installing…' : '▶ Wake byte up'}</button>
-              : <button className="ins-btn" disabled={busy} onClick={remove}>{busy ? 'Removing…' : 'Uninstall toolkit'}</button>}
+            {!allInstalled ? (
+              <button className="ins-btn" disabled={busy} onClick={run}>
+                {busy ? 'Installing…' : '▶ Wake byte up'}
+              </button>
+            ) : (
+              <button className="ins-btn" disabled={busy} onClick={remove}>
+                {busy ? 'Removing…' : 'Uninstall toolkit'}
+              </button>
+            )}
 
-            {(results ?? toolkit.map((i) => ({ id: i.id, name: i.name, type: i.type, target: '', status: installedSet.has(i.id) ? 'installed' : 'pending' } as Result))).map((r) => (
-              <div className={`ins-row on${r.status === 'pending' ? '' : statusClass(r.status)}`} key={r.id}>
-                <span className="ins-ic">{r.status === 'pending' ? '○' : statusIcon(r.status)}</span>
+            {(
+              results ??
+              toolkit.map(
+                (i) =>
+                  ({
+                    id: i.id,
+                    name: i.name,
+                    type: i.type,
+                    target: '',
+                    status: installedSet.has(i.id) ? 'installed' : 'pending',
+                  }) as Result,
+              )
+            ).map((r) => (
+              <div
+                className={`ins-row on${r.status === 'pending' ? '' : statusClass(r.status)}`}
+                key={r.id}
+              >
+                <span className="ins-ic">
+                  {r.status === 'pending' ? '○' : statusIcon(r.status)}
+                </span>
                 <div className="ins-meta">
-                  <b>{r.name} <span className="ins-kind">{r.type}</span></b>
-                  <span>{r.status === 'error' ? r.error : (r.target || `will install to ~/.claude/${r.type === 'skill' ? 'skills' : 'agents'}`)}</span>
+                  <b>
+                    {r.name} <span className="ins-kind">{r.type}</span>
+                  </b>
+                  <span>
+                    {r.status === 'error'
+                      ? r.error
+                      : r.target ||
+                        `will install to ~/.claude/${r.type === 'skill' ? 'skills' : 'agents'}`}
+                  </span>
                 </div>
-                {r.status !== 'pending' && <span className={`ins-tag${r.status === 'error' ? ' err' : ''}`}>{r.status}</span>}
+                {r.status !== 'pending' && (
+                  <span className={`ins-tag${r.status === 'error' ? ' err' : ''}`}>{r.status}</span>
+                )}
               </div>
             ))}
           </>
@@ -115,8 +174,15 @@ export function InstallView() {
 
         {cap?.mode === 'remote' && (
           <div className="ins-cmd">
-            <div className="ins-cmd-h">Run this from your Codepet repo to install byte's toolkit:</div>
-            <div className="ins-cmd-box"><code>{cmd}</code><button className="ins-cmd-copy" onClick={copy}>{copied ? 'Copied ✓' : 'Copy'}</button></div>
+            <div className="ins-cmd-h">
+              Run this from your Codepet repo to install byte&apos;s toolkit:
+            </div>
+            <div className="ins-cmd-box">
+              <code>{cmd}</code>
+              <button className="ins-cmd-copy" onClick={copy}>
+                {copied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
           </div>
         )}
 
@@ -131,7 +197,9 @@ export function InstallView() {
           </div>
         </div>
 
-        <button className="ins-skip" onClick={() => show('env')}>Skip → see the full Environment</button>
+        <button className="ins-skip" onClick={() => show('env')}>
+          Skip → see the full Environment
+        </button>
       </div>
     </section>
   );

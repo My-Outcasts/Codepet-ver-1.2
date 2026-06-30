@@ -26,7 +26,8 @@ import {
 } from './firebase/companyData';
 import type { CompanyBrief } from './firebase/schema';
 
-export type View = 'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
+export type View =
+  'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
 
 export type Modal =
   { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
@@ -101,7 +102,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    try { if (localStorage.getItem('codepet:installed') === '1') setInstalled(true); } catch {}
+    try {
+      if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
+    } catch {}
   }, []);
 
   const [modal, setModal] = useState<Modal>(null);

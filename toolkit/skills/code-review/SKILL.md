@@ -8,6 +8,7 @@ description: Use when reviewing a diff before it ships — checks correctness, e
 Review the current diff for correctness and clarity.
 
 ## Checklist
+
 - Correctness: does it do what the change intends? Off-by-one, null/empty, error paths.
 - Edge cases: boundary inputs, concurrency, failure modes.
 - Clarity: names match behavior; no dead code; no accidental scope creep.

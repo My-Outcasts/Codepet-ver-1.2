@@ -16,6 +16,7 @@ install is about setting up byte's environment/toolkit.
 ## Scope
 
 ### In scope
+
 - New `install` view + sidebar menu under "Your setup", above "Environment".
 - Animated "wake byte up" flow adapted to the app's existing light/warm design language
   (reuse `<Byte>`, `.view`/`.vhead` patterns — do NOT port the demo's dark theme).
@@ -27,6 +28,7 @@ install is about setting up byte's environment/toolkit.
   with a "Re-run setup" affordance instead of replaying the animation.
 
 ### Out of scope (YAGNI)
+
 - No real hooks/statusline categories (ENV has none) — they appear only as decorative chips in
   the starter pack.
 - No change to the existing `Onboarding` wizard flow.
@@ -35,6 +37,7 @@ install is about setting up byte's environment/toolkit.
 ## Architecture
 
 ### State (`lib/store.tsx`)
+
 - Add `'install'` to the `View` union.
 - Add to `AppState`:
   - `installed: boolean`
@@ -44,12 +47,14 @@ install is about setting up byte's environment/toolkit.
   hydration mismatch); the effect upgrades it after mount.
 
 ### Sidebar (`components/Sidebar.tsx`)
+
 - Add an `install` nav item inside the existing "Your setup" group, rendered **above** the
   "Environment" item.
 - Badge: show a "needs setup" dot/indicator when `!installed`; show ✓ (or no badge) when
   `installed`.
 
 ### Install view (`components/views/InstallView.tsx`)
+
 - New client component, rendered when `view === 'install'` (wire into `AppRoot` Shell's
   `ActiveView` switch).
 - Two render states driven by `installed`:
@@ -72,10 +77,12 @@ install is about setting up byte's environment/toolkit.
       simply replays locally).
 
 ### Styling (`app/globals.css`)
+
 - Add `.install-*` classes matching existing tokens (`--surface`, `--accent`, `--t-1`, hairlines,
   the app's button styles). Reuse existing button/card classes where they fit.
 
 ## Data flow
+
 1. User opens `install` view from sidebar.
 2. Click "Wake byte up" → animation → mutate `ENV` (skills/agents `rec:1` → `s=1`) → `bump()` →
    Environment view + sidebar badge update live.
@@ -83,12 +90,14 @@ install is about setting up byte's environment/toolkit.
 4. Return visit → store hydrates `installed=true` → install view shows recap state.
 
 ## Error / edge handling
+
 - `localStorage` access wrapped in try/catch (private mode / unavailable) — treat failure as
   "not installed", no crash.
 - Animation timers cleaned up on unmount (clear all `setTimeout` in the effect cleanup).
 - Re-running setup when items are already `s=1` is idempotent (flip-to-1 is a no-op).
 
 ## Testing
+
 - Manual/visual: fresh load shows fresh install state; clicking wakes byte, chips appear,
   Environment view reflects newly-active skills/agents, sidebar badge clears.
 - Reload page → install view shows "ready" recap; sidebar shows ✓.

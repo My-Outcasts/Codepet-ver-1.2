@@ -15,12 +15,13 @@ copy-paste terminal command.
 ## Why this shape
 
 A browser cannot touch the user's filesystem. Only server-side code can — and only when the Next.js
-server *is* the user's machine (localhost). So real one-click install requires local-run mode;
+server _is_ the user's machine (localhost). So real one-click install requires local-run mode;
 hosted mode degrades to a pasteable command. This is a hard browser-sandbox constraint, not a choice.
 
 ## Scope
 
 ### In scope (v1)
+
 - Bundle a small but real toolkit in the repo: skill + agent markdown definitions.
 - A shared, Next-free installer core that copies toolkit items into `~/.claude/skills/<slug>/SKILL.md`
   and `~/.claude/agents/<slug>.md`, idempotently, returning a structured per-item report.
@@ -32,6 +33,7 @@ hosted mode degrades to a pasteable command. This is a hard browser-sandbox cons
 - `node:test` unit tests for the installer core (operating on a temp claude-dir).
 
 ### Out of scope (v1)
+
 - Writing `~/.claude/settings.json` (hooks/statusline) — shown as optional "later" chips only.
 - MCP/connector OAuth (GitHub/Notion stay "connect later", no auto-install).
 - Publishing an npm package or a Claude Code marketplace.
@@ -49,6 +51,7 @@ Real, minimal, valid definitions under `toolkit/`:
 `manifest.mjs` exports `TOOLKIT`: an array of
 `{ id, name, type: 'skill'|'agent', source, desc }` where `source` is the repo-relative path under
 `toolkit/`. Targets are derived, never taken from the client:
+
 - skill → `<claudeDir>/skills/<id>/SKILL.md`
 - agent → `<claudeDir>/agents/<id>.md`
 
@@ -86,6 +89,7 @@ by both the server actions (`.ts`) and the CLI (`.mjs`).
 
 Thin wrappers that inject server-only state and never accept paths/content from the client — only
 ids, re-validated against the manifest:
+
 - `getCapability()` → `detectCapability(process.env)`.
 - `getStatus()` → `installedStatus(allIds, resolveClaudeDir())` (+ the toolkit listing for the UI).
 - `installToolkit(ids)` → refuses with an error result if capability is `remote`; otherwise

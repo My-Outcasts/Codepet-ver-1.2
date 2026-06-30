@@ -8,18 +8,18 @@ Firebase project `devpet-8f4b1` and the Anthropic API.
 Set these for **Production** (and Preview, if you use preview deploys). Local dev
 reads the same names from `.env.local` (see `.env.example`).
 
-| Variable | Scope | Secret? | Notes |
-| --- | --- | --- | --- |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | client | no | Firebase web config |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | client | no | |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | client | no | also used by Admin verify |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | client | no | |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | client | no | |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | client | no | |
-| `ANTHROPIC_API_KEY` | **server** | **YES** | byte's live task loop. Never prefix `NEXT_PUBLIC`. |
-| `NEXT_PUBLIC_SENTRY_DSN` | client | no | optional — error tracking; app no-ops without it |
-| `FIREBASE_CLIENT_EMAIL` | server | YES | optional — only for privileged Admin ops |
-| `FIREBASE_PRIVATE_KEY` | server | YES | optional — paired with the above |
+| Variable                                   | Scope      | Secret? | Notes                                              |
+| ------------------------------------------ | ---------- | ------- | -------------------------------------------------- |
+| `NEXT_PUBLIC_FIREBASE_API_KEY`             | client     | no      | Firebase web config                                |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`         | client     | no      |                                                    |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID`          | client     | no      | also used by Admin verify                          |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`      | client     | no      |                                                    |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | client     | no      |                                                    |
+| `NEXT_PUBLIC_FIREBASE_APP_ID`              | client     | no      |                                                    |
+| `ANTHROPIC_API_KEY`                        | **server** | **YES** | byte's live task loop. Never prefix `NEXT_PUBLIC`. |
+| `NEXT_PUBLIC_SENTRY_DSN`                   | client     | no      | optional — error tracking; app no-ops without it   |
+| `FIREBASE_CLIENT_EMAIL`                    | server     | YES     | optional — only for privileged Admin ops           |
+| `FIREBASE_PRIVATE_KEY`                     | server     | YES     | optional — paired with the above                   |
 
 > `NEXT_PUBLIC_*` values are embedded in the client bundle (safe — they're public
 > identifiers). Everything without that prefix stays server-side only. `.env.local`
@@ -29,8 +29,8 @@ reads the same names from `.env.local` (see `.env.example`).
 
 - **Authentication → Sign-in method:** Google + Email/Password enabled. ✅
 - **Firestore → Rules:** the merged ruleset is deployed (iOS `users`/`feedback`
-  + web `companies`). ✅ — see `firestore.rules`; redeploy with
-  `firebase deploy --only firestore:rules`.
+  - web `companies`). ✅ — see `firestore.rules`; redeploy with
+    `firebase deploy --only firestore:rules`.
 - **Authentication → Settings → Authorized domains:** add your Vercel production
   domain (e.g. `codepet-v1-2.vercel.app` and any custom domain) so sign-in works
   off `localhost`. ⬅️ **do this before launch.**

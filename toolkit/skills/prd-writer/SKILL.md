@@ -8,6 +8,7 @@ description: Use when turning a rough product idea into a structured PRD — cla
 Turn a rough idea into a short, structured product requirements doc.
 
 ## Process
+
 1. Identify the user and the job they're hiring this for.
 2. State the problem in one sentence.
 3. List in-scope requirements and explicit non-goals (YAGNI).

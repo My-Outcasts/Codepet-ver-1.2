@@ -23,8 +23,8 @@
       "count": 22
     }
   },
-  "components/views/EnvironmentView.tsx": {
-    "react-hooks/immutability": {
+  "components/views/InstallView.tsx": {
+    "react-hooks/set-state-in-effect": {
       "count": 1
     }
   },
@@ -52,8 +52,8 @@
     }
   },
   "lib/store.tsx": {
-    "react-hooks/refs": {
-      "count": 2
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   }
 }
