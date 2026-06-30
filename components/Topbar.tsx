@@ -9,11 +9,17 @@ export function Topbar() {
   const [signingOut, setSigningOut] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
 
+  // Close the menu on a click OUTSIDE it. The listener is attached only while the
+  // menu is open and added after the opening click, so it can't immediately
+  // re-close the menu (the previous always-on listener did exactly that).
   useEffect(() => {
-    const onDoc = () => setOpen(false);
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
     document.addEventListener('click', onDoc);
     return () => document.removeEventListener('click', onDoc);
-  }, []);
+  }, [open]);
 
   // Esc cancels the sign-out confirmation.
   useEffect(() => {
