@@ -159,6 +159,56 @@ export async function completeOnboarding(companyId: string, brief?: CompanyBrief
   );
 }
 
+// ---- seed personalization (Phase 5.3) ----
+/** Personalized text fields byte returns from /api/personalize, keyed by dept. */
+export interface PersonalizedDept {
+  k: string;
+  need: string;
+  byte: string;
+  tasks: Array<{ t: string; d: string }>;
+}
+
+/**
+ * Merge byte's personalized text onto the DEPTS singleton in place. ONLY the text
+ * fields (`need`, `byte`, and each task's `t`/`d`) are touched — status, pend, run
+ * kind, `out` fallback, and all rich payloads stay exactly as seeded. Matching is by
+ * department key + task index; mismatched keys/lengths are skipped (the server
+ * already validates, this is defensive). Returns the depts that changed.
+ */
+export function applyPersonalization(generated: PersonalizedDept[]): Dept[] {
+  const changed: Dept[] = [];
+  for (const g of generated) {
+    const dept = DEPTS.find((d) => d.k === g.k);
+    if (!dept || !Array.isArray(g.tasks) || g.tasks.length !== dept.tasks.length) continue;
+    if (typeof g.need === 'string' && g.need.trim()) dept.need = g.need;
+    if (typeof g.byte === 'string' && g.byte.trim()) dept.byte = g.byte;
+    dept.tasks.forEach((task, i) => {
+      const gt = g.tasks[i];
+      if (!gt) return;
+      if (typeof gt.t === 'string' && gt.t.trim()) task.t = gt.t;
+      if (typeof gt.d === 'string' && gt.d.trim()) task.d = gt.d;
+    });
+    changed.push(dept);
+  }
+  return changed;
+}
+
+/**
+ * Persist the personalized departments and stamp `personalizedAt` so it's a one-time
+ * pass: returning users hydrate these docs via loadCompanyData and never regenerate.
+ */
+export async function persistPersonalization(companyId: string, depts: Dept[]): Promise<void> {
+  if (!depts.length) return;
+  const db = getDb();
+  const now = Date.now();
+  const batch = writeBatch(db);
+  for (const dept of depts) {
+    batch.set(doc(db, paths.department(companyId, dept.k)), serializeDept(dept));
+  }
+  batch.update(doc(db, paths.company(companyId)), { personalizedAt: now, updatedAt: now });
+  await batch.commit();
+}
+
 // ---- write-through ----
 /** Persist a task approval: the updated department doc + a new library item. */
 export async function persistApproval(

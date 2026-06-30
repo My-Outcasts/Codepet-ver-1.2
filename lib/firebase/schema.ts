@@ -59,6 +59,8 @@ export interface CompanyDoc {
   brief: CompanyBrief;
   /** When onboarding was completed (or skipped). Absent ⇒ never onboarded. */
   onboardedAt?: Millis;
+  /** When byte's one-time seed personalization ran. Absent ⇒ never personalized. */
+  personalizedAt?: Millis;
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;

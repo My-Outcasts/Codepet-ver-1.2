@@ -6,7 +6,7 @@
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
 import type { CompanyBrief } from '../firebase/schema';
 
-async function authHeader(): Promise<Record<string, string>> {
+export async function authHeader(): Promise<Record<string, string>> {
   if (!isFirebaseConfigured) return {};
   const user = getFirebaseAuth().currentUser;
   if (!user) return {};

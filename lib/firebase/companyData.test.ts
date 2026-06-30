@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { envStateFromCatalog, resetCompanyData } from './companyData';
+import { describe, it, expect, beforeEach } from 'vitest';
+import {
+  envStateFromCatalog,
+  resetCompanyData,
+  applyPersonalization,
+  type PersonalizedDept,
+} from './companyData';
 import { ENV, ENV_CATS, DEPTS, DEPTS_SEED, ENV_SEED } from '../data';
 
 describe('envStateFromCatalog', () => {
@@ -49,5 +54,68 @@ describe('resetCompanyData (per-account isolation)', () => {
         expect(item.s).toBe(ENV_SEED[c][i].s);
       });
     }
+  });
+});
+
+describe('applyPersonalization (Phase 5.3 seed templating)', () => {
+  beforeEach(() => resetCompanyData());
+
+  const genFor = (k: string): PersonalizedDept => {
+    const seed = DEPTS_SEED.find((d) => d.k === k)!;
+    return {
+      k,
+      need: `NEED for ${k}`,
+      byte: `BYTE for ${k}`,
+      tasks: seed.tasks.map((_, i) => ({ t: `T${i}-${k}`, d: `D${i}-${k}` })),
+    };
+  };
+
+  it('overwrites only the text fields, preserving status/pend/run/out/payloads', () => {
+    const k = DEPTS[0].k;
+    const seed = DEPTS_SEED.find((d) => d.k === k)!;
+    const changed = applyPersonalization([genFor(k)]);
+
+    expect(changed).toHaveLength(1);
+    const dept = DEPTS.find((d) => d.k === k)!;
+    // text fields rewritten
+    expect(dept.need).toBe(`NEED for ${k}`);
+    expect(dept.byte).toBe(`BYTE for ${k}`);
+    expect(dept.tasks[0].t).toBe(`T0-${k}`);
+    expect(dept.tasks[0].d).toBe(`D0-${k}`);
+    // structural / payload fields untouched
+    expect(dept.status).toBe(seed.status);
+    expect(dept.pend).toBe(seed.pend);
+    expect(dept.tasks[0].run).toBe(seed.tasks[0].run);
+    expect(dept.tasks[0].out).toBe(seed.tasks[0].out);
+    expect(dept.tasks[0].site).toBe(seed.tasks[0].site);
+  });
+
+  it('skips a department whose task count does not match the seed (defensive)', () => {
+    const k = DEPTS[0].k;
+    const seedNeed = DEPTS_SEED.find((d) => d.k === k)!.need;
+    const bad: PersonalizedDept = { k, need: 'X', byte: 'Y', tasks: [{ t: 'only-one', d: '' }] };
+    const changed = applyPersonalization([bad]);
+
+    expect(changed).toHaveLength(0);
+    expect(DEPTS.find((d) => d.k === k)!.need).toBe(seedNeed); // untouched
+  });
+
+  it('ignores unknown department keys and blank fields', () => {
+    const k = DEPTS[0].k;
+    const seed = DEPTS_SEED.find((d) => d.k === k)!;
+    const blanked: PersonalizedDept = {
+      k,
+      need: '   ',
+      byte: '',
+      tasks: seed.tasks.map(() => ({ t: '', d: '' })),
+    };
+    const unknown: PersonalizedDept = { k: '__nope__', need: 'a', byte: 'b', tasks: [] };
+    const changed = applyPersonalization([unknown, blanked]);
+
+    // unknown key contributes nothing; blank-field dept is a no-op merge
+    const dept = DEPTS.find((d) => d.k === k)!;
+    expect(dept.need).toBe(seed.need); // blanks didn't overwrite
+    expect(dept.byte).toBe(seed.byte);
+    expect(changed.map((d) => d.k)).not.toContain('__nope__');
   });
 });

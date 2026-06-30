@@ -24,6 +24,7 @@ import {
   envStateFromCatalog,
   completeOnboarding,
 } from './firebase/companyData';
+import { personalizeCompany } from './ai/personalize';
 import type { CompanyBrief } from './firebase/schema';
 
 export type View =
@@ -175,12 +176,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Stamp completion (and brief, if any) so onboarding never shows again —
       // runs for both "finish" and "skip".
       if (companyId) {
-        completeOnboarding(companyId, briefData).catch((err) =>
-          console.error('[store] completeOnboarding failed', err),
-        );
+        completeOnboarding(companyId, briefData)
+          .then(() => {
+            // One-time seed personalization (Phase 5.3): once the brief is persisted,
+            // byte rewrites the department/task text for this company. Best-effort —
+            // on any failure the generic seed stays. Skipped when no brief was given.
+            if (!briefData) return;
+            return personalizeCompany(companyId, briefData).then((changed) => {
+              if (changed) bump(); // re-render with the now-personalized DEPTS
+            });
+          })
+          .catch((err) => console.error('[store] completeOnboarding failed', err));
       }
     },
-    [companyId],
+    [companyId, bump],
   );
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
