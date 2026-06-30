@@ -190,7 +190,7 @@ export function Onboarding() {
             happening.
           </p>
           <button className="splash-btn" onClick={() => setStep(1)}>
-            Let&apos;s go
+            Set up my company
           </button>
           <div className="ob-cold-meta">
             About a minute · I map your roadmap across 8 departments · you approve every move
