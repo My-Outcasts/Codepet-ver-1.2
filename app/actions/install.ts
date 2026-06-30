@@ -24,7 +24,10 @@ export async function installToolkit(ids: string[]) {
 }
 
 export async function uninstallToolkit(ids: string[]) {
-  return uninstallItems(validateIds(ids), resolveClaudeDir());
+  if (detectCapability(process.env).mode === 'remote') {
+    return { ok: false as const, reason: 'remote' as const };
+  }
+  return { ok: true as const, results: uninstallItems(validateIds(ids), resolveClaudeDir()) };
 }
 
 export async function getInstallCommand(ids: string[]) {

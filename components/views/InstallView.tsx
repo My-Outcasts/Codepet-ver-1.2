@@ -26,6 +26,7 @@ export function InstallView() {
   const refresh = async () => {
     const [c, t, s] = await Promise.all([getCapability(), getToolkit(), getStatus()]);
     setCap(c as Cap); setToolkit(t as Item[]); setStatus(s as Status[]);
+    // store `installed` = "any toolkit item installed" (coarse); the view uses `allInstalled` for the full-set gate
     setInstalled(s.some((x) => x.installed));
     if (c.mode === 'remote') setCmd(await getInstallCommand(t.map((i) => i.id)));
   };
