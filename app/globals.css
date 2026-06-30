@@ -43,6 +43,13 @@
   --sh-m: 0 2px 5px rgba(31, 27, 21, 0.05), 0 10px 26px rgba(31, 27, 21, 0.06);
   --sh-l: 0 8px 20px rgba(31, 27, 21, 0.09), 0 30px 60px rgba(31, 27, 21, 0.09);
 }
+/* Pixel brand font — used only on the splash wordmark (the rest stays Google Sans). */
+@font-face {
+  font-family: 'Codepet Pixel';
+  src: url('/Minecraft.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
 * {
   box-sizing: border-box;
   margin: 0;
@@ -2424,10 +2431,10 @@ body {
   padding: 0 24px;
 }
 .splash-title {
-  font-family: var(--sans);
-  font-size: 74px;
+  font-family: 'Codepet Pixel', var(--sans);
+  font-size: 80px;
   color: #fff;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   line-height: 1;
   text-shadow:
     0 3px 0 rgba(34, 14, 64, 0.7),
