@@ -171,6 +171,49 @@ function briefToContext(raw: unknown): string | null {
   return parts.join(' ');
 }
 
+// ---- server-side brief loading (trust the account, not the client) ----
+// We read the caller's own company doc from Firestore over REST, authorized by THEIR
+// ID token, so the read is subject to the same security rules — no service account
+// needed, and the brief is always the one persisted under the signed-in account.
+interface FsValue {
+  stringValue?: string;
+  integerValue?: string;
+  doubleValue?: number;
+  booleanValue?: boolean;
+  arrayValue?: { values?: FsValue[] };
+  mapValue?: { fields?: Record<string, FsValue> };
+}
+
+function fsToJs(v: FsValue | undefined): unknown {
+  if (!v) return undefined;
+  if (v.stringValue !== undefined) return v.stringValue;
+  if (v.integerValue !== undefined) return Number(v.integerValue);
+  if (v.doubleValue !== undefined) return v.doubleValue;
+  if (v.booleanValue !== undefined) return v.booleanValue;
+  if (v.arrayValue) return (v.arrayValue.values ?? []).map(fsToJs);
+  if (v.mapValue) {
+    const out: Record<string, unknown> = {};
+    const fields = v.mapValue.fields ?? {};
+    for (const k of Object.keys(fields)) out[k] = fsToJs(fields[k]);
+    return out;
+  }
+  return undefined;
+}
+
+async function loadServerBrief(uid: string, idToken: string): Promise<unknown> {
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+  if (!projectId) return null;
+  const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/companies/${encodeURIComponent(uid)}?mask.fieldPaths=brief`;
+  try {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${idToken}` } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { fields?: { brief?: FsValue } };
+    return fsToJs(json.fields?.brief);
+  } catch {
+    return null;
+  }
+}
+
 function buildPrompt(
   kind: Kind,
   context: string,
@@ -217,8 +260,10 @@ export async function POST(req: Request): Promise<Response> {
   if (!idToken) {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
+  let uid: string;
   try {
-    await verifyIdToken(idToken);
+    const decoded = await verifyIdToken(idToken);
+    uid = decoded.uid;
   } catch {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
@@ -255,7 +300,11 @@ export async function POST(req: Request): Promise<Response> {
     current: typeof body.current === 'string' ? body.current.slice(0, 6000) : undefined,
   };
 
-  const context = briefToContext(body.brief) ?? CODEPET_CONTEXT;
+  // Prefer the caller's REAL persisted brief (loaded by the verified uid) over
+  // whatever the client passed, so generation is always scoped to the signed-in
+  // account; fall back to the client brief (e.g. mid-onboarding) then the baseline.
+  const serverBrief = await loadServerBrief(uid, idToken);
+  const context = briefToContext(serverBrief) ?? briefToContext(body.brief) ?? CODEPET_CONTEXT;
   const { schema } = KINDS[kind];
   const client = new Anthropic({ apiKey });
 
