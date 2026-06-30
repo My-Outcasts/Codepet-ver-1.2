@@ -66,6 +66,8 @@
   .nav.on{background:var(--accent-tint);color:var(--accent-deep);font-weight:600}
   .nav .ic{width:17px;height:17px;flex:none;opacity:.85}
   .nav .ct{margin-left:auto;font-family:var(--pixel);font-size:9px;color:#fff;background:var(--gold);border-radius:99px;padding:2px 6px}
+  .nav .nav-dot{margin-left:auto;width:7px;height:7px;border-radius:50%;background:var(--gold)}
+  .nav .nav-ck{margin-left:auto;font-size:11px;color:var(--accent-deep)}
   .side .grp{font-family:var(--pixel);font-size:9px;letter-spacing:.8px;text-transform:uppercase;color:var(--t-4);padding:14px 11px 6px}
   .petcard{margin-top:auto;display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:var(--surface);border:1px solid var(--hairline)}
   .petcard .lvl{font-size:11px;color:var(--t-3)}.petcard .pn{font-family:var(--pixel);font-size:12px;color:var(--t-1)}
