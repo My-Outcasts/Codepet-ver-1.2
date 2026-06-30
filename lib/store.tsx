@@ -22,7 +22,7 @@ import {
   persistApproval,
   persistEnv,
   envStateFromCatalog,
-  saveBrief,
+  completeOnboarding,
 } from './firebase/companyData';
 import type { CompanyBrief } from './firebase/schema';
 
@@ -95,7 +95,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [selStage, setSelStage] = useState(6);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [copilotCollapsed, setCopilotCollapsed] = useState(false);
-  const [onboarding, setOnboarding] = useState(true); // always show on load
+  // Onboarding is shown only to users who haven't completed it. It starts false
+  // and is flipped true after hydration iff the company has no `onboardedAt`
+  // stamp — so returning users go straight to the app.
+  const [onboarding, setOnboarding] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
 
@@ -118,10 +121,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b }) => {
+      .then(({ library: lib, brief: b, onboardedAt }) => {
         if (cancelled) return;
         setLibrary(lib);
         setBrief(b);
+        // Show onboarding only to users who haven't done it. A non-empty brief
+        // also counts as onboarded, so legacy users (saved a brief before the
+        // `onboardedAt` stamp existed) aren't asked again.
+        const onboarded = Boolean(onboardedAt) || Object.keys(b).length > 0;
+        setOnboarding(!onboarded);
         bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
         setHydrated(true);
       })
@@ -152,13 +160,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
-      if (briefData) {
-        setBrief(briefData);
-        if (companyId) {
-          saveBrief(companyId, briefData).catch((err) =>
-            console.error('[store] saveBrief failed', err),
-          );
-        }
+      if (briefData) setBrief(briefData);
+      // Stamp completion (and brief, if any) so onboarding never shows again —
+      // runs for both "finish" and "skip".
+      if (companyId) {
+        completeOnboarding(companyId, briefData).catch((err) =>
+          console.error('[store] completeOnboarding failed', err),
+        );
       }
     },
     [companyId],
