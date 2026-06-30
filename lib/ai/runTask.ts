@@ -1,7 +1,16 @@
 'use client';
 // Client helper for the live task loop. Calls the server route (which holds the
 // Anthropic key) and returns byte's generated deliverable — plain text for
-// `text`, or a structured payload for post/email/legal.
+// `text`, or a structured payload for post/email/legal. Attaches the signed-in
+// user's Firebase ID token so the route can authenticate the caller.
+import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
+
+async function authHeader(): Promise<Record<string, string>> {
+  if (!isFirebaseConfigured) return {};
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return {};
+  return { authorization: `Bearer ${await user.getIdToken()}` };
+}
 
 export type DeliverableKind = 'text' | 'post' | 'email' | 'legal';
 
@@ -30,7 +39,7 @@ export class GenerateError extends Error {
 export async function runByteTask(args: RunArgs): Promise<RunResult> {
   const res = await fetch('/api/run-task', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...(await authHeader()) },
     body: JSON.stringify(args),
   });
   if (!res.ok) {

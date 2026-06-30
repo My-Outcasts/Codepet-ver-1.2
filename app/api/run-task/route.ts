@@ -8,6 +8,7 @@
 //   post/email/legal → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
 import Anthropic from '@anthropic-ai/sdk';
+import { verifyIdToken } from '@/lib/firebase/admin';
 
 export const runtime = 'nodejs';
 
@@ -174,6 +175,19 @@ function buildPrompt(
 }
 
 export async function POST(req: Request): Promise<Response> {
+  // Require a valid Firebase ID token — the endpoint calls a paid API, so it
+  // must not be reachable by unauthenticated clients.
+  const authz = req.headers.get('authorization') ?? '';
+  const idToken = authz.startsWith('Bearer ') ? authz.slice(7).trim() : '';
+  if (!idToken) {
+    return Response.json({ error: 'unauthorized' }, { status: 401 });
+  }
+  try {
+    await verifyIdToken(idToken);
+  } catch {
+    return Response.json({ error: 'unauthorized' }, { status: 401 });
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return Response.json(
