@@ -1,17 +1,45 @@
 rules_version = '2';
 
-// Codepet Firestore security rules.
-// Model: a user owns exactly one company whose id equals their uid (v1). Rules are
-// written for membership so teams work later without a rewrite, but ownership has a
-// get()-free fast path. That fast path is also what lets the sign-up *batch* seed a
-// company + its subcollections in one commit — inside a batch, get() can't see the
-// company doc being created alongside the subdocs.
+// Codepet Firestore security rules — SHARED project devpet-8f4b1 (iOS app + web app).
+// This file MERGES the existing iOS-app rules (users + feedback) with the new web-app
+// rules (companies). Firestore is deny-by-default, so anything not matched here is
+// blocked for client access — collections used only by Cloud Functions / the Admin SDK
+// (dictionary_cache, narratives_cache, usage) don't need rules and are intentionally
+// omitted, exactly as before.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() {
       return request.auth != null;
     }
+
+    // ---- Existing (iOS app) ----
+
+    // A user owns their profile doc AND anything nested under it
+    // (e.g. users/{uid}/extensions/cursor). The web app also writes users/{uid}.
+    match /users/{userId} {
+      allow read, write: if signedIn() && request.auth.uid == userId;
+      match /{document=**} {
+        allow read, write: if signedIn() && request.auth.uid == userId;
+      }
+    }
+
+    // App feedback — anyone using the app can submit a valid payload; clients can't
+    // read or edit. Restored verbatim from the previous ruleset.
+    match /feedback/{docId} {
+      allow create: if request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.feature is string;
+      allow read, update, delete: if false;
+    }
+
+    // ---- New (Codepet web — companies) ----
+    // Model: a user owns exactly one company whose id equals their uid (v1). Rules are
+    // written for membership so teams work later without a rewrite, but ownership has a
+    // get()-free fast path. That fast path is also what lets the sign-up *batch* seed a
+    // company + its subcollections in one commit — inside a batch, get() can't see the
+    // company doc being created alongside the subdocs.
 
     // v1 convention: your company id is your uid. No get(), so it holds even during
     // the seeding batch before the company doc is committed.
@@ -23,11 +51,6 @@ service cloud.firestore {
     function isMember(companyId) {
       return signedIn()
         && request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)).data.memberIds;
-    }
-
-    // A user can only read/write their own profile document.
-    match /users/{uid} {
-      allow read, write: if signedIn() && request.auth.uid == uid;
     }
 
     match /companies/{companyId} {

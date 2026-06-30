@@ -31,5 +31,10 @@ next-env.d.ts
 .vercel
 .env*
 
+# firebase (deploy cache + debug logs; rules/config stay tracked)
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+
 # ...but keep the committed template
 !.env.example
