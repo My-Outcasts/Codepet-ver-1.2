@@ -14,6 +14,7 @@ import { DepartmentDetail } from './views/DepartmentDetail';
 import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
 import { EnvironmentView } from './views/EnvironmentView';
+import { InstallView } from './views/InstallView';
 
 function Shell() {
   const { view, copilotCollapsed, toggleCopilot } = useApp();
@@ -26,6 +27,7 @@ function Shell() {
     : view === 'dept' ? <DepartmentDetail />
     : view === 'tasks' ? <TasksView />
     : view === 'library' ? <LibraryView />
+    : view === 'install' ? <InstallView />
     : <EnvironmentView />;
 
   return (
