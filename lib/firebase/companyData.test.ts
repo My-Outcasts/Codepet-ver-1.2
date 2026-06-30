@@ -3,10 +3,13 @@ import {
   envStateFromCatalog,
   resetCompanyData,
   applyPersonalization,
+  applyDepartments,
+  applyEnvState,
   validStage,
   type PersonalizedDept,
 } from './companyData';
 import { ENV, ENV_CATS, DEPTS, DEPTS_SEED, ENV_SEED, NODES } from '../data';
+import type { DepartmentDoc, EnvState } from './schema';
 
 describe('envStateFromCatalog', () => {
   it('snapshots every catalog category as a name→boolean map', () => {
@@ -118,6 +121,88 @@ describe('applyPersonalization (Phase 5.3 seed templating)', () => {
     expect(dept.need).toBe(seed.need); // blanks didn't overwrite
     expect(dept.byte).toBe(seed.byte);
     expect(changed.map((d) => d.k)).not.toContain('__nope__');
+  });
+});
+
+describe('multi-account isolation (Phase 5.5)', () => {
+  // Build a full persisted department set for an account, derived from the seed so
+  // the structure is always valid, with account-distinct text + progress.
+  const docsFor = (acct: 'A' | 'B'): DepartmentDoc[] =>
+    DEPTS_SEED.map((d) => ({
+      k: d.k,
+      name: d.name,
+      ab: d.ab,
+      status: acct === 'A' ? 'ready' : d.status,
+      pend: acct === 'A' ? 0 : d.pend,
+      need: `${acct}-need-${d.k}`,
+      byte: `${acct}-byte-${d.k}`,
+      tasks: d.tasks.map((t, i) => ({
+        ...t,
+        t: `${acct}-task-${d.k}-${i}`,
+        done: acct === 'A', // A approved everything; B has approved nothing
+      })),
+    }));
+
+  const cat = ENV_CATS[0][0];
+  const itemName = ENV[cat][0].n;
+  const envFor = (acct: 'A' | 'B'): EnvState => {
+    const e = envStateFromCatalog();
+    e[cat][itemName] = acct === 'A'; // A turns it on, B leaves it off
+    return e;
+  };
+
+  // This is exactly what loadCompanyData does after fetching, minus the network.
+  const loadAccount = (acct: 'A' | 'B') => {
+    resetCompanyData();
+    applyDepartments(docsFor(acct));
+    applyEnvState(envFor(acct));
+  };
+
+  it('B never sees A’s data after A signs out and B loads', () => {
+    // Account A's session: load A, then make a live in-memory edit on top.
+    loadAccount('A');
+    DEPTS[0].need = 'A-live-edit';
+    expect(DEPTS[0].tasks[0].done).toBe(true);
+    expect(ENV[cat][0].s).toBe(1);
+
+    // Sign out wipes the singletons (the AppProvider-unmount cleanup), then B loads.
+    resetCompanyData();
+    loadAccount('B');
+
+    // Every department now reflects B and carries ZERO of A's residue.
+    DEPTS.forEach((d) => {
+      expect(d.need.startsWith('B-')).toBe(true);
+      expect(d.need).not.toContain('A-');
+      d.tasks.forEach((t) => {
+        expect(t.t.startsWith('B-')).toBe(true);
+        expect(t.done ?? false).toBe(false); // A's approvals didn't leak
+      });
+    });
+    expect(ENV[cat][0].s).toBe(0); // A's env toggle didn't leak
+  });
+
+  it('A’s data is intact and B-free when A returns', () => {
+    loadAccount('A');
+    loadAccount('B');
+    loadAccount('A'); // A signs back in
+
+    DEPTS.forEach((d) => {
+      expect(d.need.startsWith('A-')).toBe(true);
+      expect(d.need).not.toContain('B-');
+      d.tasks.forEach((t) => expect(t.done).toBe(true));
+    });
+    expect(ENV[cat][0].s).toBe(1);
+  });
+
+  it('a plain sign-out (reset) leaves the singletons at the pristine seed', () => {
+    loadAccount('A');
+    resetCompanyData(); // sign out, no new account loaded
+
+    DEPTS.forEach((d, i) => {
+      expect(d.need).toBe(DEPTS_SEED[i].need);
+      expect(d.status).toBe(DEPTS_SEED[i].status);
+    });
+    expect(ENV[cat][0].s).toBe(ENV_SEED[cat][0].s);
   });
 });
 
