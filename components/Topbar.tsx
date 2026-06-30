@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/lib/firebase/auth';
 
 export function Topbar() {
+  const { user, signOutUser } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
 
@@ -10,6 +12,16 @@ export function Topbar() {
     document.addEventListener('click', onDoc);
     return () => document.removeEventListener('click', onDoc);
   }, []);
+
+  // Real identity from the signed-in user (was hardcoded "Mona").
+  const name = user?.displayName || user?.email?.split('@')[0] || 'You';
+  const email = user?.email ?? '';
+  const initial = (name.trim()[0] || 'Y').toUpperCase();
+
+  const handleSignOut = () => {
+    setOpen(false);
+    signOutUser().catch((err) => console.error('[topbar] sign out failed', err));
+  };
 
   return (
     <div className="topbar">
@@ -22,7 +34,8 @@ export function Topbar() {
           setOpen((o) => !o);
         }}
       >
-        <span className="av">M</span>Mona
+        <span className="av">{initial}</span>
+        {name}
         <svg className="cv" viewBox="0 0 16 16" fill="none">
           <path
             d="M4 6l4 4 4-4"
@@ -34,12 +47,12 @@ export function Topbar() {
         </svg>
         <div className="tb-menu" onClick={(e) => e.stopPropagation()}>
           <div className="who">
-            <b>Mona</b>
-            <span>nguyen@murror.app</span>
+            <b>{name}</b>
+            {email && <span>{email}</span>}
           </div>
           <a>Account</a>
           <a>Preferences</a>
-          <a>Sign out</a>
+          <a onClick={handleSignOut}>Sign out</a>
         </div>
       </button>
       <span className="right">
