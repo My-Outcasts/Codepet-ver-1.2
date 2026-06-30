@@ -77,7 +77,7 @@ export function InstallView() {
           {!started ? '▶ Wake byte up' : !s2 ? 'Setting up…' : '✓ Toolkit ready'}
         </button>
 
-        <div className={`ins-row${started ? ' on' : ''}${s1 ? ' ok' : ''}`}>
+        <div className={`ins-row${started ? ' on' : ''}${s1 ? ' done' : ''}`}>
           <span className="ins-ic">{s1 ? '✓' : '○'}</span>
           <div className="ins-meta"><b>Unpacking byte's toolkit…</b><span>pulling out the skills you need to build</span></div>
         </div>
@@ -92,7 +92,7 @@ export function InstallView() {
           </div>
         </div>
 
-        <div className={`ins-row${s1 ? ' on' : ''}${s2 ? ' ok' : ''}`}>
+        <div className={`ins-row${s1 ? ' on' : ''}${s2 ? ' done' : ''}`}>
           <span className="ins-ic">{s2 ? '✓' : '○'}</span>
           <div className="ins-meta"><b>byte's awake! 🎉</b><span>ready to track tokens + brainstorm with you</span></div>
           {s2 && <span className="ins-tag">ready</span>}
