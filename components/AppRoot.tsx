@@ -114,6 +114,17 @@ function AuthStatus({ label }: { label: string }) {
 function Gate() {
   const { user, loading, bootstrapping } = useAuth();
   const [splashSeen, setSplashSeen] = useState(false);
+  // After a deliberate sign-out (authed → not authed), return to the splash
+  // rather than the bare sign-in screen.
+  const wasAuthed = useRef(false);
+  useEffect(() => {
+    if (user) {
+      wasAuthed.current = true;
+    } else if (wasAuthed.current) {
+      wasAuthed.current = false;
+      setSplashSeen(false);
+    }
+  }, [user]);
   if (loading) return <AuthStatus label="Loading…" />;
   if (!user) return splashSeen ? <SignIn /> : <Splash onContinue={() => setSplashSeen(true)} />;
   if (bootstrapping) return <AuthStatus label="Setting up your company…" />;
