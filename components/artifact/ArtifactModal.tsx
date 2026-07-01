@@ -119,7 +119,6 @@ function ModalBody({ children }: { children: React.ReactNode }) {
   return (
     <div className={`mbody${more ? ' has-more' : ''}`} ref={ref}>
       {children}
-      <div className="mbody-fade" aria-hidden="true" />
     </div>
   );
 }
