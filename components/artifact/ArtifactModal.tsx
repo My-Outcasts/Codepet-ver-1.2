@@ -1,17 +1,18 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { DEPTS, reviseSite, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
+import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
 import { buildSheetInputs } from '@/lib/ai/sheetModel';
+import { renderSiteHtml } from '@/lib/ai/siteTemplate';
 import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
-// (doc/prep) come back as text; post/email/legal/screens/sheet come back as
-// structured payloads. The remaining types (site/calendar/dms/checklist/pr) still
-// use their authored payloads.
-const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal', 'screens', 'sheet']);
+// (doc/prep) come back as text; post/email/legal/screens/sheet/site come back as
+// structured payloads. The remaining types (calendar/dms/checklist/pr) still use
+// their authored payloads.
+const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal', 'screens', 'sheet', 'site']);
 
 function liveKind(type: string): DeliverableKind | null {
   if (type === 'doc' || type === 'prep') return 'text';
@@ -20,7 +21,8 @@ function liveKind(type: string): DeliverableKind | null {
     type === 'email' ||
     type === 'legal' ||
     type === 'screens' ||
-    type === 'sheet'
+    type === 'sheet' ||
+    type === 'site'
   )
     return type;
   return null;
@@ -33,6 +35,8 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'legal') return JSON.stringify(t.legal ?? {});
   if (type === 'screens') return JSON.stringify(t.screens ?? []);
   if (type === 'sheet') return JSON.stringify(t.sheet ?? {});
+  // Site revises against the structured spec (small), not the rendered HTML.
+  if (type === 'site') return JSON.stringify(t.siteSpec ?? {});
   return typeof t.out === 'string' ? t.out : '';
 }
 
@@ -86,6 +90,17 @@ function applyResult(t: Task, type: string, res: RunResult): void {
       t.sheet = { inputs };
       const summary = (res.payload as { summary?: unknown }).summary;
       if (typeof summary === 'string' && summary.trim()) t.out = summary;
+    }
+  } else if (type === 'site' && res.payload) {
+    // Render byte's structured spec into the fixed HTML template (code owns the
+    // markup). Keep the seed if the payload can't make a real page. Stash the spec
+    // so a later revise pass edits the spec, not the HTML; sub becomes library text.
+    const html = renderSiteHtml(res.payload);
+    if (html) {
+      t.site = html;
+      t.siteSpec = res.payload as Record<string, unknown>;
+      const sub = (res.payload as { sub?: unknown }).sub;
+      if (typeof sub === 'string' && sub.trim()) t.out = sub;
     }
   } else if (typeof res.text === 'string' && res.text) {
     t.out = res.text;
@@ -385,9 +400,8 @@ export function ArtifactModal() {
           setGenStatus('error');
         });
     } else {
-      // Non-live types (site/sheet/...) still use the local mock revise.
-      if (type === 'site') t.site = reviseSite(t.site || '', note);
-      else t.out = reviseText(t.out, note);
+      // Non-live types (calendar/dms/checklist/pr) still use the local mock revise.
+      t.out = reviseText(t.out, note);
     }
   };
 

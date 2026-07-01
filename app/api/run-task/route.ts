@@ -4,8 +4,8 @@
 // official SDK runs.
 //
 // Kinds:
-//   text                    → plain-text deliverable, returns { text }
-//   post/email/legal/screens → structured deliverable via output_config.format, returns { payload }
+//   text                          → plain-text deliverable, returns { text }
+//   post/email/legal/screens/sheet/site → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
@@ -39,6 +39,7 @@ const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction:
   legal: { schema: STRUCTURED_SCHEMAS.legal, instruction: DELIVERABLE_INSTRUCTIONS.legal },
   screens: { schema: STRUCTURED_SCHEMAS.screens, instruction: DELIVERABLE_INSTRUCTIONS.screens },
   sheet: { schema: STRUCTURED_SCHEMAS.sheet, instruction: DELIVERABLE_INSTRUCTIONS.sheet },
+  site: { schema: STRUCTURED_SCHEMAS.site, instruction: DELIVERABLE_INSTRUCTIONS.site },
 };
 
 interface RunTaskBody {

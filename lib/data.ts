@@ -13,6 +13,9 @@ export interface Task {
   done?: boolean;
   // optional rich-outcome payloads merged from OUTCOMES / authored inline:
   site?: string;
+  // byte's structured site spec (what `site` HTML was rendered from) — kept so a
+  // revise pass edits the spec rather than re-parsing the generated markup.
+  siteSpec?: Record<string, unknown>;
   screens?: any[];
   sheet?: any;
   pr?: any;

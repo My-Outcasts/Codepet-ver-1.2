@@ -13,7 +13,7 @@ export async function authHeader(): Promise<Record<string, string>> {
   return { authorization: `Bearer ${await user.getIdToken()}` };
 }
 
-export type DeliverableKind = 'text' | 'post' | 'email' | 'legal' | 'screens' | 'sheet';
+export type DeliverableKind = 'text' | 'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site';
 
 export interface RunArgs {
   kind: DeliverableKind;

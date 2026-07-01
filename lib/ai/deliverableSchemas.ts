@@ -7,7 +7,7 @@
 // property key. deliverableSchemas.test.ts enforces that so a malformed schema
 // fails in CI instead of 400-ing at runtime.
 
-export type StructuredKind = 'post' | 'email' | 'legal' | 'screens' | 'sheet';
+export type StructuredKind = 'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site';
 
 // One slider input byte tunes: a default value + a sensible range. Structure
 // (which 4 inputs, in what order, what they mean) is FIXED in code — see
@@ -178,12 +178,110 @@ export const SHEET_SCHEMA: Record<string, unknown> = {
   required: ['price', 'waitlist', 'conversion', 'churn', 'summary'],
 };
 
+// A short {h, p} card used by both the how-it-works steps and the feature grid.
+const SITE_CARD: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    h: { type: 'string', description: 'Short heading, 1-4 words.' },
+    p: { type: 'string', description: 'One or two plain-language sentences.' },
+  },
+  required: ['h', 'p'],
+};
+
+// Marketing — a real, shippable landing page. byte fills ONLY the content and a
+// single accent hex; the page's HTML/CSS skeleton is a fixed template in code
+// (lib/ai/siteTemplate.ts), which escapes every field and sanitizes the accent.
+// byte never writes markup, so the output is always safe and on-brand.
+export const SITE_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string', description: 'Browser tab title / SEO title.' },
+    brand: { type: 'string', description: 'Company or product name for the logo + footer.' },
+    kicker: {
+      type: 'string',
+      description:
+        'Tiny label above the headline (e.g. platform / category); empty string if none.',
+    },
+    headline: { type: 'string', description: 'The hero H1 — the core promise.' },
+    headlineHi: {
+      type: 'string',
+      description:
+        'A short tail phrase of the headline shown in the accent colour; empty string if none.',
+    },
+    sub: { type: 'string', description: 'One supporting sentence under the headline.' },
+    ctaPrimary: { type: 'string', description: 'Primary button label (e.g. "Get started").' },
+    ctaSecondary: {
+      type: 'string',
+      description: 'Secondary button label; empty string if there is only one CTA.',
+    },
+    howEyebrow: { type: 'string', description: 'Eyebrow over the how-it-works section.' },
+    howTitle: { type: 'string', description: 'How-it-works section heading.' },
+    steps: {
+      type: 'array',
+      description: 'Exactly 3 how-it-works steps, in order.',
+      items: SITE_CARD,
+    },
+    featEyebrow: { type: 'string', description: 'Eyebrow over the features section.' },
+    featTitle: { type: 'string', description: 'Features section heading.' },
+    features: {
+      type: 'array',
+      description: 'Exactly 3 feature cards — concrete benefits, not fluff.',
+      items: SITE_CARD,
+    },
+    quote: {
+      type: 'string',
+      description: 'One pull-quote / testimonial line; empty string if none.',
+    },
+    quoteBy: { type: 'string', description: 'Attribution for the quote; empty string if none.' },
+    finalTitle: { type: 'string', description: 'Closing call-to-action heading.' },
+    finalSub: {
+      type: 'string',
+      description: 'One line under the closing CTA; empty string if none.',
+    },
+    finalCta: { type: 'string', description: 'Closing CTA button label.' },
+    accent: {
+      type: 'string',
+      description: 'Brand accent colour as a 6-digit hex (e.g. "#6E8E68"). Just the hex.',
+    },
+    footNote: {
+      type: 'string',
+      description: 'Footer line, e.g. "© 2026 Acme · acme.com".',
+    },
+  },
+  required: [
+    'title',
+    'brand',
+    'kicker',
+    'headline',
+    'headlineHi',
+    'sub',
+    'ctaPrimary',
+    'ctaSecondary',
+    'howEyebrow',
+    'howTitle',
+    'steps',
+    'featEyebrow',
+    'featTitle',
+    'features',
+    'quote',
+    'quoteBy',
+    'finalTitle',
+    'finalSub',
+    'finalCta',
+    'accent',
+    'footNote',
+  ],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
   legal: LEGAL_SCHEMA,
   screens: SCREENS_SCHEMA,
   sheet: SHEET_SCHEMA,
+  site: SITE_SCHEMA,
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
@@ -197,4 +295,5 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
     'Design exactly 3 onboarding screens for this company. Set `art` to "connect", then "session", then "recap" in that order (step 1, 2, 3). Walk a brand-new user to their first real moment of value in under ~2 minutes. Use empty strings for any sub/cta/note a screen does not need.',
   sheet:
     'Build a pricing model tuned to THIS company. For each of the 4 fixed inputs give a realistic default value and a sensible slider range (min ≤ val ≤ max, step ≥ 1): price (monthly Pro price in $), waitlist (current early-audience size), conversion (% who become paid), churn (monthly % churn, min at least 1). Then write a one-paragraph summary of what the model shows at those defaults.',
+  site: "Write the content for a real, shippable one-page marketing site for THIS company. Provide a hero (kicker, headline with an optional accent tail, one subline, and 1-2 CTA labels), exactly 3 how-it-works steps, exactly 3 concrete feature cards, an optional one-line testimonial, a closing CTA, a brand accent colour as a 6-digit hex, and a footer line. Write real, specific copy in the company's voice — no placeholders. Use empty strings for any optional field (kicker, headlineHi, ctaSecondary, quote, quoteBy, finalSub) the page does not need. Do NOT write HTML; only the text and the hex colour.",
 };
