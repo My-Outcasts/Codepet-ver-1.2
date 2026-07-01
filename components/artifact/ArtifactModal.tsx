@@ -41,24 +41,31 @@ function applyResult(t: Task, type: string, res: RunResult): void {
       };
     }
   } else if (type === 'email' && res.payload) {
+    // Only apply when the arrays the viewer maps over (body, seq) are present —
+    // otherwise keep the seed rather than hand EmailViewer an undefined .map().
     const e = res.payload as Record<string, unknown>;
-    t.email = {
-      from: t.email?.from ?? 'byte',
-      fromAddr: t.email?.fromAddr ?? 'hello@code-pet.com',
-      subject: e.subject,
-      preheader: e.preheader,
-      body: e.body,
-      cta: e.cta,
-      seq: e.seq,
-    };
+    if (Array.isArray(e.body) && Array.isArray(e.seq)) {
+      t.email = {
+        from: t.email?.from ?? 'byte',
+        fromAddr: t.email?.fromAddr ?? 'hello@code-pet.com',
+        subject: e.subject,
+        preheader: e.preheader,
+        body: e.body,
+        cta: e.cta,
+        seq: e.seq,
+      };
+    }
   } else if (type === 'legal' && res.payload) {
+    // Same guard: sections is what LegalViewer maps over.
     const l = res.payload as Record<string, unknown>;
-    t.legal = {
-      docTitle: l.docTitle,
-      updated: t.legal?.updated ?? 'Draft · for your review',
-      sections: l.sections,
-      flag: l.flag,
-    };
+    if (Array.isArray(l.sections)) {
+      t.legal = {
+        docTitle: l.docTitle,
+        updated: t.legal?.updated ?? 'Draft · for your review',
+        sections: l.sections,
+        flag: l.flag,
+      };
+    }
   } else if (type === 'screens' && res.payload) {
     const s = res.payload as { screens?: unknown[] };
     if (Array.isArray(s.screens) && s.screens.length) t.screens = s.screens;
