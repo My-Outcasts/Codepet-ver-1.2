@@ -38,6 +38,7 @@ const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction:
   email: { schema: STRUCTURED_SCHEMAS.email, instruction: DELIVERABLE_INSTRUCTIONS.email },
   legal: { schema: STRUCTURED_SCHEMAS.legal, instruction: DELIVERABLE_INSTRUCTIONS.legal },
   screens: { schema: STRUCTURED_SCHEMAS.screens, instruction: DELIVERABLE_INSTRUCTIONS.screens },
+  sheet: { schema: STRUCTURED_SCHEMAS.sheet, instruction: DELIVERABLE_INSTRUCTIONS.sheet },
 };
 
 interface RunTaskBody {

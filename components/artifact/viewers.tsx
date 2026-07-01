@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
 import { fmt } from '@/lib/helpers';
+import { computeSheetModel } from '@/lib/ai/sheetModel';
 
 function useCopy() {
   const { toast } = useApp();
@@ -211,14 +212,10 @@ export function ScreensViewer({
 export function SheetViewer({ head, file, sheet }: { head: string; file: string; sheet: any }) {
   const [vals, setVals] = useState<number[]>(sheet.inputs.map((x: any) => x.val));
   const I = sheet.inputs;
-  const price = vals[0],
-    wl = vals[1],
-    conv = vals[2] / 100,
-    churn = vals[3] / 100;
-  const paid = Math.round(wl * conv),
-    mrr = paid * price,
-    arr = mrr * 12,
-    ltv = Math.round(price / churn);
+  const price = vals[0];
+  // The projection is a pure, finite-safe function (churn/price floored) shared
+  // with the tests — no division-by-zero from a live-generated input.
+  const { paid, mrr, arr, ltv, life, breakeven } = computeSheetModel(vals);
   return (
     <div className="sheetart">
       <div className="site-bar">
@@ -264,11 +261,11 @@ export function SheetViewer({ head, file, sheet }: { head: string; file: string;
         </div>
         <div className="sh-cell">
           <div className="l">Churn-adj. life</div>
-          <div className="v">{Math.round(1 / churn)}mo</div>
+          <div className="v">{life}mo</div>
         </div>
         <div className="sh-cell">
           <div className="l">Break-even users</div>
-          <div className="v">{Math.ceil(2500 / price).toLocaleString()}</div>
+          <div className="v">{breakeven.toLocaleString()}</div>
         </div>
       </div>
       <div className="sh-tiers">
