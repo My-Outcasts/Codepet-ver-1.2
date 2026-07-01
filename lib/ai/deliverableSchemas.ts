@@ -7,7 +7,8 @@
 // property key. deliverableSchemas.test.ts enforces that so a malformed schema
 // fails in CI instead of 400-ing at runtime.
 
-export type StructuredKind = 'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms';
+export type StructuredKind =
+  'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms' | 'calendar';
 
 // One slider input byte tunes: a default value + a sensible range. Structure
 // (which 4 inputs, in what order, what they mean) is FIXED in code — see
@@ -316,6 +317,49 @@ export const DMS_SCHEMA: Record<string, unknown> = {
   required: ['messages'],
 };
 
+// Marketing — a teaching/build-in-public content calendar. byte plans the posts
+// tuned to THIS company; the viewer (CalendarViewer) maps weeks → items, reading
+// `weeks[].label` and `items[].{day, kind, body}`.
+export const CALENDAR_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    weeks: {
+      type: 'array',
+      description: 'Exactly 2 weeks, in order.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          label: { type: 'string', description: 'Week label, e.g. "Week 1".' },
+          items: {
+            type: 'array',
+            description: 'The 2-3 posts scheduled that week, in day order.',
+            items: {
+              type: 'object',
+              additionalProperties: false,
+              properties: {
+                day: { type: 'string', description: 'Day of week, e.g. "Mon" or "Thu".' },
+                kind: {
+                  type: 'string',
+                  description: 'Content format, e.g. "Thread", "Build log", "Story", "Clip".',
+                },
+                body: {
+                  type: 'string',
+                  description: 'One line describing the post — specific to this company.',
+                },
+              },
+              required: ['day', 'kind', 'body'],
+            },
+          },
+        },
+        required: ['label', 'items'],
+      },
+    },
+  },
+  required: ['weeks'],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
@@ -324,6 +368,7 @@ export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>>
   sheet: SHEET_SCHEMA,
   site: SITE_SCHEMA,
   dms: DMS_SCHEMA,
+  calendar: CALENDAR_SCHEMA,
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
@@ -337,6 +382,8 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
     'Design exactly 3 onboarding screens for this company. Set `art` to "connect", then "session", then "recap" in that order (step 1, 2, 3). Walk a brand-new user to their first real moment of value in under ~2 minutes. Use empty strings for any sub/cta/note a screen does not need.',
   sheet:
     'Build a pricing model tuned to THIS company. For each of the 4 fixed inputs give a realistic default value and a sensible slider range (min ≤ val ≤ max, step ≥ 1): price (monthly Pro price in $), waitlist (current early-audience size), conversion (% who become paid), churn (monthly % churn, min at least 1). Then write a one-paragraph summary of what the model shows at those defaults.',
+  calendar:
+    'Plan a 2-week teaching-in-public / build-in-public content calendar for THIS company, about 2 posts per week. For each week give a label ("Week 1", "Week 2") and 2-3 posts, each with a day (e.g. "Mon", "Thu"), a content format/kind (Thread, Build log, Story, Clip, or similar), and a one-line description of the post that is specific to this company\'s product and audience. Write in the founder\'s voice; no hype.',
   dms: 'Draft exactly 4 personalized 1:1 outreach messages to the most promising early users / waitlisters for THIS company — a per-person DM, never a broadcast. Since you do not have the real waitlist, make each entry a distinct representative early-user persona: a first-name placeholder the founder will swap for a real contact, a short note describing the signal that makes them a strong target (e.g. "replied twice", "joined day one", "referred a friend"), and a warm, specific DM in the founder\'s voice that references something concrete about this company and invites them in. Vary the warmth and angle across the four.',
   site: "Write the content for a real, shippable one-page marketing site for THIS company. Provide a hero (kicker, headline with an optional accent tail, one subline, and 1-2 CTA labels), exactly 3 how-it-works steps, exactly 3 concrete feature cards, an optional one-line testimonial, a closing CTA, a brand accent colour as a 6-digit hex, and a footer line. Write real, specific copy in the company's voice — no placeholders. Use empty strings for any optional field (kicker, headlineHi, ctaSecondary, quote, quoteBy, finalSub) the page does not need. Do NOT write HTML; only the text and the hex colour.",
 };

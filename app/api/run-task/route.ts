@@ -42,6 +42,10 @@ const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction:
   sheet: { schema: STRUCTURED_SCHEMAS.sheet, instruction: DELIVERABLE_INSTRUCTIONS.sheet },
   site: { schema: STRUCTURED_SCHEMAS.site, instruction: DELIVERABLE_INSTRUCTIONS.site },
   dms: { schema: STRUCTURED_SCHEMAS.dms, instruction: DELIVERABLE_INSTRUCTIONS.dms },
+  calendar: {
+    schema: STRUCTURED_SCHEMAS.calendar,
+    instruction: DELIVERABLE_INSTRUCTIONS.calendar,
+  },
 };
 
 interface RunTaskBody {

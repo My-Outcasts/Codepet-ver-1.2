@@ -144,4 +144,45 @@ describe('deriveOut', () => {
       expect(deriveOut('dms', {})).toBeNull();
     });
   });
+
+  describe('calendar', () => {
+    const payload = {
+      weeks: [
+        {
+          label: 'Week 1',
+          items: [
+            { day: 'Mon', kind: 'Thread', body: 'Term of the week' },
+            { day: 'Thu', kind: 'Build log', body: 'What shipped' },
+          ],
+        },
+        {
+          label: 'Week 2',
+          items: [{ day: 'Mon', kind: 'Story', body: 'A tester before/after' }],
+        },
+      ],
+    };
+    it('summarizes week count, total posts, and per-week slots', () => {
+      const out = deriveOut('calendar', payload)!;
+      expect(out).toContain('2-week content calendar ready — 3 posts');
+      expect(out).toContain('Week 1: Mon Thread · Thu Build log');
+      expect(out).toContain('Week 2: Mon Story');
+    });
+    it('uses no decorative arrows', () => {
+      const out = deriveOut('calendar', payload)!;
+      expect(out).not.toContain('->');
+      expect(out).not.toContain('→');
+    });
+    it('skips weeks with no usable items and returns null when none remain', () => {
+      const out = deriveOut('calendar', {
+        weeks: [
+          { label: 'Week 1', items: [] },
+          { label: 'Week 2', items: [{ day: 'Mon', kind: 'Story', body: 'Real' }] },
+        ],
+      })!;
+      expect(out).toContain('1-week content calendar ready — 1 post');
+      expect(out).toContain('Week 2: Mon Story');
+      expect(deriveOut('calendar', { weeks: [] })).toBeNull();
+      expect(deriveOut('calendar', {})).toBeNull();
+    });
+  });
 });
