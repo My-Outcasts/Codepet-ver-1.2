@@ -21,7 +21,11 @@ function projectId(): string | null {
  * the new running total. Returns null if usage can't be recorded (misconfig, network,
  * or rules) — callers treat null as "don't block" (fail open).
  */
-export async function bumpDailyUsage(uid: string, idToken: string, now: Date): Promise<number | null> {
+export async function bumpDailyUsage(
+  uid: string,
+  idToken: string,
+  now: Date,
+): Promise<number | null> {
   const pid = projectId();
   if (!pid) return null;
   const doc = `projects/${pid}/databases/(default)/documents/companies/${encodeURIComponent(uid)}/usage/${dayKey(now)}`;

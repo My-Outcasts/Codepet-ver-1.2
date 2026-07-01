@@ -21,7 +21,9 @@ function str(v: unknown): string {
 function pick(arr: unknown, key: string): string[] {
   if (!Array.isArray(arr)) return [];
   return arr
-    .map((row) => (row && typeof row === 'object' ? str((row as Record<string, unknown>)[key]) : ''))
+    .map((row) =>
+      row && typeof row === 'object' ? str((row as Record<string, unknown>)[key]) : '',
+    )
     .filter(Boolean);
 }
 
@@ -29,7 +31,8 @@ function fromPost(p: Record<string, unknown>): string | null {
   const variants = p.variants;
   if (!Array.isArray(variants) || variants.length === 0) return null;
   const first = variants[0];
-  const lead = first && typeof first === 'object' ? str((first as Record<string, unknown>).body) : '';
+  const lead =
+    first && typeof first === 'object' ? str((first as Record<string, unknown>).body) : '';
   if (!lead) return null;
   const labels = pick(variants, 'label');
   const angles = labels.length ? `\n\nAngles: ${labels.join(' · ')}.` : '';
