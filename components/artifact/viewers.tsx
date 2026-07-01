@@ -157,7 +157,23 @@ export function ScreensViewer({
         <span className="site-file">{file}</span>
       </div>
       <div className="sc-stage">
-        <div className="phone">
+        {/* Tap the phone to advance (wraps at the end) — matches the "tap through
+            all three screens" copy, and works even where the Back/Next row below
+            is scrolled out of view in the run modal. */}
+        <div
+          className="phone tappable"
+          role="button"
+          tabIndex={0}
+          aria-label={`Screen ${i + 1} of ${S.length} — tap to advance`}
+          title="Tap to advance"
+          onClick={() => setI((cur) => (cur + 1) % S.length)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setI((cur) => (cur + 1) % S.length);
+            }
+          }}
+        >
           <div className="notch" />
           {S.map((s, k) => (
             <div className={`scr${k === i ? ' on' : ''}`} key={k}>
