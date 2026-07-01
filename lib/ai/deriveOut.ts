@@ -11,7 +11,7 @@
 // the caller keeps the seed rather than showing a broken line. No markup, no arrows
 // (house style) — plain text with `·` separators.
 
-type DeriveKind = 'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar';
+type DeriveKind = 'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar' | 'checklist';
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -121,6 +121,25 @@ function fromCalendar(p: Record<string, unknown>): string | null {
   return `✓ ${lines.length}-week content calendar ready — ${total} post${total === 1 ? '' : 's'}.\n\n${lines.join('\n')}`;
 }
 
+function fromChecklist(p: Record<string, unknown>): string | null {
+  const items = p.items;
+  if (!Array.isArray(items)) return null;
+  const rows = items
+    .map((it) =>
+      it && typeof it === 'object'
+        ? {
+            t: str((it as Record<string, unknown>).t),
+            done: (it as Record<string, unknown>).done === true,
+          }
+        : { t: '', done: false },
+    )
+    .filter((r) => r.t.length > 0);
+  if (rows.length === 0) return null;
+  const done = rows.filter((r) => r.done).length;
+  const list = rows.map((r) => `${r.done ? '✓' : '☐'} ${r.t}`).join('\n');
+  return `✓ ${rows.length}-step checklist ready — ${done}/${rows.length} done.\n\n${list}`;
+}
+
 /**
  * Build a personalized `out` outcome line from a live structured payload.
  * Returns null for kinds handled elsewhere (text/sheet/site) or when the payload
@@ -142,6 +161,8 @@ export function deriveOut(type: string, payload: unknown): string | null {
       return fromDms(p);
     case 'calendar':
       return fromCalendar(p);
+    case 'checklist':
+      return fromChecklist(p);
     default:
       return null;
   }

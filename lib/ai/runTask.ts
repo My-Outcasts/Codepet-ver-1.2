@@ -14,7 +14,16 @@ export async function authHeader(): Promise<Record<string, string>> {
 }
 
 export type DeliverableKind =
-  'text' | 'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms' | 'calendar';
+  | 'text'
+  | 'post'
+  | 'email'
+  | 'legal'
+  | 'screens'
+  | 'sheet'
+  | 'site'
+  | 'dms'
+  | 'calendar'
+  | 'checklist';
 
 export interface RunArgs {
   kind: DeliverableKind;

@@ -10,12 +10,13 @@ import { deriveOut } from '@/lib/ai/deriveOut';
 import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
-// (doc/prep) come back as text; post/email/legal/screens/sheet/site/dms/calendar
-// come back as structured payloads. The remaining types (checklist/pr/build) still
-// use their authored payloads.
+// (doc/prep/build) come back as text; post/email/legal/screens/sheet/site/dms/
+// calendar/checklist come back as structured payloads. Only `pr` still uses its
+// authored payload (a real "verified code change" needs the coding agent).
 const LIVE_TYPES = new Set([
   'doc',
   'prep',
+  'build',
   'post',
   'email',
   'legal',
@@ -24,10 +25,12 @@ const LIVE_TYPES = new Set([
   'site',
   'dms',
   'calendar',
+  'checklist',
 ]);
 
 function liveKind(type: string): DeliverableKind | null {
-  if (type === 'doc' || type === 'prep') return 'text';
+  // build is a plain-text outcome (renders t.out), same as doc/prep.
+  if (type === 'doc' || type === 'prep' || type === 'build') return 'text';
   if (
     type === 'post' ||
     type === 'email' ||
@@ -36,7 +39,8 @@ function liveKind(type: string): DeliverableKind | null {
     type === 'sheet' ||
     type === 'site' ||
     type === 'dms' ||
-    type === 'calendar'
+    type === 'calendar' ||
+    type === 'checklist'
   )
     return type;
   return null;
@@ -51,6 +55,7 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'sheet') return JSON.stringify(t.sheet ?? {});
   if (type === 'dms') return JSON.stringify(t.dms ?? []);
   if (type === 'calendar') return JSON.stringify(t.calendar ?? {});
+  if (type === 'checklist') return JSON.stringify(t.checklist ?? []);
   // Site revises against the structured spec (small), not the rendered HTML.
   if (type === 'site') return JSON.stringify(t.siteSpec ?? {});
   return typeof t.out === 'string' ? t.out : '';
@@ -170,6 +175,27 @@ function applyResult(t: Task, type: string, res: RunResult): void {
     if (weeks.length) {
       t.calendar = { weeks };
       const out = deriveOut('calendar', res.payload);
+      if (out) t.out = out;
+    }
+  } else if (type === 'checklist' && res.payload) {
+    // ChecklistViewer maps items reading {t, done} and divides by items.length, so
+    // keep only items with a non-empty `t` (and coerce done to a real boolean); an
+    // empty payload keeps the seed rather than a 0/0 → NaN% progress bar.
+    const c = res.payload as { items?: unknown[] };
+    const items = Array.isArray(c.items)
+      ? c.items
+          .filter(
+            (it): it is { t: string; done?: unknown } =>
+              !!it &&
+              typeof it === 'object' &&
+              typeof (it as { t?: unknown }).t === 'string' &&
+              (it as { t: string }).t.trim().length > 0,
+          )
+          .map((it) => ({ t: it.t, done: it.done === true }))
+      : [];
+    if (items.length) {
+      t.checklist = items;
+      const out = deriveOut('checklist', res.payload);
       if (out) t.out = out;
     }
   } else if (type === 'sheet' && res.payload) {

@@ -36,9 +36,10 @@ function assertStrict(node: unknown, path: string): void {
 describe('deliverableSchemas', () => {
   const kinds = Object.keys(STRUCTURED_SCHEMAS) as StructuredKind[];
 
-  it('registers screens + sheet + site + dms + calendar alongside the existing structured kinds', () => {
+  it('registers screens + sheet + site + dms + calendar + checklist alongside the existing structured kinds', () => {
     expect(kinds.sort()).toEqual([
       'calendar',
+      'checklist',
       'dms',
       'email',
       'legal',

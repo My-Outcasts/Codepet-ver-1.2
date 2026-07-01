@@ -8,7 +8,7 @@
 // fails in CI instead of 400-ing at runtime.
 
 export type StructuredKind =
-  'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms' | 'calendar';
+  'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms' | 'calendar' | 'checklist';
 
 // One slider input byte tunes: a default value + a sensible range. Structure
 // (which 4 inputs, in what order, what they mean) is FIXED in code — see
@@ -360,6 +360,34 @@ export const CALENDAR_SCHEMA: Record<string, unknown> = {
   required: ['weeks'],
 };
 
+// Operations — a setup/launch checklist the founder works through. byte writes the
+// steps tuned to THIS company; the viewer (ChecklistViewer) maps items reading
+// `[].{t, done}` and computes a done/total progress bar.
+export const CHECKLIST_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    items: {
+      type: 'array',
+      description:
+        'Exactly 5-7 concrete, actionable steps, in the order the founder should do them.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          t: { type: 'string', description: 'The step, phrased as a short action.' },
+          done: {
+            type: 'boolean',
+            description: 'True only for obvious prerequisites already satisfied; false otherwise.',
+          },
+        },
+        required: ['t', 'done'],
+      },
+    },
+  },
+  required: ['items'],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
@@ -369,6 +397,7 @@ export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>>
   site: SITE_SCHEMA,
   dms: DMS_SCHEMA,
   calendar: CALENDAR_SCHEMA,
+  checklist: CHECKLIST_SCHEMA,
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
@@ -382,6 +411,8 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
     'Design exactly 3 onboarding screens for this company. Set `art` to "connect", then "session", then "recap" in that order (step 1, 2, 3). Walk a brand-new user to their first real moment of value in under ~2 minutes. Use empty strings for any sub/cta/note a screen does not need.',
   sheet:
     'Build a pricing model tuned to THIS company. For each of the 4 fixed inputs give a realistic default value and a sensible slider range (min ≤ val ≤ max, step ≥ 1): price (monthly Pro price in $), waitlist (current early-audience size), conversion (% who become paid), churn (monthly % churn, min at least 1). Then write a one-paragraph summary of what the model shows at those defaults.',
+  checklist:
+    'Build a concrete setup/launch checklist for THIS company that accomplishes the task — exactly 5 to 7 actionable steps the founder can check off in order (distribution/access, a sub-2-minute first-run, seeding early testers, and whatever else this specific product needs). Mark only the obvious already-satisfied prerequisites as done; leave the rest not done. Be specific to this company, not generic.',
   calendar:
     'Plan a 2-week teaching-in-public / build-in-public content calendar for THIS company, about 2 posts per week. For each week give a label ("Week 1", "Week 2") and 2-3 posts, each with a day (e.g. "Mon", "Thu"), a content format/kind (Thread, Build log, Story, Clip, or similar), and a one-line description of the post that is specific to this company\'s product and audience. Write in the founder\'s voice; no hype.',
   dms: 'Draft exactly 4 personalized 1:1 outreach messages to the most promising early users / waitlisters for THIS company — a per-person DM, never a broadcast. Since you do not have the real waitlist, make each entry a distinct representative early-user persona: a first-name placeholder the founder will swap for a real contact, a short note describing the signal that makes them a strong target (e.g. "replied twice", "joined day one", "referred a friend"), and a warm, specific DM in the founder\'s voice that references something concrete about this company and invites them in. Vary the warmth and angle across the four.',

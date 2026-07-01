@@ -46,6 +46,10 @@ const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction:
     schema: STRUCTURED_SCHEMAS.calendar,
     instruction: DELIVERABLE_INSTRUCTIONS.calendar,
   },
+  checklist: {
+    schema: STRUCTURED_SCHEMAS.checklist,
+    instruction: DELIVERABLE_INSTRUCTIONS.checklist,
+  },
 };
 
 interface RunTaskBody {
