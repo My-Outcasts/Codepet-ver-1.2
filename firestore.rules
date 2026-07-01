@@ -83,7 +83,12 @@ service cloud.firestore {
 
       // Departments, library, chat, and any future per-company subcollection — scoped
       // to the company's owner/members. Deny-by-default keeps every other account out.
-      match /{document=**} {
+      // The leading {sub} segment is load-bearing: a v2 recursive wildcard matches ZERO
+      // or more segments, so a bare `match /{document=**}` here would also match the
+      // company doc itself and blanket-grant write on it — bypassing the strict
+      // create/update/delete rules above (e.g. letting a plain member escalate to owner
+      // or delete the company). Requiring {sub} keeps this strictly below the doc.
+      match /{sub}/{document=**} {
         allow read, write: if ownsByConvention(companyId) || isMember(companyId);
       }
     }
