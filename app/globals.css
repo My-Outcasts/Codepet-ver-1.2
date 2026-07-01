@@ -5471,6 +5471,13 @@ body {
   position: relative;
   box-shadow: 0 20px 40px -22px rgba(40, 38, 30, 0.5);
 }
+.phone.tappable {
+  cursor: pointer;
+}
+.phone.tappable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
 .phone .notch {
   position: absolute;
   top: 0;

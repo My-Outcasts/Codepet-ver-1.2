@@ -6,15 +6,15 @@ import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpe
 import { runByteTask, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
 import { ArtifactViewer } from './viewers';
 
-// Deliverable types byte generates live via the Claude API (Phase 3). Plain-text
-// (doc/prep) come back as text; post/email/legal come back as structured payloads.
-// The remaining types (site/sheet/screens/calendar/dms/checklist/pr) still use
+// Deliverable types byte generates live via the Claude API. Plain-text
+// (doc/prep) come back as text; post/email/legal/screens come back as structured
+// payloads. The remaining types (site/sheet/calendar/dms/checklist/pr) still use
 // their authored payloads.
-const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal']);
+const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal', 'screens']);
 
 function liveKind(type: string): DeliverableKind | null {
   if (type === 'doc' || type === 'prep') return 'text';
-  if (type === 'post' || type === 'email' || type === 'legal') return type;
+  if (type === 'post' || type === 'email' || type === 'legal' || type === 'screens') return type;
   return null;
 }
 
@@ -23,6 +23,7 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'post') return JSON.stringify(t.post ?? {});
   if (type === 'email') return JSON.stringify(t.email ?? {});
   if (type === 'legal') return JSON.stringify(t.legal ?? {});
+  if (type === 'screens') return JSON.stringify(t.screens ?? []);
   return typeof t.out === 'string' ? t.out : '';
 }
 
@@ -40,24 +41,34 @@ function applyResult(t: Task, type: string, res: RunResult): void {
       };
     }
   } else if (type === 'email' && res.payload) {
+    // Only apply when the arrays the viewer maps over (body, seq) are present —
+    // otherwise keep the seed rather than hand EmailViewer an undefined .map().
     const e = res.payload as Record<string, unknown>;
-    t.email = {
-      from: t.email?.from ?? 'byte',
-      fromAddr: t.email?.fromAddr ?? 'hello@code-pet.com',
-      subject: e.subject,
-      preheader: e.preheader,
-      body: e.body,
-      cta: e.cta,
-      seq: e.seq,
-    };
+    if (Array.isArray(e.body) && Array.isArray(e.seq)) {
+      t.email = {
+        from: t.email?.from ?? 'byte',
+        fromAddr: t.email?.fromAddr ?? 'hello@code-pet.com',
+        subject: e.subject,
+        preheader: e.preheader,
+        body: e.body,
+        cta: e.cta,
+        seq: e.seq,
+      };
+    }
   } else if (type === 'legal' && res.payload) {
+    // Same guard: sections is what LegalViewer maps over.
     const l = res.payload as Record<string, unknown>;
-    t.legal = {
-      docTitle: l.docTitle,
-      updated: t.legal?.updated ?? 'Draft · for your review',
-      sections: l.sections,
-      flag: l.flag,
-    };
+    if (Array.isArray(l.sections)) {
+      t.legal = {
+        docTitle: l.docTitle,
+        updated: t.legal?.updated ?? 'Draft · for your review',
+        sections: l.sections,
+        flag: l.flag,
+      };
+    }
+  } else if (type === 'screens' && res.payload) {
+    const s = res.payload as { screens?: unknown[] };
+    if (Array.isArray(s.screens) && s.screens.length) t.screens = s.screens;
   } else if (typeof res.text === 'string' && res.text) {
     t.out = res.text;
   }
