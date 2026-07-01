@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { enforceDailyLimit } from '@/lib/firebase/serverUsage';
 import {
   STRUCTURED_SCHEMAS,
   DELIVERABLE_INSTRUCTIONS,
@@ -137,6 +138,16 @@ export async function POST(req: Request): Promise<Response> {
     reviseNote: typeof body.reviseNote === 'string' ? body.reviseNote.slice(0, 400) : undefined,
     current: typeof body.current === 'string' ? body.current.slice(0, 6000) : undefined,
   };
+
+  // Per-user daily cost guard: count this attempt and stop if the account is over
+  // its cap (fail-open if the counter is unavailable — never block on infra).
+  const limit = await enforceDailyLimit(uid, idToken, new Date());
+  if (!limit.ok) {
+    return Response.json(
+      { error: 'rate_limited', limit: limit.limit },
+      { status: 429, headers: { 'retry-after': '3600' } },
+    );
+  }
 
   // Prefer the caller's REAL persisted brief (loaded by the verified uid) over
   // whatever the client passed, so generation is always scoped to the signed-in

@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { enforceDailyLimit } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
 
 export const runtime = 'nodejs';
@@ -61,6 +62,16 @@ export async function POST(req: Request): Promise<Response> {
   const claudeMessages = toClaudeMessages(turns).slice(-20); // cap history sent upstream
   if (!claudeMessages.length) {
     return Response.json({ error: 'bad_request', message: 'no messages' }, { status: 400 });
+  }
+
+  // Per-user daily cost guard (shared with /api/run-task). Each real chat turn
+  // counts; fail-open if the counter is unavailable.
+  const limit = await enforceDailyLimit(uid, idToken, new Date());
+  if (!limit.ok) {
+    return Response.json(
+      { error: 'rate_limited', limit: limit.limit },
+      { status: 429, headers: { 'retry-after': '3600' } },
+    );
   }
 
   const serverBrief = await loadServerBrief(uid, idToken);
