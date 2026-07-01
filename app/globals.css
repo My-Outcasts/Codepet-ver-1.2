@@ -2354,6 +2354,10 @@ body {
 .bub b {
   color: var(--t-1);
 }
+/* byte replies can contain line breaks / short lists — preserve them. */
+.bub {
+  white-space: pre-wrap;
+}
 .bub.me {
   align-self: flex-end;
   background: var(--accent-tint);
@@ -2361,6 +2365,11 @@ body {
   border-top-left-radius: 13px;
   border-top-right-radius: 4px;
   color: var(--t-2);
+  white-space: pre-wrap;
+}
+.bub.byte-thinking {
+  color: var(--t-3);
+  font-style: italic;
 }
 .chips {
   display: flex;
@@ -2414,6 +2423,11 @@ body {
   cursor: pointer;
   display: grid;
   place-items: center;
+}
+.composer .send:disabled,
+.sug:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 /* ===== onboarding overlay ===== */
