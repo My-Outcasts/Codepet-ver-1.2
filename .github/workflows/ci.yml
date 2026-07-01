@@ -38,3 +38,26 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Firestore security-rules tests run against the emulator (needs Java), so they live
+  # in their own job rather than the pure-node `verify` suite.
+  rules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Firestore rules tests (emulator)
+        run: npm run test:rules
