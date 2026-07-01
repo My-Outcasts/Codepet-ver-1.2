@@ -3838,13 +3838,30 @@ body {
   background: var(--well);
 }
 .mbody {
-  padding: 22px max(28px, 5%);
+  padding: 22px max(28px, 5%) 28px;
   overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
   justify-content: safe center;
+}
+/* Soft scroll cue: a bottom fade that shows only while there's more below the fold
+   (JS toggles .has-more). Sticky + negative margin overlays the last strip of
+   content without taking layout space; pointer-events:none keeps it click-through. */
+.mbody-fade {
+  position: sticky;
+  bottom: 0;
+  flex: none;
+  height: 44px;
+  margin-top: -44px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--surface) 88%);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.mbody.has-more .mbody-fade {
+  opacity: 1;
 }
 .work {
   display: flex;

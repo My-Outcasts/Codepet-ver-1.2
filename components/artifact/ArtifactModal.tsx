@@ -92,6 +92,38 @@ function applyResult(t: Task, type: string, res: RunResult): void {
   }
 }
 
+// Scrollable modal body with a soft bottom fade that shows only while there's more
+// content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
+// every deliverable modal (view / run / result).
+function ModalBody({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    // Re-check when the body resizes OR its content changes height (viewer mounts,
+    // text types out, a revise swaps the payload).
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      el.removeEventListener('scroll', check);
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, []);
+  return (
+    <div className={`mbody${more ? ' has-more' : ''}`} ref={ref}>
+      {children}
+      <div className="mbody-fade" aria-hidden="true" />
+    </div>
+  );
+}
+
 function Phx({ a }: { a: number }) {
   const ph = (i: number, label: string) => (
     <span className={`ph ${a === i ? 'on' : a > i ? 'done' : ''}`}>
@@ -286,9 +318,9 @@ export function ArtifactModal() {
               ✕
             </div>
           </div>
-          <div className="mbody">
+          <ModalBody>
             <ArtifactViewer item={item} />
-          </div>
+          </ModalBody>
           <div className="mfoot">
             <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
               Close
@@ -648,7 +680,7 @@ export function ArtifactModal() {
               ✕
             </div>
           </div>
-          <div className="mbody">{bodyContent}</div>
+          <ModalBody>{bodyContent}</ModalBody>
           <div className="mfoot">{footer}</div>
         </div>
       </div>
@@ -668,7 +700,7 @@ export function ArtifactModal() {
             ✕
           </div>
         </div>
-        <div className="mbody">{bodyContent}</div>
+        <ModalBody>{bodyContent}</ModalBody>
         <div className="mfoot">{footer}</div>
       </div>
     </div>
