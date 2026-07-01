@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-codepet-rules \"vitest run --config vitest.rules.config.ts\"",
     "test:installer": "node --test lib/installer/"
   },
   "dependencies": {
@@ -31,6 +32,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
+    "@firebase/rules-unit-testing": "^4.0.1",
     "@types/node": "^22.12.0",
     "@types/react": "19.1.0",
     "@types/react-dom": "19.1.0",
@@ -38,6 +40,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.9",
     "eslint-config-prettier": "^10.1.8",
+    "firebase-tools": "^15.22.4",
     "prettier": "^3.9.4",
     "typescript": "5.7.2",
     "vitest": "^3.2.6"
