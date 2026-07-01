@@ -9,8 +9,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
+  setDoc,
   updateDoc,
   writeBatch,
 } from 'firebase/firestore';
@@ -22,6 +24,7 @@ import {
   type LibraryDoc,
   type EnvState,
   type CompanyBrief,
+  type ChatMessageDoc,
 } from './schema';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
@@ -109,7 +112,12 @@ export interface CompanyData {
   onboardedAt?: number;
   /** Last-selected roadmap stage; undefined ⇒ none saved (use the UI default). */
   roadmapStage?: number;
+  /** Recent byte-chat history, oldest-first. */
+  chat: ChatMessageDoc[];
 }
+
+/** How many recent chat messages to hydrate on load. */
+const CHAT_LOAD_LIMIT = 100;
 
 /** A persisted roadmap stage is only usable if it maps to a real node. */
 export function validStage(raw: unknown): number | undefined {
@@ -124,10 +132,17 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   // Start from a clean per-account baseline before applying this account's data.
   resetCompanyData();
   const db = getDb();
-  const [deptSnap, libSnap, companySnap] = await Promise.all([
+  const [deptSnap, libSnap, companySnap, chatSnap] = await Promise.all([
     getDocs(collection(db, paths.departments(companyId))),
     getDocs(query(collection(db, paths.library(companyId)), orderBy('createdAt', 'desc'))),
     getDoc(doc(db, paths.company(companyId))),
+    getDocs(
+      query(
+        collection(db, paths.chat(companyId)),
+        orderBy('createdAt', 'desc'),
+        limit(CHAT_LOAD_LIMIT),
+      ),
+    ),
   ]);
 
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
@@ -142,12 +157,25 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     return item as LibItem;
   });
 
+  // Queried newest-first (so the limit keeps the most recent); reverse to oldest-first
+  // for display.
+  const chat = chatSnap.docs.map((d) => d.data() as ChatMessageDoc).reverse();
+
   return {
     library,
     brief: (company?.brief ?? {}) as CompanyBrief,
     onboardedAt: company?.onboardedAt as number | undefined,
     roadmapStage: validStage(company?.roadmapStage),
+    chat,
   };
+}
+
+/** Persist a single byte-chat message under the company. */
+export async function persistChatMessage(
+  companyId: string,
+  message: ChatMessageDoc,
+): Promise<void> {
+  await setDoc(doc(getDb(), paths.chatMessage(companyId, message.id)), message);
 }
 
 /** Persist the user's current roadmap position so they return to where they left off. */

@@ -86,6 +86,14 @@ export interface LibraryDoc extends LibItem {
   createdAt: Millis;
 }
 
+/** One byte-chat message. 'me' = the founder, 'byte' = the companion. */
+export interface ChatMessageDoc {
+  id: string;
+  role: 'me' | 'byte';
+  text: string;
+  createdAt: Millis;
+}
+
 // ---- Collection / document path helpers (single source of truth) ----
 export const paths = {
   user: (uid: string) => `users/${uid}`,
@@ -96,6 +104,8 @@ export const paths = {
   department: (companyId: string, k: string) => `companies/${companyId}/departments/${k}`,
   library: (companyId: string) => `companies/${companyId}/library`,
   libraryItem: (companyId: string, itemId: string) => `companies/${companyId}/library/${itemId}`,
+  chat: (companyId: string) => `companies/${companyId}/chat`,
+  chatMessage: (companyId: string, msgId: string) => `companies/${companyId}/chat/${msgId}`,
 };
 
 // Re-export the shared shapes so persistence consumers import everything from one place.

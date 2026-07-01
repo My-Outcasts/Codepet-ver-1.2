@@ -13,7 +13,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ENV, type Dept, type Task, type LibItem } from './data';
+import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta } from './helpers';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
@@ -22,11 +22,26 @@ import {
   persistApproval,
   persistEnv,
   persistRoadmapStage,
+  persistChatMessage,
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
 } from './firebase/companyData';
 import { personalizeCompany } from './ai/personalize';
+import { streamByteChat } from './ai/chat';
+
+/** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
+export interface ChatMessage {
+  id: string;
+  role: 'me' | 'byte';
+  text: string;
+  ts: number;
+}
+
+const newId = (): string =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 import type { CompanyBrief } from './firebase/schema';
 
 export type View =
@@ -60,6 +75,9 @@ interface AppState {
   closeModal: () => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
   toggleEnv: (category: string, index: number) => void;
+  chatMessages: ChatMessage[];
+  chatStreaming: boolean;
+  sendChat: (text: string) => void;
   toastMsg: string;
   toast: (msg: string) => void;
 }
@@ -128,6 +146,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [brief, setBrief] = useState<CompanyBrief>({});
   const [hydrated, setHydrated] = useState(false);
 
+  // byte chat: messages (hydrated from Firestore) + a streaming guard.
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatStreaming, setChatStreaming] = useState(false);
+
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -142,10 +164,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b, onboardedAt, roadmapStage }) => {
+      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat }) => {
         if (cancelled) return;
         setLibrary(lib);
         setBrief(b);
+        setChatMessages(
+          chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
+        );
         // Restore the last-viewed roadmap stage (drawer stays closed — we restore
         // position, not an open panel). Absent ⇒ keep the UI default.
         if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
@@ -289,6 +314,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // byte chat. Appends the founder's message, streams byte's reply in place, and
+  // persists both. One turn at a time — guarded by chatStreaming.
+  const sendChat = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text || chatStreaming) return;
+
+      const now = Date.now();
+      const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
+
+      // Build the history to send BEFORE the empty byte placeholder is added.
+      const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
+      setChatMessages((prev) => [...prev, userMsg, byteMsg]);
+      setChatStreaming(true);
+      track('chat.send', {});
+
+      if (companyId) {
+        persistChatMessage(companyId, {
+          id: userMsg.id,
+          role: 'me',
+          text,
+          createdAt: userMsg.ts,
+        }).catch((err) => console.error('[store] persist user message failed', err));
+      }
+
+      // A compact snapshot of the departments so byte talks about THIS company.
+      const deptSummary = DEPTS.map(
+        (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
+      ).join('\n');
+
+      (async () => {
+        let acc = '';
+        try {
+          for await (const chunk of streamByteChat(history, deptSummary)) {
+            acc += chunk;
+            setChatMessages((prev) =>
+              prev.map((m) => (m.id === byteMsg.id ? { ...m, text: acc } : m)),
+            );
+          }
+        } catch (err) {
+          console.error('[store] chat stream failed', err);
+        }
+        const finalText = acc.trim() || 'I hit a snag reaching the model — give it another try.';
+        setChatMessages((prev) =>
+          prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText } : m)),
+        );
+        setChatStreaming(false);
+        // Persist byte's reply only if it's a real answer (not the error fallback).
+        if (companyId && acc.trim()) {
+          persistChatMessage(companyId, {
+            id: byteMsg.id,
+            role: 'byte',
+            text: finalText,
+            createdAt: byteMsg.ts,
+          }).catch((err) => console.error('[store] persist byte message failed', err));
+        }
+      })();
+    },
+    [companyId, chatMessages, chatStreaming],
+  );
+
   const value = useMemo<AppState>(
     () => ({
       tick,
@@ -315,6 +402,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeModal,
       approveTask,
       toggleEnv,
+      chatMessages,
+      chatStreaming,
+      sendChat,
       toastMsg,
       toast,
     }),
@@ -343,6 +433,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeModal,
       approveTask,
       toggleEnv,
+      chatMessages,
+      chatStreaming,
+      sendChat,
       toastMsg,
       toast,
     ],
