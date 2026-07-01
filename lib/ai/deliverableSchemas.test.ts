@@ -36,8 +36,8 @@ function assertStrict(node: unknown, path: string): void {
 describe('deliverableSchemas', () => {
   const kinds = Object.keys(STRUCTURED_SCHEMAS) as StructuredKind[];
 
-  it('registers screens alongside the existing structured kinds', () => {
-    expect(kinds.sort()).toEqual(['email', 'legal', 'post', 'screens']);
+  it('registers screens + sheet alongside the existing structured kinds', () => {
+    expect(kinds.sort()).toEqual(['email', 'legal', 'post', 'screens', 'sheet']);
   });
 
   it.each(kinds)('%s is a strict JSON schema', (kind) => {

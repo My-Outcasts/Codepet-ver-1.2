@@ -7,7 +7,23 @@
 // property key. deliverableSchemas.test.ts enforces that so a malformed schema
 // fails in CI instead of 400-ing at runtime.
 
-export type StructuredKind = 'post' | 'email' | 'legal' | 'screens';
+export type StructuredKind = 'post' | 'email' | 'legal' | 'screens' | 'sheet';
+
+// One slider input byte tunes: a default value + a sensible range. Structure
+// (which 4 inputs, in what order, what they mean) is FIXED in code — see
+// lib/ai/sheetModel.ts — because SheetViewer reads inputs by position and
+// divides by churn. byte only fills the numbers.
+const SHEET_INPUT: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    val: { type: 'number', description: 'Realistic default for this company.' },
+    min: { type: 'number', description: 'Low end of the slider.' },
+    max: { type: 'number', description: 'High end of the slider.' },
+    step: { type: 'number', description: 'Slider step (≥ 1).' },
+  },
+  required: ['val', 'min', 'max', 'step'],
+};
 
 /** Illustrations the screens viewer (components/artifact/viewers.tsx) can render.
  *  byte's `art` field is constrained to these so it can never pick one the phone
@@ -143,11 +159,31 @@ export const SCREENS_SCHEMA: Record<string, unknown> = {
   required: ['screens'],
 };
 
+// Finance — an interactive pricing model. byte supplies the 4 pinned inputs'
+// values/ranges (price · waitlist · conversion% · churn%) + a summary; the model
+// math and the input roles live in code (lib/ai/sheetModel.ts).
+export const SHEET_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    price: { ...SHEET_INPUT, description: 'Monthly Pro-tier price, in dollars.' },
+    waitlist: { ...SHEET_INPUT, description: 'Current waitlist / early-audience size (a count).' },
+    conversion: { ...SHEET_INPUT, description: 'Percent of that audience who become paid (a %).' },
+    churn: { ...SHEET_INPUT, description: 'Monthly churn as a percent — at least 1.' },
+    summary: {
+      type: 'string',
+      description: 'One paragraph on what the model shows at the default values.',
+    },
+  },
+  required: ['price', 'waitlist', 'conversion', 'churn', 'summary'],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
   legal: LEGAL_SCHEMA,
   screens: SCREENS_SCHEMA,
+  sheet: SHEET_SCHEMA,
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
@@ -159,4 +195,6 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
     'Draft a real, formatted legal document with a clear title and 4-7 substantive sections written in plain language.',
   screens:
     'Design exactly 3 onboarding screens for this company. Set `art` to "connect", then "session", then "recap" in that order (step 1, 2, 3). Walk a brand-new user to their first real moment of value in under ~2 minutes. Use empty strings for any sub/cta/note a screen does not need.',
+  sheet:
+    'Build a pricing model tuned to THIS company. For each of the 4 fixed inputs give a realistic default value and a sensible slider range (min ≤ val ≤ max, step ≥ 1): price (monthly Pro price in $), waitlist (current early-audience size), conversion (% who become paid), churn (monthly % churn, min at least 1). Then write a one-paragraph summary of what the model shows at those defaults.',
 };

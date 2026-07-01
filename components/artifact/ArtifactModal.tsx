@@ -4,17 +4,25 @@ import { useApp } from '@/lib/store';
 import { DEPTS, reviseSite, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
+import { buildSheetInputs } from '@/lib/ai/sheetModel';
 import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
-// (doc/prep) come back as text; post/email/legal/screens come back as structured
-// payloads. The remaining types (site/sheet/calendar/dms/checklist/pr) still use
-// their authored payloads.
-const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal', 'screens']);
+// (doc/prep) come back as text; post/email/legal/screens/sheet come back as
+// structured payloads. The remaining types (site/calendar/dms/checklist/pr) still
+// use their authored payloads.
+const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal', 'screens', 'sheet']);
 
 function liveKind(type: string): DeliverableKind | null {
   if (type === 'doc' || type === 'prep') return 'text';
-  if (type === 'post' || type === 'email' || type === 'legal' || type === 'screens') return type;
+  if (
+    type === 'post' ||
+    type === 'email' ||
+    type === 'legal' ||
+    type === 'screens' ||
+    type === 'sheet'
+  )
+    return type;
   return null;
 }
 
@@ -24,6 +32,7 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'email') return JSON.stringify(t.email ?? {});
   if (type === 'legal') return JSON.stringify(t.legal ?? {});
   if (type === 'screens') return JSON.stringify(t.screens ?? []);
+  if (type === 'sheet') return JSON.stringify(t.sheet ?? {});
   return typeof t.out === 'string' ? t.out : '';
 }
 
@@ -69,9 +78,49 @@ function applyResult(t: Task, type: string, res: RunResult): void {
   } else if (type === 'screens' && res.payload) {
     const s = res.payload as { screens?: unknown[] };
     if (Array.isArray(s.screens) && s.screens.length) t.screens = s.screens;
+  } else if (type === 'sheet' && res.payload) {
+    // Rebuild the fixed 4-input array (clamped/finite) from byte's values; keep the
+    // seed if the payload is unusable. The summary becomes the library `out` text.
+    const inputs = buildSheetInputs(res.payload);
+    if (inputs) {
+      t.sheet = { inputs };
+      const summary = (res.payload as { summary?: unknown }).summary;
+      if (typeof summary === 'string' && summary.trim()) t.out = summary;
+    }
   } else if (typeof res.text === 'string' && res.text) {
     t.out = res.text;
   }
+}
+
+// Scrollable modal body with a soft bottom fade that shows only while there's more
+// content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
+// every deliverable modal (view / run / result).
+function ModalBody({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    // Re-check when the body resizes OR its content changes height (viewer mounts,
+    // text types out, a revise swaps the payload).
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      el.removeEventListener('scroll', check);
+      ro.disconnect();
+      mo.disconnect();
+    };
+  }, []);
+  return (
+    <div className={`mbody${more ? ' has-more' : ''}`} ref={ref}>
+      {children}
+    </div>
+  );
 }
 
 function Phx({ a }: { a: number }) {
@@ -268,9 +317,9 @@ export function ArtifactModal() {
               ✕
             </div>
           </div>
-          <div className="mbody">
+          <ModalBody>
             <ArtifactViewer item={item} />
-          </div>
+          </ModalBody>
           <div className="mfoot">
             <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
               Close
@@ -630,7 +679,7 @@ export function ArtifactModal() {
               ✕
             </div>
           </div>
-          <div className="mbody">{bodyContent}</div>
+          <ModalBody>{bodyContent}</ModalBody>
           <div className="mfoot">{footer}</div>
         </div>
       </div>
@@ -650,7 +699,7 @@ export function ArtifactModal() {
             ✕
           </div>
         </div>
-        <div className="mbody">{bodyContent}</div>
+        <ModalBody>{bodyContent}</ModalBody>
         <div className="mfoot">{footer}</div>
       </div>
     </div>

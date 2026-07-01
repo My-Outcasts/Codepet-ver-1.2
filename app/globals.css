@@ -3775,7 +3775,7 @@ body {
 }
 .mcard {
   width: min(1500px, 80vw);
-  max-height: 80vh;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -3796,6 +3796,7 @@ body {
   }
 }
 .mhead {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -3838,13 +3839,19 @@ body {
   background: var(--well);
 }
 .mbody {
-  padding: 22px max(28px, 5%);
+  padding: 22px max(28px, 5%) 28px;
   overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: safe center;
+}
+/* Soft scroll cue: fade the bottom edge whenever there's more below the fold
+   (JS toggles .has-more). A mask touches no layout and can't skew the scroll math,
+   so it never interferes with scrolling — it just hints "there's more". */
+.mbody.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
 }
 .work {
   display: flex;
@@ -3949,6 +3956,7 @@ body {
   color: var(--t-1);
 }
 .mfoot {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 9px;
