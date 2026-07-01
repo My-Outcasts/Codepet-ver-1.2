@@ -185,4 +185,37 @@ describe('deriveOut', () => {
       expect(deriveOut('calendar', {})).toBeNull();
     });
   });
+
+  describe('checklist', () => {
+    const payload = {
+      items: [
+        { t: 'Create the beta group', done: true },
+        { t: 'Upload the build', done: false },
+        { t: 'Write invite copy', done: false },
+      ],
+    };
+    it('summarizes step count, done count, and marks each item', () => {
+      const out = deriveOut('checklist', payload)!;
+      expect(out).toContain('3-step checklist ready — 1/3 done');
+      expect(out).toContain('✓ Create the beta group');
+      expect(out).toContain('☐ Upload the build');
+    });
+    it('uses no decorative arrows', () => {
+      const out = deriveOut('checklist', payload)!;
+      expect(out).not.toContain('->');
+      expect(out).not.toContain('→');
+    });
+    it('skips items with no label and returns null when none remain', () => {
+      const out = deriveOut('checklist', {
+        items: [
+          { t: '', done: true },
+          { t: 'Real step', done: false },
+        ],
+      })!;
+      expect(out).toContain('1-step checklist ready — 0/1 done');
+      expect(out).toContain('☐ Real step');
+      expect(deriveOut('checklist', { items: [] })).toBeNull();
+      expect(deriveOut('checklist', {})).toBeNull();
+    });
+  });
 });
