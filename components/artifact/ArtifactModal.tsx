@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
-import { runByteTask, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
+import { runByteTask, GenerateError, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
 import { buildSheetInputs } from '@/lib/ai/sheetModel';
 import { renderSiteHtml } from '@/lib/ai/siteTemplate';
+import { deriveOut } from '@/lib/ai/deriveOut';
 import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
@@ -52,6 +53,8 @@ function applyResult(t: Task, type: string, res: RunResult): void {
         stats: t.post?.stats ?? { replies: 18, reposts: 34, likes: 210 },
         variants: p.variants,
       };
+      const out = deriveOut('post', res.payload);
+      if (out) t.out = out;
     }
   } else if (type === 'email' && res.payload) {
     // Only apply when the arrays the viewer maps over (body, seq) are present —
@@ -67,6 +70,8 @@ function applyResult(t: Task, type: string, res: RunResult): void {
         cta: e.cta,
         seq: e.seq,
       };
+      const out = deriveOut('email', res.payload);
+      if (out) t.out = out;
     }
   } else if (type === 'legal' && res.payload) {
     // Same guard: sections is what LegalViewer maps over.
@@ -78,10 +83,16 @@ function applyResult(t: Task, type: string, res: RunResult): void {
         sections: l.sections,
         flag: l.flag,
       };
+      const out = deriveOut('legal', res.payload);
+      if (out) t.out = out;
     }
   } else if (type === 'screens' && res.payload) {
     const s = res.payload as { screens?: unknown[] };
-    if (Array.isArray(s.screens) && s.screens.length) t.screens = s.screens;
+    if (Array.isArray(s.screens) && s.screens.length) {
+      t.screens = s.screens;
+      const out = deriveOut('screens', res.payload);
+      if (out) t.out = out;
+    }
   } else if (type === 'sheet' && res.payload) {
     // Rebuild the fixed 4-input array (clamped/finite) from byte's values; keep the
     // seed if the payload is unusable. The summary becomes the library `out` text.
@@ -272,6 +283,9 @@ export function ArtifactModal() {
   const [picked, setPicked] = useState('');
   // Live-generation status for plain-text deliverables (Phase 3).
   const [genStatus, setGenStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  // The error code from a failed live pass, so the error line can be specific
+  // (e.g. the daily cost cap) rather than the generic "couldn't reach byte".
+  const [genError, setGenError] = useState<string>('');
 
   // (re)initialize when a run modal opens for a task
   const task = modal?.kind === 'run' ? modal.task : null;
@@ -285,6 +299,7 @@ export function ArtifactModal() {
       setReviseNote('');
       setPicked('');
       setGenStatus('idle');
+      setGenError('');
 
       // byte generates the real deliverable via the Claude API while the execute
       // log animates. On failure we fall back to the authored draft so the loop
@@ -308,6 +323,7 @@ export function ArtifactModal() {
           })
           .catch((err) => {
             console.error('[byte] live generation failed', err);
+            setGenError(err instanceof GenerateError ? err.code : '');
             setGenStatus('error');
           });
       }
@@ -397,6 +413,7 @@ export function ArtifactModal() {
         })
         .catch((err) => {
           console.error('[byte] live revise failed', err);
+          setGenError(err instanceof GenerateError ? err.code : '');
           setGenStatus('error');
         });
     } else {
@@ -452,6 +469,14 @@ export function ArtifactModal() {
     ) : (
       <>First draft ready — written from your brief, in your voice</>
     );
+
+  // The line shown when a live pass fails. A rate-limit is a friendly, specific
+  // message (the account hit today's cap); anything else falls back to the generic
+  // "showing the saved draft" note.
+  const liveErrorMsg =
+    genError === 'rate_limited'
+      ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
+      : 'Couldn’t reach byte just now — showing the saved draft.';
 
   let bodyContent: React.ReactNode;
   if (stage === 'exec') {
@@ -519,7 +544,7 @@ export function ArtifactModal() {
                   )}
                   {LIVE_TYPES.has(type) && genStatus === 'error' && (
                     <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
-                      Couldn’t reach byte just now — showing the saved draft.
+                      {liveErrorMsg}
                     </div>
                   )}
                   <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />

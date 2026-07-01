@@ -1,0 +1,116 @@
+import { describe, it, expect } from 'vitest';
+import { deriveOut } from './deriveOut';
+
+describe('deriveOut', () => {
+  it('returns null for handled-elsewhere / unknown kinds', () => {
+    expect(deriveOut('text', { anything: 1 })).toBeNull();
+    expect(deriveOut('sheet', { summary: 'x' })).toBeNull();
+    expect(deriveOut('site', { sub: 'x' })).toBeNull();
+    expect(deriveOut('mystery', { a: 1 })).toBeNull();
+  });
+
+  it('returns null for non-object payloads', () => {
+    expect(deriveOut('post', null)).toBeNull();
+    expect(deriveOut('post', 'nope')).toBeNull();
+    expect(deriveOut('post', 42)).toBeNull();
+  });
+
+  describe('post', () => {
+    const payload = {
+      variants: [
+        { label: 'Bold', body: 'Ship code you understand.' },
+        { label: 'Problem-first', body: 'Vibe coding leaves gaps.' },
+      ],
+    };
+    it('summarizes variant count, angles, and the lead body', () => {
+      const out = deriveOut('post', payload)!;
+      expect(out).toContain('2 launch-post variants ready to A/B');
+      expect(out).toContain('Bold · Problem-first');
+      expect(out).toContain('Ship code you understand.');
+    });
+    it('handles a single variant (no plural, no angles line when unlabeled)', () => {
+      const out = deriveOut('post', { variants: [{ label: '', body: 'Just one.' }] })!;
+      expect(out).toContain('1 launch-post variant ready');
+      expect(out).not.toContain('variants');
+      expect(out).toContain('Just one.');
+    });
+    it('returns null when there is no usable lead body', () => {
+      expect(deriveOut('post', { variants: [] })).toBeNull();
+      expect(deriveOut('post', { variants: [{ label: 'X', body: '' }] })).toBeNull();
+      expect(deriveOut('post', {})).toBeNull();
+    });
+  });
+
+  describe('email', () => {
+    const payload = {
+      subject: 'Your spot is open',
+      preheader: 'Run one session today.',
+      body: ['Hi', 'Welcome'],
+      cta: 'Open Codepet',
+      seq: [
+        { when: 'Day 0', title: 'A', open: 'x' },
+        { when: 'Day 3', title: 'B', open: 'y' },
+      ],
+    };
+    it('leads with the subject and folds in cta + sequence', () => {
+      const out = deriveOut('email', payload)!;
+      expect(out).toContain('subject: "Your spot is open"');
+      expect(out).toContain('Run one session today.');
+      expect(out).toContain('CTA: Open Codepet.');
+      expect(out).toContain('2-step follow-up (Day 0, Day 3)');
+    });
+    it('needs only a subject to produce output', () => {
+      const out = deriveOut('email', { subject: 'Hey' });
+      expect(out).toContain('subject: "Hey"');
+    });
+    it('returns null without a subject', () => {
+      expect(deriveOut('email', { preheader: 'x', cta: 'y' })).toBeNull();
+    });
+  });
+
+  describe('legal', () => {
+    const payload = {
+      docTitle: 'Privacy Policy',
+      sections: [
+        { h: 'Data we collect', p: '...' },
+        { h: 'Your rights', p: '...' },
+      ],
+      flag: 'Have a lawyer review before publishing.',
+    };
+    it('summarizes title, section count, headings, and the reviewer flag', () => {
+      const out = deriveOut('legal', payload)!;
+      expect(out).toContain('Privacy Policy drafted — 2 sections');
+      expect(out).toContain('Data we collect · Your rights');
+      expect(out).toContain('Reviewer note: Have a lawyer review before publishing.');
+    });
+    it('returns null without any section headings', () => {
+      expect(deriveOut('legal', { docTitle: 'X', sections: [], flag: 'y' })).toBeNull();
+      expect(deriveOut('legal', { docTitle: 'X', sections: [{ h: '', p: 'z' }] })).toBeNull();
+    });
+  });
+
+  describe('screens', () => {
+    const payload = {
+      screens: [
+        { name: 'Connect', time: '0:15', title: 'Link your project' },
+        { name: 'Session', time: '0:45', title: 'Run your first task' },
+        { name: 'Recap', time: '0:30', title: 'See what you built' },
+      ],
+    };
+    it('lists screen names and per-screen detail', () => {
+      const out = deriveOut('screens', payload)!;
+      expect(out).toContain('3 screens: Connect · Session · Recap');
+      expect(out).toContain('Connect (0:15) — Link your project');
+      expect(out).toContain('Recap (0:30) — See what you built');
+    });
+    it('uses no decorative arrows in the summary', () => {
+      const out = deriveOut('screens', payload)!;
+      expect(out).not.toContain('->');
+      expect(out).not.toContain('→');
+    });
+    it('returns null when screens have no names', () => {
+      expect(deriveOut('screens', { screens: [] })).toBeNull();
+      expect(deriveOut('screens', { screens: [{ time: '0:15' }] })).toBeNull();
+    });
+  });
+});

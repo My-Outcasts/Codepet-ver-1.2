@@ -29,7 +29,7 @@ import {
 } from './firebase/companyData';
 import { personalizeCompany } from './ai/personalize';
 import { LoadingScreen } from '../components/LoadingScreen';
-import { streamByteChat } from './ai/chat';
+import { streamByteChat, ChatError } from './ai/chat';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -335,6 +335,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       (async () => {
         let acc = '';
+        let errCode = '';
         try {
           for await (const chunk of streamByteChat(history, deptSummary)) {
             acc += chunk;
@@ -344,8 +345,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (err) {
           console.error('[store] chat stream failed', err);
+          errCode = err instanceof ChatError ? err.code : '';
         }
-        const finalText = acc.trim() || 'I hit a snag reaching the model — give it another try.';
+        const fallback =
+          errCode === 'rate_limited'
+            ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
+            : 'I hit a snag reaching the model — give it another try.';
+        const finalText = acc.trim() || fallback;
         setChatMessages((prev) =>
           prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText } : m)),
         );
