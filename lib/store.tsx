@@ -28,6 +28,7 @@ import {
   resetCompanyData,
 } from './firebase/companyData';
 import { personalizeCompany } from './ai/personalize';
+import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat } from './ai/chat';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
@@ -91,21 +92,7 @@ export const useApp = (): AppState => {
 
 // Full-screen status panel shown while the company state hydrates from Firestore.
 function HydrateScreen() {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--page)',
-        color: 'var(--t-3)',
-        fontSize: 13,
-      }}
-    >
-      Loading your company…
-    </div>
-  );
+  return <LoadingScreen label="Loading your company…" />;
 }
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -118,7 +105,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [deptKey, setDeptKey] = useState<string | null>(null);
   const [selStage, setSelStage] = useState(6);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [copilotCollapsed, setCopilotCollapsed] = useState(false);
+  // Chat starts closed by default; the floating button opens it on demand.
+  const [copilotCollapsed, setCopilotCollapsed] = useState(true);
   // Onboarding is shown only to users who haven't completed it. It starts false
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.

@@ -2469,6 +2469,95 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+
+/* Branded loading screen — same splash.jpg world as splash/sign-in, so every
+   pre-app moment is one continuous flow. Reuses fadeIn/kenburns/riseIn. */
+.loadscr {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #100a26;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  animation: fadeIn 0.5s ease both;
+}
+.loadscr::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/splash.jpg') center / cover no-repeat;
+  animation: kenburns 30s ease-in-out infinite alternate;
+}
+.loadscr::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(rgba(13, 5, 34, 0.62), rgba(13, 5, 34, 0.62)),
+    radial-gradient(120% 90% at 50% 48%, transparent 30%, rgba(13, 5, 34, 0.6) 100%);
+}
+.loadscr-in {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  transform: translateY(-4%);
+}
+.loadscr-byte {
+  width: 56px;
+  height: 56px;
+  image-rendering: pixelated;
+  animation: loadfloat 2.4s ease-in-out infinite;
+  filter: drop-shadow(0 8px 22px rgba(12, 4, 36, 0.6));
+}
+.loadscr-label {
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.86);
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both;
+}
+.loadscr-dots {
+  display: flex;
+  gap: 6px;
+}
+.loadscr-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(180, 150, 255, 0.9);
+  animation: loaddot 1.2s ease-in-out infinite;
+}
+.loadscr-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.loadscr-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes loadfloat {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+@keyframes loaddot {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
 .splash-in {
   position: relative;
   z-index: 2;

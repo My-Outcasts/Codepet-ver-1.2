@@ -5,6 +5,7 @@ import { AppProvider, useApp } from '@/lib/store';
 import { AuthProvider, useAuth } from '@/lib/firebase/auth';
 import { SignIn } from './auth/SignIn';
 import { Splash } from './Splash';
+import { LoadingScreen } from './LoadingScreen';
 import { Topbar } from './Topbar';
 import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
@@ -92,25 +93,6 @@ function Shell() {
   );
 }
 
-// A full-screen status panel shown while auth resolves or the company bootstraps.
-function AuthStatus({ label }: { label: string }) {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--page)',
-        color: 'var(--t-3)',
-        fontSize: 13,
-      }}
-    >
-      {label}
-    </div>
-  );
-}
-
 // Gates the app on auth. A signed-out visitor sees the brand splash first, then
 // the sign-in screen. Once signed in and bootstrapped, the app mounts; onboarding
 // (inside Shell) shows only for users who haven't completed it.
@@ -128,9 +110,9 @@ function Gate() {
       setSplashSeen(false);
     }
   }, [user]);
-  if (loading) return <AuthStatus label="Loading…" />;
+  if (loading) return <LoadingScreen label="Loading…" />;
   if (!user) return splashSeen ? <SignIn /> : <Splash onContinue={() => setSplashSeen(true)} />;
-  if (bootstrapping) return <AuthStatus label="Setting up your company…" />;
+  if (bootstrapping) return <LoadingScreen label="Setting up your company…" />;
   return (
     <AppProvider>
       <Shell />
