@@ -10,10 +10,20 @@ import { deriveOut } from '@/lib/ai/deriveOut';
 import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
-// (doc/prep) come back as text; post/email/legal/screens/sheet/site come back as
-// structured payloads. The remaining types (calendar/dms/checklist/pr) still use
-// their authored payloads.
-const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal', 'screens', 'sheet', 'site']);
+// (doc/prep) come back as text; post/email/legal/screens/sheet/site/dms come back
+// as structured payloads. The remaining types (calendar/checklist/pr/build) still
+// use their authored payloads.
+const LIVE_TYPES = new Set([
+  'doc',
+  'prep',
+  'post',
+  'email',
+  'legal',
+  'screens',
+  'sheet',
+  'site',
+  'dms',
+]);
 
 function liveKind(type: string): DeliverableKind | null {
   if (type === 'doc' || type === 'prep') return 'text';
@@ -23,7 +33,8 @@ function liveKind(type: string): DeliverableKind | null {
     type === 'legal' ||
     type === 'screens' ||
     type === 'sheet' ||
-    type === 'site'
+    type === 'site' ||
+    type === 'dms'
   )
     return type;
   return null;
@@ -36,6 +47,7 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'legal') return JSON.stringify(t.legal ?? {});
   if (type === 'screens') return JSON.stringify(t.screens ?? []);
   if (type === 'sheet') return JSON.stringify(t.sheet ?? {});
+  if (type === 'dms') return JSON.stringify(t.dms ?? []);
   // Site revises against the structured spec (small), not the rendered HTML.
   if (type === 'site') return JSON.stringify(t.siteSpec ?? {});
   return typeof t.out === 'string' ? t.out : '';
@@ -91,6 +103,30 @@ function applyResult(t: Task, type: string, res: RunResult): void {
     if (Array.isArray(s.screens) && s.screens.length) {
       t.screens = s.screens;
       const out = deriveOut('screens', res.payload);
+      if (out) t.out = out;
+    }
+  } else if (type === 'dms' && res.payload) {
+    // Keep only entries with the fields DmsViewer maps over (name drives the avatar
+    // initial via name[0], msg is the copyable body) — a partial payload keeps the seed.
+    const d = res.payload as { messages?: unknown[] };
+    const msgs = Array.isArray(d.messages)
+      ? d.messages.filter(
+          (m): m is { name: string; note: string; msg: string } =>
+            !!m &&
+            typeof m === 'object' &&
+            typeof (m as { name?: unknown }).name === 'string' &&
+            (m as { name: string }).name.trim().length > 0 &&
+            typeof (m as { msg?: unknown }).msg === 'string' &&
+            (m as { msg: string }).msg.trim().length > 0,
+        )
+      : [];
+    if (msgs.length) {
+      t.dms = msgs.map((m) => ({
+        name: m.name,
+        note: typeof m.note === 'string' ? m.note : '',
+        msg: m.msg,
+      }));
+      const out = deriveOut('dms', res.payload);
       if (out) t.out = out;
     }
   } else if (type === 'sheet' && res.payload) {
