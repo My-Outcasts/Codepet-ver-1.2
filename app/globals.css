@@ -3775,7 +3775,7 @@ body {
 }
 .mcard {
   width: min(1500px, 80vw);
-  max-height: 80vh;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -3796,6 +3796,7 @@ body {
   }
 }
 .mhead {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -3955,6 +3956,7 @@ body {
   color: var(--t-1);
 }
 .mfoot {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 9px;
