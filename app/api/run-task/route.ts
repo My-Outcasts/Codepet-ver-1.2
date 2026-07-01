@@ -4,13 +4,18 @@
 // official SDK runs.
 //
 // Kinds:
-//   text          → plain-text deliverable, returns { text }
-//   post/email/legal → structured deliverable via output_config.format, returns { payload }
+//   text                    → plain-text deliverable, returns { text }
+//   post/email/legal/screens → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
 import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import {
+  STRUCTURED_SCHEMAS,
+  DELIVERABLE_INSTRUCTIONS,
+  type StructuredKind,
+} from '@/lib/ai/deliverableSchemas';
 
 export const runtime = 'nodejs';
 
@@ -23,111 +28,16 @@ Voice: warm, plain-language, confident, specific. No hype, no emoji, no clichés
 // brief once onboarding persists it; until then byte writes from the product.
 const CODEPET_CONTEXT = `Codepet is a macOS companion that builds your whole company with you, department by department. It reads your project, writes the business brief and roadmap, then does real work across Engineering, Marketing, Design, Finance, Operations, Legal, Sales, and Support — producing real deliverables you approve. The promise is comprehension plus control: a real company, and one you actually understand.`;
 
-// ---- structured-output schemas (must satisfy the strict JSON-schema subset:
-// additionalProperties:false + every property required). ----
-const POST_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    variants: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          label: {
-            type: 'string',
-            description: 'The hook angle, 1-3 words (e.g. "Bold", "Problem-first").',
-          },
-          body: {
-            type: 'string',
-            description: 'The full social post, under ~280 characters, no hashtag spam.',
-          },
-        },
-        required: ['label', 'body'],
-      },
-    },
-  },
-  required: ['variants'],
-};
-
-const EMAIL_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    subject: { type: 'string' },
-    preheader: { type: 'string', description: 'Short inbox preview line.' },
-    body: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Email body as an ordered list of paragraphs.',
-    },
-    cta: { type: 'string', description: 'Call-to-action button label.' },
-    seq: {
-      type: 'array',
-      description: 'A short follow-up sequence that sends on milestones.',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          when: { type: 'string', description: 'Trigger, e.g. "Day 0", "On first session".' },
-          title: { type: 'string' },
-          open: { type: 'string', description: 'The opening line of that email.' },
-        },
-        required: ['when', 'title', 'open'],
-      },
-    },
-  },
-  required: ['subject', 'preheader', 'body', 'cta', 'seq'],
-};
-
-const LEGAL_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    docTitle: { type: 'string' },
-    sections: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          h: { type: 'string', description: 'Section heading.' },
-          p: { type: 'string', description: 'Section body (a real paragraph, not a placeholder).' },
-        },
-        required: ['h', 'p'],
-      },
-    },
-    flag: {
-      type: 'string',
-      description: 'One-line reviewer note, e.g. that a lawyer should review before publishing.',
-    },
-  },
-  required: ['docTitle', 'sections', 'flag'],
-};
-
-type Kind = 'text' | 'post' | 'email' | 'legal';
+// Structured-output schemas + prompt instructions live in a pure, unit-tested
+// module (lib/ai/deliverableSchemas.ts). `text` has no schema (plain text).
+type Kind = 'text' | StructuredKind;
 
 const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction: string }> = {
-  text: {
-    schema: null,
-    instruction: 'Write the deliverable as plain text.',
-  },
-  post: {
-    schema: POST_SCHEMA,
-    instruction:
-      'Write exactly 3 distinct launch-post variants that take different angles on the same announcement.',
-  },
-  email: {
-    schema: EMAIL_SCHEMA,
-    instruction:
-      'Write a launch/activation email: a subject, a preheader, 3-5 short body paragraphs, a CTA label, and a 2-3 step follow-up sequence.',
-  },
-  legal: {
-    schema: LEGAL_SCHEMA,
-    instruction:
-      'Draft a real, formatted legal document with a clear title and 4-7 substantive sections written in plain language.',
-  },
+  text: { schema: null, instruction: DELIVERABLE_INSTRUCTIONS.text },
+  post: { schema: STRUCTURED_SCHEMAS.post, instruction: DELIVERABLE_INSTRUCTIONS.post },
+  email: { schema: STRUCTURED_SCHEMAS.email, instruction: DELIVERABLE_INSTRUCTIONS.email },
+  legal: { schema: STRUCTURED_SCHEMAS.legal, instruction: DELIVERABLE_INSTRUCTIONS.legal },
+  screens: { schema: STRUCTURED_SCHEMAS.screens, instruction: DELIVERABLE_INSTRUCTIONS.screens },
 };
 
 interface RunTaskBody {
