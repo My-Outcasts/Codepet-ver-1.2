@@ -11,7 +11,7 @@
 // the caller keeps the seed rather than showing a broken line. No markup, no arrows
 // (house style) — plain text with `·` separators.
 
-type DeriveKind = 'post' | 'email' | 'legal' | 'screens';
+type DeriveKind = 'post' | 'email' | 'legal' | 'screens' | 'dms';
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -89,6 +89,12 @@ function fromScreens(p: Record<string, unknown>): string | null {
   return `✓ Onboarding flow ready — ${names.length} screen${names.length === 1 ? '' : 's'}: ${names.join(' · ')}.\n\n${detail.join('\n')}`;
 }
 
+function fromDms(p: Record<string, unknown>): string | null {
+  const names = pick(p.messages, 'name');
+  if (names.length === 0) return null;
+  return `✓ ${names.length} personalized outreach draft${names.length === 1 ? '' : 's'} ready — a per-person DM, not a broadcast.\n\nTargets: ${names.join(' · ')}.\n\nSwap each placeholder name for a real contact, then send.`;
+}
+
 /**
  * Build a personalized `out` outcome line from a live structured payload.
  * Returns null for kinds handled elsewhere (text/sheet/site) or when the payload
@@ -106,6 +112,8 @@ export function deriveOut(type: string, payload: unknown): string | null {
       return fromLegal(p);
     case 'screens':
       return fromScreens(p);
+    case 'dms':
+      return fromDms(p);
     default:
       return null;
   }

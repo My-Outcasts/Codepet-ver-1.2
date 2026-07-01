@@ -41,6 +41,7 @@ const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction:
   screens: { schema: STRUCTURED_SCHEMAS.screens, instruction: DELIVERABLE_INSTRUCTIONS.screens },
   sheet: { schema: STRUCTURED_SCHEMAS.sheet, instruction: DELIVERABLE_INSTRUCTIONS.sheet },
   site: { schema: STRUCTURED_SCHEMAS.site, instruction: DELIVERABLE_INSTRUCTIONS.site },
+  dms: { schema: STRUCTURED_SCHEMAS.dms, instruction: DELIVERABLE_INSTRUCTIONS.dms },
 };
 
 interface RunTaskBody {

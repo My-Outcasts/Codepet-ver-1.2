@@ -7,7 +7,7 @@
 // property key. deliverableSchemas.test.ts enforces that so a malformed schema
 // fails in CI instead of 400-ing at runtime.
 
-export type StructuredKind = 'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site';
+export type StructuredKind = 'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms';
 
 // One slider input byte tunes: a default value + a sensible range. Structure
 // (which 4 inputs, in what order, what they mean) is FIXED in code — see
@@ -275,6 +275,47 @@ export const SITE_SCHEMA: Record<string, unknown> = {
   ],
 };
 
+// Sales — a shortlist of personalized 1:1 outreach drafts. byte writes one warm,
+// per-person DM per entry (never a broadcast). It can't know the founder's real
+// waitlist, so each entry is a representative early-user persona: `name` is a
+// first-name placeholder the founder swaps for a real contact, `note` is the signal
+// that identifies that segment, and `msg` is the outreach written in the company's
+// voice. Matches DmsViewer's `[].{name, note, msg}` contract.
+export const DMS_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    messages: {
+      type: 'array',
+      description:
+        'Exactly 4 personalized outreach drafts, each to a different early-user persona.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          name: {
+            type: 'string',
+            description:
+              'A representative first name for this persona — a placeholder the founder swaps for a real contact.',
+          },
+          note: {
+            type: 'string',
+            description:
+              'The signal that makes this person a strong target, e.g. "replied twice · shared it" or "joined day one".',
+          },
+          msg: {
+            type: 'string',
+            description:
+              'The full 1:1 DM — warm, specific, personal (not a broadcast). References something concrete about this company and why this person specifically.',
+          },
+        },
+        required: ['name', 'note', 'msg'],
+      },
+    },
+  },
+  required: ['messages'],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
@@ -282,6 +323,7 @@ export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>>
   screens: SCREENS_SCHEMA,
   sheet: SHEET_SCHEMA,
   site: SITE_SCHEMA,
+  dms: DMS_SCHEMA,
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
@@ -295,5 +337,6 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
     'Design exactly 3 onboarding screens for this company. Set `art` to "connect", then "session", then "recap" in that order (step 1, 2, 3). Walk a brand-new user to their first real moment of value in under ~2 minutes. Use empty strings for any sub/cta/note a screen does not need.',
   sheet:
     'Build a pricing model tuned to THIS company. For each of the 4 fixed inputs give a realistic default value and a sensible slider range (min ≤ val ≤ max, step ≥ 1): price (monthly Pro price in $), waitlist (current early-audience size), conversion (% who become paid), churn (monthly % churn, min at least 1). Then write a one-paragraph summary of what the model shows at those defaults.',
+  dms: 'Draft exactly 4 personalized 1:1 outreach messages to the most promising early users / waitlisters for THIS company — a per-person DM, never a broadcast. Since you do not have the real waitlist, make each entry a distinct representative early-user persona: a first-name placeholder the founder will swap for a real contact, a short note describing the signal that makes them a strong target (e.g. "replied twice", "joined day one", "referred a friend"), and a warm, specific DM in the founder\'s voice that references something concrete about this company and invites them in. Vary the warmth and angle across the four.',
   site: "Write the content for a real, shippable one-page marketing site for THIS company. Provide a hero (kicker, headline with an optional accent tail, one subline, and 1-2 CTA labels), exactly 3 how-it-works steps, exactly 3 concrete feature cards, an optional one-line testimonial, a closing CTA, a brand accent colour as a 6-digit hex, and a footer line. Write real, specific copy in the company's voice — no placeholders. Use empty strings for any optional field (kicker, headlineHi, ctaSecondary, quote, quoteBy, finalSub) the page does not need. Do NOT write HTML; only the text and the hex colour.",
 };

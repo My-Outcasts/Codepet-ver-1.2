@@ -113,4 +113,35 @@ describe('deriveOut', () => {
       expect(deriveOut('screens', { screens: [{ time: '0:15' }] })).toBeNull();
     });
   });
+
+  describe('dms', () => {
+    const payload = {
+      messages: [
+        { name: 'Alex', note: 'replied twice', msg: 'Hey Alex...' },
+        { name: 'Priya', note: 'joined day one', msg: 'Hi Priya...' },
+      ],
+    };
+    it('summarizes count, target names, and the swap-then-send instruction', () => {
+      const out = deriveOut('dms', payload)!;
+      expect(out).toContain('2 personalized outreach drafts ready');
+      expect(out).toContain('a per-person DM, not a broadcast');
+      expect(out).toContain('Alex · Priya');
+      expect(out).toContain('Swap each placeholder name');
+    });
+    it('handles a single draft (singular)', () => {
+      const out = deriveOut('dms', { messages: [{ name: 'Sam', note: 'n', msg: 'm' }] })!;
+      expect(out).toContain('1 personalized outreach draft ready');
+      expect(out).not.toContain('drafts ready');
+    });
+    it('uses no decorative arrows', () => {
+      const out = deriveOut('dms', payload)!;
+      expect(out).not.toContain('->');
+      expect(out).not.toContain('→');
+    });
+    it('returns null when there are no named messages', () => {
+      expect(deriveOut('dms', { messages: [] })).toBeNull();
+      expect(deriveOut('dms', { messages: [{ note: 'x', msg: 'y' }] })).toBeNull();
+      expect(deriveOut('dms', {})).toBeNull();
+    });
+  });
 });
