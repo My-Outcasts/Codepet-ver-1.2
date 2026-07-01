@@ -10,8 +10,8 @@ import { deriveOut } from '@/lib/ai/deriveOut';
 import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
-// (doc/prep) come back as text; post/email/legal/screens/sheet/site/dms come back
-// as structured payloads. The remaining types (calendar/checklist/pr/build) still
+// (doc/prep) come back as text; post/email/legal/screens/sheet/site/dms/calendar
+// come back as structured payloads. The remaining types (checklist/pr/build) still
 // use their authored payloads.
 const LIVE_TYPES = new Set([
   'doc',
@@ -23,6 +23,7 @@ const LIVE_TYPES = new Set([
   'sheet',
   'site',
   'dms',
+  'calendar',
 ]);
 
 function liveKind(type: string): DeliverableKind | null {
@@ -34,7 +35,8 @@ function liveKind(type: string): DeliverableKind | null {
     type === 'screens' ||
     type === 'sheet' ||
     type === 'site' ||
-    type === 'dms'
+    type === 'dms' ||
+    type === 'calendar'
   )
     return type;
   return null;
@@ -48,6 +50,7 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'screens') return JSON.stringify(t.screens ?? []);
   if (type === 'sheet') return JSON.stringify(t.sheet ?? {});
   if (type === 'dms') return JSON.stringify(t.dms ?? []);
+  if (type === 'calendar') return JSON.stringify(t.calendar ?? {});
   // Site revises against the structured spec (small), not the rendered HTML.
   if (type === 'site') return JSON.stringify(t.siteSpec ?? {});
   return typeof t.out === 'string' ? t.out : '';
@@ -127,6 +130,46 @@ function applyResult(t: Task, type: string, res: RunResult): void {
         msg: m.msg,
       }));
       const out = deriveOut('dms', res.payload);
+      if (out) t.out = out;
+    }
+  } else if (type === 'calendar' && res.payload) {
+    // CalendarViewer maps weeks[].items[] — keep only weeks that carry a real items
+    // array, and only items with a body; a partial payload keeps the seed.
+    const c = res.payload as { weeks?: unknown[] };
+    const weeks = Array.isArray(c.weeks)
+      ? c.weeks
+          .map((w) => {
+            if (!w || typeof w !== 'object') return null;
+            const row = w as { label?: unknown; items?: unknown };
+            const items = Array.isArray(row.items)
+              ? row.items.filter(
+                  (it): it is { day: string; kind: string; body: string } =>
+                    !!it &&
+                    typeof it === 'object' &&
+                    typeof (it as { body?: unknown }).body === 'string' &&
+                    (it as { body: string }).body.trim().length > 0,
+                )
+              : [];
+            if (!items.length) return null;
+            return {
+              label: typeof row.label === 'string' ? row.label : '',
+              items: items.map((it) => ({
+                day: typeof it.day === 'string' ? it.day : '',
+                kind: typeof it.kind === 'string' ? it.kind : '',
+                body: it.body,
+              })),
+            };
+          })
+          .filter(
+            (
+              w,
+            ): w is { label: string; items: Array<{ day: string; kind: string; body: string }> } =>
+              w !== null,
+          )
+      : [];
+    if (weeks.length) {
+      t.calendar = { weeks };
+      const out = deriveOut('calendar', res.payload);
       if (out) t.out = out;
     }
   } else if (type === 'sheet' && res.payload) {

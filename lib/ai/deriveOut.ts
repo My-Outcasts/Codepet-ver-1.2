@@ -11,7 +11,7 @@
 // the caller keeps the seed rather than showing a broken line. No markup, no arrows
 // (house style) — plain text with `·` separators.
 
-type DeriveKind = 'post' | 'email' | 'legal' | 'screens' | 'dms';
+type DeriveKind = 'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar';
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -95,6 +95,32 @@ function fromDms(p: Record<string, unknown>): string | null {
   return `✓ ${names.length} personalized outreach draft${names.length === 1 ? '' : 's'} ready — a per-person DM, not a broadcast.\n\nTargets: ${names.join(' · ')}.\n\nSwap each placeholder name for a real contact, then send.`;
 }
 
+function fromCalendar(p: Record<string, unknown>): string | null {
+  const weeks = p.weeks;
+  if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  const lines: string[] = [];
+  let total = 0;
+  for (const w of weeks) {
+    if (!w || typeof w !== 'object') continue;
+    const row = w as { label?: unknown; items?: unknown };
+    const items = Array.isArray(row.items) ? row.items : [];
+    const slots = items
+      .map((it) =>
+        it && typeof it === 'object'
+          ? [str((it as Record<string, unknown>).day), str((it as Record<string, unknown>).kind)]
+              .filter(Boolean)
+              .join(' ')
+          : '',
+      )
+      .filter(Boolean);
+    if (slots.length === 0) continue;
+    total += slots.length;
+    lines.push(`${str(row.label) || 'Week'}: ${slots.join(' · ')}`);
+  }
+  if (lines.length === 0) return null;
+  return `✓ ${lines.length}-week content calendar ready — ${total} post${total === 1 ? '' : 's'}.\n\n${lines.join('\n')}`;
+}
+
 /**
  * Build a personalized `out` outcome line from a live structured payload.
  * Returns null for kinds handled elsewhere (text/sheet/site) or when the payload
@@ -114,6 +140,8 @@ export function deriveOut(type: string, payload: unknown): string | null {
       return fromScreens(p);
     case 'dms':
       return fromDms(p);
+    case 'calendar':
+      return fromCalendar(p);
     default:
       return null;
   }
