@@ -2469,6 +2469,50 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+
+/* Branded loading screen — same splash.jpg world as splash/sign-in, so every
+   pre-app moment is one continuous flow. Reuses fadeIn/kenburns/riseIn. */
+.loadscr {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #100a26;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  animation: fadeIn 0.5s ease both;
+}
+.loadscr::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/loading.jpg') center / cover no-repeat;
+  animation: kenburns 30s ease-in-out infinite alternate;
+}
+.loadscr::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(rgba(13, 5, 34, 0.62), rgba(13, 5, 34, 0.62)),
+    radial-gradient(120% 90% at 50% 48%, transparent 30%, rgba(13, 5, 34, 0.6) 100%);
+}
+.loadscr-in {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(-2%);
+}
+.loadscr-label {
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.86);
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both;
+}
 .splash-in {
   position: relative;
   z-index: 2;
