@@ -50,6 +50,7 @@ const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction:
     schema: STRUCTURED_SCHEMAS.checklist,
     instruction: DELIVERABLE_INSTRUCTIONS.checklist,
   },
+  plan: { schema: STRUCTURED_SCHEMAS.plan, instruction: DELIVERABLE_INSTRUCTIONS.plan },
 };
 
 interface RunTaskBody {

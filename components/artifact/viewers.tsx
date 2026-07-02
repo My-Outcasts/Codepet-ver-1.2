@@ -520,46 +520,73 @@ export function ChecklistViewer({ checklist }: { checklist: any[] }) {
   );
 }
 
-/* ===== engineering PR ===== */
-export function PrViewer({ pr, title }: { pr: any; title?: string }) {
-  const bars = (a: number, d: number) => {
-    const tot = Math.min(5, Math.max(1, Math.round((a + d) / 20)));
-    const aCount = Math.round((tot * a) / (a + d || 1));
-    return Array.from({ length: 5 }, (_, i) => (
-      <i key={i} className={i < tot ? (i < aCount ? 'a' : 'd') : ''} />
-    ));
-  };
+/* ===== engineering code-change plan ===== */
+// Honest: the change byte WOULD make (goal / approach / areas touched / how to
+// verify) — never a fake "merged PR" with invented files, line counts, or green
+// checks. byte can't open PRs or run CI, so it drafts the plan to hand off instead.
+export function PlanViewer({ plan, title }: { plan: any; title?: string }) {
+  const steps: string[] = Array.isArray(plan?.steps) ? plan.steps : [];
+  const changes: Array<{ area?: string; edit?: string }> = Array.isArray(plan?.changes)
+    ? plan.changes
+    : [];
+  const verify: string[] = Array.isArray(plan?.verify) ? plan.verify : [];
+  const goal = typeof plan?.goal === 'string' ? plan.goal : '';
+  const risks = typeof plan?.risks === 'string' ? plan.risks : '';
   return (
-    <div className="prart">
-      <div className="pr-head">
-        <div className="pr-t">
-          <span className="pr-merged">✓ Merged</span>
-          <span className="pr-num">#{pr.num}</span>
-        </div>
-        <div className="pr-title">{title || pr.branch}</div>
-        <div className="pr-branch">
-          <code>{pr.branch}</code> → <code>main</code> · {pr.repo}
-        </div>
+    <div className="planart">
+      <div className="plan-head">
+        <span className="plan-chip">Code-change plan</span>
+        <div className="plan-title">{title || 'Change plan'}</div>
       </div>
-      <div className="pr-sum">{pr.summary}</div>
-      <div className="pr-files">
-        {pr.files.map((f: any, i: number) => (
-          <div className="pr-file" key={i}>
-            <span className="fn">{f.name}</span>
-            <span className="fa">+{f.add}</span>
-            <span className="fd">−{f.del}</span>
-            <span className="pr-bars">{bars(f.add, f.del)}</span>
+      {goal && (
+        <div className="plan-sec">
+          <div className="plan-lbl">Goal</div>
+          <p className="plan-goal">{goal}</p>
+        </div>
+      )}
+      {steps.length > 0 && (
+        <div className="plan-sec">
+          <div className="plan-lbl">Approach</div>
+          <ol className="plan-steps">
+            {steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {changes.length > 0 && (
+        <div className="plan-sec">
+          <div className="plan-lbl">Changes</div>
+          <div className="plan-changes">
+            {changes.map((c, i) => (
+              <div className="plan-change" key={i}>
+                <span className="plan-area">{c.area}</span>
+                <span className="plan-edit">{c.edit}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="pr-checks">
-        {pr.checks.map((c: any, i: number) => (
-          <span className="pr-check" key={i}>
-            <span className="cok">✓</span>
-            {c.n}
-          </span>
-        ))}
-      </div>
+        </div>
+      )}
+      {verify.length > 0 && (
+        <div className="plan-sec">
+          <div className="plan-lbl">How to verify</div>
+          <ul className="plan-verify">
+            {verify.map((v, i) => (
+              <li key={i}>
+                <span className="plan-box">☐</span>
+                <span>{v}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {risks && (
+        <div className="plan-risk">
+          <span className="plan-rk">!</span>
+          <span>{risks}</span>
+        </div>
+      )}
+      <div className="plan-foot">Hand this plan to your coding agent to implement it.</div>
     </div>
   );
 }
@@ -577,7 +604,7 @@ export function ArtifactViewer({ item }: { item: any }) {
   if (item.type === 'legal') return <LegalViewer legal={item.legal} />;
   if (item.type === 'dms') return <DmsViewer dms={item.dms} />;
   if (item.type === 'checklist') return <ChecklistViewer checklist={item.checklist} />;
-  if (item.type === 'pr') return <PrViewer pr={item.pr} title={item.title} />;
+  if (item.type === 'plan') return <PlanViewer plan={item.plan} title={item.title} />;
   return (
     <div className="artifact">
       <div className={`art-bar ${item.type}`}>

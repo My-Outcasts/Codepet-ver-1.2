@@ -265,16 +265,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         legal: t.legal,
         dms: t.dms,
         checklist: t.checklist,
-        pr: t.pr,
+        plan: t.plan,
       };
       t._item = item;
       setLibrary((prev) => [item, ...prev]);
       const next = d.tasks.find((x) => !x.done);
       bump();
       track('task.approved', { dept: d.k, type });
-      toast(
-        (type === 'build' || type === 'site' || type === 'pr' ? 'Shipped' : 'Saved') + ' · ' + t.t,
-      );
+      toast((type === 'build' || type === 'site' ? 'Shipped' : 'Saved') + ' · ' + t.t);
       // Write-through (optimistic — the in-memory update already happened).
       if (companyId) {
         persistApproval(companyId, d, item, Date.now()).catch((err) => {

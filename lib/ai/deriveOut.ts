@@ -11,10 +11,17 @@
 // the caller keeps the seed rather than showing a broken line. No markup, no arrows
 // (house style) — plain text with `·` separators.
 
-type DeriveKind = 'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar' | 'checklist';
+type DeriveKind =
+  'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar' | 'checklist' | 'plan';
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
+}
+
+/** Non-empty trimmed strings from a plain string array, in order. */
+function strs(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(str).filter(Boolean);
 }
 
 /** Non-empty trimmed strings pulled from an array field, in order. */
@@ -140,6 +147,22 @@ function fromChecklist(p: Record<string, unknown>): string | null {
   return `✓ ${rows.length}-step checklist ready — ${done}/${rows.length} done.\n\n${list}`;
 }
 
+function fromPlan(p: Record<string, unknown>): string | null {
+  const goal = str(p.goal);
+  const steps = strs(p.steps);
+  if (!goal || steps.length === 0) return null;
+  const areas = pick(p.changes, 'area');
+  const lines = [
+    `✓ Code-change plan ready — ${goal}`,
+    '',
+    'Approach:',
+    ...steps.map((s, i) => `${i + 1}. ${s}`),
+  ];
+  if (areas.length) lines.push('', `Touches: ${areas.join(' · ')}.`);
+  lines.push('', 'Hand this plan to your coding agent to implement.');
+  return lines.join('\n');
+}
+
 /**
  * Build a personalized `out` outcome line from a live structured payload.
  * Returns null for kinds handled elsewhere (text/sheet/site) or when the payload
@@ -163,6 +186,8 @@ export function deriveOut(type: string, payload: unknown): string | null {
       return fromCalendar(p);
     case 'checklist':
       return fromChecklist(p);
+    case 'plan':
+      return fromPlan(p);
     default:
       return null;
   }

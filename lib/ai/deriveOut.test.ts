@@ -218,4 +218,36 @@ describe('deriveOut', () => {
       expect(deriveOut('checklist', {})).toBeNull();
     });
   });
+
+  describe('plan', () => {
+    const payload = {
+      goal: 'Measure whether testers understand their code after a week.',
+      steps: ['Add four funnel events.', 'Fire them at the key moments.'],
+      changes: [
+        { area: 'Analytics layer', edit: 'Declare the events.' },
+        { area: 'Onboarding flow', edit: 'Emit signup_completed.' },
+      ],
+      verify: ['Confirm signup fires on a real run.'],
+      risks: 'Depends on the survey trigger existing.',
+    };
+    it('leads with the goal, numbers the approach, and lists the areas touched', () => {
+      const out = deriveOut('plan', payload)!;
+      expect(out).toContain('Code-change plan ready — Measure whether testers');
+      expect(out).toContain('1. Add four funnel events.');
+      expect(out).toContain('2. Fire them at the key moments.');
+      expect(out).toContain('Touches: Analytics layer · Onboarding flow.');
+      expect(out).toContain('Hand this plan to your coding agent');
+    });
+    it('never claims the change shipped and uses no decorative arrows', () => {
+      const out = deriveOut('plan', payload)!;
+      expect(out).not.toMatch(/merged|shipped|verified/i);
+      expect(out).not.toContain('->');
+      expect(out).not.toContain('→');
+    });
+    it('returns null without a goal or steps', () => {
+      expect(deriveOut('plan', { goal: '', steps: ['a'] })).toBeNull();
+      expect(deriveOut('plan', { goal: 'A goal', steps: [] })).toBeNull();
+      expect(deriveOut('plan', {})).toBeNull();
+    });
+  });
 });

@@ -23,7 +23,8 @@ export type DeliverableKind =
   | 'site'
   | 'dms'
   | 'calendar'
-  | 'checklist';
+  | 'checklist'
+  | 'plan';
 
 export interface RunArgs {
   kind: DeliverableKind;

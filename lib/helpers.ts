@@ -21,8 +21,8 @@ export const artType = (t: Task, walk?: boolean): string =>
       ? 'screens'
       : t.sheet
         ? 'sheet'
-        : t.pr
-          ? 'pr'
+        : t.plan
+          ? 'plan'
           : t.post
             ? 'post'
             : t.email
@@ -129,15 +129,16 @@ export const RICH_META: Record<string, RichMeta> = {
     ho: '<b>byte prepared a checklist you can run.</b> Tick items off here — approve to track it in your plan.',
     saved: 'tracked in your <b>plan</b>',
   },
-  pr: {
-    file: 'pull-request.diff',
-    head: 'Pull request',
-    tag: artTag('--accent', 'merged'),
-    log: 'build',
-    vstat: 'Shipped & verified — merged to main, all checks green',
-    ok: 'Looks right — log it',
-    ho: '<b>byte shipped this and verified it.</b> Review the change and the checks — approve to log it, or send it back.',
-    saved: 'live in your project',
+  plan: {
+    file: 'change-plan.md',
+    head: 'Code-change plan',
+    tag: artTag('--blue', 'plan'),
+    log: 'doc',
+    vstat:
+      'A code-change plan drafted from your brief — the change byte would make, ready to hand to your coding agent',
+    ok: 'Approve the plan',
+    ho: '<b>byte drafted a code-change plan.</b> Review the goal, approach, and changes — approve to save it, or send it back for another pass.',
+    saved: 'in your <b>Library</b>',
   },
 };
 

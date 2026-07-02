@@ -39,7 +39,7 @@ describe('slug', () => {
 describe('artType', () => {
   it('prefers explicit artifact payloads', () => {
     expect(artType(task({ site: '<html>' }))).toBe('site');
-    expect(artType(task({ pr: {} }))).toBe('pr');
+    expect(artType(task({ plan: {} }))).toBe('plan');
   });
   it('maps route runs to build', () => {
     expect(artType(task({ run: 'route' }))).toBe('build');

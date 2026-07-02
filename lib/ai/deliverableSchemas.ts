@@ -8,7 +8,16 @@
 // fails in CI instead of 400-ing at runtime.
 
 export type StructuredKind =
-  'post' | 'email' | 'legal' | 'screens' | 'sheet' | 'site' | 'dms' | 'calendar' | 'checklist';
+  | 'post'
+  | 'email'
+  | 'legal'
+  | 'screens'
+  | 'sheet'
+  | 'site'
+  | 'dms'
+  | 'calendar'
+  | 'checklist'
+  | 'plan';
 
 // One slider input byte tunes: a default value + a sensible range. Structure
 // (which 4 inputs, in what order, what they mean) is FIXED in code — see
@@ -388,6 +397,54 @@ export const CHECKLIST_SCHEMA: Record<string, unknown> = {
   required: ['items'],
 };
 
+// Engineering — an HONEST code-change plan: what byte would change and why, NOT a
+// claim that it shipped. No invented repo/branch/PR number/line counts/passing
+// checks (that was the old fake "merged PR"). The viewer (PlanViewer) reads goal,
+// steps[], changes[].{area, edit}, verify[], risks — all required (strict subset).
+export const PLAN_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    goal: {
+      type: 'string',
+      description: 'One line: what the change accomplishes and why it matters, tied to the task.',
+    },
+    steps: {
+      type: 'array',
+      description: 'The implementation approach as 3-5 ordered, plain-language steps.',
+      items: { type: 'string' },
+    },
+    changes: {
+      type: 'array',
+      description: 'The specific areas/modules/surfaces the change touches.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          area: {
+            type: 'string',
+            description:
+              'The module/surface in plain terms (e.g. "Onboarding flow", "the analytics layer") — NOT a fabricated file path with line counts.',
+          },
+          edit: { type: 'string', description: 'What would change in that area.' },
+        },
+        required: ['area', 'edit'],
+      },
+    },
+    verify: {
+      type: 'array',
+      description:
+        'A few concrete verification checks, phrased in the future ("Add a test that…", "Confirm that…") — never as already-passed.',
+      items: { type: 'string' },
+    },
+    risks: {
+      type: 'string',
+      description: 'One line on the main risk or open question to watch.',
+    },
+  },
+  required: ['goal', 'steps', 'changes', 'verify', 'risks'],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
@@ -398,6 +455,7 @@ export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>>
   dms: DMS_SCHEMA,
   calendar: CALENDAR_SCHEMA,
   checklist: CHECKLIST_SCHEMA,
+  plan: PLAN_SCHEMA,
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
@@ -416,5 +474,6 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
   calendar:
     'Plan a 2-week teaching-in-public / build-in-public content calendar for THIS company, about 2 posts per week. For each week give a label ("Week 1", "Week 2") and 2-3 posts, each with a day (e.g. "Mon", "Thu"), a content format/kind (Thread, Build log, Story, Clip, or similar), and a one-line description of the post that is specific to this company\'s product and audience. Write in the founder\'s voice; no hype.',
   dms: 'Draft exactly 4 personalized 1:1 outreach messages to the most promising early users / waitlisters for THIS company — a per-person DM, never a broadcast. Since you do not have the real waitlist, make each entry a distinct representative early-user persona: a first-name placeholder the founder will swap for a real contact, a short note describing the signal that makes them a strong target (e.g. "replied twice", "joined day one", "referred a friend"), and a warm, specific DM in the founder\'s voice that references something concrete about this company and invites them in. Vary the warmth and angle across the four.',
+  plan: "Draft an HONEST code-change plan for THIS company's product — what you would change and why, NOT a claim that it is done. Do NOT invent a repo name, branch, PR number, file paths with line counts, or passing checks. Provide: a one-line goal that ties the change to the task; 3-5 ordered approach steps; the specific areas/modules/surfaces you would touch, each with what changes there (describe the area in plain terms like 'Onboarding flow' or 'the analytics layer' — no fabricated diffs); a few concrete verification checks phrased in the future ('Add a test that…', 'Confirm that…'); and one line on the main risk or open question. Write it as a plan the founder can hand to their coding agent.",
   site: "Write the content for a real, shippable one-page marketing site for THIS company. Provide a hero (kicker, headline with an optional accent tail, one subline, and 1-2 CTA labels), exactly 3 how-it-works steps, exactly 3 concrete feature cards, an optional one-line testimonial, a closing CTA, a brand accent colour as a 6-digit hex, and a footer line. Write real, specific copy in the company's voice — no placeholders. Use empty strings for any optional field (kicker, headlineHi, ctaSecondary, quote, quoteBy, finalSub) the page does not need. Do NOT write HTML; only the text and the hex colour.",
 };

@@ -20,7 +20,7 @@
   },
   "components/artifact/viewers.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 22
+      "count": 20
     }
   },
   "components/views/InstallView.tsx": {
