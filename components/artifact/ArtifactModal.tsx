@@ -263,9 +263,11 @@ function Phx({ a }: { a: number }) {
   );
   return (
     <div className="phx">
-      {ph(0, 'Execute')}
+      {ph(0, 'Outline')}
       <span className="pa">→</span>
-      {ph(1, 'Deliver')}
+      {ph(1, 'Execute')}
+      <span className="pa">→</span>
+      {ph(2, 'Deliver')}
     </div>
   );
 }
@@ -373,7 +375,40 @@ function TypeOut({ text, onDone }: { text: string; onDone: () => void }) {
   );
 }
 
-type Stage = 'exec' | 'deliver' | 'revise' | 'result';
+type Stage = 'outline' | 'exec' | 'deliver' | 'revise' | 'result';
+
+// One-line "what byte will make" for the Outline stage, by deliverable type. Pure
+// framing (no API call) — the personalized "why" comes from the department/task text.
+function planFor(type: string): string {
+  switch (type) {
+    case 'site':
+      return 'A one-page site — hero, how-it-works, feature cards, and a call-to-action. On-brand and shippable.';
+    case 'post':
+      return 'Three launch-post variants that take different angles, ready to A/B.';
+    case 'email':
+      return 'A launch email — subject, body, and a short follow-up sequence.';
+    case 'legal':
+      return 'A real, formatted legal document in plain language, flagged for review.';
+    case 'screens':
+      return 'Three onboarding screens that get a new user to their first value in under two minutes.';
+    case 'sheet':
+      return 'An interactive pricing model tuned to your numbers — drag the inputs, watch MRR and LTV move.';
+    case 'dms':
+      return 'Four personalized 1:1 outreach drafts — a per-person DM, not a broadcast.';
+    case 'calendar':
+      return 'A two-week content calendar tuned to your product and audience.';
+    case 'checklist':
+      return 'A concrete setup and launch checklist you can work through step by step.';
+    case 'pr':
+      return 'A verified code change, routed to your agent and checked.';
+    case 'build':
+      return 'A real, working piece wired up and verified.';
+    case 'prep':
+      return 'A prepared brief you can act on.';
+    default:
+      return 'A real, ready-to-use deliverable — not a description of one.';
+  }
+}
 
 export function ArtifactModal() {
   const { modal, closeModal, approveTask, viewItem, runTask, show, toast, brief } = useApp();
@@ -396,7 +431,10 @@ export function ArtifactModal() {
   const task = modal?.kind === 'run' ? modal.task : null;
   useEffect(() => {
     if (modal?.kind === 'run') {
-      setStage('exec');
+      // Open on the Outline stage — show why the task matters + what byte will make,
+      // and wait for the user to hit "Run it". Nothing executes (and no paid call
+      // fires) until they green-light it: comprehension + control before action.
+      setStage('outline');
       setRev(null);
       setExecKind('task');
       setDeliverReady(false);
@@ -405,33 +443,6 @@ export function ArtifactModal() {
       setPicked('');
       setGenStatus('idle');
       setGenError('');
-
-      // byte generates the real deliverable via the Claude API while the execute
-      // log animates. On failure we fall back to the authored draft so the loop
-      // never dead-ends.
-      const tk = modal.task;
-      const dp = modal.dept;
-      const ty = artType(tk, modal.walk);
-      const kind = liveKind(ty);
-      if (kind) {
-        setGenStatus('loading');
-        runByteTask({
-          kind,
-          taskTitle: tk.t,
-          taskHint: tk.d || (typeof tk.out === 'string' ? tk.out.slice(0, 160) : undefined),
-          deptName: dp.name,
-          brief,
-        })
-          .then((res) => {
-            applyResult(tk, ty, res);
-            setGenStatus('done');
-          })
-          .catch((err) => {
-            console.error('[byte] live generation failed', err);
-            setGenError(err instanceof GenerateError ? err.code : '');
-            setGenStatus('error');
-          });
-      }
     }
   }, [modal, task]);
 
@@ -492,6 +503,38 @@ export function ArtifactModal() {
     M('<span class="ad">✓</span> revised — opening v2 below'),
   ];
 
+  // "Run it" from the Outline stage: move into Execute and kick off the live pass
+  // (the same generation that used to fire on open). On failure the loop falls back
+  // to the authored draft so it never dead-ends.
+  const startRun = () => {
+    setExecKind('task');
+    setDeliverReady(false);
+    setGenStatus('idle');
+    setGenError('');
+    setStage('exec');
+
+    const kind = liveKind(type);
+    if (kind) {
+      setGenStatus('loading');
+      runByteTask({
+        kind,
+        taskTitle: t.t,
+        taskHint: t.d || (typeof t.out === 'string' ? t.out.slice(0, 160) : undefined),
+        deptName: d.name,
+        brief,
+      })
+        .then((res) => {
+          applyResult(t, type, res);
+          setGenStatus('done');
+        })
+        .catch((err) => {
+          console.error('[byte] live generation failed', err);
+          setGenError(err instanceof GenerateError ? err.code : '');
+          setGenStatus('error');
+        });
+    }
+  };
+
   const sendRevision = () => {
     const note = reviseNote.trim() || picked || 'Tighten it up';
     setRev(note);
@@ -536,13 +579,15 @@ export function ArtifactModal() {
 
   // header subtitle
   const ms =
-    stage === 'exec' && execKind === 'revise'
-      ? `${d.name} · Revising`
-      : stage === 'deliver'
-        ? `${d.name} · Deliver${rev ? ' · v2' : ''}`
-        : stage === 'revise'
-          ? `${d.name} · Request changes`
-          : `${d.name} · Execute`;
+    stage === 'outline'
+      ? `${d.name} · Outline`
+      : stage === 'exec' && execKind === 'revise'
+        ? `${d.name} · Revising`
+        : stage === 'deliver'
+          ? `${d.name} · Deliver${rev ? ' · v2' : ''}`
+          : stage === 'revise'
+            ? `${d.name} · Request changes`
+            : `${d.name} · Execute`;
 
   // deliver: vstat text & whether the body is a typed-out plain doc
   const item = { ...t, type, ...artMeta(t, type) };
@@ -583,14 +628,40 @@ export function ArtifactModal() {
       ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
       : 'Couldn’t reach byte just now — showing the saved draft.';
 
+  const olLabel: React.CSSProperties = {
+    fontSize: 11,
+    letterSpacing: '.08em',
+    textTransform: 'uppercase',
+    color: 'var(--t-3)',
+    marginBottom: 7,
+  };
+
   let bodyContent: React.ReactNode;
-  if (stage === 'exec') {
+  if (stage === 'outline') {
+    bodyContent = (
+      <>
+        <Phx a={0} />
+        <div style={{ padding: '4px 2px' }}>
+          <div style={{ marginBottom: 20 }}>
+            <div style={olLabel}>Why this matters</div>
+            <p style={{ margin: 0, color: 'var(--t-1)', lineHeight: 1.55 }}>{d.need}</p>
+          </div>
+          <div>
+            <div style={olLabel}>What byte will make</div>
+            <p style={{ margin: 0, color: 'var(--t-1)', lineHeight: 1.55 }}>
+              {t.d || planFor(type)}
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  } else if (stage === 'exec') {
     const steps = execKind === 'revise' ? reviseSteps(rev || '') : buildLog(t, logType, d);
     const title =
       execKind === 'revise' ? <>byte is revising — “{rev}”</> : 'byte is doing the work…';
     bodyContent = (
       <>
-        <Phx a={0} />
+        <Phx a={1} />
         <ExecLog
           key={execKind}
           steps={steps}
@@ -605,7 +676,7 @@ export function ArtifactModal() {
   } else if (stage === 'deliver') {
     bodyContent = (
       <>
-        <Phx a={1} />
+        <Phx a={2} />
         {rev && (
           <div
             className="vstat"
@@ -723,7 +794,18 @@ export function ArtifactModal() {
 
   // footer per stage
   let footer: React.ReactNode = null;
-  if (stage === 'deliver' && deliverReady) {
+  if (stage === 'outline') {
+    footer = (
+      <>
+        <button className="btn" onClick={startRun}>
+          Run it
+        </button>
+        <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
+          Not now
+        </button>
+      </>
+    );
+  } else if (stage === 'deliver' && deliverReady) {
     const okLabel =
       RICH_META[type]?.ok ||
       (type === 'site'
