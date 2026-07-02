@@ -30,6 +30,8 @@ import {
 import { personalizeCompany } from './ai/personalize';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
+import { fetchNextStep, type NextStep } from './ai/nextStep';
+import { nextAction } from './roadmap';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -79,6 +81,8 @@ interface AppState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** byte's single next step — the one value the beacon AND chat both read. */
+  nextStep: NextStep | null;
   toastMsg: string;
   toast: (msg: string) => void;
 }
@@ -138,6 +142,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
 
+  // byte's single next step — the one value the beacon AND chat read, so they can
+  // never disagree. Set instantly to the authored golden path (so nothing is ever
+  // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
+  // on hydrate and after every approval. On failure the authored fallback stands.
+  const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  const computeNextStep = useCallback(() => {
+    const fb = nextAction();
+    const fallback: NextStep | null = fb
+      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+      : null;
+    setNextStep(fallback);
+    if (!fallback) return; // nothing open
+    fetchNextStep()
+      .then((pick) => {
+        if (pick) setNextStep(pick);
+      })
+      .catch((err) => console.error('[store] next-step failed — keeping authored fallback', err));
+  }, []);
+
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -169,6 +192,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setOnboarding(!onboarded);
         bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
         setHydrated(true);
+        computeNextStep(); // DEPTS is hydrated now — pick the next step
       })
       .catch((err) => {
         console.error('[store] hydrate failed', err);
@@ -177,7 +201,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [companyId, bump]);
+  }, [companyId, bump, computeNextStep]);
 
   const show = useCallback((v: View) => {
     setView(v);
@@ -280,9 +304,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           toast('Saved locally — sync failed');
         });
       }
+      computeNextStep(); // this task is done now — advance the next step
       return { item, next };
     },
-    [companyId, bump, toast],
+    [companyId, bump, toast, computeNextStep],
   );
 
   const toggleEnv = useCallback(
@@ -326,10 +351,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }).catch((err) => console.error('[store] persist user message failed', err));
       }
 
-      // A compact snapshot of the departments so byte talks about THIS company.
-      const deptSummary = DEPTS.map(
+      // A compact snapshot of the departments so byte talks about THIS company —
+      // plus the single next step byte already picked, so chat and the map beacon
+      // never disagree about what's next.
+      const deptLines = DEPTS.map(
         (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
       ).join('\n');
+      const focusDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : undefined;
+      const focus =
+        nextStep && focusDept
+          ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
+          : '';
+      const deptSummary = deptLines + focus;
 
       (async () => {
         let acc = '';
@@ -365,7 +398,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     },
-    [companyId, chatMessages, chatStreaming],
+    [companyId, chatMessages, chatStreaming, nextStep],
   );
 
   const value = useMemo<AppState>(
@@ -397,6 +430,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      nextStep,
       toastMsg,
       toast,
     }),
@@ -428,6 +462,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      nextStep,
       toastMsg,
       toast,
     ],
