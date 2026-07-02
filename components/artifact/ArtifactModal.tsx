@@ -11,8 +11,8 @@ import { ArtifactViewer } from './viewers';
 
 // Deliverable types byte generates live via the Claude API. Plain-text
 // (doc/prep/build) come back as text; post/email/legal/screens/sheet/site/dms/
-// calendar/checklist come back as structured payloads. Only `pr` still uses its
-// authored payload (a real "verified code change" needs the coding agent).
+// calendar/checklist/plan come back as structured payloads. `plan` is an honest
+// code-change plan (goal/approach/changes) byte hands off — not a fake merged PR.
 const LIVE_TYPES = new Set([
   'doc',
   'prep',
@@ -26,6 +26,7 @@ const LIVE_TYPES = new Set([
   'dms',
   'calendar',
   'checklist',
+  'plan',
 ]);
 
 function liveKind(type: string): DeliverableKind | null {
@@ -40,7 +41,8 @@ function liveKind(type: string): DeliverableKind | null {
     type === 'site' ||
     type === 'dms' ||
     type === 'calendar' ||
-    type === 'checklist'
+    type === 'checklist' ||
+    type === 'plan'
   )
     return type;
   return null;
@@ -56,6 +58,7 @@ function currentDraft(t: Task, type: string): string {
   if (type === 'dms') return JSON.stringify(t.dms ?? []);
   if (type === 'calendar') return JSON.stringify(t.calendar ?? {});
   if (type === 'checklist') return JSON.stringify(t.checklist ?? []);
+  if (type === 'plan') return JSON.stringify(t.plan ?? {});
   // Site revises against the structured spec (small), not the rendered HTML.
   if (type === 'site') return JSON.stringify(t.siteSpec ?? {});
   return typeof t.out === 'string' ? t.out : '';
@@ -196,6 +199,42 @@ function applyResult(t: Task, type: string, res: RunResult): void {
     if (items.length) {
       t.checklist = items;
       const out = deriveOut('checklist', res.payload);
+      if (out) t.out = out;
+    }
+  } else if (type === 'plan' && res.payload) {
+    // PlanViewer reads goal / steps[] / changes[].{area,edit} / verify[] / risks.
+    // Require a goal + at least one step, else keep the seed (never render an empty,
+    // meaningless plan). Drop any change/verify entry missing its text.
+    const p = res.payload as {
+      goal?: unknown;
+      steps?: unknown[];
+      changes?: unknown[];
+      verify?: unknown[];
+      risks?: unknown;
+    };
+    const goal = typeof p.goal === 'string' ? p.goal.trim() : '';
+    const steps = Array.isArray(p.steps)
+      ? p.steps.filter((s): s is string => typeof s === 'string' && s.trim().length > 0)
+      : [];
+    const changes = Array.isArray(p.changes)
+      ? p.changes
+          .filter(
+            (c): c is { area: string; edit: string } =>
+              !!c &&
+              typeof c === 'object' &&
+              typeof (c as { area?: unknown }).area === 'string' &&
+              (c as { area: string }).area.trim().length > 0 &&
+              typeof (c as { edit?: unknown }).edit === 'string' &&
+              (c as { edit: string }).edit.trim().length > 0,
+          )
+          .map((c) => ({ area: c.area, edit: c.edit }))
+      : [];
+    const verify = Array.isArray(p.verify)
+      ? p.verify.filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+      : [];
+    if (goal && steps.length) {
+      t.plan = { goal, steps, changes, verify, risks: typeof p.risks === 'string' ? p.risks : '' };
+      const out = deriveOut('plan', t.plan);
       if (out) t.out = out;
     }
   } else if (type === 'sheet' && res.payload) {
@@ -399,8 +438,8 @@ function planFor(type: string): string {
       return 'A two-week content calendar tuned to your product and audience.';
     case 'checklist':
       return 'A concrete setup and launch checklist you can work through step by step.';
-    case 'pr':
-      return 'A verified code change, routed to your agent and checked.';
+    case 'plan':
+      return 'A code-change plan — the goal, the approach, and the areas it touches — ready to hand to your coding agent.';
     case 'build':
       return 'A real, working piece wired up and verified.';
     case 'prep':
@@ -565,14 +604,14 @@ export function ArtifactModal() {
           setGenStatus('error');
         });
     } else {
-      // Non-live types (calendar/dms/checklist/pr) still use the local mock revise.
+      // Non-live types still use the local mock revise.
       t.out = reviseText(t.out, note);
     }
   };
 
   const onApprove = () => {
     const res = approveTask(t, d, type);
-    const built = type === 'build' || type === 'site' || type === 'pr';
+    const built = type === 'build' || type === 'site';
     setApproved({ ...res, built });
     setStage('result');
   };
@@ -979,8 +1018,10 @@ function ResultBody({
       <>
         The live model is saved to your <b>Library</b> — re-open and adjust it any time.
       </>
-    ) : type === 'pr' ? (
-      <>The change is live in your project, verified.</>
+    ) : type === 'plan' ? (
+      <>
+        Saved to your <b>Library</b> — hand it to your coding agent to implement.
+      </>
     ) : type === 'checklist' ? (
       <>
         Tracked in your <b>plan</b> — tick items off any time.
