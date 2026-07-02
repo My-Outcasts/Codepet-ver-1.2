@@ -21,9 +21,9 @@ import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction } from '@/lib/roadmap';
 import {
-  STAGE_COUNT,
   stageIndexOf,
   stageLabelOf,
+  currentPhaseName,
   productProgress,
   companyProgress,
 } from '@/lib/stages';
@@ -369,7 +369,7 @@ export default function OverviewView() {
         </div>
       </div>
 
-      <ProgressCard stageIndex={stageIndexOf(brief.stage)} />
+      <ProgressCard stage={brief.stage} />
 
       {here && (
         <HereCard
@@ -598,10 +598,11 @@ function Meter({ label, pct, hex }: { label: string; pct: number; hex: string })
   );
 }
 
-function ProgressCard({ stageIndex }: { stageIndex: number }) {
+function ProgressCard({ stage }: { stage?: string }) {
   const prod = productProgress();
   const comp = companyProgress();
-  const label = stageLabelOf(stageIndex);
+  const label = stageLabelOf(stageIndexOf(stage));
+  const phase = currentPhaseName(stage); // the roadmap phase — keeps this in step with the Roadmap
   return (
     <div
       style={{
@@ -631,10 +632,12 @@ function ProgressCard({ stageIndex }: { stageIndex: number }) {
       >
         Progress
       </div>
-      {stageIndex >= 0 && (
+      {(phase || label) && (
         <div style={{ fontSize: 12.5, fontWeight: 600, color: '#F5F3FF', marginTop: 6 }}>
-          Stage {stageIndex + 1} of {STAGE_COUNT}
-          <span style={{ color: 'rgba(245,243,255,.5)', fontWeight: 500 }}> · {label}</span>
+          {phase || 'In progress'}
+          {label && (
+            <span style={{ color: 'rgba(245,243,255,.5)', fontWeight: 500 }}> · {label}</span>
+          )}
         </div>
       )}
       <Meter label="Product" pct={prod.pct} hex="#8B5CF6" />

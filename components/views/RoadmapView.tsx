@@ -1,9 +1,8 @@
 'use client';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { PHASES, NODES, byN, STAGE_TASKS } from '@/lib/data';
-import { eff, stageTasks, stageProgress, isStageDone } from '@/lib/roadmap';
-import { taskState, esc } from '@/lib/helpers';
+import { PHASES, NODES, byN } from '@/lib/data';
+import { eff } from '@/lib/roadmap';
 
 const Lock = () => (
   <svg className="lockic" viewBox="0 0 16 16" fill="none">
@@ -13,7 +12,7 @@ const Lock = () => (
 );
 
 function StageDrawer() {
-  const { selStage, drawerOpen, closeStage, openDept } = useApp();
+  const { selStage, drawerOpen, closeStage } = useApp();
   const n = byN(selStage);
   if (!n) return null;
   const e = eff(n);
@@ -21,7 +20,6 @@ function StageDrawer() {
     e === 'done' ? 'Complete' : e === 'now' ? 'In progress' : e === 'next' ? 'Up next' : 'Locked';
   const sCls =
     e === 'done' ? 'st-done' : e === 'now' ? 'st-draft' : e === 'next' ? 'st-you' : 'st-locked';
-  const wired = STAGE_TASKS[n.n];
   const CHK = (
     <svg viewBox="0 0 16 16" width="10" height="10" fill="none">
       <path
@@ -52,78 +50,20 @@ function StageDrawer() {
     </div>
   );
 
-  let cta: React.ReactNode = null;
-  if (e === 'next')
-    cta = (
+  const cta: React.ReactNode =
+    e === 'next' ? (
       <span className="lock">
-        <Lock /> Up next — its tasks open here as soon as you reach it, or start one early from its
-        department.
+        <Lock /> Up next — you&apos;ll get here as you progress. Start one early from its department
+        any time.
       </span>
-    );
-  else if (e !== 'done' && e !== 'now') {
-    const blockers = n.deps
-      .filter((d: number) => !isStageDone(byN(d)))
-      .map((d: number) => byN(d).name)
-      .join(', ');
-    cta = (
-      <span className="lock">
-        <Lock /> Locked — unlocks when you finish:{' '}
-        <b style={{ color: 'var(--t-2)', marginLeft: 3 }}>{blockers}</b>
-      </span>
-    );
-  }
+    ) : null;
 
-  let body: React.ReactNode;
-  if (wired) {
-    const ts = stageTasks(n.n),
-      pr = stageProgress(n.n),
-      avail = e === 'now';
-    const pct = pr.total ? Math.round((pr.done / pr.total) * 100) : 0;
-    body = (
-      <>
-        <div className="jd-prog">
-          <div className="jd-pbar">
-            <i style={{ width: `${pct}%` }} />
-          </div>
-          <span>
-            {pr.done} / {pr.total} done
-          </span>
-        </div>
-        <div className="jdr-lbl">byte is delivering</div>
-        <div className="jd-tgrid">
-          {ts.map(({ dept, task }, i) => {
-            const st = taskState(task, avail);
-            return (
-              <div
-                className={`jd-tcard ${task.done ? 'done' : ''}`}
-                key={i}
-                title={esc(dept.name)}
-                onClick={() => openDept(dept.k)}
-              >
-                <span className={`di c-${dept.k}`}>{dept.ab}</span>
-                <div className="jd-tc-body">
-                  <div className={`tstate ${st.cls}`}>
-                    <i />
-                    {st.label}
-                  </div>
-                  <div className="jd-tc-name">{task.t}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="jdr-lbl">Full stage checklist</div>
-        <Checklist />
-      </>
-    );
-  } else {
-    body = (
-      <>
-        <div className="jdr-lbl">Checklist</div>
-        <Checklist />
-      </>
-    );
-  }
+  const body = (
+    <>
+      <div className="jdr-lbl">Checklist</div>
+      <Checklist />
+    </>
+  );
 
   return (
     <aside className={`jdrawer${drawerOpen ? ' open' : ''}`}>
@@ -238,7 +178,7 @@ export function RoadmapView() {
       <div className="vhead">
         <h1>Roadmap</h1>
         <div className="sub">
-          Five phases from idea to growth. Each unlocks the next; tap any stage to open it.
+          Five phases from idea to growth, marked to where you are today. Tap any stage to open it.
         </div>
       </div>
       <div className="rmap-stage">
@@ -273,35 +213,18 @@ export function RoadmapView() {
                 {p.stages.map((s) => {
                   const n = byN(s.n),
                     e = eff(n);
-                  let meta: React.ReactNode;
-                  if (STAGE_TASKS[n.n]) {
-                    const pr = stageProgress(n.n);
-                    meta =
-                      e === 'done' ? (
-                        `Done · ${pr.total} tasks`
-                      ) : e === 'now' ? (
-                        `${pr.done} / ${pr.total} tasks done`
-                      ) : e === 'next' ? (
-                        `${pr.total} tasks · up next`
-                      ) : (
-                        <>
-                          <Lock /> {pr.total} tasks
-                        </>
-                      );
-                  } else {
-                    meta =
-                      e === 'done' ? (
-                        `Done · ${n.a.length} steps`
-                      ) : e === 'now' ? (
-                        'You are here'
-                      ) : e === 'next' ? (
-                        `${n.a.length} steps · up next`
-                      ) : (
-                        <>
-                          <Lock /> {n.a.length} steps
-                        </>
-                      );
-                  }
+                  const meta: React.ReactNode =
+                    e === 'done' ? (
+                      `Done · ${n.a.length} steps`
+                    ) : e === 'now' ? (
+                      'You are here'
+                    ) : e === 'next' ? (
+                      `${n.a.length} steps · up next`
+                    ) : (
+                      <>
+                        <Lock /> {n.a.length} steps
+                      </>
+                    );
                   return (
                     <div
                       className={`rstage ${e}${selStage === n.n && drawerOpen ? ' sel' : ''}`}
