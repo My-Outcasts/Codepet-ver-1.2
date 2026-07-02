@@ -30,6 +30,8 @@ import {
 import { personalizeCompany } from './ai/personalize';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
+import { fetchNextStep, type NextStep } from './ai/nextStep';
+import { nextAction } from './roadmap';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -37,6 +39,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
+  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>"). */
+  action?: { label: string; deptK: string; taskTitle: string };
+  /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
+  brief?: boolean;
 }
 
 const newId = (): string =>
@@ -72,13 +78,22 @@ interface AppState {
   library: LibItem[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
+  /** byte "arrives" in a department: fly there, open chat, drop an orientation + start chip. */
+  briefDepartment: (dept: Dept, task: Task | null) => void;
+  /** Run a task named by an in-chat action chip (deptK + taskTitle). */
+  runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
   closeModal: () => void;
+  /** A deliverable opened into the "Your company" section (in-context, not a modal). */
+  /** Open a delivered artifact externally: a site in a new tab, everything else copied. */
+  openDeliverable: (item: LibItem) => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
   toggleEnv: (category: string, index: number) => void;
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** byte's single next step — the one value the beacon AND chat both read. */
+  nextStep: NextStep | null;
   toastMsg: string;
   toast: (msg: string) => void;
 }
@@ -138,6 +153,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
 
+  // byte's single next step — the one value the beacon AND chat read, so they can
+  // never disagree. Set instantly to the authored golden path (so nothing is ever
+  // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
+  // on hydrate and after every approval. On failure the authored fallback stands.
+  const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  const computeNextStep = useCallback(() => {
+    const fb = nextAction();
+    const fallback: NextStep | null = fb
+      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+      : null;
+    setNextStep(fallback);
+    if (!fallback) return; // nothing open
+    fetchNextStep()
+      .then((pick) => {
+        if (pick) setNextStep(pick);
+      })
+      .catch((err) => console.error('[store] next-step failed — keeping authored fallback', err));
+  }, []);
+
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
@@ -169,6 +203,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setOnboarding(!onboarded);
         bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
         setHydrated(true);
+        computeNextStep(); // DEPTS is hydrated now — pick the next step
       })
       .catch((err) => {
         console.error('[store] hydrate failed', err);
@@ -177,7 +212,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [companyId, bump]);
+  }, [companyId, bump, computeNextStep]);
 
   const show = useCallback((v: View) => {
     setView(v);
@@ -240,6 +275,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const viewItem = useCallback((item: LibItem) => setModal({ kind: 'view', item }), []);
   const closeModal = useCallback(() => setModal(null), []);
 
+  // Open a delivered artifact the minimal way — no modal, no inline takeover:
+  // a site opens in a new browser tab; everything else copies to the clipboard.
+  const openDeliverable = useCallback(
+    (item: LibItem) => {
+      setModal(null);
+      if (item.type === 'site' && typeof item.site === 'string' && item.site) {
+        try {
+          const url = URL.createObjectURL(new Blob([item.site], { type: 'text/html' }));
+          window.open(url, '_blank', 'noopener');
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch {
+          toast('Couldn’t open the site');
+        }
+        return;
+      }
+      const text = typeof item.out === 'string' ? item.out.trim() : '';
+      if (text && navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => toast('Copied to clipboard'))
+          .catch(() => toast('Copy failed'));
+      } else {
+        toast('Nothing to copy');
+      }
+    },
+    [toast],
+  );
+
+  // Arrival briefing: when the founder starts the next step, byte "arrives" in that
+  // department — the map flies there, chat opens, and byte drops a short orientation
+  // (where you are, why, what's open) with a one-tap chip to start the task. The
+  // briefing is transient (not persisted) — it's guidance for this moment.
+  const briefDepartment = useCallback(
+    (d: Dept, t: Task | null) => {
+      toggleCopilot(false);
+      const open = d.tasks.filter((x) => !x.done).length;
+      const need = (d.need || '').trim();
+      const text = `You're in ${d.name}.${need ? ` ${need}` : ''} ${open} task${open === 1 ? '' : 's'} open here${t ? ` — I'd start with “${t.t}”` : ''}.`;
+      const msg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text,
+        ts: Date.now(),
+        action: t ? { label: `Start: ${t.t}`, deptK: d.k, taskTitle: t.t } : undefined,
+        brief: true,
+      };
+      // Keep only the latest briefing — drop any prior one so the thread never
+      // fills with repeated "You're in …" arrivals.
+      setChatMessages((prev) => [...prev.filter((m) => !m.brief), msg]);
+    },
+    [toggleCopilot],
+  );
+
+  // Open the run loop for a task named by an in-chat action chip.
+  const runBriefedTask = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (d && t) runTask(t, d, t.who === 'you');
+    },
+    [runTask],
+  );
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
       t.done = true;
@@ -280,9 +378,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           toast('Saved locally — sync failed');
         });
       }
+      computeNextStep(); // this task is done now — advance the next step
       return { item, next };
     },
-    [companyId, bump, toast],
+    [companyId, bump, toast, computeNextStep],
   );
 
   const toggleEnv = useCallback(
@@ -326,10 +425,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }).catch((err) => console.error('[store] persist user message failed', err));
       }
 
-      // A compact snapshot of the departments so byte talks about THIS company.
-      const deptSummary = DEPTS.map(
+      // A compact snapshot of the departments so byte talks about THIS company —
+      // plus the single next step byte already picked, so chat and the map beacon
+      // never disagree about what's next.
+      const deptLines = DEPTS.map(
         (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
       ).join('\n');
+      const focusDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : undefined;
+      const focus =
+        nextStep && focusDept
+          ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
+          : '';
+      const deptSummary = deptLines + focus;
 
       (async () => {
         let acc = '';
@@ -365,7 +472,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     },
-    [companyId, chatMessages, chatStreaming],
+    [companyId, chatMessages, chatStreaming, nextStep],
   );
 
   const value = useMemo<AppState>(
@@ -390,13 +497,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       library,
       modal,
       runTask,
+      briefDepartment,
+      runBriefedTask,
       viewItem,
       closeModal,
+      openDeliverable,
       approveTask,
       toggleEnv,
       chatMessages,
       chatStreaming,
       sendChat,
+      nextStep,
       toastMsg,
       toast,
     }),
@@ -421,13 +532,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       library,
       modal,
       runTask,
+      briefDepartment,
+      runBriefedTask,
       viewItem,
       closeModal,
+      openDeliverable,
       approveTask,
       toggleEnv,
       chatMessages,
       chatStreaming,
       sendChat,
+      nextStep,
       toastMsg,
       toast,
     ],

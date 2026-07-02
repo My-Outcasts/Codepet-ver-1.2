@@ -5,35 +5,23 @@ import { taskState } from '@/lib/helpers';
 import { Byte } from '../Byte';
 
 function Delivered({ item, onOpen }: { item: LibItem; onOpen: () => void }) {
-  const openable = item.type === 'site' || item.type === 'screens' || item.type === 'sheet';
-  const openLbl =
-    item.type === 'site'
-      ? 'Open the site ↗'
-      : item.type === 'screens'
-        ? 'Tap through ↗'
-        : item.type === 'sheet'
-          ? 'Open the model ↗'
-          : '';
+  // Minimal: the compact summary card + one light action — a site opens in a new
+  // tab, everything else copies. No inline full render.
+  const openLbl = item.type === 'site' ? 'Open ↗' : 'Copy';
   return (
     <div className={`delivered${item.type === 'site' ? ' site' : ''}`} onClick={onOpen}>
       <div className={`dl-bar ${item.type}`}>
         <span>{item.head}</span>
         <span className="dl-file">{item.file}</span>
       </div>
-      {item.type === 'site' && item.site ? (
-        <div className="dl-thumb">
-          <iframe sandbox="allow-same-origin" scrolling="no" title="thumb" srcDoc={item.site} />
-        </div>
-      ) : (
-        <div className="dl-body">{(item.out || '').split('\n').slice(0, 4).join('\n')}</div>
-      )}
-      {openable && <span className="dl-open">{openLbl}</span>}
+      <div className="dl-body">{(item.out || '').split('\n').slice(0, 4).join('\n')}</div>
+      <span className="dl-open">{openLbl}</span>
     </div>
   );
 }
 
 function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
-  const { runTask, viewItem } = useApp();
+  const { runTask, openDeliverable } = useApp();
   if (t.done) {
     return (
       <div className="tk tk-done">
@@ -47,7 +35,9 @@ function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
           <span className="donerow">
             <span className="ok">✓</span> {t.run === 'route' ? 'Shipped' : 'Approved'} · delivered
           </span>
-          {t._item && <Delivered item={t._item} onOpen={() => viewItem(t._item as LibItem)} />}
+          {t._item && (
+            <Delivered item={t._item} onOpen={() => openDeliverable(t._item as LibItem)} />
+          )}
         </div>
       </div>
     );

@@ -450,8 +450,12 @@ function planFor(type: string): string {
 }
 
 export function ArtifactModal() {
-  const { modal, closeModal, approveTask, viewItem, runTask, show, toast, brief } = useApp();
+  const { modal, closeModal, approveTask, openDeliverable, runTask, toast, brief, toggleCopilot } =
+    useApp();
   const [stage, setStage] = useState<Stage>('exec');
+  // Run mode docks as a right-hand panel so the map stays visible as context;
+  // "Expand" swaps to a full centered card for the rich deliverables that need room.
+  const [expanded, setExpanded] = useState(false);
   const [rev, setRev] = useState<string | null>(null);
   const [execKind, setExecKind] = useState<'task' | 'revise'>('task');
   const [deliverReady, setDeliverReady] = useState(false);
@@ -482,8 +486,12 @@ export function ArtifactModal() {
       setPicked('');
       setGenStatus('idle');
       setGenError('');
+      setExpanded(false);
+      // The work panel docks where the chat lives — collapse the chat so one thing
+      // owns the right at a time (it's a tap away on its floating button).
+      toggleCopilot(true);
     }
-  }, [modal, task]);
+  }, [modal, task, toggleCopilot]);
 
   if (!modal) return null;
 
@@ -887,37 +895,28 @@ export function ArtifactModal() {
     const { item: it, next, built } = approved;
     footer = (
       <>
-        <button className="btn ghost" onClick={() => viewItem(it)}>
-          {type === 'site'
-            ? 'Open the site'
-            : type === 'screens'
-              ? 'Open the screens'
-              : type === 'sheet'
-                ? 'Open the model'
-                : 'Open the file'}
-        </button>
-        {next ? (
-          <button className="btn" onClick={() => runTask(next, d, next.who === 'you')}>
-            Do the next one →
-          </button>
-        ) : (
-          <button
-            className="btn"
-            onClick={() => {
-              closeModal();
-              show('home');
-            }}
-          >
-            Back to company
-          </button>
-        )}
+        {/* The deliverable is saved — the useful next move is back to byte, not a
+            pointless copy. byte already knows the advanced next step. */}
         <button
-          className="btn ghost"
-          style={{ marginLeft: 'auto' }}
+          className="btn"
           onClick={() => {
             closeModal();
+            toggleCopilot(false);
           }}
         >
+          Continue with byte
+        </button>
+        {next && (
+          <button className="btn ghost" onClick={() => runTask(next, d, next.who === 'you')}>
+            Do the next one →
+          </button>
+        )}
+        {type === 'site' && (
+          <button className="btn ghost" onClick={() => openDeliverable(it)}>
+            Open the site ↗
+          </button>
+        )}
+        <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
           Close
         </button>
       </>
@@ -926,11 +925,24 @@ export function ArtifactModal() {
     void DEPTS;
   }
 
+  // Run flow docks to the right (map stays as context) unless the user expands it.
+  const wrapClass = `artmodal on run${expanded ? '' : ' docked'}`;
+  const expandBtn = (
+    <button
+      className="mexp"
+      onClick={() => setExpanded((e) => !e)}
+      title={expanded ? 'Dock to the side' : 'Expand to full screen'}
+      aria-label={expanded ? 'Dock' : 'Expand'}
+    >
+      {expanded ? 'Dock' : 'Expand'}
+    </button>
+  );
+
   // result mode uses its own header
   if (stage === 'result' && approved) {
     const built = approved.built;
     return (
-      <div className="artmodal on">
+      <div className={wrapClass}>
         <div className="mcard">
           <div className="mhead">
             <div className={`di c-${d.k}`}>{d.ab}</div>
@@ -940,6 +952,7 @@ export function ArtifactModal() {
               </div>
               <div className="ms">{d.name}</div>
             </div>
+            {expandBtn}
             <div className="mx" onClick={closeModal}>
               ✕
             </div>
@@ -952,7 +965,7 @@ export function ArtifactModal() {
   }
 
   return (
-    <div className="artmodal on">
+    <div className={wrapClass}>
       <div className="mcard">
         <div className="mhead">
           <div className={`di c-${d.k}`}>{d.ab}</div>
@@ -960,6 +973,7 @@ export function ArtifactModal() {
             <div className="mt">{t.t}</div>
             <div className="ms">{ms}</div>
           </div>
+          {expandBtn}
           <div className="mx" onClick={closeModal}>
             ✕
           </div>

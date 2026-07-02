@@ -17,9 +17,9 @@ import * as THREE from 'three';
 // @ts-ignore - addons ship without bundled types in some setups
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { useApp } from '@/lib/store';
-import { DEPTS, DCOL, NODES, type Dept, type Task } from '@/lib/data';
+import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
-import { eff, stageTasks, stageProgress } from '@/lib/roadmap';
+import { nextAction } from '@/lib/roadmap';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -79,7 +79,7 @@ const linkId = (x: unknown): string =>
   typeof x === 'object' && x ? (x as GNode).id : (x as string);
 
 export default function OverviewView() {
-  const { openDept, runTask, tick, brief } = useApp();
+  const { openDept, runTask, briefDepartment, tick, brief, nextStep } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
@@ -188,45 +188,52 @@ export default function OverviewView() {
     [hoverId, adj],
   );
 
-  // "You are here" — the live current stage + the single next action that owns
-  // it. eff()/stageTasks() read mutable DEPTS, so this recomputes on each tick.
+  // The beacon reads byte's single next step (the same value chat reads, so they
+  // never disagree). Resolve it to the live dept+task; until byte's pick lands (or
+  // if it fails) fall back to the authored golden path so the beacon is never blank.
   const here = useMemo(() => {
-    const now = NODES.find((n: any) => eff(n) === 'now');
-    if (!now) return null;
-    const refs = stageTasks(now.n);
-    const prog = stageProgress(now.n);
-    const open = refs.filter((r) => !r.task.done);
-    // surface what needs the user first, then anything still in flight
-    const pick =
-      open.find((r) => r.task.who === 'you') ||
-      open.find((r) => r.task.who === 'draft') ||
-      open[0] ||
-      refs[refs.length - 1];
-    if (!pick) return null;
-    return {
-      stageN: now.n as number,
-      stageName: now.name as string,
-      phase: now.ph as string,
-      total: NODES.length,
-      prog,
-      dept: pick.dept,
-      task: pick.task,
-    };
-  }, [tick]);
+    if (nextStep) {
+      const dept = DEPTS.find((d) => d.k === nextStep.deptK);
+      const task = dept?.tasks.find((t) => t.t === nextStep.taskTitle && !t.done);
+      if (dept && task) return { dept, task };
+    }
+    const fb = nextAction();
+    return fb ? { dept: fb.dept, task: fb.task } : null;
+  }, [tick, nextStep]);
 
-  // ease the camera to frame a node (used by the "you are here" card). Distance
-  // is RELATIVE to the node's settled position (the sim relaxes the layout to a
-  // different scale each run, so a fixed offset over/under-shoots). We look at
-  // the project→node midpoint so the "you are here" relationship is the framing.
-  const flyTo = (nodeId: string) => {
+  // The beacon: the map node for the single next action. It's brightened and
+  // gently pulses so one "start here" star stands out; the rest of the map keeps
+  // its normal colors.
+  const beaconId = useMemo(() => {
+    if (!here) return null;
+    const idx = here.dept.tasks.indexOf(here.task);
+    return idx >= 0 ? `task:${here.dept.k}:${idx}` : null;
+  }, [here]);
+  const beaconHex = useMemo(
+    () => (here ? STATE_HEX[taskState(here.task, true).cls] || '#FFFFFF' : '#FFFFFF'),
+    [here],
+  );
+  // Slow breathe for the beacon (color/size only — never touches the sim). Runs
+  // only while a beacon exists.
+  const [beat, setBeat] = useState(0);
+  useEffect(() => {
+    if (!beaconId) return;
+    const id = setInterval(() => setBeat((b) => (b + 1) % 100000), 60);
+    return () => clearInterval(id);
+  }, [beaconId]);
+  const pulse = 0.5 + 0.5 * Math.sin(beat * 0.16); // 0..1
+
+  // Glide the camera to frame a node — the "jump to the step" on Start, so the
+  // docked work panel opens with its node in view (map stays as context behind it).
+  const flyTo = (nodeId: string | null) => {
     const fg = fgRef.current as any;
-    if (!fg) return;
+    if (!fg || !nodeId) return;
     const n = data.nodes.find((x) => x.id === nodeId);
     if (!n || !Number.isFinite(n.x)) return;
     tookControlRef.current = true; // don't let a settle-time auto-fit override this
-    noteInteract(); // pause auto-rotate so the framed shot holds before resuming
+    noteInteract(); // pause auto-rotate so the framed shot holds
     const aspect = dims.w / Math.max(1, dims.h);
-    const k = 2.7 * Math.max(1, 1.2 / aspect); // camera at k× the node radius (pulls back on narrow panels)
+    const k = 2.7 * Math.max(1, 1.2 / aspect);
     const look = { x: n.x * 0.45, y: n.y * 0.45, z: n.z * 0.45 };
     fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
   };
@@ -355,7 +362,15 @@ export default function OverviewView() {
         </div>
       </div>
 
-      {here && <HereCard here={here} onFocus={() => flyTo(`dept:${here.dept.k}`)} />}
+      {here && (
+        <HereCard
+          here={here}
+          onStart={() => {
+            flyTo(`dept:${here.dept.k}`); // glide to the department…
+            briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
+          }}
+        />
+      )}
       <div
         style={{
           position: 'absolute',
@@ -389,8 +404,14 @@ export default function OverviewView() {
             backgroundColor="#000000"
             showNavInfo={false}
             controlType="orbit"
-            nodeVal={(n) => (hoverId === n.id ? n.val * 1.7 : n.val)}
-            nodeColor={(n) => (inFocus(n.id) ? n.color : DIM_NODE)}
+            nodeVal={(n) => {
+              if (n.id === beaconId) return 2.8 + pulse * 1.0; // the "start here" star
+              return hoverId === n.id ? n.val * 1.7 : n.val;
+            }}
+            nodeColor={(n) => {
+              if (n.id === beaconId) return rgba(beaconHex, 0.9 + pulse * 0.1); // always lit
+              return inFocus(n.id) ? n.color : DIM_NODE;
+            }}
             nodeOpacity={0.95}
             nodeResolution={18}
             nodeRelSize={2.2}
@@ -445,39 +466,28 @@ export default function OverviewView() {
 }
 
 interface HereInfo {
-  stageN: number;
-  stageName: string;
-  phase: string;
-  total: number;
-  prog: { done: number; total: number };
   dept: Dept;
   task: Task;
 }
 
-// "You are here" breadcrumb — stage → department → next action. Fixed overlay
-// (camera-independent); clicking it eases the camera to that node.
-function HereCard({ here, onFocus }: { here: HereInfo; onFocus: () => void }) {
-  const dHex = HEX[DCOL[here.dept.k]] || HEX['--accent'];
+// The beacon — byte's single next move. One thing to read, one thing to do:
+// the task, and Start (which opens the run loop). Nothing else. Fixed overlay.
+function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
   const st = taskState(here.task, true);
-  const stHex = STATE_HEX[st.cls] || dHex;
-  const pct = here.prog.total ? Math.round((here.prog.done / here.prog.total) * 100) : 0;
   return (
     <div
-      onClick={onFocus}
-      title="Focus this on the map"
       style={{
         position: 'absolute',
         top: 92,
         left: 26,
         zIndex: 6,
-        width: 286,
-        padding: '13px 15px 14px',
-        background: 'rgba(16,14,28,0.72)',
+        width: 264,
+        padding: '15px 17px 16px',
+        background: 'rgba(16,14,28,0.74)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.09)',
-        borderRadius: 13,
-        cursor: 'pointer',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 14,
         boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
       }}
     >
@@ -485,60 +495,45 @@ function HereCard({ here, onFocus }: { here: HereInfo; onFocus: () => void }) {
         style={{
           fontSize: 10,
           letterSpacing: '1.4px',
-          fontWeight: 600,
-          color: 'rgba(245,243,255,.42)',
+          fontWeight: 700,
+          color: 'rgba(245,243,255,.45)',
           textTransform: 'uppercase',
         }}
       >
-        You are here
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: stHex,
-            boxShadow: `0 0 8px ${stHex}`,
-            flex: '0 0 auto',
-          }}
-        />
-        <span style={{ fontSize: 13.5, fontWeight: 650, color: '#F5F3FF', letterSpacing: '-.2px' }}>
-          Stage {here.stageN}/{here.total} · {here.stageName}
-        </span>
-      </div>
-      <div style={{ fontSize: 12, marginTop: 7, color: 'rgba(245,243,255,.55)' }}>
-        {here.phase} <span style={{ opacity: 0.45 }}>▸</span>{' '}
-        <span style={{ color: dHex, fontWeight: 600 }}>{here.dept.name}</span>
+        Next step
       </div>
       <div
         style={{
-          fontSize: 12.5,
-          marginTop: 5,
-          color: 'rgba(245,243,255,.82)',
-          display: 'flex',
-          gap: 5,
+          fontSize: 15,
+          fontWeight: 650,
+          color: '#F7F5FF',
+          letterSpacing: '-.2px',
+          marginTop: 9,
+          lineHeight: 1.35,
         }}
       >
-        <span style={{ color: stHex }}>▸</span>
-        <span>{here.task.t}</span>
+        {here.task.t}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 11 }}>
-        <div
-          style={{
-            flex: 1,
-            height: 5,
-            borderRadius: 3,
-            background: 'rgba(255,255,255,.08)',
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ width: `${pct}%`, height: '100%', background: dHex, borderRadius: 3 }} />
-        </div>
-        <span style={{ fontSize: 11, color: 'rgba(245,243,255,.5)', whiteSpace: 'nowrap' }}>
-          {here.prog.done} / {here.prog.total} this stage
-        </span>
+      <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
+        {here.dept.name} · {st.label}
       </div>
+      <button
+        onClick={onStart}
+        style={{
+          marginTop: 15,
+          fontFamily: 'inherit',
+          fontSize: 13,
+          fontWeight: 650,
+          color: '#0B0616',
+          background: '#F5F3FF',
+          border: 0,
+          borderRadius: 9,
+          padding: '9px 24px',
+          cursor: 'pointer',
+        }}
+      >
+        Start
+      </button>
     </div>
   );
 }

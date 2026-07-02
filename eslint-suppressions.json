@@ -30,7 +30,7 @@
   },
   "components/views/OverviewView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 13
     }
   },
   "components/views/RoadmapView.tsx": {

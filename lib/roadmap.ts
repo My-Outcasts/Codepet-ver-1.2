@@ -39,3 +39,22 @@ export function eff(n: any): 'done' | 'locked' | 'now' | 'next' {
   ).sort((a: any, b: any) => a.n - b.n)[0];
   return active && active.n === n.n ? 'now' : 'next';
 }
+
+// The authored golden-path "next step": the single task to do next, from the
+// current stage. This is the deterministic FALLBACK the beacon and byte both read
+// when byte's own ranking (/api/next-step) hasn't resolved or is unavailable — so
+// the two surfaces always agree even offline. Reads live DEPTS, so call per render.
+export function nextAction(): StageTaskRef | null {
+  const now = NODES.find((n) => eff(n) === 'now');
+  if (!now) return null;
+  const refs = stageTasks(now.n);
+  const open = refs.filter((r) => !r.task.done);
+  // what needs the founder first, then anything still in flight
+  return (
+    open.find((r) => r.task.who === 'you') ||
+    open.find((r) => r.task.who === 'draft') ||
+    open[0] ||
+    refs[refs.length - 1] ||
+    null
+  );
+}
