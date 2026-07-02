@@ -3889,6 +3889,35 @@ body {
 .mhead .mexp + .mx {
   margin-left: 8px;
 }
+/* company view — re-plan button + dormant "later" department rows */
+.vhead-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.replan {
+  flex: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--t-2);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.replan:hover {
+  color: var(--ink);
+  border-color: var(--hairline);
+}
+.deptrow.later {
+  opacity: 0.5;
+}
+.deptrow.later:hover {
+  opacity: 0.72;
+}
 /* one-tap action byte offers inside a chat bubble (e.g. "Start: <task>") */
 .bub-act {
   display: block;

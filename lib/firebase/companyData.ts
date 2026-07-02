@@ -50,6 +50,7 @@ function serializeDept(dept: Dept): DepartmentDoc {
     need: dept.need,
     byte: dept.byte,
     tasks: dept.tasks.map(serializeTask),
+    later: dept.later ?? false,
   };
 }
 
@@ -235,6 +236,78 @@ export function applyPersonalization(generated: PersonalizedDept[]): Dept[] {
     changed.push(dept);
   }
   return changed;
+}
+
+// ---- stage scaffold (Part 1) ----
+export interface ScaffoldTask {
+  t: string;
+  d: string;
+  who: string;
+  kind: string;
+}
+export interface ScaffoldDept {
+  k: string;
+  active: boolean;
+  need: string;
+  byte: string;
+  tasks: ScaffoldTask[];
+}
+
+/**
+ * Replace the seed company with byte's stage-appropriate scaffold, in place on the
+ * DEPTS singleton. For each department: set need/byte, and either install the
+ * generated tasks (active) or clear them and mark the dept `later` (dormant). Returns
+ * the depts that changed so the caller can persist + re-render.
+ */
+export function applyScaffold(generated: ScaffoldDept[]): Dept[] {
+  const changed: Dept[] = [];
+  for (const g of generated) {
+    const dept = DEPTS.find((d) => d.k === g.k);
+    if (!dept) continue;
+    if (typeof g.need === 'string' && g.need.trim()) dept.need = g.need;
+    if (typeof g.byte === 'string' && g.byte.trim()) dept.byte = g.byte;
+
+    const tasks = g.active && Array.isArray(g.tasks) ? g.tasks : [];
+    const usable = tasks.filter(
+      (t) => t && typeof t.t === 'string' && t.t.trim() && typeof t.kind === 'string',
+    );
+    if (g.active && usable.length) {
+      dept.tasks = usable.map((t) => ({
+        t: t.t,
+        d: typeof t.d === 'string' ? t.d : '',
+        who: (['does', 'draft', 'you'].includes(t.who)
+          ? t.who
+          : 'does') as Dept['tasks'][number]['who'],
+        kind: t.kind,
+        out: '',
+        done: false,
+      }));
+      dept.later = false;
+      dept.pend = dept.tasks.length;
+      dept.status = 'attention';
+    } else {
+      // Dormant — no work yet at this stage.
+      dept.tasks = [];
+      dept.later = true;
+      dept.pend = 0;
+      dept.status = 'idle';
+    }
+    changed.push(dept);
+  }
+  return changed;
+}
+
+/** Persist byte's stage scaffold; stamp `scaffoldedAt` so returning users hydrate it. */
+export async function persistScaffold(companyId: string, depts: Dept[]): Promise<void> {
+  if (!depts.length) return;
+  const db = getDb();
+  const now = Date.now();
+  const batch = writeBatch(db);
+  for (const dept of depts) {
+    batch.set(doc(db, paths.department(companyId, dept.k)), serializeDept(dept));
+  }
+  batch.update(doc(db, paths.company(companyId)), { scaffoldedAt: now, updatedAt: now });
+  await batch.commit();
 }
 
 /**

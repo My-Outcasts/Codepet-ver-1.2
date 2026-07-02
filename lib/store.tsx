@@ -27,7 +27,7 @@ import {
   completeOnboarding,
   resetCompanyData,
 } from './firebase/companyData';
-import { personalizeCompany } from './ai/personalize';
+import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
@@ -72,6 +72,8 @@ interface AppState {
   toggleCopilot: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
+  /** Re-generate the stage-aware company for the current account (manual re-plan). */
+  regenerateCompany: () => void;
   brief: CompanyBrief;
   installed: boolean;
   setInstalled: (value: boolean) => void;
@@ -247,12 +249,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (companyId) {
         completeOnboarding(companyId, briefData)
           .then(() => {
-            // One-time seed personalization (Phase 5.3): once the brief is persisted,
-            // byte rewrites the department/task text for this company. Best-effort —
-            // on any failure the generic seed stays. Skipped when no brief was given.
+            // Part 1: once the brief is persisted, byte generates the stage-aware
+            // company (active/dormant departments + tasks) and applies + persists it.
+            // Best-effort — on any failure the current departments stay. Skipped when
+            // no brief was given (a "skip" keeps the seed).
             if (!briefData) return;
-            return personalizeCompany(companyId, briefData).then((changed) => {
-              if (changed) bump(); // re-render with the now-personalized DEPTS
+            return scaffoldCompany(companyId, briefData).then((changed) => {
+              if (changed) bump(); // re-render with the now-generated DEPTS
             });
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
@@ -260,6 +263,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [companyId, bump],
   );
+
+  // Manual re-plan: regenerate the stage-aware company for the current account
+  // (existing companies aren't scaffolded automatically). Used to test/refresh.
+  const regenerateCompany = useCallback(() => {
+    if (!companyId) return;
+    toast('Re-planning your company for your stage…');
+    scaffoldCompany(companyId, brief).then((changed) => {
+      if (changed) {
+        bump();
+        computeNextStep();
+        toast('Company re-planned for your stage');
+      } else {
+        toast('Couldn’t re-plan just now — try again');
+      }
+    });
+  }, [companyId, brief, bump, toast, computeNextStep]);
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
     try {
@@ -491,6 +510,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleCopilot,
       onboarding,
       finishOnboarding,
+      regenerateCompany,
       brief,
       installed,
       setInstalled: setInstalledFlag,
@@ -526,6 +546,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleCopilot,
       onboarding,
       finishOnboarding,
+      regenerateCompany,
       brief,
       installed,
       setInstalledFlag,

@@ -41,6 +41,11 @@ describe('artType', () => {
     expect(artType(task({ site: '<html>' }))).toBe('site');
     expect(artType(task({ plan: {} }))).toBe('plan');
   });
+  it('honours an explicit kind first, but ignores unknown kinds', () => {
+    expect(artType(task({ kind: 'email' }))).toBe('email');
+    // a bad kind must not mistype the task — fall through to the payload
+    expect(artType(task({ kind: 'bogus', post: {} }))).toBe('post');
+  });
   it('maps route runs to build', () => {
     expect(artType(task({ run: 'route' }))).toBe('build');
   });
