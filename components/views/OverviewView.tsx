@@ -19,7 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
-import { nextAction } from '@/lib/roadmap';
+import { nextAction, stageWatermark } from '@/lib/roadmap';
 import {
   stageIndexOf,
   stageLabelOf,
@@ -86,7 +86,17 @@ const linkId = (x: unknown): string =>
   typeof x === 'object' && x ? (x as GNode).id : (x as string);
 
 export default function OverviewView() {
-  const { openDept, runTask, briefDepartment, tick, brief, nextStep } = useApp();
+  const {
+    openDept,
+    runTask,
+    briefDepartment,
+    tick,
+    brief,
+    nextStep,
+    show,
+    selectStage,
+    portalSignal,
+  } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
@@ -245,6 +255,17 @@ export default function OverviewView() {
     fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
   };
 
+  // A portal was requested from elsewhere (e.g. the Roadmap's Start) — glide the
+  // camera to that department once the map is mounted. The signal's `n` changes per
+  // request, so re-portaling to the same dept still fires. Small delay lets the graph
+  // ref settle after a view switch.
+  useEffect(() => {
+    if (!portalSignal || !dims.w) return;
+    const id = setTimeout(() => flyTo(`dept:${portalSignal.deptK}`), 220);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [portalSignal, dims.w]);
+
   // gentle forces (positions are seeded)
   useEffect(() => {
     if (!dims.w) return;
@@ -369,7 +390,13 @@ export default function OverviewView() {
         </div>
       </div>
 
-      <ProgressCard stage={brief.stage} />
+      <ProgressCard
+        stage={brief.stage}
+        onOpen={() => {
+          show('roadmap');
+          selectStage(stageWatermark()); // open the stage you're on now
+        }}
+      />
 
       {here && (
         <HereCard
@@ -598,13 +625,18 @@ function Meter({ label, pct, hex }: { label: string; pct: number; hex: string })
   );
 }
 
-function ProgressCard({ stage }: { stage?: string }) {
+function ProgressCard({ stage, onOpen }: { stage?: string; onOpen: () => void }) {
+  const [hover, setHover] = useState(false);
   const prod = productProgress();
   const comp = companyProgress();
   const label = stageLabelOf(stageIndexOf(stage));
   const phase = currentPhaseName(stage); // the roadmap phase — keeps this in step with the Roadmap
   return (
     <div
+      onClick={onOpen}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      title="Open the roadmap"
       style={{
         position: 'absolute',
         top: 22,
@@ -612,25 +644,43 @@ function ProgressCard({ stage }: { stage?: string }) {
         zIndex: 5,
         width: 216,
         padding: '13px 15px 14px',
-        background: 'rgba(16,14,28,0.72)',
+        background: hover ? 'rgba(24,20,42,0.82)' : 'rgba(16,14,28,0.72)',
         backdropFilter: 'blur(10px)',
         WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.09)',
+        border: `1px solid rgba(255,255,255,${hover ? 0.2 : 0.09})`,
         borderRadius: 13,
         boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
-        pointerEvents: 'none',
+        cursor: 'pointer',
+        transition: 'background .15s, border-color .15s',
       }}
     >
-      <div
-        style={{
-          fontSize: 10,
-          letterSpacing: '1.2px',
-          fontWeight: 700,
-          color: 'rgba(245,243,255,.42)',
-          textTransform: 'uppercase',
-        }}
-      >
-        Progress
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '1.2px',
+            fontWeight: 700,
+            color: 'rgba(245,243,255,.42)',
+            textTransform: 'uppercase',
+          }}
+        >
+          Progress
+        </div>
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill="none"
+          style={{ opacity: hover ? 0.75 : 0.4, transition: 'opacity .15s' }}
+        >
+          <path
+            d="M6 4l4 4-4 4"
+            stroke="#F5F3FF"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
       </div>
       {(phase || label) && (
         <div style={{ fontSize: 12.5, fontWeight: 600, color: '#F5F3FF', marginTop: 6 }}>
