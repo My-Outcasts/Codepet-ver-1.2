@@ -20,6 +20,13 @@ import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction } from '@/lib/roadmap';
+import {
+  STAGE_COUNT,
+  stageIndexOf,
+  stageLabelOf,
+  productProgress,
+  companyProgress,
+} from '@/lib/stages';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -362,6 +369,8 @@ export default function OverviewView() {
         </div>
       </div>
 
+      <ProgressCard stageIndex={stageIndexOf(brief.stage)} />
+
       {here && (
         <HereCard
           here={here}
@@ -552,5 +561,84 @@ function Legend({ dot, label }: { dot: string; label: string }) {
       />
       {label}
     </span>
+  );
+}
+
+// Compact progress read — where you are on the stage ladder, and how far Product
+// vs Company have come. Display-only (pointer-events off so the map stays draggable).
+function Meter({ label, pct, hex }: { label: string; pct: number; hex: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
+      <span style={{ width: 54, fontSize: 11, color: 'rgba(245,243,255,.6)', flex: 'none' }}>
+        {label}
+      </span>
+      <div
+        style={{
+          flex: 1,
+          height: 5,
+          borderRadius: 3,
+          background: 'rgba(255,255,255,.08)',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ width: `${pct}%`, height: '100%', background: hex, borderRadius: 3 }} />
+      </div>
+      <span
+        style={{
+          width: 30,
+          textAlign: 'right',
+          fontSize: 11,
+          color: 'rgba(245,243,255,.7)',
+          flex: 'none',
+        }}
+      >
+        {pct}%
+      </span>
+    </div>
+  );
+}
+
+function ProgressCard({ stageIndex }: { stageIndex: number }) {
+  const prod = productProgress();
+  const comp = companyProgress();
+  const label = stageLabelOf(stageIndex);
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 22,
+        right: 26,
+        zIndex: 5,
+        width: 216,
+        padding: '13px 15px 14px',
+        background: 'rgba(16,14,28,0.72)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255,255,255,0.09)',
+        borderRadius: 13,
+        boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: '1.2px',
+          fontWeight: 700,
+          color: 'rgba(245,243,255,.42)',
+          textTransform: 'uppercase',
+        }}
+      >
+        Progress
+      </div>
+      {stageIndex >= 0 && (
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#F5F3FF', marginTop: 6 }}>
+          Stage {stageIndex + 1} of {STAGE_COUNT}
+          <span style={{ color: 'rgba(245,243,255,.5)', fontWeight: 500 }}> · {label}</span>
+        </div>
+      )}
+      <Meter label="Product" pct={prod.pct} hex="#8B5CF6" />
+      <Meter label="Company" pct={comp.pct} hex="#2DD4BF" />
+    </div>
   );
 }
