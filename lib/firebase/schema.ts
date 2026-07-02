@@ -62,8 +62,22 @@ export interface CompanyDoc {
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;
+  /** Shared secret the local Claude Code hook presents to POST /api/track. Minted
+   *  server-side; the installer bakes it into the machine's hook config. */
+  ingestToken?: string;
+  /** Local projects reported by the scan CLI (POST /api/projects) — names + paths
+   *  only, never file contents. Feeds the Build Coach's "Which project?" picker. */
+  projects?: ScannedProject[];
+  /** When the project list was last synced by a scan. */
+  projectsScannedAt?: Millis;
   createdAt: Millis;
   updatedAt: Millis;
+}
+
+/** One local git project discovered by the scan CLI. */
+export interface ScannedProject {
+  name: string;
+  path: string;
 }
 
 /** One department document. Tasks are stored inline (bounded, ~handful each). */
@@ -94,6 +108,13 @@ export const paths = {
   department: (companyId: string, k: string) => `companies/${companyId}/departments/${k}`,
   library: (companyId: string) => `companies/${companyId}/library`,
   libraryItem: (companyId: string, itemId: string) => `companies/${companyId}/library/${itemId}`,
+  trackEvents: (companyId: string) => `companies/${companyId}/trackEvents`,
+  trackEvent: (companyId: string, eventId: string) =>
+    `companies/${companyId}/trackEvents/${eventId}`,
+  liveBuilds: (companyId: string) => `companies/${companyId}/liveBuilds`,
+  liveBuild: (companyId: string, buildSessionId: string) =>
+    `companies/${companyId}/liveBuilds/${buildSessionId}`,
+  notebook: (companyId: string) => `companies/${companyId}/notebook`,
 };
 
 // Re-export the shared shapes so persistence consumers import everything from one place.
