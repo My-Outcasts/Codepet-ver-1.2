@@ -1,8 +1,8 @@
 'use client';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { PHASES, NODES, byN } from '@/lib/data';
-import { eff } from '@/lib/roadmap';
+import { PHASES, NODES, byN, DEPTS } from '@/lib/data';
+import { eff, nextAction } from '@/lib/roadmap';
 
 const Lock = () => (
   <svg className="lockic" viewBox="0 0 16 16" fill="none">
@@ -12,10 +12,23 @@ const Lock = () => (
 );
 
 function StageDrawer() {
-  const { selStage, drawerOpen, closeStage } = useApp();
+  const { selStage, drawerOpen, closeStage, nextStep, portalToTask } = useApp();
   const n = byN(selStage);
   if (!n) return null;
   const e = eff(n);
+
+  // byte's single live next move (the same value the Overview beacon + chat read),
+  // resolved to a real open dept+task. Shown on the "now" stage so the Roadmap
+  // reflects the one thing to do next — and can launch it — instead of a static list.
+  const here = (() => {
+    if (nextStep) {
+      const d = DEPTS.find((x) => x.k === nextStep.deptK);
+      const t = d?.tasks.find((x) => x.t === nextStep.taskTitle && !x.done);
+      if (d && t) return { d, t };
+    }
+    const fb = nextAction();
+    return fb ? { d: fb.dept, t: fb.task } : null;
+  })();
   const sLbl =
     e === 'done' ? 'Complete' : e === 'now' ? 'In progress' : e === 'next' ? 'Up next' : 'Locked';
   const sCls =
@@ -58,8 +71,21 @@ function StageDrawer() {
       </span>
     ) : null;
 
+  const nextMove =
+    e === 'now' && here ? (
+      <div className="jd-next">
+        <div className="jd-next-lbl">byte&apos;s next move</div>
+        <div className="jd-next-t">{here.t.t}</div>
+        <div className="jd-next-s">{here.d.name}</div>
+        <button className="jd-next-go" onClick={() => portalToTask(here.d.k, here.t.t)}>
+          Start
+        </button>
+      </div>
+    ) : null;
+
   const body = (
     <>
+      {nextMove}
       <div className="jdr-lbl">Checklist</div>
       <Checklist />
     </>

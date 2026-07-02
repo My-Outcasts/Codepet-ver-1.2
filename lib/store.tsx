@@ -83,6 +83,10 @@ interface AppState {
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
   /** byte "arrives" in a department: fly there, open chat, drop an orientation + start chip. */
   briefDepartment: (dept: Dept, task: Task | null) => void;
+  /** Camera-fly signal the Overview map consumes to glide to a department node (bumped per portal). */
+  portalSignal: { deptK: string; n: number } | null;
+  /** Portal into a task from anywhere (e.g. the Roadmap): go to the map, byte arrives in chat, camera flies to its dept. */
+  portalToTask: (deptK: string, taskTitle: string) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -123,6 +127,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [deptKey, setDeptKey] = useState<string | null>(null);
   const [selStage, setSelStage] = useState(6);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Bumped whenever something requests the map to fly to a department (the portal).
+  const [portalSignal, setPortalSignal] = useState<{ deptK: string; n: number } | null>(null);
   // Chat starts closed by default; the floating button opens it on demand.
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
   // Onboarding is shown only to users who haven't completed it. It starts false
@@ -352,6 +358,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [toggleCopilot],
   );
 
+  // Portal into a task from anywhere in the app (e.g. the Roadmap's "now" stage):
+  // switch to the map, have byte arrive + orient in chat, and bump the fly signal so
+  // the Overview glides the camera to that department. This is the SAME arrival the
+  // beacon's Start runs — one shared entry point, so every surface routes into the
+  // work the same way.
+  const portalToTask = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      if (!d) return;
+      const t = d.tasks.find((x) => x.t === taskTitle) || null;
+      setView('overview');
+      briefDepartment(d, t);
+      setPortalSignal({ deptK, n: Date.now() });
+    },
+    [briefDepartment],
+  );
+
   // Open the run loop for a task named by an in-chat action chip.
   const runBriefedTask = useCallback(
     (deptK: string, taskTitle: string) => {
@@ -523,6 +546,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       modal,
       runTask,
       briefDepartment,
+      portalSignal,
+      portalToTask,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -559,6 +584,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       modal,
       runTask,
       briefDepartment,
+      portalSignal,
+      portalToTask,
       runBriefedTask,
       viewItem,
       closeModal,
