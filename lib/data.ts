@@ -11,6 +11,10 @@ export interface Task {
   run?: 'route' | 'draft';
   out: string;
   done?: boolean;
+  // Explicit deliverable type for tasks with no payload yet (e.g. byte-generated
+  // stage tasks). artType() honours this first; authored tasks omit it and are
+  // typed by the payload/run they carry.
+  kind?: string;
   // optional rich-outcome payloads merged from OUTCOMES / authored inline:
   site?: string;
   // byte's structured site spec (what `site` HTML was rendered from) — kept so a

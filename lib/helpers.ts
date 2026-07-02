@@ -13,33 +13,54 @@ export const slug = (s: string): string =>
     .toLowerCase()
     .replace(/^-|-$/g, '');
 
+// The deliverable types a task can resolve to. A byte-generated task declares one
+// via `kind` (it has no payload yet); anything outside this set falls through to
+// payload/run-based typing so a bad value can never mistype a task.
+const KNOWN_KINDS = new Set([
+  'doc',
+  'prep',
+  'build',
+  'post',
+  'email',
+  'legal',
+  'screens',
+  'sheet',
+  'site',
+  'dms',
+  'calendar',
+  'checklist',
+  'plan',
+]);
+
 // type of artifact a task produces
 export const artType = (t: Task, walk?: boolean): string =>
-  t.site
-    ? 'site'
-    : t.screens
-      ? 'screens'
-      : t.sheet
-        ? 'sheet'
-        : t.plan
-          ? 'plan'
-          : t.post
-            ? 'post'
-            : t.email
-              ? 'email'
-              : t.calendar
-                ? 'calendar'
-                : t.legal
-                  ? 'legal'
-                  : t.dms
-                    ? 'dms'
-                    : t.checklist
-                      ? 'checklist'
-                      : t.run === 'route'
-                        ? 'build'
-                        : walk || t.who === 'you'
-                          ? 'prep'
-                          : 'doc';
+  t.kind && KNOWN_KINDS.has(t.kind)
+    ? t.kind
+    : t.site
+      ? 'site'
+      : t.screens
+        ? 'screens'
+        : t.sheet
+          ? 'sheet'
+          : t.plan
+            ? 'plan'
+            : t.post
+              ? 'post'
+              : t.email
+                ? 'email'
+                : t.calendar
+                  ? 'calendar'
+                  : t.legal
+                    ? 'legal'
+                    : t.dms
+                      ? 'dms'
+                      : t.checklist
+                        ? 'checklist'
+                        : t.run === 'route'
+                          ? 'build'
+                          : walk || t.who === 'you'
+                            ? 'prep'
+                            : 'doc';
 
 export interface TaskStateInfo {
   label: string;
