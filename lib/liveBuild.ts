@@ -16,6 +16,9 @@ export interface LiveEvent {
 }
 
 export interface LiveState {
+  /** Claude Code's session_id — lets END correlate this build to its SessionEnd
+   *  rollup (trackEvent), which is keyed by session id, not buildSessionId. */
+  sessionId: string;
   actionCount: number;
   turns: number;
   recentTools: string[];
@@ -24,24 +27,34 @@ export interface LiveState {
   ended: boolean;
 }
 
-export function initialLive(ts: Millis): LiveState {
-  return { actionCount: 0, turns: 0, recentTools: [], startedAt: ts, lastTs: ts, ended: false };
+export function initialLive(ts: Millis, sessionId = ''): LiveState {
+  return {
+    sessionId,
+    actionCount: 0,
+    turns: 0,
+    recentTools: [],
+    startedAt: ts,
+    lastTs: ts,
+    ended: false,
+  };
 }
 
 /** Fold one live activity event into the running counters. `start` resets state
  *  (a fresh session), `tool` counts an action (+ records the tool name), `turn`
- *  counts a completed assistant turn. Never mutates the input. */
+ *  counts a completed assistant turn. Always records the event's session id.
+ *  Never mutates the input. */
 export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState {
-  if (event.kind === 'start') return initialLive(event.ts);
-  const s = state ?? initialLive(event.ts);
+  const sessionId = event.sessionId || state?.sessionId || '';
+  if (event.kind === 'start') return initialLive(event.ts, sessionId);
+  const s = state ?? initialLive(event.ts, sessionId);
   if (event.kind === 'tool') {
     const recentTools = event.tool
       ? [...s.recentTools, event.tool].slice(-RECENT_TOOLS_CAP)
       : s.recentTools;
-    return { ...s, actionCount: s.actionCount + 1, recentTools, lastTs: event.ts };
+    return { ...s, sessionId, actionCount: s.actionCount + 1, recentTools, lastTs: event.ts };
   }
   // kind === 'turn'
-  return { ...s, turns: s.turns + 1, lastTs: event.ts };
+  return { ...s, sessionId, turns: s.turns + 1, lastTs: event.ts };
 }
 
 /** Map a Claude Code hook event name to the live kind it produces (or null to skip). */

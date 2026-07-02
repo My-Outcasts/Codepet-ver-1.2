@@ -12,6 +12,7 @@ const base = { buildSessionId: 'b1', sessionId: 's1' };
 describe('reduceLive', () => {
   it('start resets state', () => {
     const prev = {
+      sessionId: 's1',
       actionCount: 9,
       turns: 3,
       recentTools: ['Edit'],
@@ -21,6 +22,7 @@ describe('reduceLive', () => {
     };
     const s = reduceLive(prev, { ...base, kind: 'start', ts: 100 });
     expect(s).toEqual({
+      sessionId: 's1',
       actionCount: 0,
       turns: 0,
       recentTools: [],
@@ -30,10 +32,11 @@ describe('reduceLive', () => {
     });
   });
 
-  it('start from null initialises', () => {
+  it('start from null initialises and records the session id', () => {
     const s = reduceLive(null, { ...base, kind: 'start', ts: 50 });
     expect(s.actionCount).toBe(0);
     expect(s.startedAt).toBe(50);
+    expect(s.sessionId).toBe('s1');
   });
 
   it('tool increments actionCount and records the tool', () => {
