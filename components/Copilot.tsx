@@ -1,7 +1,9 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { DEPTS } from '@/lib/data';
 import { Byte } from './Byte';
+import type { ChatMessage } from '@/lib/store';
 
 // Quick-start prompts shown only before the first message — they send to byte.
 const CHIPS = [
@@ -9,6 +11,85 @@ const CHIPS = [
   'Summarize where my company is',
   'What’s blocking my launch?',
 ];
+
+// byte is told to write plain text, but strip stray markdown emphasis as a safety
+// net so a leftover **…**, `code`, or __…__ never renders as literal punctuation.
+function plain(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/__(.+?)__/g, '$1')
+    .replace(/`([^`]+?)`/g, '$1')
+    .replace(/(^|\s)\*(\S.*?\S)\*(?=\s|$)/g, '$1$2');
+}
+
+// Friendly noun for each deliverable type, shown on the inline result card.
+const TYPE_NOUN: Record<string, string> = {
+  doc: 'Doc',
+  prep: 'Prep',
+  build: 'Build',
+  post: 'Post',
+  email: 'Email',
+  legal: 'Doc',
+  screens: 'Screens',
+  sheet: 'Model',
+  site: 'Landing page',
+  dms: 'Messages',
+  calendar: 'Calendar',
+  checklist: 'Checklist',
+  plan: 'Plan',
+};
+
+// An inline deliverable byte produced in chat — the "run it from here" result.
+// Reads the live task so the preview reflects the fresh output; Approve / Open /
+// Redo keep the founder in the conversation.
+function ResultCard({ m }: { m: ChatMessage }) {
+  const { runTaskInChat, approveChatResult, openChatResult } = useApp();
+  const r = m.result!;
+  const d = DEPTS.find((x) => x.k === r.deptK);
+  const t = d?.tasks.find((x) => x.t === r.taskTitle);
+  const noun = TYPE_NOUN[r.type] || 'Deliverable';
+  const preview = (t?.out || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+
+  return (
+    <div className="cres">
+      <div className="cres-h">
+        <span className="cres-t">{r.taskTitle}</span>
+        <span className="cres-tag">
+          {d?.name ? `${d.name} · ` : ''}
+          {noun}
+        </span>
+      </div>
+      {m.running ? (
+        <div className="cres-run">
+          <span className="cres-spin" />
+          Producing…
+        </div>
+      ) : (
+        <>
+          {preview && <div className="cres-prev">{preview}</div>}
+          {r.approved ? (
+            <div className="cres-saved">Saved to your library</div>
+          ) : (
+            <div className="cres-acts">
+              <button
+                className="cres-b primary"
+                onClick={() => approveChatResult(r.deptK, r.taskTitle)}
+              >
+                Approve
+              </button>
+              <button className="cres-b" onClick={() => openChatResult(r.deptK, r.taskTitle)}>
+                {r.type === 'site' ? 'Open' : 'Copy'}
+              </button>
+              <button className="cres-b" onClick={() => runTaskInChat(r.deptK, r.taskTitle)}>
+                Redo
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 export function Copilot() {
   const { toggleCopilot, brief, chatMessages, chatStreaming, sendChat, runBriefedTask } = useApp();
@@ -68,6 +149,7 @@ export function Copilot() {
         </div>
 
         {chatMessages.map((m) => {
+          if (m.result) return <ResultCard key={m.id} m={m} />;
           const streamingByte = chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
           if (streamingByte && !m.text) {
             return (
@@ -78,7 +160,7 @@ export function Copilot() {
           }
           return (
             <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
-              {m.text}
+              {m.role === 'byte' ? plain(m.text) : m.text}
               {m.action && (
                 <button
                   className="bub-act"

@@ -14,9 +14,64 @@ export const runtime = 'nodejs';
 
 const BYTE_SYSTEM = `You are byte, the AI building companion inside Codepet — a senior operator who helps a solo founder build and understand their whole company, department by department.
 
-You are in a chat with the founder. Be warm, plain-spoken, specific, and brief — usually 2-4 sentences, occasionally a short list when it genuinely helps. No hype, no emoji, no filler. When they ask what to do next, ground your answer in their actual company and departments. You can outline and advise here; the founder runs real tasks from each department, where you produce the actual deliverables.
+You are in a chat with the founder. Be warm, plain-spoken, specific, and brief — usually 2-4 sentences, occasionally a short list when it genuinely helps. No hype, no emoji, no filler. Write plain text only — no markdown, asterisks, backticks, or arrows for emphasis; the chat shows your words as-is. When they ask what to do next, ground your answer in their actual company and departments.
+
+You can DO the work here, not only talk about it. When the founder asks you to run, make, draft, write, finish, or execute a task — or says "do it" / "run that for me" about the task you're discussing — call the run_task tool with the matching entry from RUNNABLE TASKS. The deliverable is produced right here in the chat for them to approve; never tell them to go open the task somewhere else. Say one short lead-in line first (e.g. "On it — running the willingness-to-pay survey.") and then call the tool. Rules: only call run_task for a task that is actually in RUNNABLE TASKS, using its exact deptK and taskTitle; if it's unclear which task they mean, ask a one-line clarifying question instead of guessing; and for questions, advice, or status, just reply — don't call the tool.
 
 If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.`;
+
+// The tool byte calls to actually produce a deliverable inside the chat. Its input
+// must reference a real open task (validated against RUNNABLE TASKS before we act).
+const RUN_TASK_TOOL = {
+  name: 'run_task',
+  description:
+    "Produce a task's real deliverable right now, in this chat, for the founder to approve. Call this when the founder asks you to run/do/make/draft/finish/execute a specific task from the RUNNABLE TASKS list. Use the exact deptK and taskTitle from that list. If it's ambiguous which task they mean, do NOT call this — ask a clarifying question instead.",
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+      deptK: {
+        type: 'string',
+        description: 'The department key (deptK) of the task, copied exactly from RUNNABLE TASKS.',
+      },
+      taskTitle: {
+        type: 'string',
+        description: 'The exact task title, copied exactly from RUNNABLE TASKS.',
+      },
+    },
+    required: ['deptK', 'taskTitle'],
+  },
+};
+
+// Marker that separates byte's streamed reply text from a trailing run_task action
+// payload on the wire. Record-separator (U+001E) never appears in normal prose, so
+// the client can split the stream cleanly: text before it, JSON action after.
+const ACTION_MARK = String.fromCharCode(0x1e);
+
+interface RunnableTask {
+  deptK: string;
+  deptName: string;
+  taskTitle: string;
+  hint: string;
+}
+
+function parseOpenTasks(raw: unknown): RunnableTask[] {
+  if (!Array.isArray(raw)) return [];
+  const out: RunnableTask[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const o = r as Record<string, unknown>;
+    if (typeof o.deptK === 'string' && typeof o.taskTitle === 'string') {
+      out.push({
+        deptK: o.deptK,
+        deptName: typeof o.deptName === 'string' ? o.deptName : o.deptK,
+        taskTitle: o.taskTitle,
+        hint: typeof o.hint === 'string' ? o.hint : '',
+      });
+    }
+  }
+  return out.slice(0, 60);
+}
 
 const FALLBACK_CONTEXT =
   'The founder is building their company with Codepet but has not filled in a detailed brief yet — keep guidance general and invite them to tell you more.';
@@ -24,6 +79,7 @@ const FALLBACK_CONTEXT =
 interface ChatBody {
   messages?: unknown;
   deptSummary?: unknown;
+  openTasks?: unknown;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -82,7 +138,19 @@ export async function POST(req: Request): Promise<Response> {
     typeof body.deptSummary === 'string' && body.deptSummary.trim()
       ? `\n\nWhere their departments stand right now:\n${body.deptSummary.trim().slice(0, 1200)}`
       : '';
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${deptSummary}`;
+
+  // The tasks byte is allowed to run from chat. Included in the prompt so byte uses
+  // exact identifiers, and validated on the way back so a hallucinated title can't act.
+  const runnable = parseOpenTasks(body.openTasks);
+  const runnableBlock = runnable.length
+    ? `\n\nRUNNABLE TASKS (call run_task with the exact deptK + taskTitle to produce one here):\n${runnable
+        .map(
+          (r) =>
+            `- deptK:"${r.deptK}" taskTitle:"${r.taskTitle}" — ${r.hint || 'no hint'} (${r.deptName})`,
+        )
+        .join('\n')}`
+    : '\n\nRUNNABLE TASKS: none open right now — if the founder asks you to run something, tell them there are no open tasks to run.';
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${deptSummary}${runnableBlock}`;
 
   const client = new Anthropic({ apiKey });
   try {
@@ -93,6 +161,7 @@ export async function POST(req: Request): Promise<Response> {
       output_config: { effort: 'low' },
       system,
       messages: claudeMessages,
+      tools: runnable.length ? [RUN_TASK_TOOL] : undefined,
     });
 
     const encoder = new TextEncoder();
@@ -102,6 +171,29 @@ export async function POST(req: Request): Promise<Response> {
           for await (const event of mstream) {
             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
               controller.enqueue(encoder.encode(event.delta.text));
+            }
+          }
+          // After the reply streams, see whether byte chose to run a task. Only act on
+          // a tool call that matches a real runnable task (exact title; deptK is a
+          // best-effort match) — so a wrong or invented reference is dropped silently.
+          const final = await mstream.finalMessage();
+          const toolUse = final.content.find(
+            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+              b.type === 'tool_use' && b.name === 'run_task',
+          );
+          if (toolUse) {
+            const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
+            const taskTitle = typeof input.taskTitle === 'string' ? input.taskTitle : '';
+            const deptK = typeof input.deptK === 'string' ? input.deptK : '';
+            const match =
+              runnable.find((r) => r.deptK === deptK && r.taskTitle === taskTitle) ||
+              runnable.find((r) => r.taskTitle === taskTitle);
+            if (match) {
+              controller.enqueue(
+                encoder.encode(
+                  ACTION_MARK + JSON.stringify({ deptK: match.deptK, taskTitle: match.taskTitle }),
+                ),
+              );
             }
           }
         } catch (err) {
