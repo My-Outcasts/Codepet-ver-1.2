@@ -11,7 +11,7 @@ const CHIPS = [
 ];
 
 export function Copilot() {
-  const { toggleCopilot, brief, chatMessages, chatStreaming, sendChat } = useApp();
+  const { toggleCopilot, brief, chatMessages, chatStreaming, sendChat, runBriefedTask } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
   const company = brief.projectName?.trim() || 'your company';
@@ -79,6 +79,14 @@ export function Copilot() {
           return (
             <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
               {m.text}
+              {m.action && (
+                <button
+                  className="bub-act"
+                  onClick={() => runBriefedTask(m.action!.deptK, m.action!.taskTitle)}
+                >
+                  {m.action.label}
+                </button>
+              )}
             </div>
           );
         })}

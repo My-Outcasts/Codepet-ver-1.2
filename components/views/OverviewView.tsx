@@ -79,7 +79,7 @@ const linkId = (x: unknown): string =>
   typeof x === 'object' && x ? (x as GNode).id : (x as string);
 
 export default function OverviewView() {
-  const { openDept, runTask, tick, brief, nextStep } = useApp();
+  const { openDept, runTask, briefDepartment, tick, brief, nextStep } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
@@ -223,6 +223,21 @@ export default function OverviewView() {
   }, [beaconId]);
   const pulse = 0.5 + 0.5 * Math.sin(beat * 0.16); // 0..1
 
+  // Glide the camera to frame a node — the "jump to the step" on Start, so the
+  // docked work panel opens with its node in view (map stays as context behind it).
+  const flyTo = (nodeId: string | null) => {
+    const fg = fgRef.current as any;
+    if (!fg || !nodeId) return;
+    const n = data.nodes.find((x) => x.id === nodeId);
+    if (!n || !Number.isFinite(n.x)) return;
+    tookControlRef.current = true; // don't let a settle-time auto-fit override this
+    noteInteract(); // pause auto-rotate so the framed shot holds
+    const aspect = dims.w / Math.max(1, dims.h);
+    const k = 2.7 * Math.max(1, 1.2 / aspect);
+    const look = { x: n.x * 0.45, y: n.y * 0.45, z: n.z * 0.45 };
+    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
+  };
+
   // gentle forces (positions are seeded)
   useEffect(() => {
     if (!dims.w) return;
@@ -350,7 +365,10 @@ export default function OverviewView() {
       {here && (
         <HereCard
           here={here}
-          onStart={() => runTask(here.task, here.dept, here.task.who === 'you')}
+          onStart={() => {
+            flyTo(`dept:${here.dept.k}`); // glide to the department…
+            briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
+          }}
         />
       )}
       <div

@@ -39,6 +39,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
+  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>"). */
+  action?: { label: string; deptK: string; taskTitle: string };
+  /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
+  brief?: boolean;
 }
 
 const newId = (): string =>
@@ -74,8 +78,15 @@ interface AppState {
   library: LibItem[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
+  /** byte "arrives" in a department: fly there, open chat, drop an orientation + start chip. */
+  briefDepartment: (dept: Dept, task: Task | null) => void;
+  /** Run a task named by an in-chat action chip (deptK + taskTitle). */
+  runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
   closeModal: () => void;
+  /** A deliverable opened into the "Your company" section (in-context, not a modal). */
+  /** Open a delivered artifact externally: a site in a new tab, everything else copied. */
+  openDeliverable: (item: LibItem) => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
   toggleEnv: (category: string, index: number) => void;
   chatMessages: ChatMessage[];
@@ -264,6 +275,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const viewItem = useCallback((item: LibItem) => setModal({ kind: 'view', item }), []);
   const closeModal = useCallback(() => setModal(null), []);
 
+  // Open a delivered artifact the minimal way — no modal, no inline takeover:
+  // a site opens in a new browser tab; everything else copies to the clipboard.
+  const openDeliverable = useCallback(
+    (item: LibItem) => {
+      setModal(null);
+      if (item.type === 'site' && typeof item.site === 'string' && item.site) {
+        try {
+          const url = URL.createObjectURL(new Blob([item.site], { type: 'text/html' }));
+          window.open(url, '_blank', 'noopener');
+          setTimeout(() => URL.revokeObjectURL(url), 60000);
+        } catch {
+          toast('Couldn’t open the site');
+        }
+        return;
+      }
+      const text = typeof item.out === 'string' ? item.out.trim() : '';
+      if (text && navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(text)
+          .then(() => toast('Copied to clipboard'))
+          .catch(() => toast('Copy failed'));
+      } else {
+        toast('Nothing to copy');
+      }
+    },
+    [toast],
+  );
+
+  // Arrival briefing: when the founder starts the next step, byte "arrives" in that
+  // department — the map flies there, chat opens, and byte drops a short orientation
+  // (where you are, why, what's open) with a one-tap chip to start the task. The
+  // briefing is transient (not persisted) — it's guidance for this moment.
+  const briefDepartment = useCallback(
+    (d: Dept, t: Task | null) => {
+      toggleCopilot(false);
+      const open = d.tasks.filter((x) => !x.done).length;
+      const need = (d.need || '').trim();
+      const text = `You're in ${d.name}.${need ? ` ${need}` : ''} ${open} task${open === 1 ? '' : 's'} open here${t ? ` — I'd start with “${t.t}”` : ''}.`;
+      const msg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text,
+        ts: Date.now(),
+        action: t ? { label: `Start: ${t.t}`, deptK: d.k, taskTitle: t.t } : undefined,
+        brief: true,
+      };
+      // Keep only the latest briefing — drop any prior one so the thread never
+      // fills with repeated "You're in …" arrivals.
+      setChatMessages((prev) => [...prev.filter((m) => !m.brief), msg]);
+    },
+    [toggleCopilot],
+  );
+
+  // Open the run loop for a task named by an in-chat action chip.
+  const runBriefedTask = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (d && t) runTask(t, d, t.who === 'you');
+    },
+    [runTask],
+  );
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
       t.done = true;
@@ -423,8 +497,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       library,
       modal,
       runTask,
+      briefDepartment,
+      runBriefedTask,
       viewItem,
       closeModal,
+      openDeliverable,
       approveTask,
       toggleEnv,
       chatMessages,
@@ -455,8 +532,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       library,
       modal,
       runTask,
+      briefDepartment,
+      runBriefedTask,
       viewItem,
       closeModal,
+      openDeliverable,
       approveTask,
       toggleEnv,
       chatMessages,
