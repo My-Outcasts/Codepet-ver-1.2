@@ -31,7 +31,8 @@ import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
-import { nextAction } from './roadmap';
+import { nextAction, setStageWatermark } from './roadmap';
+import { roadmapWatermarkFor } from './stages';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -192,6 +193,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setLibrary(lib);
         setBrief(b);
+        setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
         setChatMessages(
           chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
         );
@@ -243,7 +245,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
-      if (briefData) setBrief(briefData);
+      if (briefData) {
+        setBrief(briefData);
+        setStageWatermark(roadmapWatermarkFor(briefData.stage));
+      }
       // Stamp completion (and brief, if any) so onboarding never shows again —
       // runs for both "finish" and "skip".
       if (companyId) {

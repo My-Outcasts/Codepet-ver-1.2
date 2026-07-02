@@ -38,7 +38,7 @@
       "count": 2
     },
     "react-hooks/static-components": {
-      "count": 2
+      "count": 1
     }
   },
   "lib/data.ts": {
@@ -48,7 +48,7 @@
   },
   "lib/roadmap.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 2
     }
   },
   "lib/store.tsx": {
