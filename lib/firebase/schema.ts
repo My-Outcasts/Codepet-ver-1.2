@@ -78,6 +78,7 @@ export interface DepartmentDoc {
   need: string;
   byte: string;
   tasks: Task[];
+  later?: boolean;
 }
 
 /** An approved deliverable saved to the company Library. */

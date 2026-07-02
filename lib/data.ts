@@ -44,6 +44,9 @@ export interface Dept {
   need: string;
   byte: string;
   tasks: Task[];
+  // Set by the stage scaffold: this department has no work yet at the founder's
+  // current stage — shown quietly as "later" until they advance.
+  later?: boolean;
 }
 
 export interface Stage {
