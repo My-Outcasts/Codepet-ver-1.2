@@ -2371,6 +2371,98 @@ body {
   color: var(--t-3);
   font-style: italic;
 }
+/* Inline deliverable byte produced in chat — the "run it from here" result card. */
+.cres {
+  align-self: stretch;
+  max-width: 94%;
+  background: var(--surface);
+  border: 1px solid var(--accent-line);
+  border-radius: 13px;
+  border-top-left-radius: 4px;
+  padding: 12px 13px 13px;
+  box-shadow: var(--sh-s);
+}
+.cres-h {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cres-t {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--t-1);
+  letter-spacing: -0.1px;
+}
+.cres-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+}
+.cres-prev {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--t-3);
+  margin-top: 8px;
+}
+.cres-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--t-3);
+  margin-top: 9px;
+}
+.cres-spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-line);
+  border-top-color: var(--accent);
+  animation: cres-spin 0.7s linear infinite;
+}
+@keyframes cres-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cres-acts {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+.cres-b {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-2);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: 0.14s;
+}
+.cres-b:hover {
+  background: var(--well);
+  color: var(--t-1);
+}
+.cres-b.primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.cres-b.primary:hover {
+  background: var(--accent-deep);
+  color: #fff;
+}
+.cres-saved {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  margin-top: 11px;
+}
 .chips {
   display: flex;
   flex-direction: column;

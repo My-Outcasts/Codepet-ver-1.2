@@ -14,7 +14,9 @@ import React, {
   useState,
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
-import { artMeta } from './helpers';
+import { artMeta, artType } from './helpers';
+import { runByteTask, GenerateError } from './ai/runTask';
+import { applyResult, liveKind } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
 import {
@@ -44,6 +46,10 @@ export interface ChatMessage {
   action?: { label: string; deptK: string; taskTitle: string };
   /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
   brief?: boolean;
+  /** byte is producing a deliverable for this message right now (inline run). */
+  running?: boolean;
+  /** An inline deliverable byte produced in chat, awaiting approval (reads the live task). */
+  result?: { deptK: string; taskTitle: string; type: string; approved?: boolean };
 }
 
 const newId = (): string =>
@@ -99,6 +105,12 @@ interface AppState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** Produce a task's deliverable inline in chat (byte's "run it from here"). */
+  runTaskInChat: (deptK: string, taskTitle: string) => void;
+  /** Approve an inline chat result — saves to the Library + marks the task done. */
+  approveChatResult: (deptK: string, taskTitle: string) => void;
+  /** Open an inline chat result the minimal way (site → new tab, else copy). */
+  openChatResult: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
   toastMsg: string;
@@ -446,6 +458,125 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // Produce a task's deliverable INLINE in chat — byte's "run it from here." Runs the
+  // exact same generation the department panel uses (runByteTask → applyResult), then
+  // leaves a result card in the thread for the founder to approve. Reads live DEPTS, so
+  // the card renders the fresh deliverable after bump().
+  const runTaskInChat = useCallback(
+    async (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t) return;
+      const type = artType(t);
+      const kind = liveKind(type);
+      const msgId = newId();
+      if (!kind) {
+        // Not something byte can produce here — say so plainly instead of failing.
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: msgId,
+            role: 'byte',
+            text: `“${t.t}” isn’t one I can produce right here — open it in ${d.name} and I’ll help you finish it.`,
+            ts: Date.now(),
+          },
+        ]);
+        return;
+      }
+      // Drop a "producing…" card, then swap it for the finished deliverable.
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: msgId,
+          role: 'byte',
+          text: '',
+          ts: Date.now(),
+          running: true,
+          result: { deptK, taskTitle, type },
+        },
+      ]);
+      try {
+        const res = await runByteTask({
+          kind,
+          taskTitle: t.t,
+          taskHint: t.d,
+          deptName: d.name,
+          brief,
+        });
+        applyResult(t, type, res);
+        bump();
+        track('chat.run_task', { dept: d.k, type });
+        setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
+      } catch (err) {
+        const code = err instanceof GenerateError ? err.code : '';
+        const limited = code === 'rate_limited' || code === 'http_429';
+        const msg = limited
+          ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this up then.'
+          : 'I hit a snag producing that — want me to try again?';
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === msgId ? { ...m, running: false, result: undefined, text: msg } : m,
+          ),
+        );
+      }
+    },
+    [brief, bump],
+  );
+
+  // Approve an inline chat result: same as approving from the panel (Library + done),
+  // then flip the card to its saved state.
+  const approveChatResult = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t) return;
+      const type = artType(t);
+      approveTask(t, d, type);
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.result && m.result.deptK === deptK && m.result.taskTitle === taskTitle
+            ? { ...m, result: { ...m.result, approved: true } }
+            : m,
+        ),
+      );
+    },
+    [approveTask],
+  );
+
+  // Open an inline chat result the minimal way (site → new tab, else copy) — reuses
+  // the shared openDeliverable behavior, built from the live task.
+  const openChatResult = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t) return;
+      const type = artType(t);
+      const { file, head, tag } = artMeta(t, type);
+      openDeliverable({
+        title: t.t,
+        dept: d.name,
+        k: d.k,
+        ab: d.ab,
+        type,
+        out: t.out,
+        file,
+        head,
+        tag,
+        site: t.site,
+        screens: t.screens,
+        sheet: t.sheet,
+        post: t.post,
+        email: t.email,
+        calendar: t.calendar,
+        legal: t.legal,
+        dms: t.dms,
+        checklist: t.checklist,
+        plan: t.plan,
+      });
+    },
+    [openDeliverable],
+  );
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   const sendChat = useCallback(
@@ -485,12 +616,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           : '';
       const deptSummary = deptLines + focus;
 
+      // The tasks byte may run from chat: every open task with a live deliverable type.
+      const openTasks = DEPTS.flatMap((d) =>
+        d.tasks
+          .filter((t) => !t.done && liveKind(artType(t)) !== null)
+          .map((t) => ({ deptK: d.k, deptName: d.name, taskTitle: t.t, hint: t.d ?? '' })),
+      );
+
       (async () => {
         let acc = '';
         let errCode = '';
+        let pending: { deptK: string; taskTitle: string } | null = null;
         try {
-          for await (const chunk of streamByteChat(history, deptSummary)) {
-            acc += chunk;
+          for await (const ev of streamByteChat(history, deptSummary, openTasks)) {
+            if (ev.type === 'action') {
+              pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
+              continue;
+            }
+            acc += ev.text;
             setChatMessages((prev) =>
               prev.map((m) => (m.id === byteMsg.id ? { ...m, text: acc } : m)),
             );
@@ -503,13 +646,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           errCode === 'rate_limited'
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
             : 'I hit a snag reaching the model — give it another try.';
-        const finalText = acc.trim() || fallback;
+        // If byte chose to run a task but said nothing, synthesize a short lead-in so
+        // the run never appears out of nowhere.
+        const finalText =
+          acc.trim() || (pending ? `On it — running “${pending.taskTitle}”.` : fallback);
         setChatMessages((prev) =>
           prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText } : m)),
         );
         setChatStreaming(false);
-        // Persist byte's reply only if it's a real answer (not the error fallback).
-        if (companyId && acc.trim()) {
+        // Persist byte's reply if it's a real answer or a run lead-in (not the error
+        // fallback). The inline result card itself is transient, like the briefings.
+        if (companyId && (acc.trim() || pending)) {
           persistChatMessage(companyId, {
             id: byteMsg.id,
             role: 'byte',
@@ -517,9 +664,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             createdAt: byteMsg.ts,
           }).catch((err) => console.error('[store] persist byte message failed', err));
         }
+        // byte decided to run a task — produce it inline now.
+        if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, chatMessages, chatStreaming, nextStep],
+    [companyId, chatMessages, chatStreaming, nextStep, runTaskInChat],
   );
 
   const value = useMemo<AppState>(
@@ -557,6 +706,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      runTaskInChat,
+      approveChatResult,
+      openChatResult,
       nextStep,
       toastMsg,
       toast,
@@ -595,6 +747,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      runTaskInChat,
+      approveChatResult,
+      openChatResult,
       nextStep,
       toastMsg,
       toast,
