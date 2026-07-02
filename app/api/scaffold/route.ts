@@ -68,6 +68,16 @@ const SCAFFOLD_SCHEMA: Record<string, unknown> = {
             description:
               'True if this department has real work to do at the founder’s CURRENT stage.',
           },
+          need: {
+            type: 'string',
+            description:
+              'One sentence: what this department needs to do for THIS company. For a dormant one, frame it as what it will handle later.',
+          },
+          byte: {
+            type: 'string',
+            description:
+              "byte's short first-person note about how it will help in this department.",
+          },
           tasks: {
             type: 'array',
             description:
@@ -94,7 +104,7 @@ const SCAFFOLD_SCHEMA: Record<string, unknown> = {
             },
           },
         },
-        required: ['k', 'active', 'tasks'],
+        required: ['k', 'active', 'need', 'byte', 'tasks'],
       },
     },
   },
@@ -131,7 +141,7 @@ The founder's current stage: ${stage}.
 Departments (fixed — one entry per key in your output):
 ${deptList}
 
-Decide, for THIS company at THIS stage, which departments have real work to do NOW (active) and which come later (dormant, empty tasks). For each ACTIVE department, write 2-4 concrete, stage-appropriate tasks specific to this product — earlier stages skew toward validation/product; later stages toward launch/growth/scale. Give each task the right deliverable \`kind\` and \`who\`. Don't invent departments; use only the keys above.`;
+Decide, for THIS company at THIS stage, which departments have real work to do NOW (active) and which come later (dormant, empty tasks). For every department write a one-line \`need\` (what it does for this company — for dormant ones, what it will handle later) and a short first-person \`byte\` note. For each ACTIVE department, write 2-4 concrete, stage-appropriate tasks specific to this product — earlier stages skew toward validation/product; later stages toward launch/growth/scale. Give each task the right deliverable \`kind\` and \`who\`. Don't invent departments; use only the keys above.`;
 
   try {
     const client = new Anthropic({ apiKey });
