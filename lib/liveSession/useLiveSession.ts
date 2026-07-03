@@ -1,15 +1,30 @@
 'use client';
 import { useCallback, useRef, useState } from 'react';
 import { initialTranscript, reduceTranscript, type TranscriptState } from './transcript';
-import { parseEventLine } from './parseEvents';
+import type { SessionEvent } from './parseEvents';
 import type { BytePlan } from '../ai/plan';
 
-/** Pure: fold one raw ndjson stream line (0..n events) into the transcript.
- *  Returns the same reference when the line yields nothing (blank/malformed). */
+/** Pure: fold one raw ndjson stream line into the transcript. Each line is an
+ *  already-normalized SessionEvent (the server parsed claude's stdout before
+ *  emitting), so we JSON.parse it and reduce directly. Returns the SAME reference
+ *  when the line is blank or not a valid SessionEvent. */
 export function applyLine(state: TranscriptState, line: string): TranscriptState {
-  const events = parseEventLine(line);
-  if (events.length === 0) return state;
-  return events.reduce(reduceTranscript, state);
+  const t = line.trim();
+  if (!t) return state;
+  let event: SessionEvent;
+  try {
+    event = JSON.parse(t) as SessionEvent;
+  } catch {
+    return state;
+  }
+  if (
+    !event ||
+    typeof event !== 'object' ||
+    typeof (event as { kind?: unknown }).kind !== 'string'
+  ) {
+    return state;
+  }
+  return reduceTranscript(state, event);
 }
 
 export function useLiveSession(opts: {
