@@ -11,6 +11,10 @@ export interface Task {
   run?: 'route' | 'draft';
   out: string;
   done?: boolean;
+  // Set true once byte has produced a reviewable draft the founder hasn't approved
+  // yet — persisted on the task so the "awaiting approval" state survives reload.
+  // Moot once `done`. Never meaningfully set for ship (route) tasks — they go to Done.
+  drafted?: boolean;
   // Explicit deliverable type for tasks with no payload yet (e.g. byte-generated
   // stage tasks). artType() honours this first; authored tasks omit it and are
   // typed by the payload/run they carry.

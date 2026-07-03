@@ -1,32 +1,33 @@
 'use client';
 import { useApp } from '@/lib/store';
 import { DEPTS, type Dept, type Task } from '@/lib/data';
+import { taskState } from '@/lib/helpers';
 
 interface Row {
   d: Dept;
   t: Task;
 }
 
-// Kanban columns by task state. Order: the two "waiting on you" lanes first
-// (your action items), then byte's in-flight work, then completed.
+// Kanban columns by the task's real state (via taskState). "byte's queue"
+// (draft-not-yet + does) folds into Up next; a produced draft sits in Awaiting.
 const COLS: Array<{ key: string; label: string; dot: string; test: (x: Row) => boolean }> = [
   {
-    key: 'draft',
-    label: 'Needs approval',
+    key: 'upnext',
+    label: 'Up next',
+    dot: 'var(--accent)',
+    test: (x) => taskState(x.t, true).cls === 'st-does',
+  },
+  {
+    key: 'awaiting',
+    label: 'Awaiting your approval',
     dot: 'var(--gold)',
-    test: (x) => !x.t.done && x.t.who === 'draft',
+    test: (x) => taskState(x.t, true).cls === 'st-draft',
   },
   {
     key: 'you',
-    label: 'Needs input',
+    label: 'Your move',
     dot: 'var(--blue)',
-    test: (x) => !x.t.done && x.t.who === 'you',
-  },
-  {
-    key: 'does',
-    label: 'byte is doing',
-    dot: 'var(--accent)',
-    test: (x) => !x.t.done && x.t.who !== 'draft' && x.t.who !== 'you',
+    test: (x) => taskState(x.t, true).cls === 'st-you',
   },
   { key: 'done', label: 'Done', dot: '#10B981', test: (x) => !!x.t.done },
 ];

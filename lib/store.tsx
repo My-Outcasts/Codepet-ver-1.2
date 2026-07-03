@@ -25,6 +25,7 @@ import {
   loadTrackingSummary,
   loadProjects,
   persistApproval,
+  persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
   persistBrief,
@@ -169,6 +170,8 @@ interface AppState {
   openChatResult: (deptK: string, taskTitle: string) => void;
   /** Drop a chat message's one-tap action once it has been used. */
   dismissChatAction: (msgId: string) => void;
+  /** Mark a task as awaiting the founder's approval and persist so it survives reload. */
+  persistTaskDraft: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
   toastMsg: string;
@@ -782,6 +785,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // byte produced a reviewable draft for this task — mark it awaiting the founder's
+  // approval and persist so the state survives reload. `done` (on approve) supersedes.
+  const persistTaskDraft = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t || t.done || t.run === 'route') return; // ship-type never "awaits"
+      t.drafted = true;
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] persistTaskDraft failed', err),
+        );
+    },
+    [companyId, bump],
+  );
+
   // Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
   // Idempotent (never flips an already-on item off) and persisted like toggleEnv.
   const setupCapability = useCallback(
@@ -848,6 +868,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
         applyResult(t, type, res);
         bump();
+        persistTaskDraft(d.k, t.t);
         track('chat.run_task', { dept: d.k, type });
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
@@ -863,7 +884,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [brief, bump],
+    [brief, bump, persistTaskDraft],
   );
 
   // Revise an inline chat result against the founder's feedback — the same revise pass
@@ -893,6 +914,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
         applyResult(t, type, res);
         bump();
+        persistTaskDraft(d.k, t.t);
         track('chat.revise_task', { dept: d.k, type });
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
@@ -906,7 +928,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       }
     },
-    [brief, bump, toast],
+    [brief, bump, persistTaskDraft, toast],
   );
 
   // Approve an inline chat result: same as approving from the panel (Library + done),
@@ -1141,6 +1163,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       approveChatResult,
       openChatResult,
       dismissChatAction,
+      persistTaskDraft,
       nextStep,
       toastMsg,
       toast,
@@ -1195,6 +1218,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       approveChatResult,
       openChatResult,
       dismissChatAction,
+      persistTaskDraft,
       nextStep,
       toastMsg,
       toast,

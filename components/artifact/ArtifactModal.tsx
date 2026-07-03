@@ -195,8 +195,17 @@ function planFor(type: string): string {
 }
 
 export function ArtifactModal() {
-  const { modal, closeModal, approveTask, openDeliverable, runTask, toast, brief, toggleCopilot } =
-    useApp();
+  const {
+    modal,
+    closeModal,
+    approveTask,
+    openDeliverable,
+    runTask,
+    toast,
+    brief,
+    toggleCopilot,
+    persistTaskDraft,
+  } = useApp();
   const [stage, setStage] = useState<Stage>('exec');
   // Run mode docks as a right-hand panel so the map stays visible as context;
   // "Expand" swaps to a full centered card for the rich deliverables that need room.
@@ -317,6 +326,7 @@ export function ArtifactModal() {
       })
         .then((res) => {
           applyResult(t, type, res);
+          persistTaskDraft(d.k, t.t);
           setGenStatus('done');
         })
         .catch((err) => {
@@ -349,6 +359,7 @@ export function ArtifactModal() {
       })
         .then((res) => {
           applyResult(t, type, res);
+          persistTaskDraft(d.k, t.t);
           setGenStatus('done');
         })
         .catch((err) => {

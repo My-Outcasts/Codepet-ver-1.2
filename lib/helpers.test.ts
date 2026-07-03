@@ -59,16 +59,29 @@ describe('artType', () => {
 });
 
 describe('taskState', () => {
-  it('reports done first, regardless of availability', () => {
-    expect(taskState(task({ done: true }), false).label).toBe('Done');
+  it('done wins over everything, including a lingering drafted flag', () => {
+    expect(taskState(task({ done: true, drafted: true }), false).label).toBe('Done');
   });
-  it('reports locked when unavailable', () => {
+  it('available === false is Locked', () => {
     expect(taskState(task(), false).cls).toBe('st-locked');
   });
-  it('distinguishes approval, input, and byte-driven states', () => {
-    expect(taskState(task({ who: 'draft' })).cls).toBe('st-draft');
-    expect(taskState(task({ who: 'you' })).cls).toBe('st-you');
-    expect(taskState(task({ who: 'does' })).cls).toBe('st-does');
+  it('a produced draft is Awaiting your approval (gold)', () => {
+    const s = taskState(task({ who: 'draft', drafted: true }), true);
+    expect(s.label).toBe('Awaiting your approval');
+    expect(s.cls).toBe('st-draft');
+  });
+  it('a draft byte has not produced yet is Up next, not awaiting', () => {
+    const s = taskState(task({ who: 'draft' }), true);
+    expect(s.label).toBe('Up next');
+    expect(s.cls).toBe('st-does');
+  });
+  it('a you-task is Your move', () => {
+    const s = taskState(task({ who: 'you' }), true);
+    expect(s.label).toBe('Your move');
+    expect(s.cls).toBe('st-you');
+  });
+  it('a does-task is Up next (byte queue)', () => {
+    expect(taskState(task({ who: 'does' }), true).label).toBe('Up next');
   });
 });
 
