@@ -48,12 +48,15 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
     case 'error':
       return { ...state, status: 'error', error: event.message };
     case 'exit':
-      // A non-zero exit, or an exit before a result, is a failure; a clean exit
-      // after we already ended stays ended.
+      // A result already succeeded → a trailing exit stays ended.
       if (state.status === 'ended') return state;
-      return event.code === 0
-        ? { ...state, status: 'ended' }
-        : { ...state, status: 'error', error: `claude exited with code ${event.code}` };
+      // Any exit while still running (no result yet) or already errored, and any
+      // non-zero exit, is a failure. Keep the original error message if we have one.
+      return {
+        ...state,
+        status: 'error',
+        error: state.error ?? `claude exited with code ${event.code}`,
+      };
     default:
       return state;
   }

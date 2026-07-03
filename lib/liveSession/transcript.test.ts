@@ -56,6 +56,16 @@ describe('reduceTranscript', () => {
     expect(ok.status).toBe('ended'); // a clean exit after result stays ended
   });
 
+  it('treats a clean exit before any result as an error', () => {
+    expect(run([{ kind: 'exit', code: 0 }]).status).toBe('error');
+  });
+
+  it('keeps an existing error when a clean exit follows', () => {
+    const s = run([{ kind: 'error', message: 'boom' }, { kind: 'exit', code: 0 }]);
+    expect(s.status).toBe('error');
+    expect(s.error).toBe('boom');
+  });
+
   it('does not mutate the input state', () => {
     const s0 = initialTranscript();
     reduceTranscript(s0, { kind: 'assistant-text', text: 'x' });
