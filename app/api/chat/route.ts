@@ -6,7 +6,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
-import { enforceDailyLimit } from '@/lib/firebase/serverUsage';
+import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
 import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
 
@@ -159,6 +159,7 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 2048,
       label: 'chat',
       tools: runnable.length ? [RUN_TASK_TOOL] : undefined,
+      onUsage: usageSink(uid, idToken, 'chat'),
     });
 
     const encoder = new TextEncoder();

@@ -10,7 +10,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
-import { enforceDailyLimit } from '@/lib/firebase/serverUsage';
+import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import {
   STRUCTURED_SCHEMAS,
@@ -165,6 +165,7 @@ export async function POST(req: Request): Promise<Response> {
   const context = briefToContext(serverBrief) ?? briefToContext(body.brief) ?? CODEPET_CONTEXT;
   const { schema } = KINDS[kind];
   const prompt = buildPrompt(kind, context, fields);
+  const onUsage = usageSink(uid, idToken, 'runTask');
 
   try {
     if (schema) {
@@ -175,6 +176,7 @@ export async function POST(req: Request): Promise<Response> {
         maxTokens: 4096,
         label: `run-task:${kind}`,
         schema,
+        onUsage,
       });
       return Response.json({ payload });
     }
@@ -184,6 +186,7 @@ export async function POST(req: Request): Promise<Response> {
       prompt,
       maxTokens: 4096,
       label: `run-task:${kind}`,
+      onUsage,
     });
     return Response.json({ text });
   } catch (err) {

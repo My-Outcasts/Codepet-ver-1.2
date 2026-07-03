@@ -10,6 +10,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 
 export const runtime = 'nodejs';
@@ -155,6 +156,7 @@ Decide, for THIS company at THIS stage, which departments have real work to do N
       maxTokens: 4096,
       label: 'scaffold',
       schema: SCAFFOLD_SCHEMA,
+      onUsage: usageSink(uid, idToken, 'scaffold'),
     });
     return Response.json({ scaffold });
   } catch (err) {

@@ -13,6 +13,28 @@ export const MODEL = 'claude-opus-4-8';
 /** Effort levels byte uses; all current routes run `low` (cheap, structured work). */
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+/**
+ * Normalized token usage for one model call. The client produces this shape (it owns
+ * it); a route can pass an `onUsage` sink to persist it (see lib/firebase/serverUsage).
+ * Keeping the type here means the client never imports Firebase — the dependency runs
+ * the other way (the sink imports this type).
+ */
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+}
+
+function toTokenUsage(usage: Anthropic.Usage | null | undefined): TokenUsage {
+  return {
+    inputTokens: usage?.input_tokens ?? 0,
+    outputTokens: usage?.output_tokens ?? 0,
+    cacheReadTokens: usage?.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: usage?.cache_creation_input_tokens ?? 0,
+  };
+}
+
 // Canonical failure kinds a generation can end in. Routes translate these to their
 // own error codes via aiErrorResponse() so the public API contract is unchanged.
 type Failure =
@@ -86,6 +108,8 @@ export interface GenerateOptions {
   schema?: Record<string, unknown> | null;
   /** Defaults to 'low' — the setting every current route uses. */
   effort?: Effort;
+  /** Optional sink for this call's token usage (e.g. persist per-user daily totals). */
+  onUsage?: (usage: TokenUsage) => void;
 }
 
 /**
@@ -116,6 +140,7 @@ export async function generateText(opts: GenerateOptions): Promise<string> {
   }
 
   logUsage(opts.label, startedAt, message.usage, message.stop_reason);
+  opts.onUsage?.(toTokenUsage(message.usage));
 
   if (message.stop_reason === 'refusal') throw new GenerationError({ kind: 'refused' });
   const text = extractText(message);
@@ -148,6 +173,8 @@ export interface StreamOptions {
   effort?: Effort;
   /** Optional tool set (e.g. byte's run_task tool in chat). */
   tools?: Anthropic.MessageCreateParams['tools'];
+  /** Optional sink for this call's token usage, fired when the stream completes. */
+  onUsage?: (usage: TokenUsage) => void;
 }
 
 /**
@@ -169,7 +196,10 @@ export function streamMessage(opts: StreamOptions) {
   });
   stream
     .finalMessage()
-    .then((m) => logUsage(opts.label, startedAt, m.usage, m.stop_reason))
+    .then((m) => {
+      logUsage(opts.label, startedAt, m.usage, m.stop_reason);
+      opts.onUsage?.(toTokenUsage(m.usage));
+    })
     .catch(() => {
       /* aborted or errored mid-stream — the route surfaces the error to the client */
     });

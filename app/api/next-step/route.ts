@@ -10,6 +10,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 
 export const runtime = 'nodejs';
@@ -106,6 +107,7 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 1024,
       label: 'next-step',
       schema,
+      onUsage: usageSink(uid, idToken, 'nextStep'),
     });
     const pick = typeof parsed.pick === 'number' ? Math.trunc(parsed.pick) : -1;
     if (pick < 0 || pick >= tasks.length) {

@@ -12,6 +12,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { DEPTS_SEED } from '@/lib/data';
 
@@ -158,6 +159,7 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 8192,
       label: 'personalize',
       schema: PERSONALIZE_SCHEMA,
+      onUsage: usageSink(uid, idToken, 'personalize'),
     });
 
     // Keep only departments whose key matches the seed and whose task count lines up,
