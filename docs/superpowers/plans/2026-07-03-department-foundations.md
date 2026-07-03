@@ -26,10 +26,12 @@
 ### Task 1: The `lib/ai/departments.ts` module (data + composers, TDD)
 
 **Files:**
+
 - Create: `lib/ai/departments.ts`
 - Test: `lib/ai/departments.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `interface DepartmentFoundation { mandate: string; skills: string[]; stageFocus: Record<string, string>; antipatterns: string[]; }`
   - `const DEPARTMENT_FOUNDATIONS: Record<string, DepartmentFoundation>` (8 keys)
@@ -43,11 +45,7 @@ Create `lib/ai/departments.test.ts`:
 ```ts
 import { describe, it, expect } from 'vitest';
 import { OB_STAGES } from '../data';
-import {
-  DEPARTMENT_FOUNDATIONS,
-  departmentBlock,
-  departmentBrief,
-} from './departments';
+import { DEPARTMENT_FOUNDATIONS, departmentBlock, departmentBrief } from './departments';
 
 const KEYS = ['eng', 'design', 'mkt', 'sales', 'support', 'fin', 'ops', 'legal'];
 
@@ -60,7 +58,10 @@ describe('DEPARTMENT_FOUNDATIONS completeness', () => {
       const f = DEPARTMENT_FOUNDATIONS[k];
       expect(f.mandate.trim().length, `${k} mandate`).toBeGreaterThan(0);
       expect(f.skills.length, `${k} skills`).toBeGreaterThan(0);
-      expect(f.skills.every((s) => s.trim().length > 0), `${k} skills non-empty`).toBe(true);
+      expect(
+        f.skills.every((s) => s.trim().length > 0),
+        `${k} skills non-empty`,
+      ).toBe(true);
       expect(f.antipatterns.length, `${k} antipatterns`).toBeGreaterThan(0);
     }
   });
@@ -433,9 +434,11 @@ git commit -m "feat(departments): per-department foundations (mandate + skills +
 ### Task 2: Thread `departmentBlock` into `/api/scaffold`
 
 **Files:**
+
 - Modify: `app/api/scaffold/route.ts`
 
 **Interfaces:**
+
 - Consumes: `departmentBlock(k, stage)` from `@/lib/ai/departments` (Task 1).
 
 - [ ] **Step 1: Import the composer**
@@ -448,12 +451,12 @@ import { departmentBlock } from '@/lib/ai/departments';
 
 - [ ] **Step 2: Feed each department's foundation block into the prompt**
 
-Find the `deptList` construction (it currently maps the `DEPARTMENTS` array using `d.role`, roughly: `const deptList = DEPARTMENTS.map((d) => \`- ${d.k} (${d.name}): ${d.role}\`).join('\n');`). Replace it with a version that emits each department's full foundation block for the founder's `stage` (the `stage` variable already exists in scope, resolved above the prompt):
+Find the `deptList` construction (it currently maps the `DEPARTMENTS` array using `d.role`, roughly: `const deptList = DEPARTMENTS.map((d) => \`- ${d.k} (${d.name}): ${d.role}\`).join('\n');`). Replace it with a version that emits each department's full foundation block for the founder's `stage`(the`stage` variable already exists in scope, resolved above the prompt):
 
 ```ts
-  const deptList = DEPARTMENTS.map(
-    (d) => `- ${d.k} (${d.name}):\n${departmentBlock(d.k, stage)}`,
-  ).join('\n\n');
+const deptList = DEPARTMENTS.map(
+  (d) => `- ${d.k} (${d.name}):\n${departmentBlock(d.k, stage)}`,
+).join('\n\n');
 ```
 
 Leave the `DEPARTMENTS` array, the schema, the generation call, and everything else unchanged. (The `role` field is now unused by the prompt; leaving it in the array is harmless — do not remove it in this task to keep the diff minimal.)
@@ -466,6 +469,7 @@ Leave the `DEPARTMENTS` array, the schema, the generation call, and everything e
 ./node_modules/.bin/prettier --write app/api/scaffold/route.ts && ./node_modules/.bin/prettier --check app/api/scaffold/route.ts
 ./node_modules/.bin/vitest run
 ```
+
 Expected: clean/pass. (Prompt-only change; no unit test — verified manually in Task 4.)
 
 - [ ] **Step 4: Commit**
@@ -480,12 +484,14 @@ git commit -m "feat(departments): scaffold generates tasks from each department'
 ### Task 3: Thread `departmentBrief` into `/api/run-task` + `deptKey` passthrough
 
 **Files:**
+
 - Modify: `app/api/run-task/route.ts`
 - Modify: `lib/ai/runTask.ts` (`RunArgs`)
 - Modify: `lib/store.tsx` (two `runByteTask` calls)
 - Modify: `components/artifact/ArtifactModal.tsx` (two `runByteTask` calls)
 
 **Interfaces:**
+
 - Consumes: `departmentBrief(k)` from `@/lib/ai/departments` (Task 1).
 - Produces: an optional `deptKey?: string` on `RunArgs` and the run-task request; when present, the deliverable prompt includes the department brief.
 
@@ -502,6 +508,7 @@ In `lib/ai/runTask.ts`, find `export interface RunArgs {` (it has `deptName?: st
 - [ ] **Step 2: Pass `deptKey` from the four call sites**
 
 Each caller has the department object `d` (with `.k`). Add `deptKey: d.k,` alongside the existing `deptName` in each `runByteTask({ ... })` call:
+
 - `lib/store.tsx` — the call in `runTaskInChat` (~line 862) and the call in `reviseTaskInChat` (~line 906). Both have `d` in scope.
 - `components/artifact/ArtifactModal.tsx` — the produce call (~line 320) and the revise call (~line 351). Use the modal's department object key (confirm its variable name — `dept`/`d`; use `<that>.k`).
 
@@ -510,6 +517,7 @@ If any of these four call sites does not have a department object with `.k` in s
 - [ ] **Step 3: Parse + inject `deptKey` in `/api/run-task/route.ts`**
 
 Find the `fields` type/object (it declares `deptName?: string` and parses `deptName: typeof body.deptName === 'string' ? body.deptName : undefined`). Add the parallel `deptKey`:
+
 - In the `fields` type block: `deptKey?: string;`
 - In the parse block: `deptKey: typeof body.deptKey === 'string' ? body.deptKey : undefined,`
 
@@ -535,6 +543,7 @@ And, in `buildPrompt`, right after the `Department: ${deptName}` line, add the b
 ./node_modules/.bin/prettier --write app/api/run-task/route.ts lib/ai/runTask.ts lib/store.tsx components/artifact/ArtifactModal.tsx && ./node_modules/.bin/prettier --check app/api/run-task/route.ts lib/ai/runTask.ts lib/store.tsx components/artifact/ArtifactModal.tsx
 ./node_modules/.bin/vitest run
 ```
+
 Expected: all clean/pass.
 
 - [ ] **Step 5: Commit**
@@ -563,6 +572,7 @@ cd <worktree>
 - [ ] **Step 2: Manual proof (localhost, signed in)**
 
 Copy `.env.local` from the main checkout into the worktree, start `PORT=3013 ./node_modules/.bin/next dev --webpack`, hand the URL to the user to sign in. Then:
+
 1. On a fresh test company, complete onboarding (or "Re-plan for my stage") at an **early** stage (e.g. Prototype) → the generated department tasks should read as validation/product-first and specific to the craft (e.g. Sales = "talk to 20–30 people," not "build a pipeline").
 2. Change stage (advance) or re-plan at a **later** stage (e.g. Launched) → the same departments' tasks visibly shift toward launch/scale.
 3. Run one task in a couple of departments (e.g. Marketing, Finance) → the deliverable reads like that specialist wrote it.
@@ -580,6 +590,7 @@ lsof -ti:3013 | xargs kill -9 2>/dev/null || true
 ## Self-Review
 
 **Spec coverage:**
+
 - `lib/ai/departments.ts` module (types + data + composers) → Task 1. ✓
 - All 8 departments' verbatim content, 6-stage focus, anti-patterns → Task 1 (embedded). ✓
 - Completeness test (8 keys, 6 stage keys each, non-empty) + composer tests → Task 1. ✓
