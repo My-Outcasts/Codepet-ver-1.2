@@ -290,6 +290,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (briefData: CompanyBrief) => {
       toggleCopilot(false); // open the chat panel so the greeting is seen
       const gid = newId();
+      // Fire firstrun.action_offered at most once — when an action first appears,
+      // whether it came from the synchronous authored fallback or the async byte pick.
+      let offered = false;
       const seed = (ns: NextStep | null) => {
         const g = buildFirstRunGreeting(briefData, ns);
         setChatMessages((prev) => {
@@ -303,6 +306,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const i = prev.findIndex((m) => m.id === gid);
           return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
         });
+        if (g.action && !offered) {
+          offered = true;
+          track('firstrun.action_offered', { dept: g.action.deptK });
+        }
       };
       const fb = nextAction();
       const fallback: NextStep | null = fb
@@ -310,8 +317,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         : null;
       setNextStep(fallback);
       seed(fallback);
-      if (!fallback) return;
-      track('firstrun.action_offered', { dept: fallback.deptK });
+      // Always ask byte for the best first move — even when the synchronous authored
+      // fallback is momentarily null (e.g. the roadmap isn't settled the instant
+      // onboarding finishes). Recovering the action here keeps the greeting's
+      // "Do it with me" — the whole B→C bridge — from silently vanishing.
+      // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
       fetchNextStep()
         .then((pick) => {
           if (pick) {
