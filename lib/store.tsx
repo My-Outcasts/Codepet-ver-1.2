@@ -39,6 +39,7 @@ import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
 import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
+import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
 import { nextAction, setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
@@ -64,6 +65,8 @@ export interface ChatMessage {
   result?: { deptK: string; taskTitle: string; type: string; approved?: boolean };
   /** A "stage complete — advance?" prompt: the rung the founder can move up to. */
   advance?: { toStage: string };
+  /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
+  setup?: { category: string; name: string };
 }
 
 const newId = (): string =>
@@ -151,6 +154,7 @@ interface AppState {
   openDeliverable: (item: LibItem) => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
   toggleEnv: (category: string, index: number) => void;
+  setupCapability: (category: string, name: string) => void;
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
@@ -778,6 +782,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
+  // Idempotent (never flips an already-on item off) and persisted like toggleEnv.
+  const setupCapability = useCallback(
+    (category: string, name: string) => {
+      const idx = resolveEnvIndex(ENV, category, name);
+      if (idx === -1) return;
+      const item = ENV[category][idx];
+      if (item.s) return; // already on — nothing to do
+      item.s = 1;
+      bump();
+      if (companyId) {
+        persistEnv(companyId, envStateFromCatalog()).catch((err) => {
+          console.error('[store] persistEnv (setup) failed', err);
+        });
+      }
+    },
+    [companyId, bump],
+  );
+
   // Produce a task's deliverable INLINE in chat — byte's "run it from here." Runs the
   // exact same generation the department panel uses (runByteTask → applyResult), then
   // leaves a result card in the thread for the founder to approve. Reads live DEPTS, so
@@ -996,13 +1019,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           .map((t) => ({ deptK: d.k, deptName: d.name, taskTitle: t.t, hint: t.d ?? '' })),
       );
 
+      // The currently-off toolkit items byte may offer to turn on from this turn.
+      const envSetup = collectSetupItems(ENV);
+
       (async () => {
         let acc = '';
         let errCode = '';
         let pending: { deptK: string; taskTitle: string } | null = null;
         let navChip: NavChip | undefined;
+        let setupChip: { category: string; name: string } | undefined;
         try {
-          for await (const ev of streamByteChat(history, deptSummary, openTasks)) {
+          for await (const ev of streamByteChat(history, deptSummary, openTasks, envSetup)) {
             if (ev.type === 'action') {
               pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
               continue;
@@ -1010,6 +1037,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             if (ev.type === 'nav') {
               // Resolve to a real chip client-side (drops a stale/unknown destination).
               navChip = resolveNavChip(ev.dest, ev.target, DEPTS);
+              continue;
+            }
+            if (ev.type === 'setup') {
+              setupChip = { category: ev.category, name: ev.name };
               continue;
             }
             acc += ev.text;
@@ -1033,14 +1064,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? `On it — running “${pending.taskTitle}”.`
             : navChip
               ? 'Here you go.'
-              : fallback);
+              : setupChip
+                ? 'I can turn that on for you — one tap.'
+                : fallback);
         setChatMessages((prev) =>
-          prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText, nav: navChip } : m)),
+          prev.map((m) =>
+            m.id === byteMsg.id ? { ...m, text: finalText, nav: navChip, setup: setupChip } : m,
+          ),
         );
         setChatStreaming(false);
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
         // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending || navChip)) {
+        if (companyId && (acc.trim() || pending || navChip || setupChip)) {
           persistChatMessage(companyId, {
             id: byteMsg.id,
             role: 'byte',
@@ -1097,6 +1132,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openDeliverable,
       approveTask,
       toggleEnv,
+      setupCapability,
       chatMessages,
       chatStreaming,
       sendChat,
@@ -1150,6 +1186,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openDeliverable,
       approveTask,
       toggleEnv,
+      setupCapability,
       chatMessages,
       chatStreaming,
       sendChat,
