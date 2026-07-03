@@ -5,6 +5,8 @@ import { budgetState, byteDuringLine, DANGER_PCT } from '@/lib/buildCoach';
 import { requestBuildPlan } from '@/lib/ai/buildPlan';
 import { buildOpeningPrompt, terminalCommand } from '@/lib/armSession';
 import { armBuildSession } from '@/app/actions/build';
+import { getCapability } from '@/app/actions/install';
+import { LiveChat } from './build/LiveChat';
 import type { BytePlan } from '@/lib/ai/plan';
 import type { LiveState } from '@/lib/liveBuild';
 import type { TrackEvent } from '@/lib/tracking';
@@ -183,11 +185,19 @@ function DuringStep({
   live,
   unlocked,
   launchCommand,
+  local,
+  buildSessionId,
+  projectDir,
+  brief,
 }: {
   plan: BytePlan | null;
   live: LiveState | null;
   unlocked: boolean;
   launchCommand: string | null;
+  local: boolean;
+  buildSessionId: string | null;
+  projectDir: string;
+  brief: string;
 }) {
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const actions = live?.actionCount ?? 0;
@@ -199,6 +209,14 @@ function DuringStep({
   return (
     <div>
       <div className="bc-panel-h">Step 2 · building now</div>
+      {local && plan && projectDir && buildSessionId && (
+        <LiveChat
+          buildSessionId={buildSessionId}
+          projectDir={projectDir}
+          plan={plan}
+          brief={brief}
+        />
+      )}
       <CoachBubble
         mood={line?.mood ?? (bs.warn ? 'worried' : 'idle')}
         say={
@@ -399,6 +417,8 @@ export function BuildCoachView() {
   const [live, setLive] = useState<LiveState | null>(null);
   const [launchCommand, setLaunchCommand] = useState<string | null>(null);
   const [arming, setArming] = useState(false);
+  const [projectDir, setProjectDir] = useState('');
+  const [local, setLocal] = useState(false);
 
   const idx = STEPS.indexOf(step);
   const actions = live?.actionCount ?? 0;
@@ -426,22 +446,36 @@ export function BuildCoachView() {
       const id = crypto.randomUUID();
       const dirs = await loadProjectDirs(companyId);
       const projectDir = dirs.find((p) => p.name === project)?.path ?? (project.trim() || '.');
-      const token = await ensureIngestToken(companyId);
-      const command = terminalCommand(projectDir, buildOpeningPrompt(plan, brief));
-      const res = await armBuildSession({
-        buildSessionId: id,
-        projectDir,
-        plan,
-        brief,
-        companyId,
-        token,
-        apiUrl: window.location.origin,
-      });
-      const launched = res.ok && res.launched;
-      setLaunchCommand(launched ? null : command);
-      setBuildSessionId(id);
-      setLive(null);
-      setStep('during');
+      setProjectDir(projectDir);
+      const cap = await getCapability();
+      if (cap.mode === 'local') {
+        // Local: LiveChat will POST /api/build-session/start and stream the real
+        // claude session into the UI — no Terminal, no arm-file.
+        setLocal(true);
+        setLaunchCommand(null);
+        setBuildSessionId(id);
+        setLive(null);
+        setStep('during');
+      } else {
+        // Remote: fall back to the copy-paste command + hook meter.
+        setLocal(false);
+        const command = terminalCommand(projectDir, buildOpeningPrompt(plan, brief));
+        const token = await ensureIngestToken(companyId);
+        const res = await armBuildSession({
+          buildSessionId: id,
+          projectDir,
+          plan,
+          brief,
+          companyId,
+          token,
+          apiUrl: window.location.origin,
+        });
+        const launched = res.ok && res.launched;
+        setLaunchCommand(launched ? null : command);
+        setBuildSessionId(id);
+        setLive(null);
+        setStep('during');
+      }
     } finally {
       setArming(false);
     }
@@ -455,6 +489,8 @@ export function BuildCoachView() {
       setBuildSessionId(null);
       setLive(null);
       setLaunchCommand(null);
+      setProjectDir('');
+      setLocal(false);
       return;
     }
     setStep(STEPS[idx + 1]);
@@ -499,7 +535,16 @@ export function BuildCoachView() {
           />
         )}
         {step === 'during' && (
-          <DuringStep plan={plan} live={live} unlocked={unlocked} launchCommand={launchCommand} />
+          <DuringStep
+            plan={plan}
+            live={live}
+            unlocked={unlocked}
+            launchCommand={launchCommand}
+            local={local}
+            buildSessionId={buildSessionId}
+            projectDir={projectDir}
+            brief={brief}
+          />
         )}
         {step === 'end' && (
           <EndStep

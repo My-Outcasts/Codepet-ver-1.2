@@ -7678,3 +7678,13 @@ body {
   color: var(--t-2);
   border: 1px solid var(--hairline);
 }
+
+/* live chat (in-UI claude transcript, DURING step) */
+.lc-wrap { margin: 8px 0 14px; }
+.lc-feed { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; padding: 10px; background: var(--panel, #faf7ff); border-radius: 12px; }
+.lc-msg { white-space: pre-wrap; line-height: 1.4; }
+.lc-tool { font-size: 13px; opacity: .8; }
+.lc-tool.err { color: #c0392b; }
+.lc-tool-sum { opacity: .7; }
+.lc-err { color: #c0392b; }
+.lc-done { opacity: .6; font-size: 13px; }
