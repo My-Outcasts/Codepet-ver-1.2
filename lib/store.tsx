@@ -46,8 +46,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
-  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>"). */
-  action?: { label: string; deptK: string; taskTitle: string };
+  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
+   * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
+   * opening the department run modal (runBriefedTask). */
+  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
   /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
   brief?: boolean;
   /** byte is producing a deliverable for this message right now (inline run). */
@@ -63,6 +65,11 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 import type { CompanyBrief } from './firebase/schema';
+import {
+  buildRevealSummary,
+  buildFirstRunGreeting,
+  type RevealSummary,
+} from './onboarding/firstRun';
 import { EMPTY_TRACKING, type TrackingSummary } from './tracking';
 
 export type View =
@@ -99,6 +106,8 @@ interface AppState {
   toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
+  /** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
+  scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
@@ -140,6 +149,8 @@ interface AppState {
   approveChatResult: (deptK: string, taskTitle: string) => void;
   /** Open an inline chat result the minimal way (site → new tab, else copy). */
   openChatResult: (deptK: string, taskTitle: string) => void;
+  /** Drop a chat message's one-tap action once it has been used. */
+  dismissChatAction: (msgId: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
   toastMsg: string;
@@ -227,6 +238,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstApproveTracked = useRef(false);
+  const scaffoldedInWizard = useRef(false);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -316,6 +329,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  // First-run only: byte opens chat and greets the founder by name with the single best
+  // first move as a one-tap INLINE action (produces the deliverable in-thread). Seeds
+  // immediately from the authored fallback, then upgrades to byte's own pick when
+  // /api/next-step resolves — the greeting message updates in place (stable id).
+  const greetFirstRun = useCallback(
+    (briefData: CompanyBrief) => {
+      toggleCopilot(false); // open the chat panel so the greeting is seen
+      const gid = newId();
+      // Fire firstrun.action_offered at most once — when an action first appears,
+      // whether it came from the synchronous authored fallback or the async byte pick.
+      let offered = false;
+      const seed = (ns: NextStep | null) => {
+        const g = buildFirstRunGreeting(briefData, ns);
+        setChatMessages((prev) => {
+          const msg: ChatMessage = {
+            id: gid,
+            role: 'byte',
+            text: g.text,
+            ts: Date.now(),
+            action: g.action,
+          };
+          const i = prev.findIndex((m) => m.id === gid);
+          return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+        });
+        if (g.action && !offered) {
+          offered = true;
+          track('firstrun.action_offered', { dept: g.action.deptK });
+        }
+      };
+      const fb = nextAction();
+      const fallback: NextStep | null = fb
+        ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+        : null;
+      setNextStep(fallback);
+      seed(fallback);
+      // Always ask byte for the best first move — even when the synchronous authored
+      // fallback is momentarily null (e.g. the roadmap isn't settled the instant
+      // onboarding finishes). Recovering the action here keeps the greeting's
+      // "Do it with me" — the whole B→C bridge — from silently vanishing.
+      // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
+      fetchNextStep()
+        .then((pick) => {
+          if (pick) {
+            setNextStep(pick);
+            seed(pick);
+          }
+        })
+        .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
+    },
+    [toggleCopilot],
+  );
+
+  // Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
+  // so the founder watches byte build their actual company instead of a fake animation.
+  // Marks scaffoldedInWizard so finishOnboarding won't run it a second time. Returns a
+  // reveal summary read from the now-live DEPTS (ok=false ⇒ generation failed, seed kept).
+  const scaffoldFromOnboarding = useCallback(
+    async (briefData: CompanyBrief): Promise<RevealSummary> => {
+      scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
+      if (!companyId) return buildRevealSummary(DEPTS, false);
+      const changed = await scaffoldCompany(companyId, briefData);
+      if (changed > 0) bump();
+      return buildRevealSummary(DEPTS, changed > 0);
+    },
+    [companyId, bump],
+  );
+
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
@@ -328,19 +409,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (companyId) {
         completeOnboarding(companyId, briefData)
           .then(() => {
-            // Part 1: once the brief is persisted, byte generates the stage-aware
-            // company (active/dormant departments + tasks) and applies + persists it.
-            // Best-effort — on any failure the current departments stay. Skipped when
-            // no brief was given (a "skip" keeps the seed).
-            if (!briefData) return;
+            // The wizard's analysis step already scaffolded (the real reveal). Only
+            // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
+            if (!briefData || scaffoldedInWizard.current) return;
             return scaffoldCompany(companyId, briefData).then((changed) => {
-              if (changed) bump(); // re-render with the now-generated DEPTS
+              if (changed) bump();
             });
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
       }
+      if (briefData) greetFirstRun(briefData);
     },
-    [companyId, bump],
+    [companyId, bump, greetFirstRun],
   );
 
   // Manual re-plan: regenerate the stage-aware company for the current account
@@ -739,6 +819,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!d || !t) return;
       const type = artType(t);
       approveTask(t, d, type);
+      if (!firstApproveTracked.current) {
+        firstApproveTracked.current = true;
+        track('firstrun.first_approve', { dept: deptK });
+      }
       setChatMessages((prev) =>
         prev.map((m) =>
           m.result && m.result.deptK === deptK && m.result.taskTitle === taskTitle
@@ -749,6 +833,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [approveTask],
   );
+
+  // Drop a chat message's one-tap action once it's been used (e.g. after the
+  // first-run greeting's "Do it with me" is tapped) so it can't be re-run.
+  const dismissChatAction = useCallback((msgId: string) => {
+    setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, action: undefined } : m)));
+  }, []);
 
   // Open an inline chat result the minimal way (site → new tab, else copy) — reuses
   // the shared openDeliverable behavior, built from the live task.
@@ -896,6 +986,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSide,
       onboarding,
       finishOnboarding,
+      scaffoldFromOnboarding,
       regenerateCompany,
       advanceStage,
       brief,
@@ -922,6 +1013,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reviseTaskInChat,
       approveChatResult,
       openChatResult,
+      dismissChatAction,
       nextStep,
       toastMsg,
       toast,
@@ -943,6 +1035,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSide,
       onboarding,
       finishOnboarding,
+      scaffoldFromOnboarding,
       regenerateCompany,
       advanceStage,
       brief,
@@ -969,6 +1062,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reviseTaskInChat,
       approveChatResult,
       openChatResult,
+      dismissChatAction,
       nextStep,
       toastMsg,
       toast,

@@ -1,7 +1,10 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL } from '@/lib/data';
+import { DEPTS, OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL } from '@/lib/data';
+import { buildRevealSummary, type RevealSummary } from '@/lib/onboarding/firstRun';
+import type { CompanyBrief } from '@/lib/firebase/schema';
+import { track } from '@/lib/analytics';
 import { Byte } from './Byte';
 
 interface ObData {
@@ -36,6 +39,22 @@ const AN_LINES = [
   'Cross-checking your space & stage',
   'Drafting your roadmap to launch',
 ];
+
+// The wizard's collected answers → the CompanyBrief byte scaffolds + grounds work in.
+function briefFromData(data: ObData): CompanyBrief {
+  return {
+    founderName: data.name || undefined,
+    role: data.roleLabel || undefined,
+    tech: OB_TECH.find(([, k]) => k === data.tech)?.[0],
+    stage: OB_STAGES[data.stage],
+    projectName: data.projName || undefined,
+    oneLiner: data.oneLiner || undefined,
+    notes: data.proj || undefined,
+    link: data.link || undefined,
+    categories: data.categories.length ? data.categories : undefined,
+    audience: data.audience || undefined,
+  };
+}
 
 function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) => void }) {
   const n = OB_STAGES.length,
@@ -102,7 +121,7 @@ function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) =>
 }
 
 export function Onboarding() {
-  const { onboarding, finishOnboarding, toast } = useApp();
+  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding } = useApp();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<ObData>({
     name: '',
@@ -119,21 +138,57 @@ export function Onboarding() {
   });
   const [anShown, setAnShown] = useState(0);
   const [anDone, setAnDone] = useState(false);
+  const [reveal, setReveal] = useState<RevealSummary | null>(null);
+  const [slow, setSlow] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // step 6: run the analysis animation
+  // step 6: play the analysis animation AND run the real scaffold. "See what I found"
+  // unlocks only when both the animation has finished and the scaffold has resolved.
   useEffect(() => {
     if (step !== 6) {
       setAnShown(0);
       setAnDone(false);
+      if (step < 6) {
+        setReveal(null);
+        setSlow(false);
+      }
       return;
     }
     setAnShown(0);
     setAnDone(false);
+    setReveal(null);
+    setSlow(false);
+    let done = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     AN_LINES.forEach((_, i) => timers.push(setTimeout(() => setAnShown(i + 1), i * 640)));
     timers.push(setTimeout(() => setAnDone(true), AN_LINES.length * 640 + 300));
-    return () => timers.forEach(clearTimeout);
+    // subtle "still working…" affordance if the API runs long
+    timers.push(
+      setTimeout(
+        () => {
+          if (!done) setSlow(true);
+        },
+        AN_LINES.length * 640 + 3000,
+      ),
+    );
+    // the real work
+    scaffoldFromOnboarding(briefFromData(data)).then((sum) => {
+      if (done) return;
+      setReveal(sum);
+      if (sum.ok) track('firstrun.scaffold_shown', { depts: sum.deptCount, tasks: sum.taskCount });
+    });
+    // hard safety net: never leave the founder stuck on the analysis screen
+    timers.push(
+      setTimeout(() => {
+        if (!done) setReveal(buildRevealSummary(DEPTS, false));
+      }, 20000),
+    );
+    return () => {
+      done = true;
+      timers.forEach(clearTimeout);
+    };
+    // data is complete + frozen by step 6; scaffoldFromOnboarding is stable (useCallback)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   // focus the name field on step 1
@@ -153,20 +208,9 @@ export function Onboarding() {
     }));
   const enterApp = () => finishOnboarding();
   const finish = () => {
-    finishOnboarding({
-      founderName: data.name || undefined,
-      role: data.roleLabel || undefined,
-      tech: OB_TECH.find(([, k]) => k === data.tech)?.[0],
-      stage: OB_STAGES[data.stage],
-      projectName: data.projName || undefined,
-      oneLiner: data.oneLiner || undefined,
-      notes: data.proj || undefined,
-      link: data.link || undefined,
-      categories: data.categories.length ? data.categories : undefined,
-      audience: data.audience || undefined,
-    });
+    finishOnboarding(briefFromData(data));
     setTimeout(
-      () => toast('Your roadmap is ready — byte mapped 9 steps across 8 departments.'),
+      () => toast('Your roadmap is ready — byte mapped your company across your departments.'),
       400,
     );
   };
@@ -396,54 +440,72 @@ export function Onboarding() {
         </div>
       </>
     );
-    foot = anDone ? (
-      <div className="ob-foot">
-        <div className="ob-prog">
-          <div className="ob-bar">
-            <i style={{ width: `${pct}%` }} />
+    foot =
+      anDone && reveal ? (
+        <div className="ob-foot">
+          <div className="ob-prog">
+            <div className="ob-bar">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+            <span className="rstep">
+              Step {step + 1} of {OB_TOTAL}
+            </span>
           </div>
-          <span className="rstep">
-            Step {step + 1} of {OB_TOTAL}
-          </span>
+          <span className="grow" />
+          <button className="btnlg" onClick={() => setStep(7)}>
+            See what I found
+          </button>
         </div>
-        <span className="grow" />
-        <button className="btnlg" onClick={() => setStep(7)}>
-          See what I found
-        </button>
-      </div>
-    ) : null;
+      ) : slow ? (
+        <div className="ob-foot">
+          <span className="rstep">Still building your company…</span>
+        </div>
+      ) : null;
   } else {
     const rl = (data.roleLabel || 'founder').toLowerCase();
+    const r = reveal;
     body = (
       <>
         <h2>Here&apos;s your company{data.name ? ', ' + data.name : ''}.</h2>
         <p>
-          You&apos;re a <b>{rl}</b> at the <b>{OB_STAGES[data.stage].toLowerCase()}</b> stage. I
-          built your roadmap and staffed all eight departments — here&apos;s what I&apos;ll take off
-          your plate:
+          You&apos;re a <b>{rl}</b> at the <b>{OB_STAGES[data.stage].toLowerCase()}</b> stage.
+          {r && r.ok
+            ? ` I built your roadmap and staffed ${r.deptCount} departments — ${r.taskCount} tasks already prepped:`
+            : ' I built your roadmap and staffed your departments — here’s what I’ll take off your plate:'}
         </p>
         <div className="val">
-          <div className="vrow">
-            <div className="vi">✦</div>
-            <div>
-              <b>A living roadmap</b> — staged from &quot;{OB_STAGES[data.stage]}&quot; all the way
-              to launch.
-            </div>
-          </div>
-          <div className="vrow">
-            <div className="vi">✦</div>
-            <div>
-              <b>Real work, done with you</b> — 11 tasks already prepped across Engineering,
-              Marketing, Legal &amp; more.
-            </div>
-          </div>
-          <div className="vrow">
-            <div className="vi">✦</div>
-            <div>
-              <b>You stay in control</b> — I draft &amp; build; you approve. Nothing ships behind
-              your back.
-            </div>
-          </div>
+          {r && r.ok && r.sampleTasks.length ? (
+            r.sampleTasks.map((t) => (
+              <div className="vrow" key={t}>
+                <div className="vi">✦</div>
+                <div>
+                  <b>{t}</b>
+                </div>
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="vrow">
+                <div className="vi">✦</div>
+                <div>
+                  <b>A living roadmap</b> — staged from &quot;{OB_STAGES[data.stage]}&quot; to
+                  launch.
+                </div>
+              </div>
+              <div className="vrow">
+                <div className="vi">✦</div>
+                <div>
+                  <b>Real work, done with you</b> — tasks prepped across your departments.
+                </div>
+              </div>
+              <div className="vrow">
+                <div className="vi">✦</div>
+                <div>
+                  <b>You stay in control</b> — I draft &amp; build; you approve.
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </>
     );
