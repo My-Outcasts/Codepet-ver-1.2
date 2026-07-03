@@ -2392,31 +2392,76 @@ body {
   text-align: center;
   padding: 20px 0;
 }
-/* ===== Library: filter bar + preview grid ===== */
+/* ==== Library ==== */
+/* masthead: display title + monospace specimen index */
+.lib-mast {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.lib-mast h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.lib-idx {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--t-4);
+  margin-top: 11px;
+}
+.lib-say {
+  max-width: 300px;
+  text-align: right;
+  margin-top: 0;
+}
+/* state pip — filled teal = live/shipped, hollow ring = draft */
+.lib-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-tint);
+  flex: none;
+}
+.lib-pip.hollow {
+  background: transparent;
+  border: 1.5px solid var(--t-4);
+  box-shadow: none;
+}
+
+/* filter row — monospace catalog tabs */
 .lib-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 26px 2px;
+  padding: 18px 26px 2px;
 }
 .lib-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 4px;
 }
 .lib-chip {
-  font-size: 12px;
+  font-family: var(--sans);
   font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   color: var(--t-3);
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: 99px;
-  padding: 5px 13px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  box-shadow: var(--sh-s);
+  gap: 7px;
   transition:
     color 0.14s,
     border-color 0.14s,
@@ -2424,159 +2469,167 @@ body {
 }
 .lib-chip:hover {
   color: var(--t-1);
-  border-color: var(--t-4);
+  background: var(--surface);
+  border-color: var(--hairline);
 }
 .lib-chip.on {
   color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--t-1);
+  border-color: var(--t-1);
 }
 .lib-chip .n {
-  font-size: 10.5px;
-  opacity: 0.75;
+  font-size: 10px;
+  opacity: 0.5;
   font-variant-numeric: tabular-nums;
 }
-.lib-count {
-  margin-left: auto;
-  font-size: 12px;
+
+/* status groups — structure comes from Live vs Drafts, not decoration */
+.lib-group:last-child {
+  padding-bottom: 44px;
+}
+.lib-ghead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--t-3);
+  padding: 20px 26px 14px;
+}
+.lib-ghead .gn {
   color: var(--t-4);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
+/* department avatar chip in the group header (colours come from .c-<dept>) */
+.lib-gav {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--sans);
+  font-size: 8.5px;
+  font-weight: 700;
+  flex: none;
+}
+
+/* compact card grid */
+/* vertical stack — one row per item, filling the full content width */
 .lib-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
-  gap: 16px;
-  align-content: start;
-  padding: 16px 26px 44px;
-}
-.lib-card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--hairline);
-  border-radius: 14px;
+  gap: 10px;
+  padding: 0 26px;
+}
+
+/* compact row — type + title + summary on the left, live/draft status on the right */
+/* the meta column is a FIXED width so the status badges line up across every row */
+.lib-tile {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 112px;
+  align-items: center;
+  gap: 22px;
+  padding: 15px 18px 15px 20px;
   background: var(--surface);
-  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 13px;
   cursor: pointer;
   box-shadow: var(--sh-s);
   transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease;
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
 }
-.lib-card:hover {
+.lib-tile:hover {
   transform: translateY(-2px);
   box-shadow: var(--sh-m);
 }
-/* per-type tinted preview — hue passed in via --tint/--line/--ink-h (info-box house style) */
-.lib-prev {
-  position: relative;
-  height: 142px;
-  overflow: hidden;
-  background: var(--tint, var(--surface-2));
-  border-bottom: 1px solid var(--line, var(--hairline));
-}
-.lib-prev .lib-snip {
-  padding: 36px 16px 16px;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.62;
-  color: var(--t-3);
-  white-space: pre-wrap;
-}
-.lib-prev.txt-doc .lib-snip {
-  font-family: var(--sans);
-  font-size: 12.5px;
-  color: var(--t-2);
-  line-height: 1.55;
-}
-.lib-prev:after {
+/* type-colored spine */
+.lib-tile::before {
   content: '';
   position: absolute;
   left: 0;
-  right: 0;
-  bottom: 0;
-  height: 46px;
-  background: linear-gradient(transparent, var(--tint, var(--surface-2)));
-  pointer-events: none;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--c, var(--t-4));
+  opacity: 0.85;
 }
-.lib-prev.site {
-  background: #fff;
-  pointer-events: none;
-}
-.lib-prev.site:after {
-  display: none;
-}
-.lib-prev.site iframe {
-  width: 250%;
-  height: 345px;
-  border: 0;
-  transform: scale(0.4);
-  transform-origin: top left;
-}
-/* the type label lives ON the tint as a floating colored caption (no solid pill) */
-.lib-tag {
-  position: absolute;
-  top: 12px;
-  left: 15px;
-  z-index: 2;
-  font-family: var(--sans);
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--ink-h, var(--t-3));
-}
-.lib-prev.site .lib-tag {
-  top: 11px;
-  left: 11px;
-  padding: 3px 8px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: var(--sh-s);
-}
-.lib-foot {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 13px 15px;
-}
-.lib-foot .di {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  font-family: var(--sans);
-  font-size: 10px;
-  font-weight: 600;
-  flex: none;
-}
-.lib-foot .lf-t {
-  flex: 1;
+.lt-main {
   min-width: 0;
 }
-.lib-foot .lf-title {
-  font-size: 13.5px;
+.lt-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans);
   font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--c, var(--t-3));
+}
+/* right-side live/draft status badge */
+.lt-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--t-4);
+}
+.lt-state.live {
+  color: #0f9d8f;
+}
+.lt-state .lib-pip {
+  width: 6px;
+  height: 6px;
+  box-shadow: 0 0 0 2.5px var(--teal-tint);
+}
+.lt-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   color: var(--t-1);
+  line-height: 1.3;
+  margin-top: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.lib-foot .lf-meta {
-  font-size: 11.5px;
+.lt-desc {
+  font-size: 12.5px;
+  line-height: 1.45;
   color: var(--t-3);
-  margin-top: 2px;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.lib-foot .lf-open {
-  font-size: 11px;
+.lt-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+}
+.lt-open {
+  margin-left: 2px;
+  font-family: var(--sans);
   font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--accent);
   opacity: 0;
   transition: opacity 0.14s;
-  flex: none;
 }
-.lib-card:hover .lf-open {
+.lib-tile:hover .lt-open {
   opacity: 1;
 }
 .lib-empty {
@@ -2587,8 +2640,25 @@ body {
   line-height: 1.6;
 }
 @media (max-width: 900px) {
-  .lib-grid {
-    grid-template-columns: 1fr;
+  .lib-tile {
+    grid-template-columns: 1fr auto;
+  }
+  .lib-mast {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .lib-say {
+    text-align: left;
+    max-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lib-tile {
+    transition: none;
+  }
+  .lib-tile:hover {
+    transform: none;
   }
 }
 .tk-act {
