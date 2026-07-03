@@ -712,6 +712,49 @@ function DocBody({ text }: { text: string }) {
   return <div className="md-body">{blocks}</div>;
 }
 
+/* ===== plain-text deliverables (doc / prep / build) rendered as a readable, */
+/* scrollable document with a Copy affordance — the default when a type has no */
+/* richer viewer of its own. */
+export function TextViewer({
+  item,
+}: {
+  item: { type: string; head: string; file: string; tag: string; out?: string };
+}) {
+  const { copied, copy } = useCopy();
+  const { toast } = useApp();
+  const text = item.out ?? '';
+  const fn = (item.file || 'document.md').toString();
+  return (
+    <div className="artifact">
+      <div className={`art-bar ${item.type}`}>
+        <span>{item.head}</span>
+        <span className="art-file">{item.file}</span>
+        <span dangerouslySetInnerHTML={{ __html: item.tag }} />
+      </div>
+      <div className="art-body">
+        <DocBody text={text} />
+      </div>
+      <div className="lg-foot">
+        <button
+          className={`copybtn${copied === 'doc' ? ' ok' : ''}`}
+          onClick={() => copy('doc', text)}
+        >
+          {copied === 'doc' ? 'Copied ✓' : 'Copy text'}
+        </button>
+        <button
+          className="markbtn"
+          onClick={() => {
+            download(fn.endsWith('.md') ? fn : fn + '.md', text, 'text/markdown');
+            toast('Downloaded ' + fn);
+          }}
+        >
+          Download .md
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ArtifactViewer({ item }: { item: any }) {
   const { head, file } = item;
   if (item.type === 'site') return <SiteViewer head={head} file={file} site={item.site} />;
@@ -725,16 +768,5 @@ export function ArtifactViewer({ item }: { item: any }) {
   if (item.type === 'dms') return <DmsViewer dms={item.dms} />;
   if (item.type === 'checklist') return <ChecklistViewer checklist={item.checklist} />;
   if (item.type === 'plan') return <PlanViewer plan={item.plan} title={item.title} />;
-  return (
-    <div className="artifact">
-      <div className={`art-bar ${item.type}`}>
-        <span>{item.head}</span>
-        <span className="art-file">{item.file}</span>
-        <span dangerouslySetInnerHTML={{ __html: item.tag }} />
-      </div>
-      <div className="art-body">
-        <DocBody text={item.out ?? ''} />
-      </div>
-    </div>
-  );
+  return <TextViewer item={item} />;
 }
