@@ -1,18 +1,6 @@
 'use client';
 import { useApp } from '@/lib/store';
 import { DEPTS, type Dept, type Task } from '@/lib/data';
-import { taskState } from '@/lib/helpers';
-
-const TTINT: Record<string, string> = {
-  eng: '--blue-tint',
-  mkt: '--clay-tint',
-  ops: '--teal-tint',
-  fin: '--gold-tint',
-  legal: '--violet-tint',
-  design: '--violet-tint',
-  sales: '--accent-tint',
-  support: '--rose-tint',
-};
 
 interface Row {
   d: Dept;
@@ -60,25 +48,10 @@ export function TasksView() {
   };
 
   const card = ({ d, t }: Row, key: number) => {
-    const st = taskState(t, true);
     return (
-      <div
-        className="kb-card"
-        key={key}
-        onClick={() => open({ d, t })}
-        style={{ ['--gtint' as string]: `var(${TTINT[d.k] || '--accent-tint'})` }}
-      >
-        <div className="tc-head">
-          <span className="tc-dept">{d.name}</span>
-        </div>
+      <div className="kb-card" key={key} onClick={() => open({ d, t })}>
+        <div className="kb-dept">{d.name}</div>
         <div className="kb-title">{t.t}</div>
-        <div className="tc-foot">
-          <span className={`tstate ${st.cls}`}>
-            <i />
-            {st.label}
-          </span>
-        </div>
-        <div className="tc-glow" />
       </div>
     );
   };
@@ -93,7 +66,7 @@ export function TasksView() {
         {COLS.map((c) => {
           const items = ALL.filter(c.test);
           return (
-            <div className="kb-col" key={c.key}>
+            <div className={`kb-col kb-col--${c.key}`} key={c.key}>
               <div className="kb-colhead">
                 <span className="kb-dot" style={{ background: c.dot }} />
                 <span className="kb-label">{c.label}</span>

@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { composeShippedDigest, composeProjectModel } from './projectModel';
+import {
+  composeShippedDigest,
+  composeProjectModel,
+  normalizeDecisions,
+  composeDecisions,
+  MAX_DECISIONS,
+} from './projectModel';
 import type { PriorItem } from './priorWork';
 
 const item = (over: Partial<PriorItem>): PriorItem => ({
@@ -90,5 +96,74 @@ describe('composeProjectModel', () => {
   it('omits the focus line when the title is blank', () => {
     const model = composeProjectModel({ brief: BRIEF, focus: { title: '   ' } });
     expect(model).not.toContain('Current focus');
+  });
+
+  it('includes locked-in decisions when present', () => {
+    const model = composeProjectModel({
+      brief: BRIEF,
+      decisions: [{ topic: 'pricing', statement: 'Plus is $4/mo' }],
+    });
+    expect(model).toContain('Decisions the founder has locked in');
+    expect(model).toContain('- pricing: Plus is $4/mo');
+  });
+});
+
+describe('normalizeDecisions', () => {
+  it('returns [] for non-array input', () => {
+    expect(normalizeDecisions(null)).toEqual([]);
+    expect(normalizeDecisions('nope')).toEqual([]);
+    expect(normalizeDecisions({ topic: 'x' })).toEqual([]);
+  });
+
+  it('keeps only entries with a non-empty topic and statement, trimmed', () => {
+    const out = normalizeDecisions([
+      { topic: ' pricing ', statement: ' $4/mo ' },
+      { topic: '', statement: 'no topic' },
+      { topic: 'naming', statement: '  ' },
+      { statement: 'no topic key' },
+      'garbage',
+      null,
+    ]);
+    expect(out).toEqual([
+      { topic: 'pricing', statement: '$4/mo', source: undefined, updatedAt: undefined },
+    ]);
+  });
+
+  it('preserves valid source and updatedAt, drops invalid ones', () => {
+    const out = normalizeDecisions([
+      { topic: 't', statement: 's', source: ' Finance ', updatedAt: 123 },
+      { topic: 'u', statement: 'v', source: '  ', updatedAt: Number.NaN },
+    ]);
+    expect(out[0]).toEqual({ topic: 't', statement: 's', source: 'Finance', updatedAt: 123 });
+    expect(out[1]).toEqual({ topic: 'u', statement: 'v', source: undefined, updatedAt: undefined });
+  });
+
+  it('caps at MAX_DECISIONS, keeping the most recently updated', () => {
+    const many = Array.from({ length: MAX_DECISIONS + 5 }, (_, i) => ({
+      topic: `t${i}`,
+      statement: 's',
+      updatedAt: i, // higher i = newer
+    }));
+    const out = normalizeDecisions(many);
+    expect(out).toHaveLength(MAX_DECISIONS);
+    // The oldest 5 (updatedAt 0-4) are dropped; the newest is kept.
+    expect(out.some((d) => d.topic === `t${MAX_DECISIONS + 4}`)).toBe(true);
+    expect(out.some((d) => d.topic === 't0')).toBe(false);
+  });
+});
+
+describe('composeDecisions', () => {
+  it('is empty for no decisions', () => {
+    expect(composeDecisions([])).toBe('');
+  });
+
+  it('renders one line per decision under an honor-these header', () => {
+    const block = composeDecisions([
+      { topic: 'pricing', statement: 'Plus is $4/mo' },
+      { topic: 'positioning', statement: 'lead with roommate money-tension' },
+    ]);
+    expect(block).toContain('honor these');
+    expect(block).toContain('- pricing: Plus is $4/mo');
+    expect(block).toContain('- positioning: lead with roommate money-tension');
   });
 });

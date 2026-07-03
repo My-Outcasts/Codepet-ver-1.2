@@ -19,6 +19,21 @@ export interface Focus {
   why?: string;
 }
 
+/**
+ * One durable decision the company has locked in — the kind of choice (pricing,
+ * positioning, naming) that lives in no single deliverable. Keyed by `topic` so a newer
+ * decision on the same topic replaces the old one (the drift guard). Phase 1 only reads
+ * and renders these; the byte-maintained writer that extracts them is Phase 2.
+ */
+export interface DecisionEntry {
+  topic: string;
+  statement: string;
+  /** Where the decision came from, e.g. "Finance / Pricing model". */
+  source?: string;
+  /** Millis of the last update — used to evict the oldest when capped. */
+  updatedAt?: number;
+}
+
 export interface ProjectModelInput {
   /** The persisted brief (preferred). */
   brief: unknown;
@@ -26,8 +41,47 @@ export interface ProjectModelInput {
   fallbackBrief?: unknown;
   /** Approved deliverables (newest-first), for the shipped digest. */
   shipped?: PriorItem[];
+  /** Decisions the founder has locked in, honored as constraints. */
+  decisions?: DecisionEntry[];
   /** The current agreed focus, if the caller has one (e.g. the next-step pick). */
   focus?: Focus | null;
+}
+
+/** Hard cap on decisions carried in the model, to bound tokens and force curation. */
+export const MAX_DECISIONS = 30;
+
+/**
+ * Coerce an untrusted value (e.g. the Firestore `decisions` field) into valid entries:
+ * keep only those with a non-empty topic + statement, trim, and cap at MAX_DECISIONS
+ * (keeping the most recently updated). Pure so it unit-tests and is reused by the reader.
+ */
+export function normalizeDecisions(raw: unknown, max = MAX_DECISIONS): DecisionEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const entries: DecisionEntry[] = [];
+  for (const r of raw) {
+    if (!r || typeof r !== 'object') continue;
+    const o = r as Record<string, unknown>;
+    const topic = typeof o.topic === 'string' ? o.topic.trim() : '';
+    const statement = typeof o.statement === 'string' ? o.statement.trim() : '';
+    if (!topic || !statement) continue;
+    entries.push({
+      topic,
+      statement,
+      source: typeof o.source === 'string' && o.source.trim() ? o.source.trim() : undefined,
+      updatedAt:
+        typeof o.updatedAt === 'number' && Number.isFinite(o.updatedAt) ? o.updatedAt : undefined,
+    });
+  }
+  if (entries.length <= max) return entries;
+  // Over cap: keep the most recently updated (undefined updatedAt sorts oldest).
+  return [...entries].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)).slice(0, max);
+}
+
+/** Render locked-in decisions as a grounding block. '' when there are none. */
+export function composeDecisions(decisions: DecisionEntry[]): string {
+  if (!decisions.length) return '';
+  const lines = decisions.map((d) => `- ${d.topic}: ${d.statement}`);
+  return `Decisions the founder has locked in — honor these; don't contradict or re-open them:\n${lines.join('\n')}`;
 }
 
 export interface DigestOptions {
@@ -71,8 +125,11 @@ export function composeProjectModel(input: ProjectModelInput): string {
   const narrative = briefToContext(input.brief) ?? briefToContext(input.fallbackBrief);
   const shipped = input.shipped?.length ? composeShippedDigest(input.shipped) : '';
 
+  const decisions = input.decisions?.length ? composeDecisions(input.decisions) : '';
+
   const parts: string[] = [];
   if (narrative) parts.push(narrative);
+  if (decisions) parts.push(decisions);
   if (shipped) parts.push(`What the company has shipped so far — ${shipped}.`);
   if (input.focus?.title.trim()) {
     const why = input.focus.why?.trim();

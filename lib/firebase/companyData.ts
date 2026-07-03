@@ -5,17 +5,21 @@
 // Firestore on load and PERSIST changes after each in-memory mutation, so the
 // view layer (which imports DEPTS/ENV directly) needs no changes.
 import {
+  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   setDoc,
   updateDoc,
+  where,
   writeBatch,
 } from 'firebase/firestore';
+import type { LiveState } from '../liveBuild';
 import { getDb } from './client';
 import { DEPTS, ENV, DEPTS_SEED, ENV_SEED, byN, type Dept, type Task, type LibItem } from '../data';
 import {
@@ -24,8 +28,17 @@ import {
   type LibraryDoc,
   type EnvState,
   type CompanyBrief,
+  type ScannedProject,
   type ChatMessageDoc,
 } from './schema';
+import { projectNames } from '../projects';
+import {
+  aggregateTracking,
+  distinctProjects,
+  EMPTY_TRACKING,
+  type TrackEvent,
+  type TrackingSummary,
+} from '../tracking';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -193,6 +206,115 @@ export async function persistBrief(companyId: string, brief: CompanyBrief): Prom
     brief: clean(brief),
     updatedAt: Date.now(),
   });
+}
+
+/**
+ * Return the company's ingest token, minting + persisting one on first use. The
+ * local installer bakes this into the machine's hook config so /api/track can
+ * attribute pushed events to the right company.
+ */
+export async function ensureIngestToken(companyId: string): Promise<string> {
+  const db = getDb();
+  const ref = doc(db, paths.company(companyId));
+  const snap = await getDoc(ref);
+  const existing = snap.data()?.ingestToken;
+  if (typeof existing === 'string' && existing) return existing;
+  const token = crypto.randomUUID().replace(/-/g, '');
+  await updateDoc(ref, { ingestToken: token, updatedAt: Date.now() });
+  return token;
+}
+
+const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * Read the company's recent Claude Code activity (last ~200 session events) and
+ * roll it up into the numbers the Summary shows. Best-effort: any read failure
+ * (rules, offline, empty collection) yields the empty summary so the UI just
+ * falls back to its DEPTS-derived view instead of erroring.
+ */
+export async function loadTrackingSummary(companyId: string): Promise<TrackingSummary> {
+  try {
+    const db = getDb();
+    const snap = await getDocs(
+      query(collection(db, paths.trackEvents(companyId)), orderBy('ts', 'desc'), limit(200)),
+    );
+    const events = snap.docs.map((d) => d.data() as TrackEvent);
+    return aggregateTracking(events, Date.now() - THIRTY_DAYS);
+  } catch {
+    return EMPTY_TRACKING;
+  }
+}
+
+/** Local projects for the Build Coach's "Which project?" picker. Prefers the
+ *  list synced by the scan CLI (POST /api/projects); falls back to the repos the
+ *  tracker has seen. Empty on any error or when neither source has data. */
+export async function loadProjects(companyId: string): Promise<string[]> {
+  try {
+    const db = getDb();
+    const companySnap = await getDoc(doc(db, paths.company(companyId)));
+    const scanned = (companySnap.data()?.projects ?? []) as ScannedProject[];
+    if (scanned.length > 0) return projectNames(scanned);
+    // Fallback: distinct repos the tracker reported.
+    const snap = await getDocs(
+      query(collection(db, paths.trackEvents(companyId)), orderBy('ts', 'desc'), limit(200)),
+    );
+    return distinctProjects(snap.docs.map((d) => d.data() as TrackEvent));
+  } catch {
+    return [];
+  }
+}
+
+/** Local projects with their absolute paths, for arming a build session (the
+ *  picker shows names; arming needs the dir to `cd` into). Empty on any error. */
+export async function loadProjectDirs(companyId: string): Promise<ScannedProject[]> {
+  try {
+    const db = getDb();
+    const companySnap = await getDoc(doc(db, paths.company(companyId)));
+    return (companySnap.data()?.projects ?? []) as ScannedProject[];
+  } catch {
+    return [];
+  }
+}
+
+/** Live-subscribe to a build session's activity doc. Returns an unsubscribe fn;
+ *  the callback fires with null before the first event arrives or on any error. */
+export function subscribeLiveBuild(
+  companyId: string,
+  buildSessionId: string,
+  cb: (state: LiveState | null) => void,
+): () => void {
+  const ref = doc(getDb(), paths.liveBuild(companyId, buildSessionId));
+  return onSnapshot(
+    ref,
+    (snap) => cb(snap.exists() ? (snap.data() as LiveState) : null),
+    () => cb(null),
+  );
+}
+
+/** The most recent SessionEnd rollup for a given session id (drives END recap). */
+export async function loadTrackEventForSession(
+  companyId: string,
+  sessionId: string,
+): Promise<TrackEvent | null> {
+  try {
+    const db = getDb();
+    const rows = await getDocs(
+      query(collection(db, paths.trackEvents(companyId)), where('sessionId', '==', sessionId)),
+    );
+    const events = rows.docs.map((d) => d.data() as TrackEvent);
+    events.sort((a, b) => b.ts - a.ts);
+    return events[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Append a small note to the company notebook (Build Coach END "write to memory"). */
+export async function writeNotebookNote(
+  companyId: string,
+  note: { buildSessionId: string; doneLooks: string; wins: string[] },
+): Promise<void> {
+  await addDoc(collection(getDb(), paths.notebook(companyId)), { ...note, ts: Date.now() });
 }
 
 /**

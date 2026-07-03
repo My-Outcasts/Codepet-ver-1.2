@@ -16,11 +16,14 @@ import React, {
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType } from './helpers';
 import { runByteTask, GenerateError } from './ai/runTask';
+import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
 import {
   loadCompanyData,
+  loadTrackingSummary,
+  loadProjects,
   persistApproval,
   persistEnv,
   persistRoadmapStage,
@@ -67,9 +70,20 @@ import {
   buildFirstRunGreeting,
   type RevealSummary,
 } from './onboarding/firstRun';
+import { EMPTY_TRACKING, type TrackingSummary } from './tracking';
 
 export type View =
-  'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
+  | 'summary'
+  | 'overview'
+  | 'home'
+  | 'roadmap'
+  | 'dept'
+  | 'tasks'
+  | 'library'
+  | 'env'
+  | 'install'
+  | 'settings'
+  | 'build';
 
 export type Modal =
   { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
@@ -87,6 +101,9 @@ interface AppState {
   closeStage: () => void;
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
+  /** Sidebar collapsed to an icon-only rail (persisted) — frees width for the main + chat. */
+  sideCollapsed: boolean;
+  toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
   /** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
@@ -99,6 +116,10 @@ interface AppState {
   installed: boolean;
   setInstalled: (value: boolean) => void;
   library: LibItem[];
+  /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
+  tracking: TrackingSummary;
+  /** Distinct local projects the tracker has reported (empty until events arrive). */
+  projects: string[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
   /** byte "arrives" in a department: fly there, open chat, drop an orientation + start chip. */
@@ -162,6 +183,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [portalSignal, setPortalSignal] = useState<{ deptK: string; n: number } | null>(null);
   // Chat starts closed by default; the floating button opens it on demand.
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+  const [sideCollapsed, setSideCollapsed] = useState(false);
   // Onboarding is shown only to users who haven't completed it. It starts false
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.
@@ -171,6 +193,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
+      if (localStorage.getItem('codepet:sidecollapsed') === '1') setSideCollapsed(true);
     } catch {}
   }, []);
 
@@ -186,6 +209,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Library + business brief are owned here as state, hydrated from Firestore.
   const [library, setLibrary] = useState<LibItem[]>([]);
+  const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
+  const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
   const [hydrated, setHydrated] = useState(false);
 
@@ -252,6 +277,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error('[store] hydrate failed', err);
         if (!cancelled) setHydrated(true); // fail open to the seed rather than hang
       });
+    // Tracking loads independently — never block hydration on it, and a failure
+    // just leaves the empty summary (Summary falls back to its DEPTS-derived view).
+    loadTrackingSummary(companyId)
+      .then((t) => {
+        if (!cancelled) setTracking(t);
+      })
+      .catch(() => {});
+    // Projects load independently too — a failure just leaves the picker empty.
+    loadProjects(companyId)
+      .then((p) => {
+        if (!cancelled) setProjects(p);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -280,6 +318,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const closeStage = useCallback(() => setDrawerOpen(false), []);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
+  }, []);
+  const toggleSide = useCallback((collapsed?: boolean) => {
+    setSideCollapsed((c) => {
+      const next = collapsed === undefined ? !c : collapsed;
+      try {
+        if (next) localStorage.setItem('codepet:sidecollapsed', '1');
+        else localStorage.removeItem('codepet:sidecollapsed');
+      } catch {}
+      return next;
+    });
   }, []);
 
   // First-run only: byte opens chat and greets the founder by name with the single best
@@ -623,6 +671,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           console.error('[store] persistApproval failed', err);
           toast('Saved locally — sync failed');
         });
+        // Fire-and-forget: let byte extract any durable decision this deliverable locks
+        // in (server-gated by AI_MEMORY_ENABLED; never blocks or surfaces errors).
+        rememberApproval({
+          title: item.title,
+          dept: item.dept,
+          type,
+          out: typeof item.out === 'string' ? item.out : '',
+        });
       }
       computeNextStep(); // this task is done now — advance the next step
       maybeOfferAdvance(); // …and if that was the last one, offer to move up a stage
@@ -926,6 +982,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
+      sideCollapsed,
+      toggleSide,
       onboarding,
       finishOnboarding,
       scaffoldFromOnboarding,
@@ -935,6 +993,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       library,
+      tracking,
+      projects,
       modal,
       runTask,
       briefDepartment,
@@ -971,6 +1031,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
+      sideCollapsed,
+      toggleSide,
       onboarding,
       finishOnboarding,
       scaffoldFromOnboarding,
@@ -980,6 +1042,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       library,
+      tracking,
+      projects,
       modal,
       runTask,
       briefDepartment,

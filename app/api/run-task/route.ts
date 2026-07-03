@@ -8,7 +8,7 @@
 //   post/email/legal/screens/sheet/site → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
 import { verifyIdToken } from '@/lib/firebase/admin';
-import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { loadServerCompany } from '@/lib/firebase/serverCompany';
 import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
@@ -165,19 +165,23 @@ export async function POST(req: Request): Promise<Response> {
   // Prefer the caller's REAL persisted brief (loaded by the verified uid) over
   // whatever the client passed, so generation is always scoped to the signed-in
   // account; fall back to the client brief (e.g. mid-onboarding) then the baseline.
-  // Load the brief and the approved-deliverable library together (one round-trip of
-  // latency, not two). The library grounds byte in what the company has already
-  // shipped so a new deliverable stays consistent; fail-open — [] just skips grounding.
-  const [serverBrief, library] = await Promise.all([
-    loadServerBrief(uid, idToken),
+  // Load the company (brief + locked-in decisions, one masked read) and the approved-
+  // deliverable library together. Both ground byte so a new deliverable stays consistent
+  // with what's decided and shipped; fail-open — empty values just skip that grounding.
+  const [company, library] = await Promise.all([
+    loadServerCompany(uid, idToken),
     loadServerLibrary(uid, idToken),
   ]);
-  // The project model (brief narrative + a breadth digest of shipped work) is the
-  // top-level grounding; the prior-work block below adds depth on the most relevant
-  // items. Both derive from state already loaded above — no extra reads.
+  // The project model (brief narrative + locked-in decisions + a breadth digest of
+  // shipped work) is the top-level grounding; the prior-work block below adds depth on
+  // the most relevant items. All derive from state already loaded above — no extra reads.
   const context =
-    composeProjectModel({ brief: serverBrief, fallbackBrief: body.brief, shipped: library }) ||
-    CODEPET_CONTEXT;
+    composeProjectModel({
+      brief: company.brief,
+      fallbackBrief: body.brief,
+      decisions: company.decisions,
+      shipped: library,
+    }) || CODEPET_CONTEXT;
   const priorWork = composePriorWorkContext(
     selectPriorWork(library, { deptName: fields.deptName, excludeTitle: fields.taskTitle }),
   );
