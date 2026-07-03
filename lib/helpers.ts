@@ -177,7 +177,7 @@ export function artMeta(t: Task, type: string): ArtMeta {
   return type === 'site'
     ? {
         file: 'index.html',
-        head: 'Built &amp; shipped',
+        head: 'Built & shipped',
         tag: '<span class="art-tag" style="background:var(--accent)">live</span>',
       }
     : type === 'screens'
@@ -195,7 +195,7 @@ export function artMeta(t: Task, type: string): ArtMeta {
         : type === 'build'
           ? {
               file: s + '.diff',
-              head: 'Built &amp; verified',
+              head: 'Built & verified',
               tag: '<span class="art-tag" style="background:var(--accent)">verified</span>',
             }
           : type === 'prep'

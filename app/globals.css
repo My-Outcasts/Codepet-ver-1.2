@@ -4865,6 +4865,24 @@ body {
 .art-body .md-body {
   white-space: normal;
 }
+/* In a deliverable modal, the panel fills the body's full height instead of a
+   short 280px box floating in whitespace: the card stretches to the available
+   space and the document scrolls inside it. The bar stays pinned; the body is
+   the scroll region. */
+.mbody > .artifact {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mbody > .artifact > .art-bar {
+  flex: none;
+}
+.mbody > .artifact > .art-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
 .md-body > :first-child {
   margin-top: 0;
 }
