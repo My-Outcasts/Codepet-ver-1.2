@@ -62,6 +62,7 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 import type { CompanyBrief } from './firebase/schema';
+import { buildRevealSummary, type RevealSummary } from './onboarding/firstRun';
 
 export type View =
   'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
@@ -84,6 +85,8 @@ interface AppState {
   toggleCopilot: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
+  /** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
+  scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
@@ -205,6 +208,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstApproveTracked = useRef(false);
+  const scaffoldedInWizard = useRef(false);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -271,6 +275,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
+  // Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
+  // so the founder watches byte build their actual company instead of a fake animation.
+  // Marks scaffoldedInWizard so finishOnboarding won't run it a second time. Returns a
+  // reveal summary read from the now-live DEPTS (ok=false ⇒ generation failed, seed kept).
+  const scaffoldFromOnboarding = useCallback(
+    async (briefData: CompanyBrief): Promise<RevealSummary> => {
+      scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
+      if (!companyId) return buildRevealSummary(DEPTS, false);
+      const changed = await scaffoldCompany(companyId, briefData);
+      if (changed > 0) bump();
+      return buildRevealSummary(DEPTS, changed > 0);
+    },
+    [companyId, bump],
+  );
+
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
@@ -283,13 +302,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (companyId) {
         completeOnboarding(companyId, briefData)
           .then(() => {
-            // Part 1: once the brief is persisted, byte generates the stage-aware
-            // company (active/dormant departments + tasks) and applies + persists it.
-            // Best-effort — on any failure the current departments stay. Skipped when
-            // no brief was given (a "skip" keeps the seed).
-            if (!briefData) return;
+            // The wizard's analysis step already scaffolded (the real reveal). Only
+            // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
+            if (!briefData || scaffoldedInWizard.current) return;
             return scaffoldCompany(companyId, briefData).then((changed) => {
-              if (changed) bump(); // re-render with the now-generated DEPTS
+              if (changed) bump();
             });
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
@@ -845,6 +862,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleCopilot,
       onboarding,
       finishOnboarding,
+      scaffoldFromOnboarding,
       regenerateCompany,
       advanceStage,
       brief,
@@ -888,6 +906,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleCopilot,
       onboarding,
       finishOnboarding,
+      scaffoldFromOnboarding,
       regenerateCompany,
       advanceStage,
       brief,
