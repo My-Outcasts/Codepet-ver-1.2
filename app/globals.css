@@ -2513,10 +2513,11 @@ body {
 }
 
 /* compact row — type + title + one-line summary on the left, dept on the right */
+/* the meta column is a FIXED width so the dept avatars line up across every row */
 .lib-tile {
   position: relative;
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 172px;
   align-items: center;
   gap: 22px;
   padding: 15px 18px 15px 20px;
@@ -2636,8 +2637,8 @@ body {
   line-height: 1.6;
 }
 @media (max-width: 900px) {
-  .lib-grid {
-    max-width: none;
+  .lib-tile {
+    grid-template-columns: 1fr auto;
   }
   .lib-mast {
     flex-direction: column;
