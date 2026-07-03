@@ -61,6 +61,27 @@ describe('parseEventLine', () => {
     expect(parseEventLine(raw)).toEqual([{ kind: 'result', text: 'done', sessionId: 's1' }]);
   });
 
+  it('maps a non-success result subtype to an error event', () => {
+    const raw = line({
+      type: 'result',
+      subtype: 'error_max_turns',
+      result: 'hit the limit',
+      session_id: 's1',
+    });
+    expect(parseEventLine(raw)).toEqual([{ kind: 'error', message: 'hit the limit' }]);
+  });
+
+  it('maps an is_error result to an error event even with subtype success', () => {
+    const raw = line({
+      type: 'result',
+      subtype: 'success',
+      is_error: true,
+      result: 'boom',
+      session_id: 's1',
+    });
+    expect(parseEventLine(raw)).toEqual([{ kind: 'error', message: 'boom' }]);
+  });
+
   it('returns [] for empty, malformed, or unknown lines', () => {
     expect(parseEventLine('')).toEqual([]);
     expect(parseEventLine('   ')).toEqual([]);

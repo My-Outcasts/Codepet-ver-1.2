@@ -35,14 +35,18 @@ export function useLiveSession(opts: {
 }) {
   const [state, setState] = useState<TranscriptState>(initialTranscript);
   const started = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const start = useCallback(async () => {
     if (started.current) return;
     started.current = true;
+    const ac = new AbortController();
+    abortRef.current = ac;
     const res = await fetch('/api/build-session/start', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(opts),
+      signal: ac.signal,
     });
     if (!res.ok) {
       setState((s) =>
@@ -52,23 +56,32 @@ export function useLiveSession(opts: {
     }
     const stream = await fetch(
       `/api/build-session/stream?buildSessionId=${encodeURIComponent(opts.buildSessionId)}`,
+      { signal: ac.signal },
     );
     if (!stream.ok || !stream.body) return;
     const reader = stream.body.getReader();
     const decoder = new TextDecoder();
     let buf = '';
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let nl: number;
-      while ((nl = buf.indexOf('\n')) !== -1) {
-        const line = buf.slice(0, nl);
-        buf = buf.slice(nl + 1);
-        setState((s) => applyLine(s, line));
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let nl: number;
+        while ((nl = buf.indexOf('\n')) !== -1) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          setState((s) => applyLine(s, line));
+        }
       }
+    } catch {
+      /* aborted or stream closed */
     }
   }, [opts]);
 
-  return { state, start };
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
+  return { state, start, stop };
 }

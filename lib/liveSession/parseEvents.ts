@@ -45,9 +45,17 @@ export function parseEventLine(line: string): SessionEvent[] {
   }
 
   if (obj.type === 'result') {
-    return [
-      { kind: 'result', text: String(obj.result ?? ''), sessionId: String(obj.session_id ?? '') },
-    ];
+    const text = String(obj.result ?? '');
+    // A non-'success' subtype (or an explicit is_error) is a failed turn — surface
+    // it as an error so the UI doesn't render "Session finished" on a failure.
+    const failed =
+      obj.is_error === true || (typeof obj.subtype === 'string' && obj.subtype !== 'success');
+    if (failed) {
+      return [
+        { kind: 'error', message: text || String(obj.subtype ?? 'claude ended with an error') },
+      ];
+    }
+    return [{ kind: 'result', text, sessionId: String(obj.session_id ?? '') }];
   }
 
   const msg = (obj.message ?? {}) as { content?: unknown };

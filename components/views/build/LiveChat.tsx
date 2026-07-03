@@ -17,11 +17,12 @@ export function LiveChat({
   plan: BytePlan;
   brief: string;
 }) {
-  const { state, start } = useLiveSession({ buildSessionId, projectDir, plan, brief });
+  const { state, start, stop } = useLiveSession({ buildSessionId, projectDir, plan, brief });
 
   useEffect(() => {
     start();
-  }, [start]);
+    return () => stop();
+  }, [start, stop]);
 
   return (
     <div className="lc-wrap">
