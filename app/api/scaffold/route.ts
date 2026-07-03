@@ -7,10 +7,10 @@
 // Auth-gated; holds the Anthropic key server-side; loads the brief from Firestore by
 // the verified uid. The 8 department slots are fixed (keyed by `k`) so the result
 // maps cleanly onto the app; byte only decides active/dormant + the tasks.
-import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 
 export const runtime = 'nodejs';
 
@@ -122,8 +122,12 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return Response.json({ error: 'not_configured' }, { status: 503 });
+  let client: ReturnType<typeof getClient>;
+  try {
+    client = getClient();
+  } catch (err) {
+    return aiErrorResponse(err, 'not_configured');
+  }
 
   const serverBrief = await loadServerBrief(uid, idToken);
   const context = briefToContext(serverBrief) ?? CODEPET_CONTEXT;
@@ -144,32 +148,16 @@ ${deptList}
 Decide, for THIS company at THIS stage, which departments have real work to do NOW (active) and which come later (dormant, empty tasks). For every department write a one-line \`need\` (what it does for this company — for dormant ones, what it will handle later) and a short first-person \`byte\` note. For each ACTIVE department, write 2-4 concrete, stage-appropriate tasks specific to this product — earlier stages skew toward validation/product; later stages toward launch/growth/scale. Give each task the right deliverable \`kind\` and \`who\`. Don't invent departments; use only the keys above.`;
 
   try {
-    const client = new Anthropic({ apiKey });
-    const message = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCAFFOLD_SCHEMA } },
+    const scaffold = await generateJson({
+      client,
       system: SYSTEM,
-      messages: [{ role: 'user', content: prompt }],
+      prompt,
+      maxTokens: 4096,
+      label: 'scaffold',
+      schema: SCAFFOLD_SCHEMA,
     });
-    if (message.stop_reason === 'refusal') {
-      return Response.json({ error: 'refused' }, { status: 422 });
-    }
-    const text = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
-    if (!text) return Response.json({ error: 'empty' }, { status: 502 });
-    try {
-      return Response.json({ scaffold: JSON.parse(text) });
-    } catch {
-      return Response.json({ error: 'parse_failed' }, { status: 502 });
-    }
+    return Response.json({ scaffold });
   } catch (err) {
-    console.error('[scaffold] generation failed', err);
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    return Response.json({ error: 'scaffold_failed' }, { status });
+    return aiErrorResponse(err, 'scaffold_failed');
   }
 }

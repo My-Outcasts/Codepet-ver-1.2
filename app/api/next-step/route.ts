@@ -7,10 +7,10 @@
 // not a user-triggered deliverable, so it is auth-gated but does NOT count against
 // the per-user daily deliverable cap. The org-level Anthropic spend limit is the
 // backstop; the client caches the result so it only re-runs on real state changes.
-import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 
 export const runtime = 'nodejs';
 
@@ -56,8 +56,12 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return Response.json({ error: 'not_configured' }, { status: 503 });
+  let client: ReturnType<typeof getClient>;
+  try {
+    client = getClient();
+  } catch (err) {
+    return aiErrorResponse(err, 'not_configured');
+  }
 
   let body: NextStepBody;
   try {
@@ -95,40 +99,20 @@ export async function POST(req: Request): Promise<Response> {
   const prompt = `The founder's company: ${context}\n\nOpen tasks across their departments:\n${list}\n\nPick the single task to do next (its index) and give one sentence why.`;
 
   try {
-    const client = new Anthropic({ apiKey });
-    const message = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 1024,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low', format: { type: 'json_schema', schema } },
+    const parsed = await generateJson<{ pick?: unknown; why?: unknown }>({
+      client,
       system: SYSTEM,
-      messages: [{ role: 'user', content: prompt }],
+      prompt,
+      maxTokens: 1024,
+      label: 'next-step',
+      schema,
     });
-
-    if (message.stop_reason === 'refusal') {
-      return Response.json({ error: 'refused' }, { status: 422 });
-    }
-    const text = message.content
-      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('\n')
-      .trim();
-    if (!text) return Response.json({ error: 'empty' }, { status: 502 });
-
-    let parsed: { pick?: unknown; why?: unknown };
-    try {
-      parsed = JSON.parse(text) as { pick?: unknown; why?: unknown };
-    } catch {
-      return Response.json({ error: 'parse_failed' }, { status: 502 });
-    }
     const pick = typeof parsed.pick === 'number' ? Math.trunc(parsed.pick) : -1;
     if (pick < 0 || pick >= tasks.length) {
       return Response.json({ error: 'invalid_pick' }, { status: 502 });
     }
     return Response.json({ pick, why: typeof parsed.why === 'string' ? parsed.why : '' });
   } catch (err) {
-    console.error('[next-step] pick failed', err);
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    return Response.json({ error: 'pick_failed' }, { status });
+    return aiErrorResponse(err, 'pick_failed');
   }
 }

@@ -7,11 +7,11 @@
 //   text                          → plain-text deliverable, returns { text }
 //   post/email/legal/screens/sheet/site → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
-import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
 import { enforceDailyLimit } from '@/lib/firebase/serverUsage';
+import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import {
   STRUCTURED_SCHEMAS,
   DELIVERABLE_INSTRUCTIONS,
@@ -117,12 +117,11 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: 'not_configured', message: 'ANTHROPIC_API_KEY is not set on the server.' },
-      { status: 503 },
-    );
+  let client: ReturnType<typeof getClient>;
+  try {
+    client = getClient();
+  } catch (err) {
+    return aiErrorResponse(err, 'not_configured');
   }
 
   let body: RunTaskBody;
@@ -165,47 +164,29 @@ export async function POST(req: Request): Promise<Response> {
   const serverBrief = await loadServerBrief(uid, idToken);
   const context = briefToContext(serverBrief) ?? briefToContext(body.brief) ?? CODEPET_CONTEXT;
   const { schema } = KINDS[kind];
-  const client = new Anthropic({ apiKey });
+  const prompt = buildPrompt(kind, context, fields);
 
   try {
-    const params: Anthropic.MessageCreateParamsNonStreaming = {
-      model: 'claude-opus-4-8',
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      output_config: schema
-        ? { effort: 'low', format: { type: 'json_schema', schema } }
-        : { effort: 'low' },
-      system: BYTE_SYSTEM,
-      messages: [{ role: 'user', content: buildPrompt(kind, context, fields) }],
-    };
-    const message = await client.messages.create(params);
-
-    if (message.stop_reason === 'refusal') {
-      return Response.json({ error: 'refused' }, { status: 422 });
-    }
-
-    const text = message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n')
-      .trim();
-
-    if (!text) {
-      return Response.json({ error: 'empty' }, { status: 502 });
-    }
-
     if (schema) {
-      try {
-        return Response.json({ payload: JSON.parse(text) });
-      } catch {
-        console.error('[run-task] structured output was not valid JSON');
-        return Response.json({ error: 'parse_failed' }, { status: 502 });
-      }
+      const payload = await generateJson({
+        client,
+        system: BYTE_SYSTEM,
+        prompt,
+        maxTokens: 4096,
+        label: `run-task:${kind}`,
+        schema,
+      });
+      return Response.json({ payload });
     }
+    const text = await generateText({
+      client,
+      system: BYTE_SYSTEM,
+      prompt,
+      maxTokens: 4096,
+      label: `run-task:${kind}`,
+    });
     return Response.json({ text });
   } catch (err) {
-    console.error('[run-task] generation failed', err);
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    return Response.json({ error: 'generation_failed' }, { status });
+    return aiErrorResponse(err, 'generation_failed');
   }
 }
