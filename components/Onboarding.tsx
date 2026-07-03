@@ -5,7 +5,6 @@ import { DEPTS, OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL 
 import { buildRevealSummary, type RevealSummary } from '@/lib/onboarding/firstRun';
 import type { CompanyBrief } from '@/lib/firebase/schema';
 import { track } from '@/lib/analytics';
-import { Byte } from './Byte';
 
 interface ObData {
   name: string;
@@ -235,20 +234,15 @@ export function Onboarding() {
           Skip onboarding →
         </button>
         <div className="ob-cold-in">
-          <div className="ob-cold-byte">
-            <Byte size="s28" />
-            <span>byte</span>
-          </div>
           <h1>
             Let&apos;s build your company — <span className="ob-hl">not just your code.</span>
           </h1>
           <p>
-            I&apos;m byte. I&apos;ll run the whole company around your product, department by
-            department — and I do the work <b>with</b> you, so you always understand what&apos;s
-            happening.
+            Codepet runs the whole company around your product, department by department — and does
+            the work <b>with</b> you, so you always understand what&apos;s happening.
           </p>
           <div className="ob-depts">
-            <div className="ob-depts-ey">byte runs all {DEPTS.length} departments</div>
+            <div className="ob-depts-ey">Codepet runs all {DEPTS.length} departments</div>
             <div className="ob-chips">
               {DEPTS.map((d) => (
                 <span
@@ -265,21 +259,6 @@ export function Onboarding() {
           <button className="splash-btn" onClick={() => setStep(1)}>
             Set up my company
           </button>
-          <div className="ob-cold-meta">
-            <span className="ob-pt">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 7v5l3 2" />
-              </svg>
-              About a minute to set up
-            </span>
-            <span className="ob-pt">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 6 9 17l-5-5" />
-              </svg>
-              You approve every move
-            </span>
-          </div>
         </div>
       </div>
     );

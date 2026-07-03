@@ -3277,20 +3277,14 @@ body {
 .ob-cold-in > * {
   animation: riseIn 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
-.ob-cold-byte {
-  animation-delay: 0.12s;
-}
 .ob-cold-in h1 {
-  animation-delay: 0.24s;
+  animation-delay: 0.1s;
 }
 .ob-cold-in p {
-  animation-delay: 0.38s;
+  animation-delay: 0.24s;
 }
 .ob-cold-in .splash-btn {
-  animation-delay: 0.62s;
-}
-.ob-cold-meta {
-  animation-delay: 0.76s;
+  animation-delay: 0.5s;
 }
 .ob-cold .skip-pre {
   background: rgba(255, 255, 255, 0.14);
@@ -3308,16 +3302,6 @@ body {
   margin: auto 0 auto clamp(40px, 9vw, 150px);
   padding-right: 40px;
 }
-.ob-cold-byte {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
-}
 .ob-cold-in h1 {
   font-family: var(--sans);
   font-size: clamp(34px, 4vw, 52px);
@@ -3334,14 +3318,17 @@ body {
   background-clip: text;
   color: transparent;
 }
-.ob-cold-in p {
+/* NOTE: `.ob p` (dark, for the light question screens) has equal specificity and
+   comes later in the file, so it wins by source order — qualify with .ob-cold to
+   keep the cold-open paragraph light and readable. */
+.ob-cold .ob-cold-in p {
   margin-top: 20px;
   font-size: 16.5px;
   line-height: 1.6;
-  color: rgba(240, 238, 252, 0.9);
+  color: rgba(240, 238, 252, 0.95);
   max-width: 500px;
 }
-.ob-cold-in p b {
+.ob-cold .ob-cold-in p b {
   color: #fff;
   font-weight: 700;
 }
@@ -3386,26 +3373,6 @@ body {
 }
 .ob-cold-in .splash-btn {
   margin-top: 30px;
-}
-.ob-cold-meta {
-  margin-top: 24px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 22px;
-  font-family: var(--sans);
-  font-size: 13px;
-  color: rgba(240, 238, 252, 0.62);
-}
-.ob-pt {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.ob-pt svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  color: #9d5cf5;
 }
 /* taller question screens (the project step) align to the top and scroll */
 .ob-body.tall {
