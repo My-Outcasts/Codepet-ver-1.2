@@ -39,16 +39,33 @@ const TYPE_NOUN: Record<string, string> = {
   plan: 'Plan',
 };
 
+// Quick revise directions offered on a produced card — one tap re-runs with that note.
+const REVISE_CHIPS = ['Shorter', 'More detail', 'Punchier'];
+
 // An inline deliverable byte produced in chat — the "run it from here" result.
 // Reads the live task so the preview reflects the fresh output; Approve / Open /
-// Redo keep the founder in the conversation.
+// Revise keep the founder in the conversation. Revise re-runs the task against a
+// typed or chip note (empty = plain regenerate) and updates this card in place.
 function ResultCard({ m }: { m: ChatMessage }) {
-  const { runTaskInChat, approveChatResult, openChatResult } = useApp();
+  const { reviseTaskInChat, approveChatResult, openChatResult } = useApp();
+  const [revising, setRevising] = useState(false);
+  const [note, setNote] = useState('');
+  // Latches true once a revise pass fires, so the spinner reads "Revising…" rather
+  // than "Producing…". A card's spinner only re-shows via revise (the initial produce
+  // is a separate card), so the flag never needs resetting.
+  const [reviseBusy, setReviseBusy] = useState(false);
   const r = m.result!;
   const d = DEPTS.find((x) => x.k === r.deptK);
   const t = d?.tasks.find((x) => x.t === r.taskTitle);
   const noun = TYPE_NOUN[r.type] || 'Deliverable';
   const preview = (t?.out || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+
+  const revise = (text: string) => {
+    reviseTaskInChat(m.id, r.deptK, r.taskTitle, text);
+    setRevising(false);
+    setReviseBusy(true);
+    setNote('');
+  };
 
   return (
     <div className="cres">
@@ -62,13 +79,56 @@ function ResultCard({ m }: { m: ChatMessage }) {
       {m.running ? (
         <div className="cres-run">
           <span className="cres-spin" />
-          Producing…
+          {reviseBusy ? 'Revising…' : 'Producing…'}
         </div>
       ) : (
         <>
           {preview && <div className="cres-prev">{preview}</div>}
           {r.approved ? (
             <div className="cres-saved">Saved to your library</div>
+          ) : revising ? (
+            <div className="cres-rev">
+              <div className="cres-rev-chips">
+                {REVISE_CHIPS.map((c) => (
+                  <button key={c} className="cres-chip" onClick={() => revise(c)}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <div className="cres-rev-row">
+                <input
+                  className="cres-rev-in"
+                  autoFocus
+                  placeholder="Tell byte what to change…"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      revise(note);
+                    } else if (e.key === 'Escape') {
+                      setRevising(false);
+                      setNote('');
+                    }
+                  }}
+                />
+                <button
+                  className="cres-rev-go"
+                  aria-label="Send revision"
+                  onClick={() => revise(note)}
+                >
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+                    <path
+                      d="M2 8h11M9 4l4 4-4 4"
+                      stroke="currentColor"
+                      strokeWidth="1.7"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="cres-acts">
               <button
@@ -80,8 +140,8 @@ function ResultCard({ m }: { m: ChatMessage }) {
               <button className="cres-b" onClick={() => openChatResult(r.deptK, r.taskTitle)}>
                 {r.type === 'site' ? 'Open' : 'Copy'}
               </button>
-              <button className="cres-b" onClick={() => runTaskInChat(r.deptK, r.taskTitle)}>
-                Redo
+              <button className="cres-b" onClick={() => setRevising(true)}>
+                Revise
               </button>
             </div>
           )}
