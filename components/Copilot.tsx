@@ -163,6 +163,7 @@ export function Copilot() {
     runTaskInChat,
     dismissChatAction,
     advanceStage,
+    navigateTo,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -256,6 +257,11 @@ export function Copilot() {
                   }}
                 >
                   {m.action.label}
+                </button>
+              )}
+              {m.nav && (
+                <button className="bub-act" onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}>
+                  {m.nav.label}
                 </button>
               )}
             </div>
