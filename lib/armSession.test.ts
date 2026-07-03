@@ -10,10 +10,9 @@ const plan: BytePlan = {
 };
 
 describe('buildOpeningPrompt', () => {
-  it('includes audience, done criteria, and every plan step', () => {
-    const p = buildOpeningPrompt(plan, 'returning users', 'email login works');
-    expect(p).toContain('returning users');
-    expect(p).toContain('email login works');
+  it('includes the brief and every plan step', () => {
+    const p = buildOpeningPrompt(plan, 'email login for returning users');
+    expect(p).toContain('email login for returning users');
     for (const s of plan.steps) expect(p).toContain(s);
   });
 });

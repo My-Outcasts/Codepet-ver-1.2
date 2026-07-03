@@ -10,6 +10,7 @@
 import 'server-only';
 import { initializeApp, getApps, getApp, cert, type App } from 'firebase-admin/app';
 import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
+import { getFirestore, type Firestore } from 'firebase-admin/firestore';
 
 function getAdminApp(): App {
   if (getApps().length) return getApp();
@@ -28,4 +29,12 @@ function getAdminApp(): App {
 /** Verify a Firebase ID token. Throws if invalid/expired. */
 export function verifyIdToken(idToken: string): Promise<DecodedIdToken> {
   return getAuth(getAdminApp()).verifyIdToken(idToken);
+}
+
+/** Admin Firestore handle for privileged server writes (e.g. the /api/track
+ *  ingest route, which is called by a local hook with no Firebase user session).
+ *  Requires a service account (FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY);
+ *  verify-only credentials cannot write. */
+export function adminDb(): Firestore {
+  return getFirestore(getAdminApp());
 }

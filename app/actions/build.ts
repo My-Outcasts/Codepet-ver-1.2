@@ -16,8 +16,7 @@ interface ArmInput {
   buildSessionId: string;
   projectDir: string;
   plan: BytePlan;
-  audience: string;
-  doneLooks: string;
+  brief: string;
   companyId: string;
   token: string;
   apiUrl: string;
@@ -26,7 +25,7 @@ interface ArmInput {
 function writeArmFile(claudeDir: string, input: ArmInput) {
   const dir = path.join(claudeDir, 'codepet');
   fs.mkdirSync(dir, { recursive: true });
-  const { buildSessionId, projectDir, plan, audience, doneLooks, companyId, token, apiUrl } = input;
+  const { buildSessionId, projectDir, plan, brief, companyId, token, apiUrl } = input;
   fs.writeFileSync(
     path.join(dir, 'current-build.json'),
     JSON.stringify(
@@ -34,8 +33,7 @@ function writeArmFile(claudeDir: string, input: ArmInput) {
         buildSessionId,
         projectDir,
         plan,
-        audience,
-        doneLooks,
+        brief,
         companyId,
         token,
         apiUrl,
@@ -52,7 +50,7 @@ function writeArmFile(claudeDir: string, input: ArmInput) {
 export async function armBuildSession(
   input: ArmInput,
 ): Promise<{ ok: true; launched: boolean } | { ok: false; reason: 'remote'; command: string }> {
-  const prompt = buildOpeningPrompt(input.plan, input.audience, input.doneLooks);
+  const prompt = buildOpeningPrompt(input.plan, input.brief);
   const command = terminalCommand(input.projectDir, prompt);
 
   if (detectCapability(process.env).mode === 'remote') {

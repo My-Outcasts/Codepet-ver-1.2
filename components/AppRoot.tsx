@@ -12,6 +12,7 @@ import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
 import { Byte } from './Byte';
 import { ArtifactModal } from './artifact/ArtifactModal';
+import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
 import { RoadmapView } from './views/RoadmapView';
 import { DepartmentDetail } from './views/DepartmentDetail';
@@ -19,6 +20,8 @@ import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
 import { EnvironmentView } from './views/EnvironmentView';
 import { InstallView } from './views/InstallView';
+import { SettingsView } from './views/SettingsView';
+import { BuildCoachView } from './views/BuildCoachView';
 
 // 3D graph view — client-only (three.js / WebGL), lazy-loaded so three.js
 // is fetched only when the Overview tab is opened.
@@ -49,7 +52,9 @@ function Shell() {
   }, [view]);
 
   const ActiveView =
-    view === 'overview' ? (
+    view === 'summary' ? (
+      <SummaryView />
+    ) : view === 'overview' ? (
       <OverviewView />
     ) : view === 'home' ? (
       <CompanyView />
@@ -59,10 +64,14 @@ function Shell() {
       <DepartmentDetail />
     ) : view === 'tasks' ? (
       <TasksView />
+    ) : view === 'build' ? (
+      <BuildCoachView />
     ) : view === 'library' ? (
       <LibraryView />
     ) : view === 'install' ? (
       <InstallView />
+    ) : view === 'settings' ? (
+      <SettingsView />
     ) : (
       <EnvironmentView />
     );

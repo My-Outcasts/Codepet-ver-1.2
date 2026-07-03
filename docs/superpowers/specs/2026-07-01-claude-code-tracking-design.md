@@ -157,3 +157,38 @@ new user with no sessions still sees a sensible screen).
 - `vitest`: `lib/tracking.test.ts`, `lib/installer/settings.test.mjs`.
 - `yarn typecheck` + `eslint` + `prettier` clean.
 - Dev server compiles; Summary renders with fallback when `tracking` is empty.
+
+## Addendum — auto-install from First install (2026-07-01)
+
+**Vision:** clicking **First install** should also install the tracker so that every
+subsequent Claude Code session auto-reports to the Summary — no manual curl/config.
+
+**Architectural condition (unchanged reality):** the web app can't touch the user's
+`~/.claude`. Auto-install therefore only works in **local mode** (the desktop/CLI
+companion, where `detectCapability().mode === 'local'` and the server action's fs
+writes hit the user's machine). In **remote/hosted** mode the UI falls back to a
+copy-paste CLI command — exactly like the existing toolkit install.
+
+**Wiring:**
+- `installToolkit(ids, tracking?)` (server action) — after `installItems`, when
+  `tracking` is supplied and mode is local, also run
+  `installTracking(resolveClaudeDir(), tracking)`. Returns a `tracker` status.
+- `buildInstallCommand(ids, tracking?)` — when `tracking` is given, append
+  `--track <companyId> <token> <apiUrl>` so the copied CLI command installs the
+  tracker too. `scripts/install-toolkit.mjs` parses that flag and calls
+  `installTracking`.
+- `InstallView` — on install (and when building the remote command), the client
+  mints the ingest token via `ensureIngestToken(companyId)` (from `useAuth`) and uses
+  `window.location.origin` as `apiUrl` (the app that served the page is the same app
+  that hosts `/api/track`). Passes `{ companyId, token, apiUrl }` down.
+
+**Security note:** the copy-paste command embeds the company's ingest token. That's
+the user's own secret on their own machine — acceptable for MVP; a follow-up could
+fetch the token during the CLI run instead of embedding it.
+
+**Packaging note:** `installTracking` reads the tracker script from
+`toolkit/hooks/codepet-track.mjs` relative to `process.cwd()`. The desktop/CLI build
+must ship the `toolkit/` dir (already true for skills/agents).
+
+**Tests:** extend `capability.test.mjs` for `buildInstallCommand(ids, tracking)`;
+`installTracking` is already covered.

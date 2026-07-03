@@ -5,11 +5,10 @@
 import type { BytePlan } from './ai/plan';
 
 /** The first message the launched `claude` session receives, so it starts on-scope. */
-export function buildOpeningPrompt(plan: BytePlan, audience: string, doneLooks: string): string {
+export function buildOpeningPrompt(plan: BytePlan, brief: string): string {
   return [
     `Let's build: ${plan.title}`,
-    `Who it's for: ${audience}`,
-    `What "done" looks like: ${doneLooks}`,
+    `What to build: ${brief}`,
     '',
     'Plan:',
     ...plan.steps.map((s, i) => `${i + 1}. ${s}`),
