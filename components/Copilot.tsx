@@ -254,7 +254,13 @@ export function Copilot() {
 
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
-          if (m.setup) return <SetupCard key={m.id} m={m} />;
+          if (m.setup)
+            return (
+              <div key={m.id}>
+                {m.text ? <div className="bub">{plain(m.text)}</div> : null}
+                <SetupCard m={m} />
+              </div>
+            );
           if (m.advance) {
             return (
               <div key={m.id} className="bub">
