@@ -140,7 +140,7 @@ function ResultCard({ m }: { m: ChatMessage }) {
                 Approve
               </button>
               <button className="cres-b" onClick={() => openChatResult(r.deptK, r.taskTitle)}>
-                {r.type === 'site' ? 'Open' : 'Copy'}
+                {r.type === 'site' ? 'Open' : 'Read'}
               </button>
               <button className="cres-b" onClick={() => setRevising(true)}>
                 Revise
