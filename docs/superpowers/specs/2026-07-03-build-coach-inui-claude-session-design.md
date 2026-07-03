@@ -6,7 +6,7 @@
 ## Problem
 
 Today "Let's build" arms a session and **opens a Terminal** running `claude`; the
-web UI only *watches* activity through hooks (a budget meter + Byte's narration).
+web UI only _watches_ activity through hooks (a budget meter + Byte's narration).
 The builder cannot converse with Claude from the app — to answer a question,
 approve a tool, or send a follow-up they must leave the UI for the Terminal.
 
@@ -108,6 +108,7 @@ type SessionEvent =
   | { kind: 'error'; message: string }
   | { kind: 'exit'; code: number | null };
 ```
+
 No I/O; unit-tested against fixture stdout streams (including partial/split lines
 and malformed lines → skipped).
 
@@ -125,6 +126,7 @@ Getters/setters + cleanup. Single-user local scope — in-memory is sufficient a
 intentionally not persisted.
 
 **4. `lib/liveSession/engine.ts` — I/O**
+
 - `startSession({ buildSessionId, projectDir, openingPrompt, permission })`: spawn
   the `claude` child in `cwd=projectDir`; write the opening prompt to stdin; pipe
   stdout through `parseEvents` → emit on the session emitter; register in the
@@ -147,6 +149,7 @@ decision (long-poll or hold the HTTP response open), then returns
 pure request/response mapping is unit-tested; the transport is integration-tested.
 
 **6. API routes — `app/api/build-session/`**
+
 - `POST /start` `{ buildSessionId, projectDir, plan, brief }` → `startSession`;
   returns `{ ok, sessionId }` or `{ ok:false, reason:'remote'|'no-claude', command }`.
 - `GET /stream?buildSessionId=…` → SSE; subscribes to the session emitter and
@@ -161,6 +164,7 @@ pure request/response mapping is unit-tested; the transport is integration-teste
 All routes are `runtime = 'nodejs'` and local-only; they reject in remote mode.
 
 **7. UI — `DuringStep` rewrite + subcomponents (`components/views/build/`)**
+
 - **Transcript**: user bubbles; assistant text (streamed via deltas); inline tool
   chips (`Read app/x.ts`, `Bash npm test`, …) with collapsible results.
 - **Composer** (P2): textarea + Send; disabled while awaiting a permission.
