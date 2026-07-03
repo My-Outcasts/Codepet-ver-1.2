@@ -39,6 +39,7 @@ import {
   type TrackEvent,
   type TrackingSummary,
 } from '../tracking';
+import { normalizeDecisions, type DecisionEntry } from '../ai/projectModel';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -128,6 +129,8 @@ export interface CompanyData {
   roadmapStage?: number;
   /** Recent byte-chat history, oldest-first. */
   chat: ChatMessageDoc[];
+  /** Durable company decisions byte maintains (the memory the founder can curate). */
+  decisions: DecisionEntry[];
 }
 
 /** How many recent chat messages to hydrate on load. */
@@ -181,7 +184,24 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     onboardedAt: company?.onboardedAt as number | undefined,
     roadmapStage: validStage(company?.roadmapStage),
     chat,
+    decisions: normalizeDecisions(company?.decisions),
   };
+}
+
+/**
+ * Persist the founder-curated decisions memory. byte writes decisions server-side on
+ * approval (/api/remember); this is the client path for the founder editing/removing
+ * them in the "What byte remembers" panel. `clean` drops undefined fields (e.g. an
+ * absent `source`) since Firestore rejects them.
+ */
+export async function persistDecisions(
+  companyId: string,
+  decisions: DecisionEntry[],
+): Promise<void> {
+  await updateDoc(doc(getDb(), paths.company(companyId)), {
+    decisions: decisions.map((d) => clean(d)),
+    updatedAt: Date.now(),
+  });
 }
 
 /** Persist a single byte-chat message under the company. */

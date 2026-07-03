@@ -1,6 +1,8 @@
 'use client';
+import { useState } from 'react';
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL } from '@/lib/data';
+import type { DecisionEntry } from '@/lib/ai/projectModel';
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   attention: { label: 'needs you', cls: 'attn' },
@@ -8,11 +10,99 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   idle: { label: 'idle', cls: 'idle' },
 };
 
+// One decision byte is holding, as a tinted memory card. View shows the topic + the
+// statement + where it came from; the founder can correct a wrong extraction in place
+// or remove it. Delete is two-step (no browser dialog) so a stray click can't wipe it.
+function MemoryCard({
+  decision,
+  onSave,
+  onDelete,
+}: {
+  decision: DecisionEntry;
+  onSave: (statement: string) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(decision.statement);
+  const [confirming, setConfirming] = useState(false);
+
+  const save = () => {
+    const next = draft.trim();
+    if (next && next !== decision.statement) onSave(next);
+    setEditing(false);
+  };
+  const cancel = () => {
+    setDraft(decision.statement);
+    setEditing(false);
+  };
+
+  return (
+    <div className="mem-card" style={{ ['--mh' as string]: 'var(--violet)' }}>
+      <div className="mem-topic">{decision.topic}</div>
+      {editing ? (
+        <>
+          <textarea
+            className="mem-edit"
+            value={draft}
+            autoFocus
+            rows={3}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) save();
+              if (e.key === 'Escape') cancel();
+            }}
+          />
+          <div className="mem-actions">
+            <button className="mem-btn primary" onClick={save}>
+              Save
+            </button>
+            <button className="mem-btn" onClick={cancel}>
+              Cancel
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="mem-stmt">{decision.statement}</div>
+          <div className="mem-foot">
+            {decision.source ? <span className="mem-src">{decision.source}</span> : <span />}
+            {confirming ? (
+              <div className="mem-actions">
+                <button className="mem-btn danger" onClick={onDelete}>
+                  Remove
+                </button>
+                <button className="mem-btn" onClick={() => setConfirming(false)}>
+                  Keep
+                </button>
+              </div>
+            ) : (
+              <div className="mem-actions">
+                <button
+                  className="mem-btn"
+                  onClick={() => {
+                    setDraft(decision.statement);
+                    setEditing(true);
+                  }}
+                >
+                  Edit
+                </button>
+                <button className="mem-btn" onClick={() => setConfirming(true)}>
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Mission-control list — every department as a scannable row: art thumbnail +
 // name + status + current task + to-do count. The whole company, readable at a
 // glance; click a row to enter.
 export function CompanyView() {
-  const { openDept, regenerateCompany, tick } = useApp();
+  const { openDept, regenerateCompany, tick, decisions, updateDecision, deleteDecision } = useApp();
   void tick;
   const need = DEPTS.filter((d) => d.status === 'attention').length;
 
@@ -77,6 +167,32 @@ export function CompanyView() {
             </div>
           );
         })}
+      </div>
+
+      <div className="mem-sec">
+        <div className="mem-head">
+          <h2>What byte remembers</h2>
+          <div className="sub">
+            Durable decisions byte carries into every task it drafts. Correct anything that’s off.
+          </div>
+        </div>
+        {decisions.length === 0 ? (
+          <div className="mem-empty">
+            No decisions yet. As you approve work, the lasting choices — pricing, positioning,
+            audience — show up here for byte to build on.
+          </div>
+        ) : (
+          <div className="mem-grid">
+            {decisions.map((d, i) => (
+              <MemoryCard
+                key={`${d.topic}-${i}`}
+                decision={d}
+                onSave={(statement) => updateDecision(i, { statement })}
+                onDelete={() => deleteDecision(i)}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   );

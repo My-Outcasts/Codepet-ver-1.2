@@ -7678,3 +7678,130 @@ body {
   color: var(--t-2);
   border: 1px solid var(--hairline);
 }
+
+/* ── Company memory: "What byte remembers" ─────────────────────────────
+   Tinted info-box cards (hue via --mh @ ~12% tint + same-hue border) that surface
+   the durable decisions byte maintains, editable + removable by the founder. */
+.mem-sec {
+  margin-top: 34px;
+}
+.mem-head {
+  margin-bottom: 14px;
+}
+.mem-head h2 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--t-1);
+}
+.mem-head .sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--t-3);
+}
+.mem-empty {
+  padding: 22px;
+  border: 1px dashed var(--hairline);
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--t-3);
+  background: var(--surface-2);
+}
+.mem-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 12px;
+}
+.mem-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 15px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--mh) 12%, var(--surface-2));
+  border: 1px solid color-mix(in srgb, var(--mh) 34%, transparent);
+}
+.mem-topic {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--mh) 62%, var(--t-2));
+}
+.mem-stmt {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--t-1);
+}
+.mem-edit {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--t-1);
+  background: var(--surface-2);
+  border: 1px solid color-mix(in srgb, var(--mh) 40%, var(--hairline));
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+.mem-edit:focus {
+  outline: none;
+  border-color: var(--mh);
+}
+.mem-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.mem-src {
+  overflow: hidden;
+  font-size: 11px;
+  color: var(--t-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mem-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}
+.mem-btn {
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--t-2);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+.mem-btn:hover {
+  color: var(--t-1);
+  border-color: color-mix(in srgb, var(--mh) 45%, var(--hairline));
+}
+.mem-btn.primary {
+  color: #fff;
+  background: var(--mh);
+  border-color: var(--mh);
+}
+.mem-btn.primary:hover {
+  color: #fff;
+  filter: brightness(1.05);
+}
+.mem-btn.danger {
+  color: #b42318;
+  border-color: color-mix(in srgb, #b42318 34%, var(--hairline));
+}
+.mem-btn.danger:hover {
+  color: #b42318;
+  background: color-mix(in srgb, #b42318 10%, transparent);
+}

@@ -29,10 +29,12 @@ import {
   persistRoadmapStage,
   persistBrief,
   persistChatMessage,
+  persistDecisions,
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
 } from './firebase/companyData';
+import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
@@ -113,6 +115,12 @@ interface AppState {
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
+  /** Durable decisions byte maintains about the company — the founder-curatable memory. */
+  decisions: DecisionEntry[];
+  /** Edit a decision in place (e.g. correct a wrong extraction). */
+  updateDecision: (index: number, patch: Partial<DecisionEntry>) => void;
+  /** Remove a decision byte is holding. */
+  deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
   library: LibItem[];
@@ -212,6 +220,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
+  // Durable decisions byte maintains (hydrated from Firestore; founder-curatable).
+  const [decisions, setDecisions] = useState<DecisionEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
@@ -253,10 +263,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat }) => {
+      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat, decisions: dec }) => {
         if (cancelled) return;
         setLibrary(lib);
         setBrief(b);
+        setDecisions(dec);
         setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
         setChatMessages(
           chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
@@ -438,6 +449,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
   }, [companyId, brief, bump, toast, computeNextStep]);
+
+  // Founder-curated memory: edit or remove a decision byte is holding. Optimistic —
+  // the panel reflects the change at once; the Firestore write is best-effort (a failed
+  // write just leaves the persisted copy; it re-hydrates on next load). Editing stamps
+  // updatedAt so the entry sorts as freshly-touched.
+  const updateDecision = useCallback(
+    (index: number, patch: Partial<DecisionEntry>) => {
+      setDecisions((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const next = prev.map((d, i) =>
+          i === index ? { ...d, ...patch, updatedAt: Date.now() } : d,
+        );
+        if (companyId) persistDecisions(companyId, next).catch(() => {});
+        return next;
+      });
+    },
+    [companyId],
+  );
+  const deleteDecision = useCallback(
+    (index: number) => {
+      setDecisions((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const next = prev.filter((_, i) => i !== index);
+        if (companyId) persistDecisions(companyId, next).catch(() => {});
+        return next;
+      });
+    },
+    [companyId],
+  );
 
   // Advance to the next product stage (confirmed from the "stage complete" prompt).
   // Optimistically bumps brief.stage so the map moves at once, then re-plans the company
@@ -990,6 +1030,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerateCompany,
       advanceStage,
       brief,
+      decisions,
+      updateDecision,
+      deleteDecision,
       installed,
       setInstalled: setInstalledFlag,
       library,
@@ -1039,6 +1082,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerateCompany,
       advanceStage,
       brief,
+      decisions,
+      updateDecision,
+      deleteDecision,
       installed,
       setInstalledFlag,
       library,
