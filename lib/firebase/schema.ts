@@ -35,6 +35,9 @@ export interface CompanyBrief {
   projectName?: string;
   /** One-sentence description of the product (highest-signal field for byte). */
   oneLiner?: string;
+  /** byte's enriched read of the product (from "byte reads it"), when the founder's
+   * inputs were rich enough to extract one. Sharper/fuller than the founder's one-liner. */
+  summary?: string;
   /** Free-form details: pitch, README, PRD notes, anything pasted. */
   notes?: string;
   /** Website / repo / Figma link. */
