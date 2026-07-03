@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
-import { LIB_TAG, LIB_BUCKET, LIB_BORDER, LIB_SKIN } from '@/lib/data';
+import { LIB_TAG, LIB_BUCKET, LIB_BORDER, LIB_SKIN, DEPTS } from '@/lib/data';
 
 const libBucket = (t: string) => LIB_BUCKET[t] || 'Docs';
 
@@ -12,6 +12,8 @@ const libState = (t: string): 'live' | 'draft' => (LIVE_TYPES.has(t) ? 'live' : 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 
 type LibItem = ReturnType<typeof useApp>['library'][number];
+
+const DEPT_ORDER = DEPTS.map((d) => d.k);
 
 export function LibraryView() {
   const { library, viewItem, tick } = useApp();
@@ -28,8 +30,18 @@ export function LibraryView() {
   const liveN = library.filter((x) => libState(x.type) === 'live').length;
 
   const shown = library.filter((x) => activeFilter === 'all' || libBucket(x.type) === activeFilter);
-  const liveItems = shown.filter((x) => libState(x.type) === 'live');
-  const draftItems = shown.filter((x) => libState(x.type) === 'draft');
+
+  // group by department, in the app's canonical DEPTS order (unknown depts last)
+  const byDept = new Map<string, LibItem[]>();
+  shown.forEach((x) => {
+    const key = x.k || 'other';
+    if (!byDept.has(key)) byDept.set(key, []);
+    byDept.get(key)!.push(x);
+  });
+  const deptKeys = [
+    ...DEPT_ORDER.filter((k) => byDept.has(k)),
+    ...[...byDept.keys()].filter((k) => !DEPT_ORDER.includes(k)),
+  ];
 
   const descOf = (x: LibItem) =>
     (x.out || '')
@@ -39,9 +51,10 @@ export function LibraryView() {
       .slice(0, 2)
       .join(' ');
 
-  const Tile = ({ x, live }: { x: LibItem; live: boolean }) => {
+  const Row = ({ x }: { x: LibItem }) => {
     const ink = (LIB_SKIN[x.type] || LIB_SKIN.doc).ink;
     const desc = descOf(x);
+    const live = libState(x.type) === 'live';
     return (
       <div
         className="lib-tile libopen"
@@ -49,17 +62,16 @@ export function LibraryView() {
         onClick={() => viewItem(x)}
       >
         <div className="lt-main">
-          <span className={`lt-tag${live ? '' : ' draft'}`}>
-            <span className="lib-pip" />
-            {LIB_TAG[x.type]}
-          </span>
+          <span className="lt-tag">{LIB_TAG[x.type]}</span>
           <div className="lt-title">{x.title}</div>
           {desc && <div className="lt-desc">{desc}</div>}
         </div>
         <div className="lt-meta">
-          <div className={`di c-${x.k}`}>{x.ab}</div>
-          <div className="lt-dept">{x.dept}</div>
-          <span className="lt-open">{x.type === 'site' ? 'open live' : 'open'}</span>
+          <span className={`lt-state${live ? ' live' : ''}`}>
+            <span className={`lib-pip${live ? '' : ' hollow'}`} />
+            {live ? 'Live' : 'Draft'}
+          </span>
+          <span className="lt-open">open</span>
         </div>
       </div>
     );
@@ -113,33 +125,25 @@ export function LibraryView() {
           </div>
         </div>
       ) : (
-        <>
-          {liveItems.length > 0 && (
-            <div className="lib-group">
+        deptKeys.map((key) => {
+          const items = byDept.get(key)!;
+          const dept = DEPTS.find((d) => d.k === key);
+          const name = dept?.name || items[0]?.dept || 'Other';
+          const ab = dept?.ab || items[0]?.ab || '—';
+          return (
+            <div className="lib-group" key={key}>
               <div className="lib-ghead">
-                <span className="lib-pip" /> Live <span className="gn">— {liveItems.length}</span>
+                <span className={`lib-gav c-${key}`}>{ab}</span>
+                {name} <span className="gn">— {items.length}</span>
               </div>
               <div className="lib-grid">
-                {liveItems.map((x, i) => (
-                  <Tile key={`l${i}`} x={x} live />
+                {items.map((x, i) => (
+                  <Row key={i} x={x} />
                 ))}
               </div>
             </div>
-          )}
-          {draftItems.length > 0 && (
-            <div className="lib-group">
-              <div className="lib-ghead">
-                <span className="lib-pip hollow" /> Drafts{' '}
-                <span className="gn">— {draftItems.length}</span>
-              </div>
-              <div className="lib-grid">
-                {draftItems.map((x, i) => (
-                  <Tile key={`d${i}`} x={x} live={false} />
-                ))}
-              </div>
-            </div>
-          )}
-        </>
+          );
+        })
       )}
     </section>
   );
