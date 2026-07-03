@@ -309,42 +309,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [companyId, brief, bump, toast, computeNextStep]);
 
   // Advance to the next product stage (confirmed from the "stage complete" prompt).
-  // Bumps brief.stage → the map moves at once (watermark recompute), then re-plans the
-  // company for the NEW stage so its tasks appear. The finished tasks already live in
-  // the Library. No-op at the top rung. Uses the freshly-computed `updated` brief for
-  // the re-plan (state setters are async, so we can't rely on `brief` here yet).
+  // Optimistically bumps brief.stage so the map moves at once, then re-plans the company
+  // for the NEW stage so its tasks appear. The finished tasks already live in the Library.
+  // No-op at the top rung. Uses the freshly-computed `updated` brief for the re-plan
+  // (state setters are async, so we can't rely on `brief` here yet).
+  //
+  // The stage is persisted ONLY after the re-plan succeeds — and rolled back in memory if
+  // it fails — so a failed re-plan can never strand the founder at a new stage that still
+  // shows the previous stage's tasks (a half-state that would survive reload). The retry
+  // affordance (the advance button) is restored on the note so they can try again.
   const advanceStage = useCallback(() => {
     const next = nextStageOf(brief.stage);
     if (!next) return;
+    const prevBrief = brief;
+    const company = brief.projectName?.trim() || 'your company';
     const updated = { ...brief, stage: next };
+    const noteId = newId();
     setBrief(updated);
     setStageWatermark(roadmapWatermarkFor(next));
     bump(); // move the map now (overlay phase + roadmap "you are here")
-    // Clear the advance prompt(s), then confirm + re-plan.
+    // Clear the advance prompt(s), then post a "re-planning…" note (updated on settle).
     setChatMessages((prev) => [
       ...prev.map((m) => (m.advance ? { ...m, advance: undefined } : m)),
       {
-        id: newId(),
+        id: noteId,
         role: 'byte',
-        text: `You're in ${next} now. Re-planning ${updated.projectName?.trim() || 'your company'} for this stage…`,
+        text: `You're in ${next} now. Re-planning ${company} for this stage…`,
         ts: Date.now(),
       },
     ]);
-    if (companyId) {
-      persistBrief(companyId, updated).catch((err) =>
-        console.error('[store] persistBrief failed', err),
-      );
-      scaffoldCompany(companyId, updated).then((changed) => {
-        if (changed) {
-          bump();
-          computeNextStep();
-          toast(`Company re-planned for ${next}`);
-        } else {
-          toast('Couldn’t re-plan just now — try “Re-plan for my stage”');
-        }
-      });
-    }
-  }, [brief, companyId, bump, toast, computeNextStep]);
+    if (!companyId) return;
+    scaffoldCompany(companyId, updated).then((changed) => {
+      if (changed) {
+        // Re-plan took — now it's safe to persist the new stage.
+        persistBrief(companyId, updated).catch((err) =>
+          console.error('[store] persistBrief failed', err),
+        );
+        bump();
+        computeNextStep();
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === noteId
+              ? {
+                  ...m,
+                  text: `You're in ${next} now — I've re-planned ${company} for this stage. Here's what's next.`,
+                }
+              : m,
+          ),
+        );
+      } else {
+        // Re-plan failed and nothing was persisted — roll the stage back so the founder
+        // stays consistent (current stage + current tasks), and offer a retry.
+        setBrief(prevBrief);
+        setStageWatermark(roadmapWatermarkFor(prevBrief.stage));
+        bump();
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === noteId
+              ? {
+                  ...m,
+                  text: `I couldn't re-plan just now, so I've kept you on your current stage — nothing changed. Want to try again?`,
+                  advance: { toStage: next },
+                }
+              : m,
+          ),
+        );
+      }
+    });
+  }, [brief, companyId, bump, computeNextStep]);
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
     try {
