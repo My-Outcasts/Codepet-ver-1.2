@@ -5,6 +5,8 @@ import { DEPTS, OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL 
 import { buildRevealSummary, type RevealSummary } from '@/lib/onboarding/firstRun';
 import type { CompanyBrief } from '@/lib/firebase/schema';
 import { track } from '@/lib/analytics';
+import { useParallax } from '@/lib/ui/useParallax';
+import { Starfield } from '@/components/ui/Starfield';
 
 interface ObData {
   name: string;
@@ -34,14 +36,26 @@ const DEPT_DOT: Record<string, string> = {
 
 // One cinematic scene per step (left panel art; step 0 is the full-bleed cold-open).
 const STEP_ART = [
-  '/onboarding/ob-team.jpg', // 0 cold-open
-  '/onboarding/ob-couch.jpg', // 1 name
-  '/onboarding/ob-chess.jpg', // 2 role
-  '/onboarding/ob-drummer.jpg', // 3 tech
-  '/onboarding/ob-observatory.jpg', // 4 project
-  '/onboarding/ob-isometric.jpg', // 5 stage
-  '/onboarding/ob-boardroom.jpg', // 6 analysis
-  '/onboarding/ob-team.jpg', // 7 summary
+  '/onboarding/ob-team.webp', // 0 cold-open
+  '/onboarding/ob-couch.webp', // 1 name
+  '/onboarding/ob-chess.webp', // 2 role
+  '/onboarding/ob-drummer.webp', // 3 tech
+  '/onboarding/ob-observatory.webp', // 4 project
+  '/onboarding/ob-isometric.webp', // 5 stage
+  '/onboarding/ob-boardroom.webp', // 6 analysis
+  '/onboarding/ob-team.webp', // 7 summary
+];
+
+// Per-step colour grade laid over the art panel (soft-light) — one hue per scene.
+const STEP_GRADE = [
+  'rgba(124,58,237,0.28)', // 0
+  'rgba(255,157,107,0.24)', // 1
+  'rgba(110,168,255,0.24)', // 2
+  'rgba(79,224,207,0.24)', // 3
+  'rgba(208,140,245,0.26)', // 4
+  'rgba(242,201,76,0.22)', // 5
+  'rgba(126,168,255,0.26)', // 6
+  'rgba(124,58,237,0.26)', // 7
 ];
 
 const AN_LINES = [
@@ -152,6 +166,8 @@ export function Onboarding() {
   const [reveal, setReveal] = useState<RevealSummary | null>(null);
   const [slow, setSlow] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const coldRef = useRef<HTMLDivElement>(null);
+  useParallax(coldRef);
 
   // step 6: play the analysis animation AND run the real scaffold. "See what I found"
   // unlocks only when both the animation has finished and the scaffold has resolved.
@@ -229,7 +245,9 @@ export function Onboarding() {
   // Step 0 — cinematic cold-open (full-bleed hero), distinct from the question screens.
   if (step === 0) {
     return (
-      <div className="ob ob-cold">
+      <div className="ob ob-cold" ref={coldRef}>
+        <div className="ob-cold-glow" aria-hidden />
+        <Starfield />
         <button className="skip-pre" onClick={enterApp}>
           Skip onboarding →
         </button>
@@ -547,8 +565,14 @@ export function Onboarding() {
         Skip onboarding →
       </button>
       <div className="obcard">
-        <div className="ob-art">
-          <span key={step} style={{ backgroundImage: `url(${STEP_ART[step]})` }} />
+        <div className="ob-art" style={{ ['--grade' as string]: STEP_GRADE[step] }}>
+          {STEP_ART.map((src, i) => (
+            <span
+              key={i}
+              className={i === step ? 'on' : ''}
+              style={{ backgroundImage: `url(${src})` }}
+            />
+          ))}
         </div>
         <div className="ob-main" id="obIn">
           <div className="ob-top">

@@ -42,7 +42,12 @@ export function CompanyView() {
               onClick={() => openDept(dep.k)}
               style={{ ['--rc' as string]: `var(${col})` }}
             >
-              <div className="dr-img" style={{ backgroundImage: `url('/covers/${dep.k}.png')` }}>
+              <div
+                className="dr-img"
+                style={{
+                  backgroundImage: `image-set(url('/covers/${dep.k}.avif') type('image/avif'), url('/covers/${dep.k}.webp') type('image/webp'))`,
+                }}
+              >
                 <span
                   className="dr-badge"
                   style={{ background: `color-mix(in srgb,var(${col}) 34%,#0b0a12)` }}

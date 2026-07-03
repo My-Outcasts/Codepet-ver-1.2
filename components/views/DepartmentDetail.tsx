@@ -110,7 +110,12 @@ export function DepartmentDetail() {
           </svg>
           Company
         </div>
-        <div className="dhero2" style={{ backgroundImage: `url('/covers/${d.k}.png')` }}>
+        <div
+          className="dhero2"
+          style={{
+            backgroundImage: `image-set(url('/covers/${d.k}.avif') type('image/avif'), url('/covers/${d.k}.webp') type('image/webp'))`,
+          }}
+        >
           <span
             className="dh-tint"
             style={{

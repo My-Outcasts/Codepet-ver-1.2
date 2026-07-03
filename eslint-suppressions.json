@@ -23,6 +23,11 @@
       "count": 20
     }
   },
+  "components/ui/Starfield.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "components/views/InstallView.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
