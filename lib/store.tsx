@@ -864,6 +864,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           taskTitle: t.t,
           taskHint: t.d,
           deptName: d.name,
+          deptKey: d.k,
           brief,
         });
         applyResult(t, type, res);
@@ -908,6 +909,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           taskTitle: t.t,
           taskHint: t.d,
           deptName: d.name,
+          deptKey: d.k,
           brief,
           reviseNote: trimmed || undefined,
           current: trimmed ? currentDraft(t, type) : undefined,
