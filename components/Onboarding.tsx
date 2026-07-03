@@ -21,6 +21,18 @@ interface ObData {
   stage: number;
 }
 
+// Bright-on-dark dot colour per department, for the cold-open department preview chips.
+const DEPT_DOT: Record<string, string> = {
+  eng: '#6ea8ff',
+  mkt: '#ff9d6b',
+  ops: '#4fe0cf',
+  fin: '#f2c94c',
+  legal: '#b98cf0',
+  design: '#d08cf5',
+  sales: '#7ea8ff',
+  support: '#7fd694',
+};
+
 // One cinematic scene per step (left panel art; step 0 is the full-bleed cold-open).
 const STEP_ART = [
   '/onboarding/ob-team.jpg', // 0 cold-open
@@ -227,17 +239,46 @@ export function Onboarding() {
             <Byte size="s28" />
             <span>byte</span>
           </div>
-          <h1>Let&apos;s build your company — not just your code.</h1>
+          <h1>
+            Let&apos;s build your company — <span className="ob-hl">not just your code.</span>
+          </h1>
           <p>
             I&apos;m byte. I&apos;ll run the whole company around your product, department by
             department — and I do the work <b>with</b> you, so you always understand what&apos;s
             happening.
           </p>
+          <div className="ob-depts">
+            <div className="ob-depts-ey">byte runs all {DEPTS.length} departments</div>
+            <div className="ob-chips">
+              {DEPTS.map((d) => (
+                <span
+                  key={d.k}
+                  className="ob-chip"
+                  style={{ ['--dc' as string]: DEPT_DOT[d.k] || '#9d5cf5' }}
+                >
+                  <i />
+                  {d.name}
+                </span>
+              ))}
+            </div>
+          </div>
           <button className="splash-btn" onClick={() => setStep(1)}>
             Set up my company
           </button>
           <div className="ob-cold-meta">
-            About a minute · I map your roadmap across 8 departments · you approve every move
+            <span className="ob-pt">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+              About a minute to set up
+            </span>
+            <span className="ob-pt">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 6 9 17l-5-5" />
+              </svg>
+              You approve every move
+            </span>
           </div>
         </div>
       </div>
