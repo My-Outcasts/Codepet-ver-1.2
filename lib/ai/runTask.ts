@@ -32,6 +32,7 @@ export interface RunArgs {
   taskTitle: string;
   taskHint?: string;
   deptName?: string;
+  deptKey?: string;
   /** Revise pass: byte's feedback + the current draft to revise. */
   reviseNote?: string;
   current?: string;

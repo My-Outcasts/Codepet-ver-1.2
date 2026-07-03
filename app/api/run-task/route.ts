@@ -14,6 +14,7 @@ import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { composeProjectModel } from '@/lib/ai/projectModel';
+import { departmentBrief } from '@/lib/ai/departments';
 import {
   STRUCTURED_SCHEMAS,
   DELIVERABLE_INSTRUCTIONS,
@@ -61,6 +62,7 @@ interface RunTaskBody {
   taskTitle?: unknown;
   taskHint?: unknown;
   deptName?: unknown;
+  deptKey?: unknown;
   reviseNote?: unknown;
   current?: unknown;
   brief?: unknown;
@@ -74,16 +76,18 @@ function buildPrompt(
     taskTitle: string;
     taskHint?: string;
     deptName?: string;
+    deptKey?: string;
     reviseNote?: string;
     current?: string;
   },
 ): string {
-  const { taskTitle, taskHint, deptName, reviseNote, current } = fields;
+  const { taskTitle, taskHint, deptName, deptKey, reviseNote, current } = fields;
   const lines = [
     `Company context: ${context}`,
     ...(priorWork ? ['', priorWork] : []),
     '',
     deptName ? `Department: ${deptName}` : null,
+    deptKey && departmentBrief(deptKey) ? departmentBrief(deptKey) : null,
     `Task: ${taskTitle}`,
     taskHint ? `Intended deliverable: ${taskHint}` : null,
     '',
@@ -149,6 +153,7 @@ export async function POST(req: Request): Promise<Response> {
     taskTitle,
     taskHint: typeof body.taskHint === 'string' ? body.taskHint.slice(0, 400) : undefined,
     deptName: typeof body.deptName === 'string' ? body.deptName : undefined,
+    deptKey: typeof body.deptKey === 'string' ? body.deptKey : undefined,
     reviseNote: typeof body.reviseNote === 'string' ? body.reviseNote.slice(0, 400) : undefined,
     current: typeof body.current === 'string' ? body.current.slice(0, 6000) : undefined,
   };

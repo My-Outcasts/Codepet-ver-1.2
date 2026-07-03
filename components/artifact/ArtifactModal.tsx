@@ -322,6 +322,7 @@ export function ArtifactModal() {
         taskTitle: t.t,
         taskHint: t.d || (typeof t.out === 'string' ? t.out.slice(0, 160) : undefined),
         deptName: d.name,
+        deptKey: d.k,
         brief,
       })
         .then((res) => {
@@ -353,6 +354,7 @@ export function ArtifactModal() {
         taskTitle: t.t,
         taskHint: t.d,
         deptName: d.name,
+        deptKey: d.k,
         reviseNote: note,
         current: currentDraft(t, type),
         brief,
