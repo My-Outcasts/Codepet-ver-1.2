@@ -148,8 +148,10 @@ export function Onboarding() {
     if (step !== 6) {
       setAnShown(0);
       setAnDone(false);
-      setReveal(null);
-      setSlow(false);
+      if (step < 6) {
+        setReveal(null);
+        setSlow(false);
+      }
       return;
     }
     setAnShown(0);
