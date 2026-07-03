@@ -92,7 +92,15 @@ function ResultCard({ m }: { m: ChatMessage }) {
 }
 
 export function Copilot() {
-  const { toggleCopilot, brief, chatMessages, chatStreaming, sendChat, runBriefedTask } = useApp();
+  const {
+    toggleCopilot,
+    brief,
+    chatMessages,
+    chatStreaming,
+    sendChat,
+    runBriefedTask,
+    advanceStage,
+  } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
   const company = brief.projectName?.trim() || 'your company';
@@ -150,6 +158,16 @@ export function Copilot() {
 
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
+          if (m.advance) {
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <button className="bub-adv" onClick={advanceStage}>
+                  Advance to {m.advance.toStage}
+                </button>
+              </div>
+            );
+          }
           const streamingByte = chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
           if (streamingByte && !m.text) {
             return (

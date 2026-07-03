@@ -24,6 +24,7 @@ import {
   persistApproval,
   persistEnv,
   persistRoadmapStage,
+  persistBrief,
   persistChatMessage,
   envStateFromCatalog,
   completeOnboarding,
@@ -34,7 +35,7 @@ import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
 import { nextAction, setStageWatermark } from './roadmap';
-import { roadmapWatermarkFor } from './stages';
+import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -50,6 +51,8 @@ export interface ChatMessage {
   running?: boolean;
   /** An inline deliverable byte produced in chat, awaiting approval (reads the live task). */
   result?: { deptK: string; taskTitle: string; type: string; approved?: boolean };
+  /** A "stage complete — advance?" prompt: the rung the founder can move up to. */
+  advance?: { toStage: string };
 }
 
 const newId = (): string =>
@@ -81,6 +84,8 @@ interface AppState {
   finishOnboarding: (brief?: CompanyBrief) => void;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
+  /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
+  advanceStage: () => void;
   brief: CompanyBrief;
   installed: boolean;
   setInstalled: (value: boolean) => void;
@@ -302,6 +307,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
   }, [companyId, brief, bump, toast, computeNextStep]);
+
+  // Advance to the next product stage (confirmed from the "stage complete" prompt).
+  // Bumps brief.stage → the map moves at once (watermark recompute), then re-plans the
+  // company for the NEW stage so its tasks appear. The finished tasks already live in
+  // the Library. No-op at the top rung. Uses the freshly-computed `updated` brief for
+  // the re-plan (state setters are async, so we can't rely on `brief` here yet).
+  const advanceStage = useCallback(() => {
+    const next = nextStageOf(brief.stage);
+    if (!next) return;
+    const updated = { ...brief, stage: next };
+    setBrief(updated);
+    setStageWatermark(roadmapWatermarkFor(next));
+    bump(); // move the map now (overlay phase + roadmap "you are here")
+    // Clear the advance prompt(s), then confirm + re-plan.
+    setChatMessages((prev) => [
+      ...prev.map((m) => (m.advance ? { ...m, advance: undefined } : m)),
+      {
+        id: newId(),
+        role: 'byte',
+        text: `You're in ${next} now. Re-planning ${updated.projectName?.trim() || 'your company'} for this stage…`,
+        ts: Date.now(),
+      },
+    ]);
+    if (companyId) {
+      persistBrief(companyId, updated).catch((err) =>
+        console.error('[store] persistBrief failed', err),
+      );
+      scaffoldCompany(companyId, updated).then((changed) => {
+        if (changed) {
+          bump();
+          computeNextStep();
+          toast(`Company re-planned for ${next}`);
+        } else {
+          toast('Couldn’t re-plan just now — try “Re-plan for my stage”');
+        }
+      });
+    }
+  }, [brief, companyId, bump, toast, computeNextStep]);
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
     try {
@@ -397,6 +440,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [runTask],
   );
 
+  // After an approval, if the founder has now finished every active task for their
+  // current stage, surface a one-tap "advance to the next stage?" prompt in chat (and
+  // open the chat so they see the moment). Confirm-first — advancing re-plans the whole
+  // company, so it's the founder's call. No-op unless the stage just completed, and it
+  // never stacks a second prompt.
+  const maybeOfferAdvance = useCallback(() => {
+    if (!stageComplete()) return;
+    const next = nextStageOf(brief.stage);
+    const stageName = brief.stage?.trim();
+    const company = brief.projectName?.trim() || 'your company';
+    setChatMessages((prev) => {
+      if (prev.some((m) => m.advance)) return prev; // one prompt at a time
+      const text = next
+        ? `That's every task done${stageName ? ` for your ${stageName} stage` : ''} — real progress. Ready to move to ${next}? I'll re-plan ${company} for it.`
+        : `That's everything done — you've taken ${company} all the way to Growing. That's the whole journey. Huge milestone.`;
+      return [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          text,
+          ts: Date.now(),
+          advance: next ? { toStage: next } : undefined,
+        },
+      ];
+    });
+    toggleCopilot(false);
+  }, [brief, toggleCopilot]);
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
       t.done = true;
@@ -438,9 +510,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       }
       computeNextStep(); // this task is done now — advance the next step
+      maybeOfferAdvance(); // …and if that was the last one, offer to move up a stage
       return { item, next };
     },
-    [companyId, bump, toast, computeNextStep],
+    [companyId, bump, toast, computeNextStep, maybeOfferAdvance],
   );
 
   const toggleEnv = useCallback(
@@ -688,6 +761,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       onboarding,
       finishOnboarding,
       regenerateCompany,
+      advanceStage,
       brief,
       installed,
       setInstalled: setInstalledFlag,
@@ -729,6 +803,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       onboarding,
       finishOnboarding,
       regenerateCompany,
+      advanceStage,
       brief,
       installed,
       setInstalledFlag,

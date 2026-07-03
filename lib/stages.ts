@@ -18,6 +18,32 @@ export function stageLabelOf(index: number): string {
   return index >= 0 && index < OB_STAGES.length ? OB_STAGES[index] : '';
 }
 
+/** The next rung on the founder's product ladder, or null at the top (Growing) / unknown. */
+export function nextStageOf(stage?: string): string | null {
+  const i = stageIndexOf(stage);
+  if (i < 0 || i >= OB_STAGES.length - 1) return null;
+  return OB_STAGES[i + 1];
+}
+
+/**
+ * True when the founder has finished the work for their current stage: every active
+ * (non-dormant) department's tasks are done. Dormant "later" departments are excluded
+ * — they belong to future stages. Requires at least one active task so an empty/loading
+ * company never reads as "complete". Reads the live DEPTS singleton — call per render.
+ */
+export function stageComplete(): boolean {
+  let total = 0;
+  let done = 0;
+  for (const d of DEPTS) {
+    if (d.later) continue;
+    for (const t of d.tasks) {
+      total += 1;
+      if (t.done) done += 1;
+    }
+  }
+  return total > 0 && done === total;
+}
+
 // Map each onboarding stage to the roadmap stage that is "now" on the Find → Build →
 // Ship → Launch → Grow spine (stages 1-9 in PHASES). Everything before is done, this
 // one is where they are, everything after is up next. Index matches OB_STAGES order.
