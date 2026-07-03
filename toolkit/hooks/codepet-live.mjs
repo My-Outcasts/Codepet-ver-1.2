@@ -10,6 +10,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { narrate, extractLastAssistantText } from './narrate.mjs';
 
 function readStdin() {
   try {
@@ -23,6 +24,7 @@ function kindFor(name) {
   if (name === 'SessionStart') return 'start';
   if (name === 'PostToolUse') return 'tool';
   if (name === 'Stop') return 'turn';
+  if (name === 'Notification') return 'ask';
   return null;
 }
 
@@ -55,9 +57,24 @@ async function main() {
     buildSessionId: build.buildSessionId,
     sessionId: input.session_id || `sess-${Date.now()}`,
     kind,
-    tool: kind === 'tool' ? input.tool_name : undefined,
     ts: Date.now(),
   };
+  if (kind === 'tool') {
+    event.tool = input.tool_name;
+  } else if (kind === 'turn') {
+    // Narrate what Claude just said — locally, so the raw text never leaves the
+    // machine. Any failure just omits `say`; the turn still counts.
+    try {
+      if (input.transcript_path) {
+        const line = narrate(extractLastAssistantText(fs.readFileSync(input.transcript_path, 'utf8')));
+        if (line) event.say = line;
+      }
+    } catch {
+      // transcript unreadable — emit the bare turn
+    }
+  } else if (kind === 'ask') {
+    event.ask = "Claude's waiting on you — hop back to the Terminal and answer 🙋";
+  }
 
   try {
     await fetch(`${cfg.apiUrl.replace(/\/$/, '')}/api/track/live`, {
