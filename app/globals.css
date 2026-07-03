@@ -2042,6 +2042,8 @@ body {
     transform 0.14s ease,
     box-shadow 0.14s ease,
     border-color 0.14s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 128px;
 }
 .deptrow:hover {
   transform: translateY(-2px);
@@ -3139,7 +3141,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/splash.jpg') center / cover no-repeat;
+  background: url('/splash.webp') center / cover no-repeat;
   animation: kenburns 30s ease-in-out infinite alternate;
 }
 /* readability scrim */
@@ -3157,7 +3159,7 @@ body {
   pointer-events: none;
 }
 
-/* Branded loading screen — same splash.jpg world as splash/sign-in, so every
+/* Branded loading screen — same splash.webp world as splash/sign-in, so every
    pre-app moment is one continuous flow. Reuses fadeIn/kenburns/riseIn. */
 .loadscr {
   position: fixed;
@@ -3174,7 +3176,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/loading.jpg') center / cover no-repeat;
+  background: url('/loading.webp') center / cover no-repeat;
   animation: kenburns 30s ease-in-out infinite alternate;
 }
 .loadscr::after {
@@ -3324,7 +3326,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/onboarding/ob-team.jpg') center / cover no-repeat;
+  background: url('/onboarding/ob-team.webp') center / cover no-repeat;
   animation: kenburns 32s ease-in-out infinite alternate;
 }
 /* readability scrim — keeps the whole left column crisp while the scene shows through right */
@@ -7044,7 +7046,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/auth.jpg') center / cover no-repeat;
+  background: url('/auth.webp') center / cover no-repeat;
   animation: kenburns 34s ease-in-out infinite alternate;
 }
 /* vignette scrim so the card reads against the busy art */

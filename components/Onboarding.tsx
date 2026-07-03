@@ -34,14 +34,14 @@ const DEPT_DOT: Record<string, string> = {
 
 // One cinematic scene per step (left panel art; step 0 is the full-bleed cold-open).
 const STEP_ART = [
-  '/onboarding/ob-team.jpg', // 0 cold-open
-  '/onboarding/ob-couch.jpg', // 1 name
-  '/onboarding/ob-chess.jpg', // 2 role
-  '/onboarding/ob-drummer.jpg', // 3 tech
-  '/onboarding/ob-observatory.jpg', // 4 project
-  '/onboarding/ob-isometric.jpg', // 5 stage
-  '/onboarding/ob-boardroom.jpg', // 6 analysis
-  '/onboarding/ob-team.jpg', // 7 summary
+  '/onboarding/ob-team.webp', // 0 cold-open
+  '/onboarding/ob-couch.webp', // 1 name
+  '/onboarding/ob-chess.webp', // 2 role
+  '/onboarding/ob-drummer.webp', // 3 tech
+  '/onboarding/ob-observatory.webp', // 4 project
+  '/onboarding/ob-isometric.webp', // 5 stage
+  '/onboarding/ob-boardroom.webp', // 6 analysis
+  '/onboarding/ob-team.webp', // 7 summary
 ];
 
 const AN_LINES = [

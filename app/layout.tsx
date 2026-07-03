@@ -26,6 +26,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:opsz,wght@6..144,300..700&display=swap"
           rel="stylesheet"
         />
+        <link rel="preload" as="image" href="/splash.webp" />
       </head>
       <body>{children}</body>
     </html>
