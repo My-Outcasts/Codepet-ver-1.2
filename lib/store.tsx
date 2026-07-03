@@ -43,8 +43,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
-  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>"). */
-  action?: { label: string; deptK: string; taskTitle: string };
+  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
+   * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
+   * opening the department run modal (runBriefedTask). */
+  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
   /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
   brief?: boolean;
   /** byte is producing a deliverable for this message right now (inline run). */
@@ -202,6 +204,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstApproveTracked = useRef(false);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -683,6 +686,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!d || !t) return;
       const type = artType(t);
       approveTask(t, d, type);
+      if (!firstApproveTracked.current) {
+        firstApproveTracked.current = true;
+        track('firstrun.first_approve', { dept: deptK });
+      }
       setChatMessages((prev) =>
         prev.map((m) =>
           m.result && m.result.deptK === deptK && m.result.taskTitle === taskTitle

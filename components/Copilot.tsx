@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { track } from '@/lib/analytics';
 import { DEPTS } from '@/lib/data';
 import { Byte } from './Byte';
 import type { ChatMessage } from '@/lib/store';
@@ -159,6 +160,7 @@ export function Copilot() {
     chatStreaming,
     sendChat,
     runBriefedTask,
+    runTaskInChat,
     advanceStage,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
@@ -242,7 +244,14 @@ export function Copilot() {
               {m.action && (
                 <button
                   className="bub-act"
-                  onClick={() => runBriefedTask(m.action!.deptK, m.action!.taskTitle)}
+                  onClick={() => {
+                    if (m.action!.inline) {
+                      track('firstrun.action_clicked', { dept: m.action!.deptK });
+                      runTaskInChat(m.action!.deptK, m.action!.taskTitle);
+                    } else {
+                      runBriefedTask(m.action!.deptK, m.action!.taskTitle);
+                    }
+                  }}
                 >
                   {m.action.label}
                 </button>
