@@ -61,7 +61,10 @@ describe('reduceTranscript', () => {
   });
 
   it('keeps an existing error when a clean exit follows', () => {
-    const s = run([{ kind: 'error', message: 'boom' }, { kind: 'exit', code: 0 }]);
+    const s = run([
+      { kind: 'error', message: 'boom' },
+      { kind: 'exit', code: 0 },
+    ]);
     expect(s.status).toBe('error');
     expect(s.error).toBe('boom');
   });
