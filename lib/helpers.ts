@@ -66,13 +66,15 @@ export interface TaskStateInfo {
   label: string;
   cls: string;
 }
-// shared task-state vocabulary — what each task needs from whom
+// shared task-state vocabulary — the honest state a task is actually in.
+// Order matters: done and locked first, then a produced-but-unapproved draft
+// (Awaiting), then the founder's own tasks, then byte's queue (draft-not-yet + does).
 export function taskState(t: Task, available?: boolean): TaskStateInfo {
   if (t.done) return { label: 'Done', cls: 'st-done' };
   if (available === false) return { label: 'Locked', cls: 'st-locked' };
-  if (t.who === 'draft') return { label: 'Needs your approval', cls: 'st-draft' };
-  if (t.who === 'you') return { label: 'Needs your input', cls: 'st-you' };
-  return { label: 'byte does this', cls: 'st-does' };
+  if (t.drafted) return { label: 'Awaiting your approval', cls: 'st-draft' };
+  if (t.who === 'you') return { label: 'Your move', cls: 'st-you' };
+  return { label: 'Up next', cls: 'st-does' };
 }
 
 const artTag = (c: string, l: string): string =>
