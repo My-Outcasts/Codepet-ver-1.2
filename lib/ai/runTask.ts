@@ -15,6 +15,7 @@ export async function authHeader(): Promise<Record<string, string>> {
 
 export type DeliverableKind =
   | 'text'
+  | 'doc'
   | 'post'
   | 'email'
   | 'legal'

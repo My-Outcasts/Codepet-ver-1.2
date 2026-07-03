@@ -5,7 +5,6 @@ import { DEPTS, OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL 
 import { buildRevealSummary, type RevealSummary } from '@/lib/onboarding/firstRun';
 import type { CompanyBrief } from '@/lib/firebase/schema';
 import { track } from '@/lib/analytics';
-import { Byte } from './Byte';
 
 interface ObData {
   name: string;
@@ -20,6 +19,18 @@ interface ObData {
   audience: string;
   stage: number;
 }
+
+// Bright-on-dark dot colour per department, for the cold-open department preview chips.
+const DEPT_DOT: Record<string, string> = {
+  eng: '#6ea8ff',
+  mkt: '#ff9d6b',
+  ops: '#4fe0cf',
+  fin: '#f2c94c',
+  legal: '#b98cf0',
+  design: '#d08cf5',
+  sales: '#7ea8ff',
+  support: '#7fd694',
+};
 
 // One cinematic scene per step (left panel art; step 0 is the full-bleed cold-open).
 const STEP_ART = [
@@ -223,22 +234,31 @@ export function Onboarding() {
           Skip onboarding →
         </button>
         <div className="ob-cold-in">
-          <div className="ob-cold-byte">
-            <Byte size="s28" />
-            <span>byte</span>
-          </div>
-          <h1>Let&apos;s build your company — not just your code.</h1>
+          <h1>
+            Let&apos;s build your company — <span className="ob-hl">not just your code.</span>
+          </h1>
           <p>
-            I&apos;m byte. I&apos;ll run the whole company around your product, department by
-            department — and I do the work <b>with</b> you, so you always understand what&apos;s
-            happening.
+            Codepet runs the whole company around your product, department by department — and does
+            the work <b>with</b> you, so you always understand what&apos;s happening.
           </p>
+          <div className="ob-depts">
+            <div className="ob-depts-ey">Codepet runs all {DEPTS.length} departments</div>
+            <div className="ob-chips">
+              {DEPTS.map((d) => (
+                <span
+                  key={d.k}
+                  className="ob-chip"
+                  style={{ ['--dc' as string]: DEPT_DOT[d.k] || '#9d5cf5' }}
+                >
+                  <i />
+                  {d.name}
+                </span>
+              ))}
+            </div>
+          </div>
           <button className="splash-btn" onClick={() => setStep(1)}>
             Set up my company
           </button>
-          <div className="ob-cold-meta">
-            About a minute · I map your roadmap across 8 departments · you approve every move
-          </div>
         </div>
       </div>
     );

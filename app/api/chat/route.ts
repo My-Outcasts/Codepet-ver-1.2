@@ -12,6 +12,7 @@ import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
 import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
 import { NAV_DESTINATIONS } from '@/lib/ai/navChip';
+import { parseSetupItems, matchSetupItem, type SetupItem } from '@/lib/ai/envSetup';
 
 export const runtime = 'nodejs';
 
@@ -31,7 +32,9 @@ You also know Codepet itself, so you can orient the founder and guide them throu
 - Environment — the tools and stack their company runs on.
 - A department (Marketing, Finance, Engineering, and so on) — that team's tasks and current focus; opening one lets you work in it together.
 
-When the founder asks what a part of the app is or how to use it, explain it plainly in a sentence or two, grounded in THEIR company — not a generic manual. When they ask where something is, or to see/open/go to one of these, ALSO call the navigate tool with the matching destination (for a department, its name as target) so they get a one-tap way there, and give a one-line spoken answer, e.g. "You're at the private beta stage — here's your roadmap." Only navigate for a real "where is / take me to / show me" ask; for a plain "what is X" question, explain it (you may still offer to take them).`;
+When the founder asks what a part of the app is or how to use it, explain it plainly in a sentence or two, grounded in THEIR company — not a generic manual. When they ask where something is, or to see/open/go to one of these, ALSO call the navigate tool with the matching destination (for a department, its name as target) so they get a one-tap way there, and give a one-line spoken answer, e.g. "You're at the private beta stage — here's your roadmap." Only navigate for a real "where is / take me to / show me" ask; for a plain "what is X" question, explain it (you may still offer to take them).
+
+When work you're about to run or discuss would clearly go better with a toolkit item that's currently off — a skill, connector, or agent in the SETUP TOOLKIT list — offer to turn it on and call the setup_capability tool with its exact category and name. Turning it on connects it for the founder right here (no separate setup). Say one short lead-in line first (e.g. "This'll go faster with Code review on — want me to turn it on?") and then call the tool. Rules: only suggest an item that's actually in SETUP TOOLKIT (they're all off); pick the single most relevant one; never raise the toolkit during plain questions, advice, or status — only when it genuinely helps the work at hand.`;
 
 // The tool byte calls to actually produce a deliverable inside the chat. Its input
 // must reference a real open task (validated against RUNNABLE TASKS before we act).
@@ -84,6 +87,31 @@ const NAVIGATE_TOOL = {
   },
 };
 
+// The tool byte calls to turn on a currently-off toolkit item (skill/connector/agent)
+// for the founder. Validated against the SETUP TOOLKIT list (the off items the client
+// sent) before we act, so an already-on or invented item is dropped.
+const SETUP_TOOL = {
+  name: 'setup_capability',
+  description:
+    'Turn on a currently-off toolkit item for the founder when it would clearly help the work at hand. Use the exact category and name from the SETUP TOOLKIT list. Only call this for an item in that list; for questions, advice, or status, do NOT call it. Always also give a one-line spoken lead-in.',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+      category: {
+        type: 'string',
+        enum: ['skills', 'connectors', 'agents'],
+        description: 'The item’s category, copied exactly from SETUP TOOLKIT.',
+      },
+      name: {
+        type: 'string',
+        description: 'The exact item name, copied exactly from SETUP TOOLKIT.',
+      },
+    },
+    required: ['category', 'name'],
+  },
+};
+
 // Marker that separates byte's streamed reply text from a trailing action payload on the
 // wire (a run_task run OR a navigate chip). Record-separator (U+001E) never appears in
 // normal prose, so the client can split the stream cleanly: text before it, JSON after.
@@ -121,6 +149,7 @@ interface ChatBody {
   messages?: unknown;
   deptSummary?: unknown;
   openTasks?: unknown;
+  envSetup?: unknown;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -210,7 +239,17 @@ export async function POST(req: Request): Promise<Response> {
         )
         .join('\n')}`
     : '\n\nRUNNABLE TASKS: none open right now — if the founder asks you to run something, tell them there are no open tasks to run.';
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}`;
+
+  // The currently-off toolkit items byte may offer to turn on. Grounded here (exact
+  // identifiers) and validated on the way back so an already-on/invented item can't act.
+  const setupItems = parseSetupItems(body.envSetup);
+  const setupBlock = setupItems.length
+    ? `\n\nSETUP TOOLKIT (call setup_capability with the exact category + name to turn one on):\n${setupItems
+        .map((s) => `- category:"${s.category}" name:"${s.name}" — ${s.why || 'no note'}`)
+        .join('\n')}`
+    : '';
+
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}`;
 
   try {
     const mstream = streamMessage({
@@ -220,8 +259,12 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 2048,
       label: 'chat',
       // navigate is always available (guiding around the app doesn't depend on open
-      // tasks); run_task only when there are real tasks to run.
-      tools: runnable.length ? [NAVIGATE_TOOL, RUN_TASK_TOOL] : [NAVIGATE_TOOL],
+      // tasks); run_task and setup_capability only when there's something real to act on.
+      tools: [
+        NAVIGATE_TOOL,
+        ...(runnable.length ? [RUN_TASK_TOOL] : []),
+        ...(setupItems.length ? [SETUP_TOOL] : []),
+      ],
       onUsage: usageSink(uid, idToken, 'chat'),
     });
 
@@ -245,6 +288,10 @@ export async function POST(req: Request): Promise<Response> {
           const navUse = final.content.find(
             (b): b is Extract<typeof b, { type: 'tool_use' }> =>
               b.type === 'tool_use' && b.name === 'navigate',
+          );
+          const setupUse = final.content.find(
+            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+              b.type === 'tool_use' && b.name === 'setup_capability',
           );
           if (toolUse) {
             const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
@@ -270,6 +317,19 @@ export async function POST(req: Request): Promise<Response> {
               const target = typeof input.target === 'string' ? input.target : undefined;
               controller.enqueue(
                 encoder.encode(ACTION_MARK + JSON.stringify({ nav: dest, target })),
+              );
+            }
+          } else if (setupUse) {
+            // byte wants to turn on a toolkit item. Emit it only if it's a real off item
+            // from SETUP TOOLKIT; the client renders an approval card and flips it on tap.
+            const input = setupUse.input as { category?: unknown; name?: unknown };
+            const match: SetupItem | null = matchSetupItem(setupItems, input.category, input.name);
+            if (match) {
+              controller.enqueue(
+                encoder.encode(
+                  ACTION_MARK +
+                    JSON.stringify({ setup: { category: match.category, name: match.name } }),
+                ),
               );
             }
           }

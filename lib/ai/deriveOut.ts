@@ -12,7 +12,7 @@
 // (house style) — plain text with `·` separators.
 
 type DeriveKind =
-  'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar' | 'checklist' | 'plan';
+  'doc' | 'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar' | 'checklist' | 'plan';
 
 function str(v: unknown): string {
   return typeof v === 'string' ? v.trim() : '';
@@ -58,6 +58,19 @@ function fromEmail(p: Record<string, unknown>): string | null {
   if (cta) tail.push(`CTA: ${cta}.`);
   if (whens.length) tail.push(`Plus a ${whens.length}-step follow-up (${whens.join(', ')}).`);
   if (tail.length) lines.push('', tail.join(' '));
+  return lines.join('\n');
+}
+
+// Doc summary leads with the call (so even the compact card preview shows the decision),
+// then the section headings and the next actions.
+function fromDoc(p: Record<string, unknown>): string | null {
+  const call = str(p.call);
+  if (!call) return null;
+  const heads = pick(p.sections, 'h');
+  const next = strs(p.next);
+  const lines = [call];
+  if (heads.length) lines.push('', `Covers: ${heads.join(' · ')}.`);
+  if (next.length) lines.push('', `Next: ${next.join(' · ')}`);
   return lines.join('\n');
 }
 
@@ -172,6 +185,8 @@ export function deriveOut(type: string, payload: unknown): string | null {
   if (!payload || typeof payload !== 'object') return null;
   const p = payload as Record<string, unknown>;
   switch (type as DeriveKind) {
+    case 'doc':
+      return fromDoc(p);
     case 'post':
       return fromPost(p);
     case 'email':

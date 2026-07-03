@@ -2,7 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { track } from '@/lib/analytics';
-import { DEPTS } from '@/lib/data';
+import { DEPTS, ENV, ENV_META } from '@/lib/data';
+import { resolveEnvIndex } from '@/lib/ai/envSetup';
 import { Byte } from './Byte';
 import type { ChatMessage } from '@/lib/store';
 
@@ -152,6 +153,37 @@ function ResultCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// A one-tap card byte offers to turn on an off toolkit item. Reads the LIVE ENV item so
+// a flip (setupCapability → bump) re-renders this card into its confirmed state.
+function SetupCard({ m }: { m: ChatMessage }) {
+  const { setupCapability } = useApp();
+  const s = m.setup!;
+  const idx = resolveEnvIndex(ENV, s.category, s.name);
+  if (idx === -1) return null; // stale/unknown item — drop quietly
+  const item = ENV[s.category][idx];
+  const meta = ENV_META[s.category];
+  return (
+    <div className="cset">
+      <div className="cset-h">
+        <span className="cset-ic">{item.ab}</span>
+        <span className="cset-cat">{meta.label}</span>
+      </div>
+      <div className="cset-n">{item.n}</div>
+      <div className="cset-why">{item.why || item.d}</div>
+      {item.s ? (
+        <div className="cset-done">
+          <span className="ck">✓</span>
+          {meta.on}
+        </div>
+      ) : (
+        <button className="cset-b" onClick={() => setupCapability(s.category, s.name)}>
+          {meta.add}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function Copilot() {
   const {
     toggleCopilot,
@@ -222,6 +254,13 @@ export function Copilot() {
 
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
+          if (m.setup)
+            return (
+              <div key={m.id}>
+                {m.text ? <div className="bub">{plain(m.text)}</div> : null}
+                <SetupCard m={m} />
+              </div>
+            );
           if (m.advance) {
             return (
               <div key={m.id} className="bub">

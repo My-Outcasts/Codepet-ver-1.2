@@ -5,6 +5,7 @@
 // The server separates the two with a record-separator marker (see ACTION_MARK).
 import { authHeader } from './runTask';
 import type { ChatTurn } from './chatMessages';
+import type { SetupItem } from './envSetup';
 
 const ACTION_MARK = String.fromCharCode(0x1e);
 
@@ -19,7 +20,8 @@ export interface RunnableTask {
 export type ChatEvent =
   | { type: 'text'; text: string }
   | { type: 'action'; deptK: string; taskTitle: string }
-  | { type: 'nav'; dest: string; target?: string };
+  | { type: 'nav'; dest: string; target?: string }
+  | { type: 'setup'; category: string; name: string };
 
 export class ChatError extends Error {
   constructor(public code: string) {
@@ -38,11 +40,12 @@ export async function* streamByteChat(
   history: ChatTurn[],
   deptSummary?: string,
   openTasks?: RunnableTask[],
+  envSetup?: SetupItem[],
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ messages: history, deptSummary, openTasks }),
+    body: JSON.stringify({ messages: history, deptSummary, openTasks, envSetup }),
   });
   if (!res.ok || !res.body) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -82,6 +85,7 @@ export async function* streamByteChat(
         taskTitle?: unknown;
         nav?: unknown;
         target?: unknown;
+        setup?: unknown;
       };
       if (typeof a.deptK === 'string' && typeof a.taskTitle === 'string') {
         yield { type: 'action', deptK: a.deptK, taskTitle: a.taskTitle };
@@ -91,6 +95,11 @@ export async function* streamByteChat(
           dest: a.nav,
           target: typeof a.target === 'string' ? a.target : undefined,
         };
+      } else if (a.setup && typeof a.setup === 'object') {
+        const s = a.setup as { category?: unknown; name?: unknown };
+        if (typeof s.category === 'string' && typeof s.name === 'string') {
+          yield { type: 'setup', category: s.category, name: s.name };
+        }
       }
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */

@@ -31,6 +31,7 @@ export interface Task {
   email?: any;
   calendar?: any;
   legal?: any;
+  doc?: { title?: string; call: string; sections: { h: string; p: string }[]; next?: string[] };
   dms?: any[];
   checklist?: any[];
   // runtime annotations:
@@ -91,6 +92,7 @@ export interface LibItem {
   email?: any;
   calendar?: any;
   legal?: any;
+  doc?: { title?: string; call: string; sections: { h: string; p: string }[]; next?: string[] };
   dms?: any[];
   checklist?: any[];
   plan?: any;
