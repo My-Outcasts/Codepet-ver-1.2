@@ -4,7 +4,7 @@
 // department snapshot is passed as context so byte can talk about what's actually on
 // the founder's plate. ANTHROPIC_API_KEY stays server-side; Node runtime for the SDK.
 import { verifyIdToken } from '@/lib/firebase/admin';
-import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { loadServerCompany } from '@/lib/firebase/serverCompany';
 import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
@@ -135,11 +135,16 @@ export async function POST(req: Request): Promise<Response> {
   // Ground byte's advice in the same project model the generation route uses: the brief
   // narrative plus a digest of what the company has already shipped. Loaded in parallel
   // (no added latency); fail-open — an empty library just omits the shipped digest.
-  const [serverBrief, library] = await Promise.all([
-    loadServerBrief(uid, idToken),
+  const [company, library] = await Promise.all([
+    loadServerCompany(uid, idToken),
     loadServerLibrary(uid, idToken),
   ]);
-  const context = composeProjectModel({ brief: serverBrief, shipped: library }) || FALLBACK_CONTEXT;
+  const context =
+    composeProjectModel({
+      brief: company.brief,
+      decisions: company.decisions,
+      shipped: library,
+    }) || FALLBACK_CONTEXT;
   const deptSummary =
     typeof body.deptSummary === 'string' && body.deptSummary.trim()
       ? `\n\nWhere their departments stand right now:\n${body.deptSummary.trim().slice(0, 1200)}`
