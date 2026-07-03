@@ -11,6 +11,7 @@ import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
 import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
+import { NAV_DESTINATIONS } from '@/lib/ai/navChip';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +21,9 @@ You are in a chat with the founder. Be warm, plain-spoken, specific, and brief �
 
 You can DO the work here, not only talk about it. When the founder asks you to run, make, draft, write, finish, or execute a task — or says "do it" / "run that for me" about the task you're discussing — call the run_task tool with the matching entry from RUNNABLE TASKS. The deliverable is produced right here in the chat for them to approve; never tell them to go open the task somewhere else. Say one short lead-in line first (e.g. "On it — running the willingness-to-pay survey.") and then call the tool. Rules: only call run_task for a task that is actually in RUNNABLE TASKS, using its exact deptK and taskTitle; if it's unclear which task they mean, ask a one-line clarifying question instead of guessing; and for questions, advice, or status, just reply — don't call the tool.
 
-If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.`;
+If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.
+
+You can also guide them around the app. When the founder asks where something is, or asks to see, open, or go to a part of Codepet — the roadmap (their product's stage timeline), tasks (the task board), library (delivered work), company (their departments overview), environment (their tools/stack), or a specific department — call the navigate tool with the matching destination (and, for a department, its name as target). Always answer in words too, then let the tool offer them a one-tap way there — e.g. "You're at the Beta stage — here's your roadmap." Only navigate for a genuine "where is / take me to / show me" ask; for everything else, just reply.`;
 
 // The tool byte calls to actually produce a deliverable inside the chat. Its input
 // must reference a real open task (validated against RUNNABLE TASKS before we act).
@@ -45,9 +48,37 @@ const RUN_TASK_TOOL = {
   },
 };
 
-// Marker that separates byte's streamed reply text from a trailing run_task action
-// payload on the wire. Record-separator (U+001E) never appears in normal prose, so
-// the client can split the stream cleanly: text before it, JSON action after.
+// The tool byte calls to take the founder to a part of the app when they ask where
+// something is or to open/see/go to a function. The client turns a valid destination
+// into a one-tap chip (it never navigates on its own). destination is validated against
+// the shared NAV_DESTINATIONS list before we act on it.
+const NAVIGATE_TOOL = {
+  name: 'navigate',
+  description:
+    "Take the founder to a part of the Codepet app when they ask where something is, or ask to see/open/go to a function. Call this for navigational asks (e.g. 'where's my product on the roadmap?', 'show me my library', 'open Marketing'); for questions, advice, or running work, do NOT call it. Always also give a one-line spoken answer.",
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {
+      destination: {
+        type: 'string',
+        enum: [...NAV_DESTINATIONS],
+        description:
+          'roadmap = the product stage timeline; tasks = the task board; library = delivered work; company = the departments overview; environment = tools/stack; department = a specific department (set target to its name).',
+      },
+      target: {
+        type: 'string',
+        description:
+          'Only for destination "department": the department name or key (e.g. "Marketing"). Omit for the others.',
+      },
+    },
+    required: ['destination'],
+  },
+};
+
+// Marker that separates byte's streamed reply text from a trailing action payload on the
+// wire (a run_task run OR a navigate chip). Record-separator (U+001E) never appears in
+// normal prose, so the client can split the stream cleanly: text before it, JSON after.
 const ACTION_MARK = String.fromCharCode(0x1e);
 
 interface RunnableTask {
@@ -180,7 +211,9 @@ export async function POST(req: Request): Promise<Response> {
       messages: claudeMessages,
       maxTokens: 2048,
       label: 'chat',
-      tools: runnable.length ? [RUN_TASK_TOOL] : undefined,
+      // navigate is always available (guiding around the app doesn't depend on open
+      // tasks); run_task only when there are real tasks to run.
+      tools: runnable.length ? [NAVIGATE_TOOL, RUN_TASK_TOOL] : [NAVIGATE_TOOL],
       onUsage: usageSink(uid, idToken, 'chat'),
     });
 
@@ -201,6 +234,10 @@ export async function POST(req: Request): Promise<Response> {
             (b): b is Extract<typeof b, { type: 'tool_use' }> =>
               b.type === 'tool_use' && b.name === 'run_task',
           );
+          const navUse = final.content.find(
+            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+              b.type === 'tool_use' && b.name === 'navigate',
+          );
           if (toolUse) {
             const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
             const taskTitle = typeof input.taskTitle === 'string' ? input.taskTitle : '';
@@ -213,6 +250,18 @@ export async function POST(req: Request): Promise<Response> {
                 encoder.encode(
                   ACTION_MARK + JSON.stringify({ deptK: match.deptK, taskTitle: match.taskTitle }),
                 ),
+              );
+            }
+          } else if (navUse) {
+            // byte wants to guide them somewhere. Emit the destination only if it's a real
+            // one; the client resolves it to a chip (and drops it if it can't). target is
+            // passed through for a department; the client resolves the exact key/name.
+            const input = navUse.input as { destination?: unknown; target?: unknown };
+            const dest = typeof input.destination === 'string' ? input.destination : '';
+            if ((NAV_DESTINATIONS as readonly string[]).includes(dest)) {
+              const target = typeof input.target === 'string' ? input.target : undefined;
+              controller.enqueue(
+                encoder.encode(ACTION_MARK + JSON.stringify({ nav: dest, target })),
               );
             }
           }

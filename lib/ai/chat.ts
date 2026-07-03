@@ -17,7 +17,9 @@ export interface RunnableTask {
 }
 
 export type ChatEvent =
-  { type: 'text'; text: string } | { type: 'action'; deptK: string; taskTitle: string };
+  | { type: 'text'; text: string }
+  | { type: 'action'; deptK: string; taskTitle: string }
+  | { type: 'nav'; dest: string; target?: string };
 
 export class ChatError extends Error {
   constructor(public code: string) {
@@ -75,9 +77,20 @@ export async function* streamByteChat(
   }
   if (acting && buf) {
     try {
-      const a = JSON.parse(buf) as { deptK?: unknown; taskTitle?: unknown };
+      const a = JSON.parse(buf) as {
+        deptK?: unknown;
+        taskTitle?: unknown;
+        nav?: unknown;
+        target?: unknown;
+      };
       if (typeof a.deptK === 'string' && typeof a.taskTitle === 'string') {
         yield { type: 'action', deptK: a.deptK, taskTitle: a.taskTitle };
+      } else if (typeof a.nav === 'string') {
+        yield {
+          type: 'nav',
+          dest: a.nav,
+          target: typeof a.target === 'string' ? a.target : undefined,
+        };
       }
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */

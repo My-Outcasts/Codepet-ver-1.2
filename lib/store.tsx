@@ -38,6 +38,7 @@ import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
+import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
 import { nextAction, setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
@@ -52,6 +53,9 @@ export interface ChatMessage {
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
   action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
+  /** A one-tap "take me there" chip byte offers when the founder asks where an app
+   * function is. Tapping it navigates (never auto-navigates). */
+  nav?: NavChip;
   /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
   brief?: boolean;
   /** byte is producing a deliverable for this message right now (inline run). */
@@ -97,6 +101,8 @@ interface AppState {
   show: (v: View) => void;
   deptKey: string | null;
   openDept: (k: string) => void;
+  /** Guide the founder to an app function from byte's chat "take me there" chip. */
+  navigateTo: (dest: NavDest, target?: string) => void;
   selStage: number;
   drawerOpen: boolean;
   selectStage: (n: number) => void;
@@ -312,6 +318,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openDept = useCallback((k: string) => {
     setDeptKey(k);
     setView('dept');
+  }, []);
+  // Guide the founder to a part of the app when they tap byte's "take me there" chip.
+  // Maps a resolved NavChip destination to the matching view/action.
+  const navigateTo = useCallback((dest: NavDest, target?: string) => {
+    switch (dest) {
+      case 'roadmap':
+        setView('roadmap');
+        break;
+      case 'tasks':
+        setView('tasks');
+        break;
+      case 'library':
+        setView('library');
+        break;
+      case 'company':
+        setView('home');
+        break;
+      case 'environment':
+        setView('env');
+        break;
+      case 'department':
+        if (target) {
+          setDeptKey(target);
+          setView('dept');
+        } else {
+          setView('home');
+        }
+        break;
+    }
+    track('chat.navigate', { dest });
   }, []);
   const selectStage = useCallback(
     (n: number) => {
@@ -964,10 +1000,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let acc = '';
         let errCode = '';
         let pending: { deptK: string; taskTitle: string } | null = null;
+        let navChip: NavChip | undefined;
         try {
           for await (const ev of streamByteChat(history, deptSummary, openTasks)) {
             if (ev.type === 'action') {
               pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
+              continue;
+            }
+            if (ev.type === 'nav') {
+              // Resolve to a real chip client-side (drops a stale/unknown destination).
+              navChip = resolveNavChip(ev.dest, ev.target, DEPTS);
               continue;
             }
             acc += ev.text;
@@ -983,17 +1025,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           errCode === 'rate_limited'
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
             : 'I hit a snag reaching the model — give it another try.';
-        // If byte chose to run a task but said nothing, synthesize a short lead-in so
-        // the run never appears out of nowhere.
+        // If byte chose to act but said nothing, synthesize a short lead-in so the run or
+        // the "take me there" chip never appears out of nowhere.
         const finalText =
-          acc.trim() || (pending ? `On it — running “${pending.taskTitle}”.` : fallback);
+          acc.trim() ||
+          (pending
+            ? `On it — running “${pending.taskTitle}”.`
+            : navChip
+              ? 'Here you go.'
+              : fallback);
         setChatMessages((prev) =>
-          prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText } : m)),
+          prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText, nav: navChip } : m)),
         );
         setChatStreaming(false);
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
         // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending)) {
+        if (companyId && (acc.trim() || pending || navChip)) {
           persistChatMessage(companyId, {
             id: byteMsg.id,
             role: 'byte',
@@ -1016,6 +1063,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       show,
       deptKey,
       openDept,
+      navigateTo,
       selStage,
       drawerOpen,
       selectStage,
@@ -1068,6 +1116,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       show,
       deptKey,
       openDept,
+      navigateTo,
       selStage,
       drawerOpen,
       selectStage,
