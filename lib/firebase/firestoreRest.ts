@@ -5,6 +5,7 @@
 
 /** A Firestore REST value node (the wire shape of a document field). */
 export interface FsValue {
+  nullValue?: null;
   stringValue?: string;
   integerValue?: string;
   doubleValue?: number;
@@ -28,6 +29,28 @@ export function fsToJs(v: FsValue | undefined): unknown {
     return out;
   }
   return undefined;
+}
+
+/** Encode a plain JS value into a Firestore REST value node (the reverse of fsToJs).
+ *  Object keys whose value is `undefined` are omitted. Used to write back document
+ *  fields (e.g. the decisions array) over the REST API. */
+export function jsToFs(v: unknown): FsValue {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'string') return { stringValue: v };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') {
+    return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+  }
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(jsToFs) } };
+  if (typeof v === 'object') {
+    const fields: Record<string, FsValue> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (val === undefined) continue;
+      fields[k] = jsToFs(val);
+    }
+    return { mapValue: { fields } };
+  }
+  return { nullValue: null };
 }
 
 /** The Firebase project id, from either server or public env. Null ⇒ misconfigured. */

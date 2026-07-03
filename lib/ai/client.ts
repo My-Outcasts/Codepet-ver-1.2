@@ -73,13 +73,14 @@ export function getClient(): Anthropic {
 // (route, model, latency, tokens, cache hit-rate, stop reason). Cheap and greppable.
 function logUsage(
   label: string,
+  model: string,
   startedAt: number,
   usage: Anthropic.Usage | null | undefined,
   stopReason: string | null,
 ): void {
   const ms = Date.now() - startedAt;
   console.info(
-    `[ai] label=${label} model=${MODEL} ms=${ms} ` +
+    `[ai] label=${label} model=${model} ms=${ms} ` +
       `in=${usage?.input_tokens ?? 0} out=${usage?.output_tokens ?? 0} ` +
       `cache_read=${usage?.cache_read_input_tokens ?? 0} ` +
       `cache_write=${usage?.cache_creation_input_tokens ?? 0} stop=${stopReason ?? '?'}`,
@@ -108,6 +109,9 @@ export interface GenerateOptions {
   schema?: Record<string, unknown> | null;
   /** Defaults to 'low' — the setting every current route uses. */
   effort?: Effort;
+  /** Model override. Defaults to MODEL (Opus 4.8). Use a cheaper tier for simple work
+   *  like decision extraction — must be an adaptive-thinking + effort model (Sonnet 5+). */
+  model?: string;
   /** Optional sink for this call's token usage (e.g. persist per-user daily totals). */
   onUsage?: (usage: TokenUsage) => void;
 }
@@ -119,7 +123,7 @@ export interface GenerateOptions {
 export async function generateText(opts: GenerateOptions): Promise<string> {
   const messages = opts.messages ?? [{ role: 'user' as const, content: opts.prompt ?? '' }];
   const params: Anthropic.MessageCreateParamsNonStreaming = {
-    model: MODEL,
+    model: opts.model ?? MODEL,
     max_tokens: opts.maxTokens,
     thinking: { type: 'adaptive' },
     output_config: opts.schema
@@ -139,7 +143,7 @@ export async function generateText(opts: GenerateOptions): Promise<string> {
     throw new GenerationError({ kind: 'upstream', status });
   }
 
-  logUsage(opts.label, startedAt, message.usage, message.stop_reason);
+  logUsage(opts.label, params.model, startedAt, message.usage, message.stop_reason);
   opts.onUsage?.(toTokenUsage(message.usage));
 
   if (message.stop_reason === 'refusal') throw new GenerationError({ kind: 'refused' });
@@ -197,7 +201,7 @@ export function streamMessage(opts: StreamOptions) {
   stream
     .finalMessage()
     .then((m) => {
-      logUsage(opts.label, startedAt, m.usage, m.stop_reason);
+      logUsage(opts.label, MODEL, startedAt, m.usage, m.stop_reason);
       opts.onUsage?.(toTokenUsage(m.usage));
     })
     .catch(() => {
