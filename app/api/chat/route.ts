@@ -6,6 +6,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { loadServerCompany } from '@/lib/firebase/serverCompany';
 import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
+import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
 import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
@@ -145,6 +146,15 @@ export async function POST(req: Request): Promise<Response> {
       decisions: company.decisions,
       shipped: library,
     }) || FALLBACK_CONTEXT;
+  // On top of the titles-only shipped digest (breadth), pull the CONTENT of the few
+  // approved deliverables most relevant to what the founder just asked — so byte can
+  // answer with the real substance of their work, not just name it. Keyed on the latest
+  // founder message; capped tight since the digest already covers breadth.
+  const lastFounderMsg = [...turns].reverse().find((t) => t.role === 'me')?.text ?? '';
+  const relevantWork = composePriorWorkContext(
+    selectPriorWork(library, { query: lastFounderMsg, max: 3 }),
+  );
+  const relevantBlock = relevantWork ? `\n\n${relevantWork}` : '';
   const deptSummary =
     typeof body.deptSummary === 'string' && body.deptSummary.trim()
       ? `\n\nWhere their departments stand right now:\n${body.deptSummary.trim().slice(0, 1200)}`
@@ -161,7 +171,7 @@ export async function POST(req: Request): Promise<Response> {
         )
         .join('\n')}`
     : '\n\nRUNNABLE TASKS: none open right now — if the founder asks you to run something, tell them there are no open tasks to run.';
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${deptSummary}${runnableBlock}`;
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}`;
 
   try {
     const mstream = streamMessage({
