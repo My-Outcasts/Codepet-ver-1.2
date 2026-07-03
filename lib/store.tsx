@@ -16,7 +16,7 @@ import React, {
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType } from './helpers';
 import { runByteTask, GenerateError } from './ai/runTask';
-import { applyResult, liveKind } from './ai/applyResult';
+import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
 import {
@@ -112,6 +112,9 @@ interface AppState {
   sendChat: (text: string) => void;
   /** Produce a task's deliverable inline in chat (byte's "run it from here"). */
   runTaskInChat: (deptK: string, taskTitle: string) => void;
+  /** Revise an inline chat result against byte's feedback, updating the card in place.
+   * An empty note is a plain regenerate. */
+  reviseTaskInChat: (msgId: string, deptK: string, taskTitle: string, note: string) => void;
   /** Approve an inline chat result — saves to the Library + marks the task done. */
   approveChatResult: (deptK: string, taskTitle: string) => void;
   /** Open an inline chat result the minimal way (site → new tab, else copy). */
@@ -596,6 +599,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [brief, bump],
   );
 
+  // Revise an inline chat result against the founder's feedback — the same revise pass
+  // the department panel runs (runByteTask with reviseNote + the current draft), but the
+  // result updates the SAME card in place instead of opening "v2" elsewhere. An empty
+  // note is a plain regenerate (so this subsumes the old blind Redo). On failure the
+  // existing draft is kept untouched — a bad revise never destroys good output.
+  const reviseTaskInChat = useCallback(
+    async (msgId: string, deptK: string, taskTitle: string, note: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t) return;
+      const type = artType(t);
+      const kind = liveKind(type);
+      if (!kind) return;
+      const trimmed = note.trim();
+      setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: true } : m)));
+      try {
+        const res = await runByteTask({
+          kind,
+          taskTitle: t.t,
+          taskHint: t.d,
+          deptName: d.name,
+          brief,
+          reviseNote: trimmed || undefined,
+          current: trimmed ? currentDraft(t, type) : undefined,
+        });
+        applyResult(t, type, res);
+        bump();
+        track('chat.revise_task', { dept: d.k, type });
+        setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
+      } catch (err) {
+        const code = err instanceof GenerateError ? err.code : '';
+        const limited = code === 'rate_limited' || code === 'http_429';
+        toast(
+          limited
+            ? 'We’ve hit today’s usage limit — it resets tomorrow.'
+            : 'I hit a snag revising that — want to try again?',
+        );
+        setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
+      }
+    },
+    [brief, bump, toast],
+  );
+
   // Approve an inline chat result: same as approving from the panel (Library + done),
   // then flip the card to its saved state.
   const approveChatResult = useCallback(
@@ -781,6 +827,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatStreaming,
       sendChat,
       runTaskInChat,
+      reviseTaskInChat,
       approveChatResult,
       openChatResult,
       nextStep,
@@ -823,6 +870,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatStreaming,
       sendChat,
       runTaskInChat,
+      reviseTaskInChat,
       approveChatResult,
       openChatResult,
       nextStep,
