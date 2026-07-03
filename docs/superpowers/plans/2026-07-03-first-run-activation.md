@@ -2,19 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make byte's company-building visible inside the onboarding wizard and hand the founder one irresistible first action, so the first session *demonstrates* the draft→approve loop (activation = witness a real deliverable, then approve it).
+**Goal:** Make byte's company-building visible inside the onboarding wizard and hand the founder one irresistible first action, so the first session _demonstrates_ the draft→approve loop (activation = witness a real deliverable, then approve it).
 
-**Architecture:** The wizard's fake "analysis" step (step 6) is replaced with the *real* `scaffoldCompany` call; the summary (step 7) reads the freshly-built `DEPTS` singleton to show the actual company; on landing, byte seeds a first-run greeting in chat offering the real `nextStep` as a one-tap **inline** action that produces a deliverable in-thread (with the existing Approve card). Scaffold logic is touched only by being awaited — no change to generation, keeping this clear of the concurrent `feat/project-model` work.
+**Architecture:** The wizard's fake "analysis" step (step 6) is replaced with the _real_ `scaffoldCompany` call; the summary (step 7) reads the freshly-built `DEPTS` singleton to show the actual company; on landing, byte seeds a first-run greeting in chat offering the real `nextStep` as a one-tap **inline** action that produces a deliverable in-thread (with the existing Approve card). Scaffold logic is touched only by being awaited — no change to generation, keeping this clear of the concurrent `feat/project-model` work.
 
 **Tech Stack:** Next.js 16 App Router / React 19 / TypeScript, Vitest for unit tests, the existing `track()` analytics façade, Firebase (untouched here).
 
 ## Global Constraints
 
 - Work only in the worktree `/private/tmp/claude-501/-Users-monatruong/d31cb161-d475-4451-86b0-aea1ff23a43b/scratchpad/wt-activation` on branch `feat/first-run-activation`. Never touch the main checkout at `~/Desktop/Codepet v1.2` (a concurrent session owns it).
-- Do **not** modify `lib/ai/scaffold.ts`, `app/api/scaffold/**`, or any `project-model` / grounding code — only *call* `scaffoldCompany`.
+- Do **not** modify `lib/ai/scaffold.ts`, `app/api/scaffold/**`, or any `project-model` / grounding code — only _call_ `scaffoldCompany`.
 - Model for any Claude call stays `claude-opus-4-8` (unchanged — no new API calls added).
 - No decorative icons/emojis in new UI copy; minimalist tone; no decorative arrows (`->`). byte writes plain text.
-- eslint rule `react-hooks/set-state-in-effect`: never call a state setter *synchronously* in a `useEffect` body. Setters inside `setTimeout`/`.then()` callbacks are fine (the existing step-6 effect already does this).
+- eslint rule `react-hooks/set-state-in-effect`: never call a state setter _synchronously_ in a `useEffect` body. Setters inside `setTimeout`/`.then()` callbacks are fine (the existing step-6 effect already does this).
 - The pre-push gate (run from the worktree) must be green: `./node_modules/.bin/prettier --check .` , `./node_modules/.bin/tsc --noEmit` (ignore pre-existing `firestore.rules.test.ts` errors), `./node_modules/.bin/eslint .` (exit 0), `./node_modules/.bin/vitest run`.
 - Commit after each task. Do **not** push or open a PR until the user asks.
 
@@ -25,10 +25,12 @@
 Self-contained, fully unit-tested pure functions the wizard and store consume. No React, no I/O.
 
 **Files:**
+
 - Create: `lib/onboarding/firstRun.ts`
 - Test: `lib/onboarding/firstRun.test.ts`
 
 **Interfaces:**
+
 - Consumes: `Dept` from `../data`, `NextStep` from `../ai/nextStep`, `CompanyBrief` from `../firebase/schema`.
 - Produces:
   - `interface RevealSummary { ok: boolean; deptCount: number; taskCount: number; sampleDepts: string[]; sampleTasks: string[]; }`
@@ -59,7 +61,10 @@ const dept = (k: string, name: string, tasks: Array<[string, boolean]>, later = 
 
 describe('buildRevealSummary', () => {
   const depts: Dept[] = [
-    dept('eng', 'Engineering', [['Ship the beta', false], ['Old thing', true]]),
+    dept('eng', 'Engineering', [
+      ['Ship the beta', false],
+      ['Old thing', true],
+    ]),
     dept('mkt', 'Marketing', [['Draft the landing page', false]]),
     dept('legal', 'Legal', [['Privacy policy', false]]),
     dept('fin', 'Finance', [['Pricing model', false]]),
@@ -174,7 +179,9 @@ export function buildFirstRunGreeting(
 ): FirstRunGreeting {
   const who = brief.founderName?.trim();
   const proj = brief.projectName?.trim() || 'your product';
-  const lead = who ? `${who}, your company for ${proj} is ready.` : `Your company for ${proj} is ready.`;
+  const lead = who
+    ? `${who}, your company for ${proj} is ready.`
+    : `Your company for ${proj} is ready.`;
   if (!nextStep) {
     return {
       text: `${lead} Take a look around — open any department to see what I've lined up, and I'll produce the work with you whenever you're ready.`,
@@ -212,10 +219,12 @@ git commit -m "feat(activation): pure first-run reveal + greeting builders"
 The greeting's action must produce the deliverable **inline** (`runTaskInChat`), not open the modal (`runBriefedTask`). Add an `inline` discriminator to the chat `action` and branch on it. Also fire the `firstrun.first_approve` funnel event (once) when the first inline result is approved.
 
 **Files:**
+
 - Modify: `lib/store.tsx` (the `ChatMessage.action` type; `approveChatResult`)
 - Modify: `components/Copilot.tsx` (the `m.action` onClick branch)
 
 **Interfaces:**
+
 - Consumes: `runTaskInChat(deptK, taskTitle)` and `runBriefedTask(deptK, taskTitle)` (existing store actions); `track` from `lib/analytics` (already imported in store).
 - Produces: `ChatMessage.action` now optionally carries `inline?: boolean`. When `inline` is true, the Copilot chip calls `runTaskInChat`.
 
@@ -235,34 +244,38 @@ Find the `ChatMessage` interface (the `action?` field) and replace it:
 Find (around line 242–247):
 
 ```tsx
-              {m.action && (
-                <button
-                  className="chip start"
-                  onClick={() => runBriefedTask(m.action!.deptK, m.action!.taskTitle)}
-                >
-                  {m.action.label}
-                </button>
-              )}
+{
+  m.action && (
+    <button
+      className="chip start"
+      onClick={() => runBriefedTask(m.action!.deptK, m.action!.taskTitle)}
+    >
+      {m.action.label}
+    </button>
+  );
+}
 ```
 
 Replace the `onClick` with an inline-aware branch (and track the first-run click):
 
 ```tsx
-              {m.action && (
-                <button
-                  className="chip start"
-                  onClick={() => {
-                    if (m.action!.inline) {
-                      track('firstrun.action_clicked', { dept: m.action!.deptK });
-                      runTaskInChat(m.action!.deptK, m.action!.taskTitle);
-                    } else {
-                      runBriefedTask(m.action!.deptK, m.action!.taskTitle);
-                    }
-                  }}
-                >
-                  {m.action.label}
-                </button>
-              )}
+{
+  m.action && (
+    <button
+      className="chip start"
+      onClick={() => {
+        if (m.action!.inline) {
+          track('firstrun.action_clicked', { dept: m.action!.deptK });
+          runTaskInChat(m.action!.deptK, m.action!.taskTitle);
+        } else {
+          runBriefedTask(m.action!.deptK, m.action!.taskTitle);
+        }
+      }}
+    >
+      {m.action.label}
+    </button>
+  );
+}
 ```
 
 Add `runTaskInChat` to the `useApp()` destructure near the top of the component (it already destructures `runBriefedTask`), and add the `track` import:
@@ -278,26 +291,28 @@ Update the destructure line that currently reads `runBriefedTask,` to include `r
 Add a ref near the other refs in `AppProvider` (e.g. beside `toastTimer`):
 
 ```ts
-  const firstApproveTracked = useRef(false);
+const firstApproveTracked = useRef(false);
 ```
 
 In `approveChatResult`, after the successful `approveTask(t, d, type)` call, before the `setChatMessages(...)` flip, add:
 
 ```ts
-      if (!firstApproveTracked.current) {
-        firstApproveTracked.current = true;
-        track('firstrun.first_approve', { dept: deptK });
-      }
+if (!firstApproveTracked.current) {
+  firstApproveTracked.current = true;
+  track('firstrun.first_approve', { dept: deptK });
+}
 ```
 
 - [ ] **Step 4: Gate**
 
 Run from the worktree:
+
 ```bash
 ./node_modules/.bin/tsc --noEmit
 ./node_modules/.bin/eslint components/Copilot.tsx lib/store.tsx
 ./node_modules/.bin/prettier --check components/Copilot.tsx lib/store.tsx
 ```
+
 Expected: tsc clean (ignore any pre-existing `firestore.rules.test.ts` error), eslint exit 0, prettier reports "All matched files use Prettier code style" (or run `--write` then re-check).
 
 - [ ] **Step 5: Commit**
@@ -311,13 +326,15 @@ git commit -m "feat(activation): inline chat action + first-approve tracking"
 
 ### Task 3: Real scaffold reveal in the wizard
 
-Replace step 6's fake animation-only screen with the *real* `scaffoldCompany` call, gate the advance on it, and show the actual company in step 7.
+Replace step 6's fake animation-only screen with the _real_ `scaffoldCompany` call, gate the advance on it, and show the actual company in step 7.
 
 **Files:**
+
 - Modify: `lib/store.tsx` (add `scaffoldFromOnboarding`; add `scaffoldedInWizard` ref; expose in context)
 - Modify: `components/Onboarding.tsx` (extract `briefFromData`; step-6 real scaffold + gating; step-7 real summary)
 
 **Interfaces:**
+
 - Consumes: `scaffoldCompany` (already imported in store), `buildRevealSummary` + `RevealSummary` from `lib/onboarding/firstRun` (Task 1), `DEPTS` from `lib/data`.
 - Produces: `scaffoldFromOnboarding(brief: CompanyBrief): Promise<RevealSummary>` on the store context; `briefFromData(data: ObData): CompanyBrief` (module-local in Onboarding).
 
@@ -332,26 +349,26 @@ import { buildRevealSummary, type RevealSummary } from './onboarding/firstRun';
 Add a ref beside the other refs in `AppProvider`:
 
 ```ts
-  const scaffoldedInWizard = useRef(false);
+const scaffoldedInWizard = useRef(false);
 ```
 
 Add the action (place it just above `finishOnboarding`):
 
 ```ts
-  // Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
-  // so the founder watches byte build their actual company instead of a fake animation.
-  // Marks scaffoldedInWizard so finishOnboarding won't run it a second time. Returns a
-  // reveal summary read from the now-live DEPTS (ok=false ⇒ generation failed, seed kept).
-  const scaffoldFromOnboarding = useCallback(
-    async (briefData: CompanyBrief): Promise<RevealSummary> => {
-      scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
-      if (!companyId) return buildRevealSummary(DEPTS, false);
-      const changed = await scaffoldCompany(companyId, briefData);
-      if (changed > 0) bump();
-      return buildRevealSummary(DEPTS, changed > 0);
-    },
-    [companyId, bump],
-  );
+// Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
+// so the founder watches byte build their actual company instead of a fake animation.
+// Marks scaffoldedInWizard so finishOnboarding won't run it a second time. Returns a
+// reveal summary read from the now-live DEPTS (ok=false ⇒ generation failed, seed kept).
+const scaffoldFromOnboarding = useCallback(
+  async (briefData: CompanyBrief): Promise<RevealSummary> => {
+    scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
+    if (!companyId) return buildRevealSummary(DEPTS, false);
+    const changed = await scaffoldCompany(companyId, briefData);
+    if (changed > 0) bump();
+    return buildRevealSummary(DEPTS, changed > 0);
+  },
+  [companyId, bump],
+);
 ```
 
 - [ ] **Step 2: Skip the re-scaffold in `finishOnboarding` when the wizard already ran it**
@@ -359,16 +376,16 @@ Add the action (place it just above `finishOnboarding`):
 In `finishOnboarding`, find the `.then(() => { ... scaffoldCompany ... })` block and guard the scaffold on the ref:
 
 ```ts
-      completeOnboarding(companyId, briefData)
-        .then(() => {
-          // The wizard's analysis step already scaffolded (the real reveal). Only
-          // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
-          if (!briefData || scaffoldedInWizard.current) return;
-          return scaffoldCompany(companyId, briefData).then((changed) => {
-            if (changed) bump();
-          });
-        })
-        .catch((err) => console.error('[store] completeOnboarding failed', err));
+completeOnboarding(companyId, briefData)
+  .then(() => {
+    // The wizard's analysis step already scaffolded (the real reveal). Only
+    // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
+    if (!briefData || scaffoldedInWizard.current) return;
+    return scaffoldCompany(companyId, briefData).then((changed) => {
+      if (changed) bump();
+    });
+  })
+  .catch((err) => console.error('[store] completeOnboarding failed', err));
 ```
 
 - [ ] **Step 3: Expose `scaffoldFromOnboarding` on the context**
@@ -376,8 +393,8 @@ In `finishOnboarding`, find the `.then(() => { ... scaffoldCompany ... })` block
 Add to the `AppState` interface (near `finishOnboarding`):
 
 ```ts
-  /** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
-  scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
+/** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
+scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
 ```
 
 Add `scaffoldFromOnboarding,` to **both** context-value objects (the memoized value has two occurrences of the field list — add it to each, matching how `finishOnboarding` appears in both).
@@ -388,6 +405,7 @@ Add `scaffoldFromOnboarding,` to **both** context-value objects (the memoized va
 ./node_modules/.bin/tsc --noEmit
 ./node_modules/.bin/eslint lib/store.tsx
 ```
+
 Expected: clean. (If tsc flags a missing field in the context value, you missed one of the two value objects — add it there.)
 
 - [ ] **Step 5: Extract `briefFromData` in `components/Onboarding.tsx`**
@@ -419,13 +437,13 @@ function briefFromData(data: ObData): CompanyBrief {
 Then rewrite `finish()` to reuse it:
 
 ```tsx
-  const finish = () => {
-    finishOnboarding(briefFromData(data));
-    setTimeout(
-      () => toast('Your roadmap is ready — byte mapped your company across your departments.'),
-      400,
-    );
-  };
+const finish = () => {
+  finishOnboarding(briefFromData(data));
+  setTimeout(
+    () => toast('Your roadmap is ready — byte mapped your company across your departments.'),
+    400,
+  );
+};
 ```
 
 (Note: the toast no longer hardcodes "9 steps across 8 departments".)
@@ -435,51 +453,58 @@ Then rewrite `finish()` to reuse it:
 In the `Onboarding` component, add reveal state and pull the new action from the store:
 
 ```tsx
-  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding } = useApp();
-  const [reveal, setReveal] = useState<RevealSummary | null>(null);
-  const [slow, setSlow] = useState(false);
+const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding } = useApp();
+const [reveal, setReveal] = useState<RevealSummary | null>(null);
+const [slow, setSlow] = useState(false);
 ```
 
 Replace the existing step-6 effect with one that also runs the real scaffold (setters live inside timeouts/`.then`, satisfying the eslint rule):
 
 ```tsx
-  // step 6: play the analysis animation AND run the real scaffold. "See what I found"
-  // unlocks only when both the animation has finished and the scaffold has resolved.
-  useEffect(() => {
-    if (step !== 6) {
-      setAnShown(0);
-      setAnDone(false);
-      setReveal(null);
-      setSlow(false);
-      return;
-    }
+// step 6: play the analysis animation AND run the real scaffold. "See what I found"
+// unlocks only when both the animation has finished and the scaffold has resolved.
+useEffect(() => {
+  if (step !== 6) {
     setAnShown(0);
     setAnDone(false);
     setReveal(null);
     setSlow(false);
-    let done = false;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    AN_LINES.forEach((_, i) => timers.push(setTimeout(() => setAnShown(i + 1), i * 640)));
-    timers.push(setTimeout(() => setAnDone(true), AN_LINES.length * 640 + 300));
-    // subtle "still working…" affordance if the API runs long
-    timers.push(setTimeout(() => { if (!done) setSlow(true); }, AN_LINES.length * 640 + 3000));
-    // the real work
-    scaffoldFromOnboarding(briefFromData(data)).then((sum) => {
-      if (!done) setReveal(sum);
-    });
-    // hard safety net: never leave the founder stuck on the analysis screen
-    timers.push(
-      setTimeout(() => {
-        if (!done) setReveal(buildRevealSummary(DEPTS, false));
-      }, 20000),
-    );
-    return () => {
-      done = true;
-      timers.forEach(clearTimeout);
-    };
-    // data is complete + frozen by step 6; scaffoldFromOnboarding is stable (useCallback)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
+    return;
+  }
+  setAnShown(0);
+  setAnDone(false);
+  setReveal(null);
+  setSlow(false);
+  let done = false;
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  AN_LINES.forEach((_, i) => timers.push(setTimeout(() => setAnShown(i + 1), i * 640)));
+  timers.push(setTimeout(() => setAnDone(true), AN_LINES.length * 640 + 300));
+  // subtle "still working…" affordance if the API runs long
+  timers.push(
+    setTimeout(
+      () => {
+        if (!done) setSlow(true);
+      },
+      AN_LINES.length * 640 + 3000,
+    ),
+  );
+  // the real work
+  scaffoldFromOnboarding(briefFromData(data)).then((sum) => {
+    if (!done) setReveal(sum);
+  });
+  // hard safety net: never leave the founder stuck on the analysis screen
+  timers.push(
+    setTimeout(() => {
+      if (!done) setReveal(buildRevealSummary(DEPTS, false));
+    }, 20000),
+  );
+  return () => {
+    done = true;
+    timers.forEach(clearTimeout);
+  };
+  // data is complete + frozen by step 6; scaffoldFromOnboarding is stable (useCallback)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [step]);
 ```
 
 - [ ] **Step 7: Gate step 6's advance on `anDone && reveal`, with the slow affordance**
@@ -487,27 +512,27 @@ Replace the existing step-6 effect with one that also runs the real scaffold (se
 In the step-6 `foot` block, change the completion gate from `anDone` to `anDone && reveal`, and surface the "still working" line. Replace the step-6 `foot` assignment:
 
 ```tsx
-    foot =
-      anDone && reveal ? (
-        <div className="ob-foot">
-          <div className="ob-prog">
-            <div className="ob-bar">
-              <i style={{ width: `${pct}%` }} />
-            </div>
-            <span className="rstep">
-              Step {step + 1} of {OB_TOTAL}
-            </span>
-          </div>
-          <span className="grow" />
-          <button className="btnlg" onClick={() => setStep(7)}>
-            See what I found
-          </button>
+foot =
+  anDone && reveal ? (
+    <div className="ob-foot">
+      <div className="ob-prog">
+        <div className="ob-bar">
+          <i style={{ width: `${pct}%` }} />
         </div>
-      ) : slow ? (
-        <div className="ob-foot">
-          <span className="rstep">Still building your company…</span>
-        </div>
-      ) : null;
+        <span className="rstep">
+          Step {step + 1} of {OB_TOTAL}
+        </span>
+      </div>
+      <span className="grow" />
+      <button className="btnlg" onClick={() => setStep(7)}>
+        See what I found
+      </button>
+    </div>
+  ) : slow ? (
+    <div className="ob-foot">
+      <span className="rstep">Still building your company…</span>
+    </div>
+  ) : null;
 ```
 
 - [ ] **Step 8: Show the real company in step 7**
@@ -515,53 +540,53 @@ In the step-6 `foot` block, change the completion gate from `anDone` to `anDone 
 Replace the hardcoded value rows in the step-7 `else` branch (the "A living roadmap / Real work, done with you / You stay in control" block). Use `reveal` when `ok`, else an honest generic summary:
 
 ```tsx
-    const rl = (data.roleLabel || 'founder').toLowerCase();
-    const r = reveal;
-    body = (
-      <>
-        <h2>Here&apos;s your company{data.name ? ', ' + data.name : ''}.</h2>
-        <p>
-          You&apos;re a <b>{rl}</b> at the <b>{OB_STAGES[data.stage].toLowerCase()}</b> stage.
-          {r && r.ok
-            ? ` I built your roadmap and staffed ${r.deptCount} departments — ${r.taskCount} tasks already prepped:`
-            : ' I built your roadmap and staffed your departments — here’s what I’ll take off your plate:'}
-        </p>
-        <div className="val">
-          {r && r.ok && r.sampleTasks.length ? (
-            r.sampleTasks.map((t) => (
-              <div className="vrow" key={t}>
-                <div className="vi">✦</div>
-                <div>
-                  <b>{t}</b>
-                </div>
-              </div>
-            ))
-          ) : (
-            <>
-              <div className="vrow">
-                <div className="vi">✦</div>
-                <div>
-                  <b>A living roadmap</b> — staged from &quot;{OB_STAGES[data.stage]}&quot; to launch.
-                </div>
-              </div>
-              <div className="vrow">
-                <div className="vi">✦</div>
-                <div>
-                  <b>Real work, done with you</b> — tasks prepped across your departments.
-                </div>
-              </div>
-              <div className="vrow">
-                <div className="vi">✦</div>
-                <div>
-                  <b>You stay in control</b> — I draft &amp; build; you approve.
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </>
-    );
-    foot = <Foot label="See my company" onClick={finish} />;
+const rl = (data.roleLabel || 'founder').toLowerCase();
+const r = reveal;
+body = (
+  <>
+    <h2>Here&apos;s your company{data.name ? ', ' + data.name : ''}.</h2>
+    <p>
+      You&apos;re a <b>{rl}</b> at the <b>{OB_STAGES[data.stage].toLowerCase()}</b> stage.
+      {r && r.ok
+        ? ` I built your roadmap and staffed ${r.deptCount} departments — ${r.taskCount} tasks already prepped:`
+        : ' I built your roadmap and staffed your departments — here’s what I’ll take off your plate:'}
+    </p>
+    <div className="val">
+      {r && r.ok && r.sampleTasks.length ? (
+        r.sampleTasks.map((t) => (
+          <div className="vrow" key={t}>
+            <div className="vi">✦</div>
+            <div>
+              <b>{t}</b>
+            </div>
+          </div>
+        ))
+      ) : (
+        <>
+          <div className="vrow">
+            <div className="vi">✦</div>
+            <div>
+              <b>A living roadmap</b> — staged from &quot;{OB_STAGES[data.stage]}&quot; to launch.
+            </div>
+          </div>
+          <div className="vrow">
+            <div className="vi">✦</div>
+            <div>
+              <b>Real work, done with you</b> — tasks prepped across your departments.
+            </div>
+          </div>
+          <div className="vrow">
+            <div className="vi">✦</div>
+            <div>
+              <b>You stay in control</b> — I draft &amp; build; you approve.
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  </>
+);
+foot = <Foot label="See my company" onClick={finish} />;
 ```
 
 - [ ] **Step 9: Fire `firstrun.scaffold_shown` when the real reveal renders**
@@ -575,11 +600,11 @@ import { track } from '@/lib/analytics';
 Fire the event as a side effect of the reveal resolving (inside the `.then` from Step 6, right after `setReveal(sum)`):
 
 ```tsx
-    scaffoldFromOnboarding(briefFromData(data)).then((sum) => {
-      if (done) return;
-      setReveal(sum);
-      if (sum.ok) track('firstrun.scaffold_shown', { depts: sum.deptCount, tasks: sum.taskCount });
-    });
+scaffoldFromOnboarding(briefFromData(data)).then((sum) => {
+  if (done) return;
+  setReveal(sum);
+  if (sum.ok) track('firstrun.scaffold_shown', { depts: sum.deptCount, tasks: sum.taskCount });
+});
 ```
 
 - [ ] **Step 10: Gate the full change**
@@ -590,6 +615,7 @@ Fire the event as a side effect of the reveal resolving (inside the `.then` from
 ./node_modules/.bin/prettier --write components/Onboarding.tsx lib/store.tsx && ./node_modules/.bin/prettier --check components/Onboarding.tsx lib/store.tsx
 ./node_modules/.bin/vitest run
 ```
+
 Expected: tsc clean, eslint exit 0, prettier clean, all vitest tests pass.
 
 - [ ] **Step 11: Commit**
@@ -606,9 +632,11 @@ git commit -m "feat(activation): real scaffold reveal in the onboarding wizard"
 On finishing onboarding, byte opens chat and greets the founder by name with the real `nextStep` as a one-tap inline action — the bridge from the reveal (still in the wizard) to the first deliverable (B) and approval (C).
 
 **Files:**
+
 - Modify: `lib/store.tsx` (add `greetFirstRun`; call it from `finishOnboarding`)
 
 **Interfaces:**
+
 - Consumes: `buildFirstRunGreeting` from `lib/onboarding/firstRun` (Task 1); `nextAction` (already imported), `fetchNextStep` (already imported), `toggleCopilot`, `setChatMessages`, `track`; the `action.inline` chip wiring from Task 2.
 - Produces: greeting seeding behavior; no new exported symbol required (internal to `AppProvider`).
 
@@ -617,7 +645,11 @@ On finishing onboarding, byte opens chat and greets the founder by name with the
 Extend the Task 1 import in `lib/store.tsx`:
 
 ```ts
-import { buildRevealSummary, buildFirstRunGreeting, type RevealSummary } from './onboarding/firstRun';
+import {
+  buildRevealSummary,
+  buildFirstRunGreeting,
+  type RevealSummary,
+} from './onboarding/firstRun';
 ```
 
 - [ ] **Step 2: Add `greetFirstRun` (place just below `computeNextStep`)**
@@ -625,47 +657,47 @@ import { buildRevealSummary, buildFirstRunGreeting, type RevealSummary } from '.
 Mirrors `computeNextStep`'s pattern: seed instantly from the authored fallback so the greeting is never blank, then upgrade the same message when byte's pick resolves. Setters run inside `.then`, satisfying the eslint rule.
 
 ```ts
-  // First-run only: byte opens chat and greets the founder by name with the single best
-  // first move as a one-tap INLINE action (produces the deliverable in-thread). Seeds
-  // immediately from the authored fallback, then upgrades to byte's own pick when
-  // /api/next-step resolves — the greeting message updates in place (stable id).
-  const greetFirstRun = useCallback(
-    (briefData: CompanyBrief) => {
-      toggleCopilot(false); // open the chat panel so the greeting is seen
-      const gid = newId();
-      const seed = (ns: NextStep | null) => {
-        const g = buildFirstRunGreeting(briefData, ns);
-        setChatMessages((prev) => {
-          const msg: ChatMessage = {
-            id: gid,
-            role: 'byte',
-            text: g.text,
-            ts: Date.now(),
-            action: g.action,
-          };
-          const i = prev.findIndex((m) => m.id === gid);
-          return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
-        });
-        if (g.action) track('firstrun.action_offered', { dept: g.action.deptK });
-      };
-      const fb = nextAction();
-      const fallback: NextStep | null = fb
-        ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
-        : null;
-      setNextStep(fallback);
-      seed(fallback);
-      if (!fallback) return;
-      fetchNextStep()
-        .then((pick) => {
-          if (pick) {
-            setNextStep(pick);
-            seed(pick);
-          }
-        })
-        .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
-    },
-    [toggleCopilot],
-  );
+// First-run only: byte opens chat and greets the founder by name with the single best
+// first move as a one-tap INLINE action (produces the deliverable in-thread). Seeds
+// immediately from the authored fallback, then upgrades to byte's own pick when
+// /api/next-step resolves — the greeting message updates in place (stable id).
+const greetFirstRun = useCallback(
+  (briefData: CompanyBrief) => {
+    toggleCopilot(false); // open the chat panel so the greeting is seen
+    const gid = newId();
+    const seed = (ns: NextStep | null) => {
+      const g = buildFirstRunGreeting(briefData, ns);
+      setChatMessages((prev) => {
+        const msg: ChatMessage = {
+          id: gid,
+          role: 'byte',
+          text: g.text,
+          ts: Date.now(),
+          action: g.action,
+        };
+        const i = prev.findIndex((m) => m.id === gid);
+        return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+      });
+      if (g.action) track('firstrun.action_offered', { dept: g.action.deptK });
+    };
+    const fb = nextAction();
+    const fallback: NextStep | null = fb
+      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+      : null;
+    setNextStep(fallback);
+    seed(fallback);
+    if (!fallback) return;
+    fetchNextStep()
+      .then((pick) => {
+        if (pick) {
+          setNextStep(pick);
+          seed(pick);
+        }
+      })
+      .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
+  },
+  [toggleCopilot],
+);
 ```
 
 - [ ] **Step 3: Call `greetFirstRun` from `finishOnboarding`**
@@ -673,7 +705,7 @@ Mirrors `computeNextStep`'s pattern: seed instantly from the authored fallback s
 `finishOnboarding` already sets the brief in state. Add the greeting call at the end of its body (after the `completeOnboarding(...)` block), passing the brief directly (state is async, so we can't rely on the `brief` closure):
 
 ```ts
-      if (briefData) greetFirstRun(briefData);
+if (briefData) greetFirstRun(briefData);
 ```
 
 Add `greetFirstRun` to `finishOnboarding`'s dependency array.
@@ -686,6 +718,7 @@ Add `greetFirstRun` to `finishOnboarding`'s dependency array.
 ./node_modules/.bin/prettier --write lib/store.tsx && ./node_modules/.bin/prettier --check lib/store.tsx
 ./node_modules/.bin/vitest run
 ```
+
 Expected: all clean/pass.
 
 - [ ] **Step 5: Commit**
@@ -723,6 +756,7 @@ cd <worktree> && PORT=3003 ./node_modules/.bin/next dev --webpack
 ```
 
 In the browser (hand the URL to the user if the shared Chrome fights navigation), sign in with a **fresh/onboarding** account and confirm the arc:
+
 1. Wizard steps 1–5 collect the brief as before.
 2. Step 6 shows the analysis lines AND genuinely waits — "See what I found" appears only after the real scaffold resolves (watch for `firstrun.scaffold_shown` in the analytics sink / console).
 3. Step 7 shows the **real** department/task names and true counts (not "11 tasks / 9 steps").
@@ -745,6 +779,7 @@ Summarize the verified arc and the gate result to the user. Do **not** push or o
 ## Self-Review
 
 **Spec coverage:**
+
 - Step 6 fake→real scaffold → Task 3 (Steps 6–7). ✓
 - Step 7 real company summary → Task 3 (Step 8). ✓
 - Landing greeting by name + real nextStep + one action → Task 4. ✓

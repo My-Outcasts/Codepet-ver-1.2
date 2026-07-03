@@ -6,13 +6,13 @@
 
 ## Problem
 
-Codepet's core promise is *byte does real work with you*. Today that promise is
+Codepet's core promise is _byte does real work with you_. Today that promise is
 **asserted in copy but never demonstrated** during first-run:
 
 - The onboarding wizard's "byte is reading your project…" analysis screen (step 6)
   is a **fake animation** — four `setTimeout` lines. No real work happens there.
 - The genuinely magical moment — byte generating a bespoke company from what the
-  founder typed — happens **invisibly in the background** *after* the wizard closes
+  founder typed — happens **invisibly in the background** _after_ the wizard closes
   (`scaffoldCompany` runs fire-and-forget inside `finishOnboarding`). On arrival the
   user briefly sees a generic seed company, which then silently swaps.
 - The wizard's summary (step 7) promises hardcoded numbers ("11 tasks across 8
@@ -20,7 +20,7 @@ Codepet's core promise is *byte does real work with you*. Today that promise is
 - On landing there is no single, irresistible first action — the user is dropped
   into the app to find their own way.
 
-Net: the one moment that would make someone say *"whoa, it built MY company"* is
+Net: the one moment that would make someone say _"whoa, it built MY company"_ is
 hidden off-screen, and the draft→approve loop is never demonstrated in the first
 session.
 
@@ -38,9 +38,10 @@ We optimize for **B leading into C** inside the first session. Reaching the app
 handoff borrowed from a lighter alternative. Reuses the already-polished wizard,
 fixes the actual hole (the magic is hidden), and stays out of the concurrent
 session's scaffold/`project-model` lane by touching `scaffoldCompany` only via
-*awaiting it and reading its result*.
+_awaiting it and reading its result_.
 
 Rejected alternatives:
+
 - **Approach 2 (cinematic live-build on the 3D map):** highest wow, but most work
   and leans hardest on the exact scaffold code another session is actively changing
   — highest collision risk.
@@ -60,7 +61,7 @@ Steps 1–5 of the wizard are unchanged (collect the brief). Everything after sh
    replacing the hardcoded promises.
 3. **Landing greeting.** On arrival, byte's chat greets the founder by name, names
    the company, and offers the real `nextStep` as **one** irresistible action:
-   *"Draft your landing hero — want me to do it with you?"*
+   _"Draft your landing hero — want me to do it with you?"_
 4. **First action → B→C.** Click → `runTaskInChat(nextStep.deptK, nextStep.taskTitle)`
    → real deliverable appears inline in chat (**B**) with the existing Approve card
    (**C**).
@@ -75,13 +76,14 @@ Steps 1–5 of the wizard are unchanged (collect the brief). Everything after sh
   "single best first move," produced by `computeNextStep()` / `fetchNextStep`.
 - `runTaskInChat(deptK, taskTitle)` (`lib/store.tsx`) already produces a real
   deliverable **inline in chat** with an Approve card. B→C is an existing
-  capability — this work only needs to *trigger* it and *reveal* the scaffold.
+  capability — this work only needs to _trigger_ it and _reveal_ the scaffold.
 - `chatMessages` / `setChatMessages` are seedable; a `pending` run-handoff pattern
   already exists in the store.
 
 ## Components & changes
 
 ### `components/Onboarding.tsx`
+
 - Step 6: on entry, trigger the real scaffold (via a new store action, so
   `companyId` stays in the store). Keep the progressive line animation but gate the
   advance button on `anDone && scaffoldResolved`.
@@ -92,14 +94,15 @@ Steps 1–5 of the wizard are unchanged (collect the brief). Everything after sh
   real first task titles, true task/department counts. No hardcoded numbers.
 
 ### `lib/store.tsx`
+
 - New action `scaffoldFromOnboarding(brief): Promise<RevealSummary>` — runs
   `scaffoldCompany`, then builds a small reveal summary (`{deptCount, taskCount,
-  sampleDepts, sampleTasks}`) read from `DEPTS`. Sets a ref/flag marking scaffold
+sampleDepts, sampleTasks}`) read from `DEPTS`. Sets a ref/flag marking scaffold
   as already done this session.
 - `finishOnboarding` **stops re-scaffolding** when the wizard already did it (guard
   on the flag), to avoid a double call. It still stamps completion and persists the
   brief. (Note: `scaffoldCompany` takes the brief as a param and persists only the
-  *scaffold*, not the brief — so scaffolding in step 6 before the brief is persisted
+  _scaffold_, not the brief — so scaffolding in step 6 before the brief is persisted
   in `finishOnboarding` is safe; no ordering hazard.)
 - Seed a **first-run-only** byte greeting into `chatMessages` after `nextStep`
   resolves: addressed by `founderName`, naming the company, offering `nextStep` with
@@ -108,10 +111,12 @@ Steps 1–5 of the wizard are unchanged (collect the brief). Everything after sh
   greeting is visible.
 
 ### `components/Copilot.tsx`
+
 - Wire the greeting's "Do it with me" button to `runTaskInChat(nextStep.deptK,
-  nextStep.taskTitle)`. Reuses the existing ResultCard (deliverable inline + Approve).
+nextStep.taskTitle)`. Reuses the existing ResultCard (deliverable inline + Approve).
 
 ### Scaffold layer
+
 - **Untouched** beyond being awaited — stays clear of the concurrent
   `feat/project-model` work.
 
@@ -142,6 +147,7 @@ Steps 1–5 of the wizard are unchanged (collect the brief). Everything after sh
 ## Measuring activation
 
 Reuse the existing `track()` analytics façade. Add the funnel:
+
 - `firstrun.scaffold_shown` — real reveal viewed (step 7).
 - `firstrun.action_offered` — greeting with a run action shown.
 - `firstrun.action_clicked` — first action triggered (**B**).

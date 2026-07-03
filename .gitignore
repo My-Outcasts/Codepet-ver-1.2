@@ -38,3 +38,6 @@ firestore-debug.log*
 
 # ...but keep the committed template
 !.env.example
+
+# subagent-driven-development scratch (briefs, reports, diffs, progress ledger)
+.superpowers/
