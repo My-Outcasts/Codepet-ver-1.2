@@ -25,12 +25,19 @@ export function briefToContext(raw: unknown): string | null {
   if (!name && !oneLiner && !summary && !notes) return null;
 
   const parts: string[] = [`The company is ${name || "the founder's product"}.`];
-  if (oneLiner) parts.push(oneLiner.endsWith('.') ? oneLiner : `${oneLiner}.`);
-  // byte's enriched read — included when it adds signal beyond the founder's one-liner.
-  if (summary && summary !== oneLiner) parts.push(summary.endsWith('.') ? summary : `${summary}.`);
+  // One product description, not three. byte's enriched `summary` is a distillation of the
+  // one-liner + notes, so when it exists it REPLACES both (avoids repeating the same
+  // description ~3x on every prompt). Without a summary, fall back to the one-liner and the
+  // raw notes the founder pasted.
+  const dot = (s: string) => (s.endsWith('.') ? s : `${s}.`);
+  if (summary) {
+    parts.push(dot(summary));
+  } else if (oneLiner) {
+    parts.push(dot(oneLiner));
+  }
   if (categories.length) parts.push(`It is a ${categories.join(' / ').toLowerCase()} product.`);
   if (audience) parts.push(`It's for ${audience}.`);
-  if (notes) parts.push(notes.endsWith('.') ? notes : `${notes}.`);
+  if (notes && !summary) parts.push(dot(notes));
   if (link) parts.push(`Reference: ${link}.`);
   const who: string[] = [];
   const role = str(b.role, 80);
