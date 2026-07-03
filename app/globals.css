@@ -4072,6 +4072,24 @@ body {
 .bub-act:hover {
   background: var(--accent-deep);
 }
+/* "Advance to <stage>" — the stage-complete prompt's confirm button in a bubble. */
+.bub-adv {
+  display: block;
+  margin-top: 11px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.bub-adv:hover {
+  background: var(--accent-deep);
+}
 .mhead {
   flex: none;
   display: flex;

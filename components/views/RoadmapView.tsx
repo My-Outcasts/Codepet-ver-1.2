@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { PHASES, NODES, byN, DEPTS } from '@/lib/data';
 import { eff, nextAction } from '@/lib/roadmap';
+import { stageComplete, nextStageOf } from '@/lib/stages';
 
 const Lock = () => (
   <svg className="lockic" viewBox="0 0 16 16" fill="none">
@@ -12,10 +13,15 @@ const Lock = () => (
 );
 
 function StageDrawer() {
-  const { selStage, drawerOpen, closeStage, nextStep, portalToTask } = useApp();
+  const { selStage, drawerOpen, closeStage, nextStep, portalToTask, advanceStage, brief } =
+    useApp();
   const n = byN(selStage);
   if (!n) return null;
   const e = eff(n);
+  // The founder has finished every active task for the stage they're on — offer to
+  // advance (moves the map + re-plans the company), the same prompt byte drops in chat.
+  const readyToAdvance = e === 'now' && stageComplete();
+  const nextStage = nextStageOf(brief.stage);
 
   // byte's single live next move (the same value the Overview beacon + chat read),
   // resolved to a real open dept+task. Shown on the "now" stage so the Roadmap
@@ -72,7 +78,16 @@ function StageDrawer() {
     ) : null;
 
   const nextMove =
-    e === 'now' && here ? (
+    readyToAdvance && nextStage ? (
+      <div className="jd-next">
+        <div className="jd-next-lbl">Stage complete</div>
+        <div className="jd-next-t">You&apos;ve finished this stage&apos;s work.</div>
+        <div className="jd-next-s">Ready to move to {nextStage}?</div>
+        <button className="jd-next-go" onClick={advanceStage}>
+          Advance to {nextStage}
+        </button>
+      </div>
+    ) : e === 'now' && here ? (
       <div className="jd-next">
         <div className="jd-next-lbl">byte&apos;s next move</div>
         <div className="jd-next-t">{here.t.t}</div>

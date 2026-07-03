@@ -187,6 +187,14 @@ export async function persistRoadmapStage(companyId: string, stage: number): Pro
   });
 }
 
+/** Persist the business brief on its own (e.g. after the founder advances a stage). */
+export async function persistBrief(companyId: string, brief: CompanyBrief): Promise<void> {
+  await updateDoc(doc(getDb(), paths.company(companyId)), {
+    brief: clean(brief),
+    updatedAt: Date.now(),
+  });
+}
+
 /**
  * Mark onboarding complete. Stamps `onboardedAt` so the wizard never shows again,
  * and (when provided) persists the business brief captured during onboarding.

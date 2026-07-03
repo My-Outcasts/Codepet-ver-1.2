@@ -380,7 +380,19 @@ export default function OverviewView() {
       className="view on"
       style={{ position: 'absolute', inset: 0, background: '#000000', overflow: 'hidden' }}
     >
-      <div style={{ position: 'absolute', top: 22, left: 26, zIndex: 5, pointerEvents: 'none' }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 22,
+          left: 26,
+          // Leave room for the Progress card (top-right) so the subtitle wraps before
+          // it runs underneath and gets hidden.
+          right: 268,
+          maxWidth: 640,
+          zIndex: 5,
+          pointerEvents: 'none',
+        }}
+      >
         <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
           Overview
         </h1>
