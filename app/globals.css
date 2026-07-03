@@ -2031,7 +2031,6 @@ body {
 .deptrow {
   display: flex;
   align-items: stretch;
-  min-height: 200px;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 20px;
@@ -2048,24 +2047,16 @@ body {
   box-shadow: var(--sh-m);
   border-color: color-mix(in srgb, var(--rc) 50%, var(--hairline));
 }
-/* image panel — 40% of the card, full height */
-.dr-img {
-  flex: 0 0 40%;
-  position: relative;
-  background-size: cover;
-  background-position: center;
-}
+/* department marker — a small inline chip beside the name (replaces the cover art) */
 .dr-badge {
-  position: absolute;
-  left: 14px;
-  bottom: 14px;
+  flex: none;
   font-family: var(--sans);
   font-size: 11px;
+  line-height: 1;
   color: #fff;
-  padding: 3px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5);
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 .dr-body {
   flex: 1;
