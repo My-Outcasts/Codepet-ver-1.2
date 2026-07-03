@@ -56,7 +56,11 @@ function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
         </span>
       </div>
       <div className="tk-act">
-        {t.who === 'you' ? (
+        {t.drafted ? (
+          <button className="btn" onClick={() => runTask(t, dept)}>
+            Review &amp; approve
+          </button>
+        ) : t.who === 'you' ? (
           <button className="btn ghost" onClick={() => runTask(t, dept, true)}>
             Walk me through it
           </button>
