@@ -961,8 +961,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, action: undefined } : m)));
   }, []);
 
-  // Open an inline chat result the minimal way (site → new tab, else copy) — reuses
-  // the shared openDeliverable behavior, built from the live task.
+  // Open an inline chat result: a site opens in a new tab, every other deliverable
+  // opens the readable viewer (scrollable full text, with its own Copy inside).
+  // Built from the live task.
   const openChatResult = useCallback(
     (deptK: string, taskTitle: string) => {
       const d = DEPTS.find((x) => x.k === deptK);
@@ -970,7 +971,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!d || !t) return;
       const type = artType(t);
       const { file, head, tag } = artMeta(t, type);
-      openDeliverable({
+      const item: LibItem = {
         title: t.t,
         dept: d.name,
         k: d.k,
@@ -987,12 +988,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email: t.email,
         calendar: t.calendar,
         legal: t.legal,
+        doc: t.doc,
         dms: t.dms,
         checklist: t.checklist,
         plan: t.plan,
-      });
+      };
+      // A site opens in a new tab; every other deliverable opens the readable
+      // viewer (scrollable full text, with its own Copy inside) — the same modal
+      // the department card and Library use.
+      if (type === 'site') openDeliverable(item);
+      else viewItem(item);
     },
-    [openDeliverable],
+    [openDeliverable, viewItem],
   );
 
   // byte chat. Appends the founder's message, streams byte's reply in place, and
