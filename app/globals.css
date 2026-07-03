@@ -2401,15 +2401,16 @@ body {
   gap: 24px;
 }
 .lib-mast h1 {
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   line-height: 1;
 }
 .lib-idx {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--t-4);
   margin-top: 11px;
@@ -2447,9 +2448,10 @@ body {
   gap: 4px;
 }
 .lib-chip {
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 11px;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.5px;
   text-transform: uppercase;
   color: var(--t-3);
   background: transparent;
@@ -2489,9 +2491,10 @@ body {
   display: flex;
   align-items: center;
   gap: 9px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  letter-spacing: 0.12em;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
   color: var(--t-3);
   padding: 20px 26px 14px;
@@ -2501,12 +2504,11 @@ body {
 }
 
 /* compact card grid */
-/* vertical stack — one full-width row per item, capped to a readable column */
+/* vertical stack — one row per item, filling the full content width */
 .lib-grid {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 912px;
   padding: 0 26px;
 }
 
@@ -2550,9 +2552,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.11em;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.7px;
   text-transform: uppercase;
   color: var(--c, var(--t-3));
 }
@@ -2604,16 +2607,20 @@ body {
   flex: none;
 }
 .lt-dept {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.06em;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 9.5px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--t-4);
 }
 .lt-open {
   margin-left: 2px;
-  font-family: var(--mono);
+  font-family: var(--sans);
+  font-weight: 600;
   font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--accent);
   opacity: 0;
   transition: opacity 0.14s;
