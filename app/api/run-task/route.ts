@@ -8,12 +8,12 @@
 //   post/email/legal/screens/sheet/site → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
 import { verifyIdToken } from '@/lib/firebase/admin';
-import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
 import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
+import { composeProjectModel } from '@/lib/ai/projectModel';
 import {
   STRUCTURED_SCHEMAS,
   DELIVERABLE_INSTRUCTIONS,
@@ -172,7 +172,12 @@ export async function POST(req: Request): Promise<Response> {
     loadServerBrief(uid, idToken),
     loadServerLibrary(uid, idToken),
   ]);
-  const context = briefToContext(serverBrief) ?? briefToContext(body.brief) ?? CODEPET_CONTEXT;
+  // The project model (brief narrative + a breadth digest of shipped work) is the
+  // top-level grounding; the prior-work block below adds depth on the most relevant
+  // items. Both derive from state already loaded above — no extra reads.
+  const context =
+    composeProjectModel({ brief: serverBrief, fallbackBrief: body.brief, shipped: library }) ||
+    CODEPET_CONTEXT;
   const priorWork = composePriorWorkContext(
     selectPriorWork(library, { deptName: fields.deptName, excludeTitle: fields.taskTitle }),
   );
