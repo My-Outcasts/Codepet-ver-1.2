@@ -360,7 +360,10 @@ export function Onboarding() {
     body = (
       <>
         <h2>Now — what are you building?</h2>
-        <p>Just a name and one line is plenty. The rest helps me do sharper work.</p>
+        <p>
+          A name and one clear sentence — that line is what I read to tailor your whole plan.
+          Everything else is optional but sharpens it.
+        </p>
         <label>Project name</label>
         <input
           className="t"
@@ -424,7 +427,13 @@ export function Onboarding() {
         />
       </>
     );
-    foot = <Foot label="Continue" disabled={!data.projName.trim()} onClick={() => setStep(5)} />;
+    foot = (
+      <Foot
+        label="Continue"
+        disabled={!data.projName.trim() || !data.oneLiner.trim()}
+        onClick={() => setStep(5)}
+      />
+    );
   } else if (step === 5) {
     body = (
       <>
