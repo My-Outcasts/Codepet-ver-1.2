@@ -10,8 +10,12 @@ export const RECENT_TOOLS_CAP = 8;
 export interface LiveEvent {
   buildSessionId: string;
   sessionId: string;
-  kind: 'start' | 'tool' | 'turn';
+  kind: 'start' | 'tool' | 'turn' | 'ask';
   tool?: string;
+  /** Byte's narrated line for this turn (already produced locally by the hook). */
+  say?: string;
+  /** Byte's "Claude is waiting on you" line, on an `ask` event. */
+  ask?: string;
   ts: Millis;
 }
 
@@ -25,6 +29,10 @@ export interface LiveState {
   startedAt: Millis;
   lastTs: Millis;
   ended: boolean;
+  /** Byte's most recent narrated line for the DURING bubble. */
+  lastSay?: string;
+  /** Set while Claude is waiting on the user; cleared when a tool event lands. */
+  pendingAsk?: string;
 }
 
 export function initialLive(ts: Millis, sessionId = ''): LiveState {
@@ -39,10 +47,20 @@ export function initialLive(ts: Millis, sessionId = ''): LiveState {
   };
 }
 
+/** Drop keys whose value is undefined — Firestore's Admin SDK rejects undefined
+ *  field values, and the live route overwrites the doc with `set` (no merge), so
+ *  omitting a key is how we clear it. */
+function prune(state: LiveState): LiveState {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(state)) if (v !== undefined) out[k] = v;
+  return out as unknown as LiveState;
+}
+
 /** Fold one live activity event into the running counters. `start` resets state
- *  (a fresh session), `tool` counts an action (+ records the tool name), `turn`
- *  counts a completed assistant turn. Always records the event's session id.
- *  Never mutates the input. */
+ *  (a fresh session), `tool` counts an action (+ records the tool name) and clears
+ *  any pending ask, `turn` counts a completed assistant turn (and may update the
+ *  narrated line), `ask` records Byte's "waiting on you" line. Always records the
+ *  event's session id. Never mutates the input. */
 export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState {
   const sessionId = event.sessionId || state?.sessionId || '';
   if (event.kind === 'start') return initialLive(event.ts, sessionId);
@@ -51,10 +69,27 @@ export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState
     const recentTools = event.tool
       ? [...s.recentTools, event.tool].slice(-RECENT_TOOLS_CAP)
       : s.recentTools;
-    return { ...s, sessionId, actionCount: s.actionCount + 1, recentTools, lastTs: event.ts };
+    // A tool means Claude resumed after any question — clear the pending ask.
+    return prune({
+      ...s,
+      sessionId,
+      actionCount: s.actionCount + 1,
+      recentTools,
+      pendingAsk: undefined,
+      lastTs: event.ts,
+    });
+  }
+  if (event.kind === 'ask') {
+    return prune({ ...s, sessionId, pendingAsk: event.ask, lastTs: event.ts });
   }
   // kind === 'turn'
-  return { ...s, sessionId, turns: s.turns + 1, lastTs: event.ts };
+  return prune({
+    ...s,
+    sessionId,
+    turns: s.turns + 1,
+    lastSay: event.say ?? s.lastSay,
+    lastTs: event.ts,
+  });
 }
 
 /** Map a Claude Code hook event name to the live kind it produces (or null to skip). */
@@ -66,12 +101,14 @@ export function eventKindFor(hookEventName: string): LiveEvent['kind'] | null {
       return 'tool';
     case 'Stop':
       return 'turn';
+    case 'Notification':
+      return 'ask';
     default:
       return null;
   }
 }
 
-const KINDS = ['start', 'tool', 'turn'] as const;
+const KINDS = ['start', 'tool', 'turn', 'ask'] as const;
 
 /** Coerce an untrusted request body into a LiveEvent (ts stamped here). Returns
  *  null if either id is missing or the kind is unknown. */
@@ -87,5 +124,17 @@ export function sanitizeLiveEvent(raw: unknown): LiveEvent | null {
     kind === 'tool' && typeof r.tool === 'string' && r.tool.trim()
       ? r.tool.trim().slice(0, 64)
       : undefined;
-  return { buildSessionId, sessionId, kind, tool, ts: Date.now() };
+  const say =
+    kind === 'turn' && typeof r.say === 'string' && r.say.trim()
+      ? r.say.trim().slice(0, 160)
+      : undefined;
+  const ask =
+    kind === 'ask' && typeof r.ask === 'string' && r.ask.trim()
+      ? r.ask.trim().slice(0, 160)
+      : undefined;
+  const out: LiveEvent = { buildSessionId, sessionId, kind, ts: Date.now() };
+  if (tool !== undefined) out.tool = tool;
+  if (say !== undefined) out.say = say;
+  if (ask !== undefined) out.ask = ask;
+  return out;
 }
