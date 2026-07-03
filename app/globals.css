@@ -7483,6 +7483,11 @@ body {
   .ob-art span.on {
     opacity: 1 !important;
   }
+  /* the per-step colour grade crossfades via `transition: background` — kill it
+     so the tint swaps instantly under reduced-motion (no crossfade). */
+  .ob-art::after {
+    transition: none !important;
+  }
 }
 
 /* Settings (dev-only) ------------------------------------------------------ */
