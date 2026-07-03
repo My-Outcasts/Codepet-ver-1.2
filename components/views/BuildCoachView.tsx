@@ -72,10 +72,8 @@ function CoachBubble({
 function StartStep({
   project,
   setProject,
-  audience,
-  setAudience,
-  doneLooks,
-  setDoneLooks,
+  brief,
+  setBrief,
   plan,
   setPlan,
   onStart,
@@ -83,10 +81,8 @@ function StartStep({
 }: {
   project: string;
   setProject: (v: string) => void;
-  audience: string;
-  setAudience: (v: string) => void;
-  doneLooks: string;
-  setDoneLooks: (v: string) => void;
+  brief: string;
+  setBrief: (v: string) => void;
   plan: BytePlan | null;
   setPlan: (p: BytePlan | null) => void;
   onStart: () => void;
@@ -97,14 +93,13 @@ function StartStep({
   const [error, setError] = useState<string | null>(null);
 
   const generate = async () => {
-    if (loading || !audience.trim() || !doneLooks.trim()) return;
+    if (loading || !brief.trim()) return;
     setLoading(true);
     setError(null);
     try {
       setPlan(
         await requestBuildPlan({
-          audience: audience.trim(),
-          doneLooks: doneLooks.trim(),
+          brief: brief.trim(),
           project: project || undefined,
         }),
       );
@@ -150,12 +145,13 @@ function StartStep({
         )}
       </label>
       <label className="bc-field">
-        <span>Who&rsquo;s it for?</span>
-        <input value={audience} onChange={(e) => setAudience(e.target.value)} />
-      </label>
-      <label className="bc-field">
-        <span>What does done look like?</span>
-        <input value={doneLooks} onChange={(e) => setDoneLooks(e.target.value)} />
+        <span>What do you want to build?</span>
+        <textarea
+          value={brief}
+          onChange={(e) => setBrief(e.target.value)}
+          rows={3}
+          placeholder="Type anything — who it's for, what it should do, what done looks like…"
+        />
       </label>
       <div className={`bc-gen${loading ? ' busy' : ''}`} onClick={generate}>
         {loading ? '· Byte is thinking…' : '▸ Let Byte turn this into a plan!'}
@@ -173,7 +169,7 @@ function StartStep({
               ))}
             </ol>
           </div>
-          <div className={`bc-gen${arming ? ' busy' : ''}`} onClick={onStart}>
+          <div className={`bc-gen primary${arming ? ' busy' : ''}`} onClick={onStart}>
             {arming ? '· Opening your session…' : '▸ Start building — Byte opens Claude Code'}
           </div>
         </>
@@ -270,13 +266,13 @@ function EndStep({
   companyId,
   sessionId,
   plan,
-  doneLooks,
+  brief,
   actions,
 }: {
   companyId: string | null;
   sessionId: string | null;
   plan: BytePlan | null;
-  doneLooks: string;
+  brief: string;
   actions: number;
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
@@ -302,13 +298,13 @@ function EndStep({
   const underBudget = actions <= target;
   const commits = ev?.commits ?? 0;
   const earned = underBudget && commits >= 1;
-  const built = ev?.wins?.[0] ?? doneLooks;
+  const built = ev?.wins?.[0] ?? brief;
 
   const save = async () => {
     if (!companyId || saved) return;
     await writeNotebookNote(companyId, {
       buildSessionId: sessionId ?? '',
-      doneLooks,
+      doneLooks: brief,
       wins: ev?.wins ?? [],
     });
     setSaved(true);
@@ -357,7 +353,7 @@ function EndStep({
               </li>
             ))}
             <li>
-              <span className="c">✓</span> Matches what &ldquo;done&rdquo; looks like: {doneLooks}
+              <span className="c">✓</span> Matches what you asked for: {brief}
             </li>
           </ul>
           <div className={`bc-unlock${earned ? ' live' : ''}`}>
@@ -393,8 +389,7 @@ export function BuildCoachView() {
 
   // Lifted flow state (shared across steps + arming).
   const [project, setProject] = useState('');
-  const [audience, setAudience] = useState('returning users who want to sign in fast');
-  const [doneLooks, setDoneLooks] = useState('sign in with email, remember me, clear errors');
+  const [brief, setBrief] = useState('');
   const [plan, setPlan] = useState<BytePlan | null>(null);
 
   // Live session state.
@@ -430,13 +425,12 @@ export function BuildCoachView() {
       const dirs = await loadProjectDirs(companyId);
       const projectDir = dirs.find((p) => p.name === project)?.path ?? (project.trim() || '.');
       const token = await ensureIngestToken(companyId);
-      const command = terminalCommand(projectDir, buildOpeningPrompt(plan, audience, doneLooks));
+      const command = terminalCommand(projectDir, buildOpeningPrompt(plan, brief));
       const res = await armBuildSession({
         buildSessionId: id,
         projectDir,
         plan,
-        audience,
-        doneLooks,
+        brief,
         companyId,
         token,
         apiUrl: window.location.origin,
@@ -449,7 +443,7 @@ export function BuildCoachView() {
     } finally {
       setArming(false);
     }
-  }, [plan, companyId, arming, project, audience, doneLooks]);
+  }, [plan, companyId, arming, project, brief]);
 
   const goNext = () => {
     if (step === 'end') {
@@ -494,10 +488,8 @@ export function BuildCoachView() {
           <StartStep
             project={project}
             setProject={setProject}
-            audience={audience}
-            setAudience={setAudience}
-            doneLooks={doneLooks}
-            setDoneLooks={setDoneLooks}
+            brief={brief}
+            setBrief={setBrief}
             plan={plan}
             setPlan={setPlan}
             onStart={startBuild}
@@ -512,7 +504,7 @@ export function BuildCoachView() {
             companyId={companyId}
             sessionId={sessionId}
             plan={plan}
-            doneLooks={doneLooks}
+            brief={brief}
             actions={actions}
           />
         )}
