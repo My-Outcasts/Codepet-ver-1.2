@@ -59,15 +59,23 @@ codepet-live.mjs (local hook)
                     → subscribeLiveBuild → DuringStep renders Byte's bubble
 ```
 
-### 1. Narration heuristic — `lib/installer/narrate.mjs` (+ `narrate.test.mjs`)
+### 1. Narration module — `toolkit/hooks/narrate.mjs` (+ `narrate.test.mjs`)
 
-A pure, framework-free ESM module following the existing `lib/installer/*.mjs`
-(`scan`, `settings`, `capability`) pattern: one exported function, unit-tested via
-`node --test` alongside the others.
+A pure, framework-free ESM module unit-tested via `node --test`. It lives **beside
+the hook in `toolkit/hooks/`** (not `lib/installer/`) so the hook's relative
+`import './narrate.mjs'` resolves both in the repo and after install (the installer
+copies both files into the same `~/.claude/codepet/` directory). `node --test` is
+pointed at `toolkit/hooks/` in addition to `lib/installer/`.
+
+It exports two pure functions:
 
 ```js
+/** Concatenate the LAST assistant message's text blocks from a transcript JSONL
+ *  string. Accepts both observed entry shapes. '' when none/unparseable. No I/O. */
+export function extractLastAssistantText(jsonl)
+
 /** Turn Claude's raw assistant text (and, as fallback, the active tool name)
- *  into one short Byte-voice line. Deterministic; no I/O. */
+ *  into one short Byte-voice line. Deterministic; total (never throws); no I/O. */
 export function narrate(text, toolName)
 ```
 
@@ -88,22 +96,23 @@ collapse whitespace, take the first sentence, hard-cap length. Output is always 
 short single line safe to POST.
 
 **Why a separate installed file, not inline in the hook:** the hook currently
-inlines a tiny `kindFor`, accepting duplication for a 3-line map. `narrate()` is
-larger and worth unit-testing, so it lives in its own `.mjs`. It is **installed as
-a sibling** of the hook in `~/.claude/codepet/narrate.mjs`; the hook imports it by
-relative path (`import { narrate } from './narrate.mjs'`). Both are `.mjs` ESM in
-the same directory, so the import resolves at runtime with no bundling.
+inlines a tiny `kindFor`, accepting duplication for a 3-line map. Narration +
+transcript parsing are larger and worth unit-testing, so they live in their own
+`.mjs`. It is **installed as a sibling** of the hook in
+`~/.claude/codepet/narrate.mjs`; the hook imports it by relative path
+(`import { narrate, extractLastAssistantText } from './narrate.mjs'`). Keeping the
+source in `toolkit/hooks/` (beside the hook) means the same relative import works
+both in the repo and after install.
 
 ### 2. Live hook — `toolkit/hooks/codepet-live.mjs`
 
 - Extend `kindFor`: `Notification → 'ask'` (in addition to the existing three).
 - On **`Stop`**: read `input.transcript_path` (JSONL). Guarded, best-effort:
-  - Parse lines, keep the **last assistant message**. Accept both observed shapes
-    defensively: top-level `type: 'assistant'` with `message.content`, and
-    `type: 'message', role: 'assistant'` with `message.content` / `content`.
-  - Concatenate its `text`-type content blocks (ignore `thinking` and `tool_use`).
-  - `say = narrate(text, undefined)`. If transcript read fails, `say` is omitted —
-    the `turn` event still fires (counting behavior unchanged).
+  - `say = narrate(extractLastAssistantText(fs.readFileSync(transcript_path)))`.
+    Both parsing (`extractLastAssistantText`) and narration (`narrate`) come from
+    `./narrate.mjs`, so the hook itself only does the file read.
+  - If the transcript read/parse fails, `say` is omitted — the `turn` event still
+    fires (counting behavior unchanged).
 - On **`Notification`**: emit `kind: 'ask'` with `ask` = a Byte reminder derived
   from `input.message`. We rely only on the `message` field (stable), not on
   `notification_type`. Example: `ask = "Claude's waiting on you — hop back to the
@@ -143,11 +152,14 @@ the *bubble's* mood/line. The `recentTools` context line stays unchanged.
 ### 5. Installer — `lib/installer/tracking.mjs` (+ `tracking.test.mjs`)
 
 - Add `'Notification'` to `LIVE_HOOK_EVENTS`.
+- Add a `narrateSource(cwd)` helper mirroring `liveSource` →
+  `toolkit/hooks/narrate.mjs`.
 - In `installTracking`, copy `narrate.mjs` into `~/.claude/codepet/narrate.mjs`
-  alongside the live hook (add a `narrateSource(cwd)` helper mirroring
-  `liveSource`). Return its path.
+  alongside the live hook, and return its path.
 - Update `tracking.test.mjs` to assert the `Notification` hook is registered and
   `narrate.mjs` is written next to the hook.
+- Broaden the `test:installer` npm script to `node --test lib/installer/
+  toolkit/hooks/` so `narrate.test.mjs` runs in CI.
 
 ## Data flow example
 
