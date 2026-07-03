@@ -26,6 +26,7 @@ _Every task's requirements implicitly include this section. Copy these verbatim 
 ## File Structure
 
 **Create:**
+
 - `scripts/optimize-images.mjs` — build-time re-encode pipeline (pure helpers + guarded `main()`).
 - `scripts/optimize-images.test.mjs` — `node --test` unit tests for the pure helpers.
 - `lib/ui/useParallax.ts` — `clampNorm` pure helper + `useParallax(ref)` hook.
@@ -34,6 +35,7 @@ _Every task's requirements implicitly include this section. Copy these verbatim 
 - `public/covers/*.{webp,avif}`, `public/onboarding/*.webp`, `public/{splash,loading,auth}.webp` — generated assets (committed in Task 1).
 
 **Modify:**
+
 - `app/layout.tsx` — preload the first splash image.
 - `components/views/CompanyView.tsx:45` — cover ref → `image-set(avif, webp)`.
 - `components/views/DepartmentDetail.tsx:113` — cover ref → `image-set(avif, webp)`.
@@ -48,11 +50,13 @@ _Every task's requirements implicitly include this section. Copy these verbatim 
 ### Task 1: Image optimization pipeline + generate assets
 
 **Files:**
+
 - Create: `scripts/optimize-images.mjs`
 - Test: `scripts/optimize-images.test.mjs`
 - Generated (committed): `public/covers/*.{webp,avif}`, `public/onboarding/*.webp`, `public/{splash,loading,auth}.webp`
 
 **Interfaces:**
+
 - Consumes: `sharp` 0.34.5 (installed).
 - Produces (named exports the test + later reasoning rely on):
   - `encodePlan(relPath: string) → { formats: string[], maxEdge: number, webpQuality: number, avifQuality: number }`
@@ -162,7 +166,12 @@ async function main() {
       const quality = format === 'avif' ? plan.avifQuality : plan.webpQuality;
       try {
         await sharp(input)
-          .resize({ width: plan.maxEdge, height: plan.maxEdge, fit: 'inside', withoutEnlargement: true })
+          .resize({
+            width: plan.maxEdge,
+            height: plan.maxEdge,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
           .toFormat(format, { quality })
           .toFile(out);
         made++;
@@ -210,6 +219,7 @@ git commit -m "feat(images): sharp pipeline generates webp/avif siblings for all
 ### Task 2: Cutover — swap references, delete originals, preload + content-visibility
 
 **Files:**
+
 - Modify: `components/views/CompanyView.tsx:45`
 - Modify: `components/views/DepartmentDetail.tsx:113`
 - Modify: `components/Onboarding.tsx:36-45` (`STEP_ART`)
@@ -218,6 +228,7 @@ git commit -m "feat(images): sharp pipeline generates webp/avif siblings for all
 - Delete: originals listed in File Structure
 
 **Interfaces:**
+
 - Consumes: the generated siblings + naming from Task 1.
 - Produces: an app that references only WebP/AVIF; no `.png` cover or `splash/loading/auth.jpg` string remains in source.
 
@@ -267,6 +278,7 @@ const STEP_ART = [
 - [ ] **Step 3: Swap the four CSS background refs to `.webp`**
 
 In `app/globals.css`:
+
 - Line ~3142 `.splash::before`: `background: url('/splash.jpg') …` → `url('/splash.webp') …`
 - Line ~3177 `.loadscr::before`: `url('/loading.jpg')` → `url('/loading.webp')`
 - Line ~3327 `.ob-cold::after`: `url('/onboarding/ob-team.jpg')` → `url('/onboarding/ob-team.webp')`
@@ -277,8 +289,8 @@ In `app/globals.css`:
 In `app/globals.css`, add to the `.deptrow` rule (find it via `grep -n "^.deptrow" app/globals.css`) these two declarations:
 
 ```css
-  content-visibility: auto;
-  contain-intrinsic-size: auto 128px;
+content-visibility: auto;
+contain-intrinsic-size: auto 128px;
 ```
 
 - [ ] **Step 5: Preload the first splash image**
@@ -286,7 +298,7 @@ In `app/globals.css`, add to the `.deptrow` rule (find it via `grep -n "^.deptro
 In `app/layout.tsx`, inside `<head>` after the font `<link>`s (before `</head>`), add:
 
 ```tsx
-        <link rel="preload" as="image" href="/splash.webp" />
+<link rel="preload" as="image" href="/splash.webp" />
 ```
 
 - [ ] **Step 6: Delete the originals**
@@ -325,10 +337,12 @@ git commit -m "feat(images): cut every render site over to webp/avif, drop 40MB 
 ### Task 3: `useParallax` hook
 
 **Files:**
+
 - Create: `lib/ui/useParallax.ts`
 - Test: `lib/ui/useParallax.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `clampNorm(value: number, min: number, max: number) → number` — maps `value` in `[min,max]` to `[-1,1]`, clamped; returns `0` for a degenerate range.
   - `useParallax(ref: RefObject<HTMLElement | null>) → void` — on `pointermove` within `ref`, writes rAF-throttled `--px`/`--py` (−1..1) onto `ref.current`. No-ops under reduced-motion or coarse pointer; SSR-safe.
@@ -427,10 +441,12 @@ git commit -m "feat(ui): useParallax hook — pointer → clamped --px/--py CSS 
 ### Task 4: `<Starfield>` component
 
 **Files:**
+
 - Create: `components/ui/Starfield.tsx`
 - Modify: `app/globals.css` (add `.starfield` styles + `twinkle` keyframes)
 
 **Interfaces:**
+
 - Consumes: nothing (self-contained).
 - Produces: `<Starfield />` — a client component rendering a drifting particle layer, or `null` when reduced-motion / `max-width:820px` / coarse pointer. Drift consumes the ancestor's `--px`/`--py` via CSS, so it must be mounted inside a `useParallax` root.
 
@@ -542,10 +558,12 @@ git commit -m "feat(ui): Starfield particle layer — client-gated, deterministi
 ### Task 5: Cinematic splash
 
 **Files:**
+
 - Modify: `components/Splash.tsx`
 - Modify: `app/globals.css` (glow layer, title sweep, word-rise on subtitle)
 
 **Interfaces:**
+
 - Consumes: `useParallax` (Task 3), `<Starfield>` (Task 4).
 - Produces: the enriched splash. No new props; `onContinue` unchanged.
 
@@ -627,7 +645,12 @@ Then, after the `.splash-hint` animation rule (~line 3225), add the title-sweep 
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.55) 50%, transparent 58%);
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 58%
+  );
   mix-blend-mode: overlay;
   transform: translateX(-120%);
   animation: titleSweep 4.6s ease-in-out 1.7s infinite;
@@ -687,10 +710,12 @@ git commit -m "feat(splash): parallax glow + starfield + title sweep + word-by-w
 ### Task 6: Cinematic onboarding (cold-open + art panel)
 
 **Files:**
+
 - Modify: `components/Onboarding.tsx`
 - Modify: `app/globals.css` (cold-open glow; layered crossfade `.ob-art`; per-step color-grade)
 
 **Interfaces:**
+
 - Consumes: `useParallax` (Task 3), `<Starfield>` (Task 4), `STEP_ART` already `.webp` (Task 2).
 - Produces: enriched cold-open + a crossfading, slow-zooming, colour-graded art panel. No change to the wizard's steps, data, or validation.
 
@@ -726,8 +751,8 @@ const STEP_GRADE = [
 Inside `export function Onboarding()`, after the existing `nameRef` declaration (~line 154), add:
 
 ```tsx
-  const coldRef = useRef<HTMLDivElement>(null);
-  useParallax(coldRef);
+const coldRef = useRef<HTMLDivElement>(null);
+useParallax(coldRef);
 ```
 
 In the `step === 0` return, add `ref={coldRef}` to the root and a glow + starfield as the first children:
@@ -748,15 +773,11 @@ In the `step === 0` return, add `ref={coldRef}` to the root and a glow + starfie
 In `components/Onboarding.tsx`, replace the `.ob-art` block in the final return (currently `<div className="ob-art"><span key={step} style={…} /></div>`, ~line 550) with a layered stack + per-step grade var:
 
 ```tsx
-        <div className="ob-art" style={{ ['--grade' as string]: STEP_GRADE[step] }}>
-          {STEP_ART.map((src, i) => (
-            <span
-              key={i}
-              className={i === step ? 'on' : ''}
-              style={{ backgroundImage: `url(${src})` }}
-            />
-          ))}
-        </div>
+<div className="ob-art" style={{ ['--grade' as string]: STEP_GRADE[step] }}>
+  {STEP_ART.map((src, i) => (
+    <span key={i} className={i === step ? 'on' : ''} style={{ backgroundImage: `url(${src})` }} />
+  ))}
+</div>
 ```
 
 - [ ] **Step 3: Add cold-open glow + rewrite `.ob-art` CSS**
@@ -841,9 +862,11 @@ git commit -m "feat(onboarding): cinematic cold-open (parallax/starfield/glow) +
 ### Task 7: In-app department image reveal
 
 **Files:**
+
 - Modify: `app/globals.css` (`.dr-img`, `.dhero2` — load reveal + hover shine)
 
 **Interfaces:**
+
 - Consumes: the swapped cover refs from Task 2.
 - Produces: a CSS-only "materialize" mount animation + hover shine sweep. No JS, no parallax, no runtime blur.
 
@@ -868,7 +891,12 @@ In `app/globals.css`, extend the `.dr-img` rule (~line 2052) — add `overflow: 
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 45%, rgba(255, 255, 255, 0.18) 50%, transparent 55%);
+  background: linear-gradient(
+    105deg,
+    transparent 45%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 55%
+  );
   transform: translateX(-120%);
   opacity: 0;
 }
@@ -901,8 +929,8 @@ In `app/globals.css`, extend the `.dr-img` rule (~line 2052) — add `overflow: 
 Then extend the `.dhero2` rule (~line 1713) — add `overflow: hidden;` (if not present) and the mount animation:
 
 ```css
-  overflow: hidden;
-  animation: mediaIn 0.6s ease both;
+overflow: hidden;
+animation: mediaIn 0.6s ease both;
 ```
 
 (Add these two declarations inside the existing `.dhero2 { … }` block; keep everything else it already sets.)
@@ -928,9 +956,11 @@ git commit -m "feat(company): department covers materialize on load + shine on h
 ### Task 8: Guardrails consolidation + final gates
 
 **Files:**
+
 - Modify: `app/globals.css` (new `@media (max-width: 820px)` intro block; extend `@media (prefers-reduced-motion: reduce)` at ~line 7276)
 
 **Interfaces:**
+
 - Consumes: every new selector added in Tasks 4–7 (`.splash-glow`, `.starfield`, `.splash-title::after`, `.ob-cold-glow`, `.ob-art span`, `.dr-img::before`, `.dhero2::before`, and the `mediaIn`/`shine`/`titleSweep`/`twinkle` animations).
 - Produces: both guardrails covering every new layer. This is the single place the cross-cutting media rules live, so they can be verified against the full selector list at once.
 

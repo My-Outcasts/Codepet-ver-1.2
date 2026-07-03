@@ -59,7 +59,12 @@ async function main() {
       const quality = format === 'avif' ? plan.avifQuality : plan.webpQuality;
       try {
         await sharp(input)
-          .resize({ width: plan.maxEdge, height: plan.maxEdge, fit: 'inside', withoutEnlargement: true })
+          .resize({
+            width: plan.maxEdge,
+            height: plan.maxEdge,
+            fit: 'inside',
+            withoutEnlargement: true,
+          })
           .toFormat(format, { quality })
           .toFile(out);
         made++;

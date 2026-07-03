@@ -21,7 +21,7 @@ image loading, and more visual life in the images. Two concrete issues:
 
 - **Cinematic & dreamy** motion language (matches the site art direction).
 - **Heavy effects on the intro only** (splash + onboarding). In-app department images get
-  the load-speed win + a *light* reveal — not full parallax — to honor the minimalist
+  the load-speed win + a _light_ reveal — not full parallax — to honor the minimalist
   in-app north-star and avoid heavy motion on the scrolling company list.
 - **Replace** the giant PNGs with WebP (drop the PNGs) — the point is to shrink served
   weight, not carry both.
@@ -31,7 +31,7 @@ image loading, and more visual life in the images. Two concrete issues:
 - No `next/image` migration: the images are CSS backgrounds, where `next/image` doesn't
   apply. Optimization is done by re-encoding the source assets + `image-set()`.
 - No new heavy motion on in-app scrolling views beyond a light load reveal + hover shine.
-- No change to onboarding *logic* / wizard flow — this is presentation only.
+- No change to onboarding _logic_ / wizard flow — this is presentation only.
 - Nothing in Giang's Build Coach surface. Splash/Onboarding/CompanyView are all ours.
 
 ## Global constraints
