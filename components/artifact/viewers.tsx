@@ -652,6 +652,10 @@ function DocBody({ text }: { text: string }) {
   for (const raw of lines) {
     const line = raw.trimEnd();
     const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    // A line of only dashes/underscores/asterisks (3+) is a section divider. Checked
+    // before the bullet rule, though they can't overlap — bullets require a space
+    // after the marker ("- text"), a rule has none.
+    const isRule = /^\s*([-_*])\1{2,}\s*$/.test(line);
     const ul = /^[-*]\s+(.*)$/.exec(line);
     const ol = /^\d+\.\s+(.*)$/.exec(line);
     if (h) {
@@ -677,6 +681,10 @@ function DocBody({ text }: { text: string }) {
             {content}
           </h5>,
         );
+    } else if (isRule) {
+      flushPara();
+      flushList();
+      blocks.push(<hr key={key++} className="md-hr" />);
     } else if (ul) {
       flushPara();
       if (!list || list.ordered) {
