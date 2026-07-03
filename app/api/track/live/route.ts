@@ -1,5 +1,5 @@
 // Live-activity ingest for the Build Coach DURING meter. The local hooks (see
-// toolkit/hooks/codepet-live.mjs) POST one LiveEvent per SessionStart/PostToolUse/Stop.
+// toolkit/hooks/codepet-live.mjs) POST one LiveEvent per SessionStart/PostToolUse/Stop/Notification.
 // Auth is the per-company ingest token, checked against the company doc (same as
 // /api/track). The event is folded into liveBuilds/{buildSessionId} via reduceLive
 // inside a transaction so concurrent tool events don't clobber each other.

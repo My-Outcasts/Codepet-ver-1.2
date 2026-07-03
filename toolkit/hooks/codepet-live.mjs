@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Codepet live-activity hook. Claude Code runs this on SessionStart / PostToolUse /
-// Stop. It reads the hook JSON on stdin, maps the event to a live "kind", and POSTs
+// Stop / Notification. It reads the hook JSON on stdin, maps the event to a live "kind", and POSTs
 // an incremental LiveEvent to Codepet's /api/track/live so the Build Coach DURING
 // meter updates in real time. It NEVER blocks or fails the session: every step is
 // guarded, the POST has a short timeout, and the process always exits 0.
