@@ -43,7 +43,7 @@ const OverviewView = dynamic(() => import('./views/OverviewView'), {
 });
 
 function Shell() {
-  const { view, copilotCollapsed, toggleCopilot } = useApp();
+  const { view, copilotCollapsed, toggleCopilot, sideCollapsed } = useApp();
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0;
@@ -71,7 +71,9 @@ function Shell() {
   return (
     <div className="app">
       <Topbar />
-      <div className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}`}>
+      <div
+        className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}${sideCollapsed ? ' side-collapsed' : ''}`}
+      >
         <Sidebar />
         <main className="main" id="main" ref={mainRef}>
           {ActiveView}

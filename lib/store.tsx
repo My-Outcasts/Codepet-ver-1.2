@@ -81,6 +81,9 @@ interface AppState {
   closeStage: () => void;
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
+  /** Sidebar collapsed to an icon-only rail (persisted) — frees width for the main + chat. */
+  sideCollapsed: boolean;
+  toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
@@ -152,6 +155,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [portalSignal, setPortalSignal] = useState<{ deptK: string; n: number } | null>(null);
   // Chat starts closed by default; the floating button opens it on demand.
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
+  const [sideCollapsed, setSideCollapsed] = useState(false);
   // Onboarding is shown only to users who haven't completed it. It starts false
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.
@@ -161,6 +165,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
+      if (localStorage.getItem('codepet:sidecollapsed') === '1') setSideCollapsed(true);
     } catch {}
   }, []);
 
@@ -268,6 +273,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const closeStage = useCallback(() => setDrawerOpen(false), []);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
+  }, []);
+  const toggleSide = useCallback((collapsed?: boolean) => {
+    setSideCollapsed((c) => {
+      const next = collapsed === undefined ? !c : collapsed;
+      try {
+        if (next) localStorage.setItem('codepet:sidecollapsed', '1');
+        else localStorage.removeItem('codepet:sidecollapsed');
+      } catch {}
+      return next;
+    });
   }, []);
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
@@ -845,6 +860,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
+      sideCollapsed,
+      toggleSide,
       onboarding,
       finishOnboarding,
       regenerateCompany,
@@ -888,6 +905,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
+      sideCollapsed,
+      toggleSide,
       onboarding,
       finishOnboarding,
       regenerateCompany,
