@@ -275,6 +275,14 @@ body {
   display: grid;
   grid-template-columns: 212px 1fr 340px;
   min-height: 0;
+  transition: grid-template-columns 0.22s ease;
+}
+/* User-toggled icon rail: sidebar shrinks to 64px, freeing width for the main + chat. */
+.shell.side-collapsed {
+  grid-template-columns: 64px 1fr 340px;
+}
+.shell.side-collapsed.cop-collapsed {
+  grid-template-columns: 64px 1fr 0;
 }
 
 /* ===== sidebar ===== */
@@ -303,6 +311,86 @@ body {
   font-family: var(--sans);
   font-size: 15px;
   color: var(--t-1);
+}
+.side-toggle {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  color: var(--t-3);
+  background: transparent;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.side-toggle:hover {
+  background: var(--well);
+  color: var(--t-1);
+}
+.side-toggle svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.2s;
+}
+.shell.side-collapsed .side-toggle svg {
+  transform: rotate(180deg);
+}
+
+/* ===== collapsed icon-rail treatment (toggled) ===== */
+.shell.side-collapsed .side {
+  padding: 16px 8px;
+}
+.shell.side-collapsed .side .brand {
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 12px;
+  justify-content: center;
+}
+.shell.side-collapsed .side .brand .nm {
+  display: none;
+}
+.shell.side-collapsed .side-toggle {
+  margin-left: 0;
+}
+.shell.side-collapsed .nav {
+  position: relative;
+  justify-content: center;
+  padding: 9px 0;
+}
+.shell.side-collapsed .nav span {
+  display: none;
+}
+.shell.side-collapsed .side .grp {
+  display: none;
+}
+/* Count badge → a small corner dot, so "something's here" still reads at a glance. */
+.shell.side-collapsed .nav .ct {
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  margin: 0;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  font-size: 0;
+  border-radius: 50%;
+}
+.shell.side-collapsed .nav .nav-dot,
+.shell.side-collapsed .nav .nav-ck {
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  margin: 0;
+}
+.shell.side-collapsed .petcard {
+  justify-content: center;
+  padding: 10px 0;
+}
+.shell.side-collapsed .petcard .meta {
+  display: none;
 }
 .nav {
   display: flex;
@@ -2197,6 +2285,23 @@ body {
   border: 1px solid var(--hairline);
   border-radius: 14px;
 }
+/* Color lives on the lanes, not the cards — each lane wears its state's hue. */
+.kb-col--draft {
+  background: var(--gold-tint);
+  border-color: var(--gold-line);
+}
+.kb-col--you {
+  background: var(--blue-tint);
+  border-color: var(--blue-line);
+}
+.kb-col--does {
+  background: var(--accent-tint);
+  border-color: var(--accent-line);
+}
+.kb-col--done {
+  background: #e7f6ee;
+  border-color: #c4e9d5;
+}
 .kb-colhead {
   flex: none;
   display: flex;
@@ -2266,22 +2371,20 @@ body {
   position: relative;
   z-index: 1;
 }
-.kb-card .tc-glow {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 58%;
-  background: linear-gradient(180deg, transparent, var(--gtint));
-  opacity: 0.7;
-  pointer-events: none;
+/* Department leads the card and stands out; the task is the supporting line. */
+.kb-dept {
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--t-1);
+  letter-spacing: 0.1px;
+  margin-bottom: 3px;
 }
 .kb-title {
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--t-1);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--t-3);
   line-height: 1.34;
-  margin-bottom: 12px;
 }
 .kb-empty {
   font-size: 12px;
@@ -2710,6 +2813,10 @@ body {
 .bub b {
   color: var(--t-1);
 }
+/* byte replies can contain line breaks / short lists — preserve them. */
+.bub {
+  white-space: pre-wrap;
+}
 .bub.me {
   align-self: flex-end;
   background: var(--accent-tint);
@@ -2717,6 +2824,169 @@ body {
   border-top-left-radius: 13px;
   border-top-right-radius: 4px;
   color: var(--t-2);
+  white-space: pre-wrap;
+}
+.bub.byte-thinking {
+  color: var(--t-3);
+  font-style: italic;
+}
+/* Inline deliverable byte produced in chat — the "run it from here" result card. */
+.cres {
+  align-self: stretch;
+  max-width: 94%;
+  background: var(--surface);
+  border: 1px solid var(--accent-line);
+  border-radius: 13px;
+  border-top-left-radius: 4px;
+  padding: 12px 13px 13px;
+  box-shadow: var(--sh-s);
+}
+.cres-h {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cres-t {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--t-1);
+  letter-spacing: -0.1px;
+}
+.cres-tag {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+}
+.cres-prev {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--t-3);
+  margin-top: 8px;
+}
+.cres-run {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--t-3);
+  margin-top: 9px;
+}
+.cres-spin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-line);
+  border-top-color: var(--accent);
+  animation: cres-spin 0.7s linear infinite;
+}
+@keyframes cres-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.cres-acts {
+  display: flex;
+  gap: 7px;
+  margin-top: 12px;
+}
+.cres-b {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-2);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: 0.14s;
+}
+.cres-b:hover {
+  background: var(--well);
+  color: var(--t-1);
+}
+.cres-b.primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.cres-b.primary:hover {
+  background: var(--accent-deep);
+  color: #fff;
+}
+.cres-saved {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  margin-top: 11px;
+}
+/* Revise-in-place: quick chips + a note input, revealed on a produced card. */
+.cres-rev {
+  margin-top: 12px;
+}
+.cres-rev-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.cres-chip {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--t-2);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 4px 11px;
+  cursor: pointer;
+  transition: 0.14s;
+}
+.cres-chip:hover {
+  background: var(--well);
+  color: var(--t-1);
+}
+.cres-rev-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.cres-rev-in {
+  flex: 1;
+  min-width: 0;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--t-1);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 7px 11px;
+  outline: none;
+  transition: 0.14s;
+}
+.cres-rev-in:focus {
+  border-color: var(--accent);
+}
+.cres-rev-in::placeholder {
+  color: var(--t-3);
+}
+.cres-rev-go {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.14s;
+}
+.cres-rev-go:hover {
+  background: var(--accent-deep);
 }
 .chips {
   display: flex;
@@ -2771,6 +3041,11 @@ body {
   display: grid;
   place-items: center;
 }
+.composer .send:disabled,
+.sug:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 
 /* ===== onboarding overlay ===== */
 /* splash */
@@ -2810,6 +3085,50 @@ body {
 .splash.hide {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Branded loading screen — same splash.jpg world as splash/sign-in, so every
+   pre-app moment is one continuous flow. Reuses fadeIn/kenburns/riseIn. */
+.loadscr {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #100a26;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  animation: fadeIn 0.5s ease both;
+}
+.loadscr::before {
+  content: '';
+  position: absolute;
+  inset: -3%;
+  z-index: 0;
+  background: url('/loading.jpg') center / cover no-repeat;
+  animation: kenburns 30s ease-in-out infinite alternate;
+}
+.loadscr::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(rgba(13, 5, 34, 0.62), rgba(13, 5, 34, 0.62)),
+    radial-gradient(120% 90% at 50% 48%, transparent 30%, rgba(13, 5, 34, 0.6) 100%);
+}
+.loadscr-in {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translateY(-2%);
+}
+.loadscr-label {
+  font-size: 14px;
+  letter-spacing: 0.2px;
+  color: rgba(255, 255, 255, 0.86);
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) 0.1s both;
 }
 .splash-in {
   position: relative;
@@ -3900,6 +4219,51 @@ body {
   margin: 5px 0 10px;
   line-height: 1.5;
 }
+/* byte's live next move on the current stage — ties the Roadmap to the same next
+   step the Overview beacon shows, and launches the shared portal. */
+.jd-next {
+  margin: 14px 0 4px;
+  padding: 12px 14px 13px;
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  border-radius: 11px;
+}
+.jd-next-lbl {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+}
+.jd-next-t {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--t-1);
+  letter-spacing: -0.1px;
+  margin-top: 7px;
+  line-height: 1.35;
+}
+.jd-next-s {
+  font-size: 12px;
+  color: var(--t-3);
+  margin-top: 3px;
+}
+.jd-next-go {
+  margin-top: 12px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 22px;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.jd-next-go:hover {
+  background: var(--accent-deep);
+}
 .jd-acts {
   display: flex;
   flex-direction: column;
@@ -4117,7 +4481,7 @@ body {
 }
 .mcard {
   width: min(1500px, 80vw);
-  max-height: 80vh;
+  max-height: 88vh;
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -4137,7 +4501,122 @@ body {
     transform: none;
   }
 }
+/* Run flow docked as a right-hand panel — the map stays visible (and interactive)
+   as context behind it. "Expand" drops this class to return to the centered card. */
+.artmodal.docked {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 0;
+  place-items: stretch;
+  justify-items: end;
+  pointer-events: none;
+}
+.artmodal.docked .mcard {
+  pointer-events: auto;
+  width: min(520px, 46vw);
+  max-height: none;
+  height: 100%;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid var(--hairline);
+  box-shadow: -24px 0 60px -34px rgba(0, 0, 0, 0.5);
+  animation: slidein 0.28s ease;
+}
+@keyframes slidein {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.mexp {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--t-3);
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+.mexp:hover {
+  color: var(--t-1);
+}
+.mhead .mexp + .mx {
+  margin-left: 8px;
+}
+/* company view — re-plan button + dormant "later" department rows */
+.vhead-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.replan {
+  flex: none;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--t-2);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.replan:hover {
+  color: var(--ink);
+  border-color: var(--hairline);
+}
+.deptrow.later {
+  opacity: 0.5;
+}
+.deptrow.later:hover {
+  opacity: 0.72;
+}
+/* one-tap action byte offers inside a chat bubble (e.g. "Start: <task>") */
+.bub-act {
+  display: block;
+  margin-top: 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 7px 15px;
+  cursor: pointer;
+}
+.bub-act:hover {
+  background: var(--accent-deep);
+}
+/* "Advance to <stage>" — the stage-complete prompt's confirm button in a bubble. */
+.bub-adv {
+  display: block;
+  margin-top: 11px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #fff;
+  background: var(--accent);
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.14s;
+}
+.bub-adv:hover {
+  background: var(--accent-deep);
+}
 .mhead {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 11px;
@@ -4180,13 +4659,19 @@ body {
   background: var(--well);
 }
 .mbody {
-  padding: 22px max(28px, 5%);
+  padding: 22px max(28px, 5%) 28px;
   overflow: auto;
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  justify-content: safe center;
+}
+/* Soft scroll cue: fade the bottom edge whenever there's more below the fold
+   (JS toggles .has-more). A mask touches no layout and can't skew the scroll math,
+   so it never interferes with scrolling — it just hints "there's more". */
+.mbody.has-more {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 40px), transparent);
 }
 .work {
   display: flex;
@@ -4274,6 +4759,68 @@ body {
   max-height: 280px;
   overflow: auto;
 }
+/* Rendered light-markdown body for text deliverables (doc / prep / build). Sits inside
+   .art-body but manages its own block spacing, so it opts out of the pre-wrap default. */
+.art-body .md-body {
+  white-space: normal;
+}
+.md-body > :first-child {
+  margin-top: 0;
+}
+.md-body .md-h {
+  color: var(--t-1);
+  font-weight: 650;
+  line-height: 1.35;
+}
+.md-body .md-h1 {
+  font-size: 15px;
+  margin: 16px 0 7px;
+}
+.md-body .md-h2 {
+  font-size: 13.5px;
+  margin: 14px 0 6px;
+}
+.md-body .md-h3 {
+  font-size: 12.5px;
+  margin: 12px 0 5px;
+  color: var(--t-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.md-body .md-p {
+  margin: 8px 0;
+}
+.md-body .md-ul,
+.md-body .md-ol {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+.md-body .md-ul {
+  list-style: disc;
+}
+.md-body .md-ol {
+  list-style: decimal;
+}
+.md-body .md-ul li,
+.md-body .md-ol li {
+  margin: 3px 0;
+}
+.md-body strong {
+  color: var(--t-1);
+  font-weight: 650;
+}
+.md-body code {
+  font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.92em;
+  background: var(--well);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.md-body .md-hr {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: 14px 0;
+}
 .handoff {
   display: flex;
   align-items: flex-start;
@@ -4291,6 +4838,7 @@ body {
   color: var(--t-1);
 }
 .mfoot {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -4944,141 +5492,134 @@ body {
 }
 
 /* engineering PR card */
-.prart {
+/* ===== engineering code-change plan (honest — the change byte would make) ===== */
+.planart {
   margin-top: 8px;
   border: 1px solid var(--hair-2);
   border-radius: 14px;
   overflow: hidden;
   background: var(--surface);
 }
-.pr-head {
+.plan-head {
   padding: 13px 16px;
   border-bottom: 1px solid var(--hairline);
 }
-.pr-t {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex-wrap: wrap;
-}
-.pr-merged {
+.plan-chip {
   font-size: 10.5px;
   font-weight: 600;
-  color: #fff;
-  background: var(--accent);
+  color: var(--blue);
+  background: var(--blue-tint);
+  border: 1px solid var(--blue-line);
   border-radius: 99px;
   padding: 3px 10px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
 }
-.pr-num {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--t-4);
-}
-.pr-title {
+.plan-title {
   font-weight: 700;
   font-size: 14px;
   color: var(--t-1);
-  margin-top: 7px;
+  margin-top: 8px;
 }
-.pr-branch {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-  font-size: 11.5px;
-  color: var(--t-3);
-}
-.pr-branch code {
-  font-family: var(--mono);
-  font-size: 11px;
-  background: var(--surface-2);
-  border: 1px solid var(--hair-2);
-  border-radius: 5px;
-  padding: 1px 6px;
-  color: var(--accent-deep);
-}
-.pr-sum {
+.plan-sec {
   padding: 12px 16px;
+  border-bottom: 1px solid var(--hairline);
+}
+.plan-lbl {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t-3);
+  margin-bottom: 7px;
+}
+.plan-goal {
+  margin: 0;
   font-size: 13px;
   line-height: 1.6;
   color: var(--t-2);
-  border-bottom: 1px solid var(--hairline);
 }
-.pr-files {
-  padding: 8px 12px;
-}
-.pr-file {
+.plan-steps {
+  margin: 0;
+  padding-left: 20px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 4px;
-  font-size: 12.5px;
+  flex-direction: column;
+  gap: 6px;
 }
-.pr-file .fn {
-  font-family: var(--mono);
-  font-size: 12px;
+.plan-steps li {
+  font-size: 13px;
+  line-height: 1.55;
   color: var(--t-2);
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.pr-file .fa {
-  color: #1a8754;
-  font-family: var(--mono);
-  font-size: 11.5px;
-}
-.pr-file .fd {
-  color: #c0392b;
-  font-family: var(--mono);
-  font-size: 11.5px;
-}
-.pr-bars {
+.plan-changes {
   display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.plan-change {
+  display: flex;
+  flex-direction: column;
   gap: 2px;
-  width: 54px;
+}
+.plan-area {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--blue);
+}
+.plan-edit {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--t-2);
+}
+.plan-verify {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.plan-verify li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--t-2);
+}
+.plan-box {
+  color: var(--t-4);
+  font-size: 13px;
+  line-height: 1.5;
   flex: none;
 }
-.pr-bars i {
-  height: 8px;
-  width: 8px;
-  border-radius: 2px;
-  background: var(--well);
-}
-.pr-bars i.a {
-  background: #3fb27f;
-}
-.pr-bars i.d {
-  background: #e07a6b;
-}
-.pr-checks {
+.plan-risk {
   display: flex;
+  align-items: flex-start;
   gap: 8px;
-  flex-wrap: wrap;
   padding: 11px 16px;
-  border-top: 1px solid var(--hairline);
-  background: var(--surface-2);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--gold-tint);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--gold-deep);
 }
-.pr-check {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11.5px;
-  color: var(--t-2);
-  font-weight: 500;
-}
-.pr-check .cok {
+.plan-rk {
   width: 15px;
   height: 15px;
   border-radius: 50%;
-  background: #2ea56f;
+  background: var(--gold);
   color: #fff;
   display: grid;
   place-items: center;
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 700;
+  flex: none;
+}
+.plan-foot {
+  padding: 11px 16px;
+  background: var(--surface-2);
+  font-size: 11.5px;
+  color: var(--t-3);
 }
 
 /* ===== first install ===== */
@@ -5812,6 +6353,13 @@ body {
   overflow: hidden;
   position: relative;
   box-shadow: 0 20px 40px -22px rgba(40, 38, 30, 0.5);
+}
+.phone.tappable {
+  cursor: pointer;
+}
+.phone.tappable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .phone .notch {
   position: absolute;

@@ -1,0 +1,194 @@
+// Phase 6.4 — outcome personalization for live structured deliverables.
+//
+// A completed task shows a plain-text `out` summary (the "✓ …" outcome line typed
+// out on the deliver screen and shown in the library). For `text`/`sheet`/`site`
+// that line already comes from the live payload, but `post`/`email`/`legal`/
+// `screens` used to fall back to the hardcoded Codepet seed — so a founder's own
+// company would still read Codepet's story. deriveOut turns each structured payload
+// into a short, company-specific outcome in byte's voice.
+//
+// Pure and defensive: returns null when the payload can't make a real summary, so
+// the caller keeps the seed rather than showing a broken line. No markup, no arrows
+// (house style) — plain text with `·` separators.
+
+type DeriveKind =
+  'post' | 'email' | 'legal' | 'screens' | 'dms' | 'calendar' | 'checklist' | 'plan';
+
+function str(v: unknown): string {
+  return typeof v === 'string' ? v.trim() : '';
+}
+
+/** Non-empty trimmed strings from a plain string array, in order. */
+function strs(arr: unknown): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map(str).filter(Boolean);
+}
+
+/** Non-empty trimmed strings pulled from an array field, in order. */
+function pick(arr: unknown, key: string): string[] {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((row) =>
+      row && typeof row === 'object' ? str((row as Record<string, unknown>)[key]) : '',
+    )
+    .filter(Boolean);
+}
+
+function fromPost(p: Record<string, unknown>): string | null {
+  const variants = p.variants;
+  if (!Array.isArray(variants) || variants.length === 0) return null;
+  const first = variants[0];
+  const lead =
+    first && typeof first === 'object' ? str((first as Record<string, unknown>).body) : '';
+  if (!lead) return null;
+  const labels = pick(variants, 'label');
+  const angles = labels.length ? `\n\nAngles: ${labels.join(' · ')}.` : '';
+  return `✓ ${variants.length} launch-post variant${variants.length === 1 ? '' : 's'} ready to A/B.${angles}\n\nLead option:\n${lead}`;
+}
+
+function fromEmail(p: Record<string, unknown>): string | null {
+  const subject = str(p.subject);
+  if (!subject) return null;
+  const lines = [`✓ Launch email drafted — subject: "${subject}".`];
+  const preheader = str(p.preheader);
+  if (preheader) lines.push('', preheader);
+  const cta = str(p.cta);
+  const whens = pick(p.seq, 'when');
+  const tail: string[] = [];
+  if (cta) tail.push(`CTA: ${cta}.`);
+  if (whens.length) tail.push(`Plus a ${whens.length}-step follow-up (${whens.join(', ')}).`);
+  if (tail.length) lines.push('', tail.join(' '));
+  return lines.join('\n');
+}
+
+function fromLegal(p: Record<string, unknown>): string | null {
+  const heads = pick(p.sections, 'h');
+  if (heads.length === 0) return null;
+  const title = str(p.docTitle) || 'Legal document';
+  const lines = [
+    `✓ ${title} drafted — ${heads.length} section${heads.length === 1 ? '' : 's'}.`,
+    '',
+    `Sections: ${heads.join(' · ')}.`,
+  ];
+  const flag = str(p.flag);
+  if (flag) lines.push('', `Reviewer note: ${flag}`);
+  return lines.join('\n');
+}
+
+function fromScreens(p: Record<string, unknown>): string | null {
+  const screens = p.screens;
+  if (!Array.isArray(screens) || screens.length === 0) return null;
+  const names = pick(screens, 'name');
+  if (names.length === 0) return null;
+  const detail = screens
+    .map((s) => {
+      if (!s || typeof s !== 'object') return '';
+      const row = s as Record<string, unknown>;
+      const name = str(row.name);
+      if (!name) return '';
+      const time = str(row.time);
+      const title = str(row.title);
+      const bits = [name];
+      if (time) bits.push(`(${time})`);
+      return title ? `${bits.join(' ')} — ${title}` : bits.join(' ');
+    })
+    .filter(Boolean);
+  return `✓ Onboarding flow ready — ${names.length} screen${names.length === 1 ? '' : 's'}: ${names.join(' · ')}.\n\n${detail.join('\n')}`;
+}
+
+function fromDms(p: Record<string, unknown>): string | null {
+  const names = pick(p.messages, 'name');
+  if (names.length === 0) return null;
+  return `✓ ${names.length} personalized outreach draft${names.length === 1 ? '' : 's'} ready — a per-person DM, not a broadcast.\n\nTargets: ${names.join(' · ')}.\n\nSwap each placeholder name for a real contact, then send.`;
+}
+
+function fromCalendar(p: Record<string, unknown>): string | null {
+  const weeks = p.weeks;
+  if (!Array.isArray(weeks) || weeks.length === 0) return null;
+  const lines: string[] = [];
+  let total = 0;
+  for (const w of weeks) {
+    if (!w || typeof w !== 'object') continue;
+    const row = w as { label?: unknown; items?: unknown };
+    const items = Array.isArray(row.items) ? row.items : [];
+    const slots = items
+      .map((it) =>
+        it && typeof it === 'object'
+          ? [str((it as Record<string, unknown>).day), str((it as Record<string, unknown>).kind)]
+              .filter(Boolean)
+              .join(' ')
+          : '',
+      )
+      .filter(Boolean);
+    if (slots.length === 0) continue;
+    total += slots.length;
+    lines.push(`${str(row.label) || 'Week'}: ${slots.join(' · ')}`);
+  }
+  if (lines.length === 0) return null;
+  return `✓ ${lines.length}-week content calendar ready — ${total} post${total === 1 ? '' : 's'}.\n\n${lines.join('\n')}`;
+}
+
+function fromChecklist(p: Record<string, unknown>): string | null {
+  const items = p.items;
+  if (!Array.isArray(items)) return null;
+  const rows = items
+    .map((it) =>
+      it && typeof it === 'object'
+        ? {
+            t: str((it as Record<string, unknown>).t),
+            done: (it as Record<string, unknown>).done === true,
+          }
+        : { t: '', done: false },
+    )
+    .filter((r) => r.t.length > 0);
+  if (rows.length === 0) return null;
+  const done = rows.filter((r) => r.done).length;
+  const list = rows.map((r) => `${r.done ? '✓' : '☐'} ${r.t}`).join('\n');
+  return `✓ ${rows.length}-step checklist ready — ${done}/${rows.length} done.\n\n${list}`;
+}
+
+function fromPlan(p: Record<string, unknown>): string | null {
+  const goal = str(p.goal);
+  const steps = strs(p.steps);
+  if (!goal || steps.length === 0) return null;
+  const areas = pick(p.changes, 'area');
+  const lines = [
+    `✓ Code-change plan ready — ${goal}`,
+    '',
+    'Approach:',
+    ...steps.map((s, i) => `${i + 1}. ${s}`),
+  ];
+  if (areas.length) lines.push('', `Touches: ${areas.join(' · ')}.`);
+  lines.push('', 'Hand this plan to your coding agent to implement.');
+  return lines.join('\n');
+}
+
+/**
+ * Build a personalized `out` outcome line from a live structured payload.
+ * Returns null for kinds handled elsewhere (text/sheet/site) or when the payload
+ * is unusable — the caller keeps the existing seed in that case.
+ */
+export function deriveOut(type: string, payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const p = payload as Record<string, unknown>;
+  switch (type as DeriveKind) {
+    case 'post':
+      return fromPost(p);
+    case 'email':
+      return fromEmail(p);
+    case 'legal':
+      return fromLegal(p);
+    case 'screens':
+      return fromScreens(p);
+    case 'dms':
+      return fromDms(p);
+    case 'calendar':
+      return fromCalendar(p);
+    case 'checklist':
+      return fromChecklist(p);
+    case 'plan':
+      return fromPlan(p);
+    default:
+      return null;
+  }
+}

@@ -121,15 +121,21 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
 ];
 
 export function Sidebar() {
-  const { view, show, library, tick, installed } = useApp();
+  const { view, show, library, tick, installed, sideCollapsed, toggleSide } = useApp();
   void tick; // re-read mutable DEPTS/ENV on each store change
   const envPending = ['skills', 'connectors', 'agents'].reduce(
     (a, k) => a + ENV[k].filter((x) => !x.s).length,
     0,
   );
 
+  // title = the label, so a collapsed icon-only rail stays discoverable on hover.
   const item = (view_: View, label: string, icon: React.ReactNode, count?: number) => (
-    <div key={view_} className={`nav${view === view_ ? ' on' : ''}`} onClick={() => show(view_)}>
+    <div
+      key={view_}
+      className={`nav${view === view_ ? ' on' : ''}`}
+      title={label}
+      onClick={() => show(view_)}
+    >
       {icon}
       <span>{label}</span>
       {count ? <span className="ct">{count}</span> : null}
@@ -141,13 +147,33 @@ export function Sidebar() {
       <div className="brand">
         <div className="logo" />
         <div className="nm pixel">Codepet</div>
+        <button
+          className="side-toggle"
+          title={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={() => toggleSide()}
+        >
+          <svg viewBox="0 0 16 16" fill="none">
+            <path
+              d="M10 4L6 8l4 4"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
       </div>
       {NAV.map((n) => {
         const c = n.view === 'library' ? library.length : n.count ? n.count() : 0;
         return item(n.view, n.label, n.icon, c || undefined);
       })}
       <div className="grp">Your setup</div>
-      <div className={`nav${view === 'install' ? ' on' : ''}`} onClick={() => show('install')}>
+      <div
+        className={`nav${view === 'install' ? ' on' : ''}`}
+        title="First install"
+        onClick={() => show('install')}
+      >
         <svg className="ic" viewBox="0 0 20 20" fill="none">
           <path
             d="M11 2L4 11h5l-1 7 7-9h-5l1-7z"

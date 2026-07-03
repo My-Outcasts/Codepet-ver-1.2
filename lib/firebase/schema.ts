@@ -59,6 +59,8 @@ export interface CompanyDoc {
   brief: CompanyBrief;
   /** When onboarding was completed (or skipped). Absent ⇒ never onboarded. */
   onboardedAt?: Millis;
+  /** When byte's one-time seed personalization ran. Absent ⇒ never personalized. */
+  personalizedAt?: Millis;
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;
@@ -90,11 +92,20 @@ export interface DepartmentDoc {
   need: string;
   byte: string;
   tasks: Task[];
+  later?: boolean;
 }
 
 /** An approved deliverable saved to the company Library. */
 export interface LibraryDoc extends LibItem {
   id: string;
+  createdAt: Millis;
+}
+
+/** One byte-chat message. 'me' = the founder, 'byte' = the companion. */
+export interface ChatMessageDoc {
+  id: string;
+  role: 'me' | 'byte';
+  text: string;
   createdAt: Millis;
 }
 
@@ -115,6 +126,8 @@ export const paths = {
   liveBuild: (companyId: string, buildSessionId: string) =>
     `companies/${companyId}/liveBuilds/${buildSessionId}`,
   notebook: (companyId: string) => `companies/${companyId}/notebook`,
+  chat: (companyId: string) => `companies/${companyId}/chat`,
+  chatMessage: (companyId: string, msgId: string) => `companies/${companyId}/chat/${msgId}`,
 };
 
 // Re-export the shared shapes so persistence consumers import everything from one place.

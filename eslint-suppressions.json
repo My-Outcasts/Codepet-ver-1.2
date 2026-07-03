@@ -20,7 +20,7 @@
   },
   "components/artifact/viewers.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 22
+      "count": 20
     }
   },
   "components/views/InstallView.tsx": {
@@ -30,7 +30,7 @@
   },
   "components/views/OverviewView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 14
+      "count": 13
     }
   },
   "components/views/RoadmapView.tsx": {
@@ -38,7 +38,7 @@
       "count": 2
     },
     "react-hooks/static-components": {
-      "count": 2
+      "count": 1
     }
   },
   "lib/data.ts": {
@@ -48,7 +48,7 @@
   },
   "lib/roadmap.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 5
+      "count": 2
     }
   },
   "lib/store.tsx": {

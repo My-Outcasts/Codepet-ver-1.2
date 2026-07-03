@@ -4,11 +4,21 @@
 // official SDK runs.
 //
 // Kinds:
-//   text          → plain-text deliverable, returns { text }
-//   post/email/legal → structured deliverable via output_config.format, returns { payload }
+//   text                          → plain-text deliverable, returns { text }
+//   post/email/legal/screens/sheet/site → structured deliverable via output_config.format, returns { payload }
 // All kinds support a revise pass (reviseNote + current draft).
-import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
+import { loadServerCompany } from '@/lib/firebase/serverCompany';
+import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
+import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
+import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
+import { composeProjectModel } from '@/lib/ai/projectModel';
+import {
+  STRUCTURED_SCHEMAS,
+  DELIVERABLE_INSTRUCTIONS,
+  type StructuredKind,
+} from '@/lib/ai/deliverableSchemas';
 
 export const runtime = 'nodejs';
 
@@ -21,111 +31,28 @@ Voice: warm, plain-language, confident, specific. No hype, no emoji, no clichés
 // brief once onboarding persists it; until then byte writes from the product.
 const CODEPET_CONTEXT = `Codepet is a macOS companion that builds your whole company with you, department by department. It reads your project, writes the business brief and roadmap, then does real work across Engineering, Marketing, Design, Finance, Operations, Legal, Sales, and Support — producing real deliverables you approve. The promise is comprehension plus control: a real company, and one you actually understand.`;
 
-// ---- structured-output schemas (must satisfy the strict JSON-schema subset:
-// additionalProperties:false + every property required). ----
-const POST_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    variants: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          label: {
-            type: 'string',
-            description: 'The hook angle, 1-3 words (e.g. "Bold", "Problem-first").',
-          },
-          body: {
-            type: 'string',
-            description: 'The full social post, under ~280 characters, no hashtag spam.',
-          },
-        },
-        required: ['label', 'body'],
-      },
-    },
-  },
-  required: ['variants'],
-};
-
-const EMAIL_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    subject: { type: 'string' },
-    preheader: { type: 'string', description: 'Short inbox preview line.' },
-    body: {
-      type: 'array',
-      items: { type: 'string' },
-      description: 'Email body as an ordered list of paragraphs.',
-    },
-    cta: { type: 'string', description: 'Call-to-action button label.' },
-    seq: {
-      type: 'array',
-      description: 'A short follow-up sequence that sends on milestones.',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          when: { type: 'string', description: 'Trigger, e.g. "Day 0", "On first session".' },
-          title: { type: 'string' },
-          open: { type: 'string', description: 'The opening line of that email.' },
-        },
-        required: ['when', 'title', 'open'],
-      },
-    },
-  },
-  required: ['subject', 'preheader', 'body', 'cta', 'seq'],
-};
-
-const LEGAL_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    docTitle: { type: 'string' },
-    sections: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          h: { type: 'string', description: 'Section heading.' },
-          p: { type: 'string', description: 'Section body (a real paragraph, not a placeholder).' },
-        },
-        required: ['h', 'p'],
-      },
-    },
-    flag: {
-      type: 'string',
-      description: 'One-line reviewer note, e.g. that a lawyer should review before publishing.',
-    },
-  },
-  required: ['docTitle', 'sections', 'flag'],
-};
-
-type Kind = 'text' | 'post' | 'email' | 'legal';
+// Structured-output schemas + prompt instructions live in a pure, unit-tested
+// module (lib/ai/deliverableSchemas.ts). `text` has no schema (plain text).
+type Kind = 'text' | StructuredKind;
 
 const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction: string }> = {
-  text: {
-    schema: null,
-    instruction: 'Write the deliverable as plain text.',
+  text: { schema: null, instruction: DELIVERABLE_INSTRUCTIONS.text },
+  post: { schema: STRUCTURED_SCHEMAS.post, instruction: DELIVERABLE_INSTRUCTIONS.post },
+  email: { schema: STRUCTURED_SCHEMAS.email, instruction: DELIVERABLE_INSTRUCTIONS.email },
+  legal: { schema: STRUCTURED_SCHEMAS.legal, instruction: DELIVERABLE_INSTRUCTIONS.legal },
+  screens: { schema: STRUCTURED_SCHEMAS.screens, instruction: DELIVERABLE_INSTRUCTIONS.screens },
+  sheet: { schema: STRUCTURED_SCHEMAS.sheet, instruction: DELIVERABLE_INSTRUCTIONS.sheet },
+  site: { schema: STRUCTURED_SCHEMAS.site, instruction: DELIVERABLE_INSTRUCTIONS.site },
+  dms: { schema: STRUCTURED_SCHEMAS.dms, instruction: DELIVERABLE_INSTRUCTIONS.dms },
+  calendar: {
+    schema: STRUCTURED_SCHEMAS.calendar,
+    instruction: DELIVERABLE_INSTRUCTIONS.calendar,
   },
-  post: {
-    schema: POST_SCHEMA,
-    instruction:
-      'Write exactly 3 distinct launch-post variants that take different angles on the same announcement.',
+  checklist: {
+    schema: STRUCTURED_SCHEMAS.checklist,
+    instruction: DELIVERABLE_INSTRUCTIONS.checklist,
   },
-  email: {
-    schema: EMAIL_SCHEMA,
-    instruction:
-      'Write a launch/activation email: a subject, a preheader, 3-5 short body paragraphs, a CTA label, and a 2-3 step follow-up sequence.',
-  },
-  legal: {
-    schema: LEGAL_SCHEMA,
-    instruction:
-      'Draft a real, formatted legal document with a clear title and 4-7 substantive sections written in plain language.',
-  },
+  plan: { schema: STRUCTURED_SCHEMAS.plan, instruction: DELIVERABLE_INSTRUCTIONS.plan },
 };
 
 interface RunTaskBody {
@@ -138,42 +65,10 @@ interface RunTaskBody {
   brief?: unknown;
 }
 
-// Compose the user's persisted onboarding brief into company context so byte
-// writes from their real company. Falls back to the baseline when absent.
-function briefToContext(raw: unknown): string | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const b = raw as Record<string, unknown>;
-  const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
-  const name = str(b.projectName, 120);
-  const oneLiner = str(b.oneLiner, 240);
-  const notes = str(b.notes, 800);
-  const categories = Array.isArray(b.categories)
-    ? b.categories.filter((c): c is string => typeof c === 'string').slice(0, 6)
-    : [];
-  const audience = str(b.audience, 160);
-  const link = str(b.link, 200);
-  if (!name && !oneLiner && !notes) return null;
-
-  const parts: string[] = [`The company is ${name || "the founder's product"}.`];
-  if (oneLiner) parts.push(oneLiner.endsWith('.') ? oneLiner : `${oneLiner}.`);
-  if (categories.length) parts.push(`It is a ${categories.join(' / ').toLowerCase()} product.`);
-  if (audience) parts.push(`It's for ${audience}.`);
-  if (notes) parts.push(notes.endsWith('.') ? notes : `${notes}.`);
-  if (link) parts.push(`Reference: ${link}.`);
-  const who: string[] = [];
-  const role = str(b.role, 80);
-  const stage = str(b.stage, 80);
-  if (role) who.push(`a ${role.toLowerCase()}`);
-  if (stage) who.push(`at the ${stage.toLowerCase()} stage`);
-  if (who.length) parts.push(`The founder is ${who.join(', ')}.`);
-  const founderName = str(b.founderName, 80);
-  if (founderName) parts.push(`Their name is ${founderName}.`);
-  return parts.join(' ');
-}
-
 function buildPrompt(
   kind: Kind,
   context: string,
+  priorWork: string,
   fields: {
     taskTitle: string;
     taskHint?: string;
@@ -185,6 +80,7 @@ function buildPrompt(
   const { taskTitle, taskHint, deptName, reviseNote, current } = fields;
   const lines = [
     `Company context: ${context}`,
+    ...(priorWork ? ['', priorWork] : []),
     '',
     deptName ? `Department: ${deptName}` : null,
     `Task: ${taskTitle}`,
@@ -217,18 +113,19 @@ export async function POST(req: Request): Promise<Response> {
   if (!idToken) {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
+  let uid: string;
   try {
-    await verifyIdToken(idToken);
+    const decoded = await verifyIdToken(idToken);
+    uid = decoded.uid;
   } catch {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: 'not_configured', message: 'ANTHROPIC_API_KEY is not set on the server.' },
-      { status: 503 },
-    );
+  let client: ReturnType<typeof getClient>;
+  try {
+    client = getClient();
+  } catch (err) {
+    return aiErrorResponse(err, 'not_configured');
   }
 
   let body: RunTaskBody;
@@ -255,49 +152,66 @@ export async function POST(req: Request): Promise<Response> {
     current: typeof body.current === 'string' ? body.current.slice(0, 6000) : undefined,
   };
 
-  const context = briefToContext(body.brief) ?? CODEPET_CONTEXT;
+  // Per-user daily cost guard: count this attempt and stop if the account is over
+  // its cap (fail-open if the counter is unavailable — never block on infra).
+  const limit = await enforceDailyLimit(uid, idToken, new Date());
+  if (!limit.ok) {
+    return Response.json(
+      { error: 'rate_limited', limit: limit.limit },
+      { status: 429, headers: { 'retry-after': '3600' } },
+    );
+  }
+
+  // Prefer the caller's REAL persisted brief (loaded by the verified uid) over
+  // whatever the client passed, so generation is always scoped to the signed-in
+  // account; fall back to the client brief (e.g. mid-onboarding) then the baseline.
+  // Load the company (brief + locked-in decisions, one masked read) and the approved-
+  // deliverable library together. Both ground byte so a new deliverable stays consistent
+  // with what's decided and shipped; fail-open — empty values just skip that grounding.
+  const [company, library] = await Promise.all([
+    loadServerCompany(uid, idToken),
+    loadServerLibrary(uid, idToken),
+  ]);
+  // The project model (brief narrative + locked-in decisions + a breadth digest of
+  // shipped work) is the top-level grounding; the prior-work block below adds depth on
+  // the most relevant items. All derive from state already loaded above — no extra reads.
+  const context =
+    composeProjectModel({
+      brief: company.brief,
+      fallbackBrief: body.brief,
+      decisions: company.decisions,
+      shipped: library,
+    }) || CODEPET_CONTEXT;
+  const priorWork = composePriorWorkContext(
+    selectPriorWork(library, { deptName: fields.deptName, excludeTitle: fields.taskTitle }),
+  );
   const { schema } = KINDS[kind];
-  const client = new Anthropic({ apiKey });
+  const prompt = buildPrompt(kind, context, priorWork, fields);
+  const onUsage = usageSink(uid, idToken, 'runTask');
 
   try {
-    const params: Anthropic.MessageCreateParamsNonStreaming = {
-      model: 'claude-opus-4-8',
-      max_tokens: 4096,
-      thinking: { type: 'adaptive' },
-      output_config: schema
-        ? { effort: 'low', format: { type: 'json_schema', schema } }
-        : { effort: 'low' },
-      system: BYTE_SYSTEM,
-      messages: [{ role: 'user', content: buildPrompt(kind, context, fields) }],
-    };
-    const message = await client.messages.create(params);
-
-    if (message.stop_reason === 'refusal') {
-      return Response.json({ error: 'refused' }, { status: 422 });
-    }
-
-    const text = message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n')
-      .trim();
-
-    if (!text) {
-      return Response.json({ error: 'empty' }, { status: 502 });
-    }
-
     if (schema) {
-      try {
-        return Response.json({ payload: JSON.parse(text) });
-      } catch {
-        console.error('[run-task] structured output was not valid JSON');
-        return Response.json({ error: 'parse_failed' }, { status: 502 });
-      }
+      const payload = await generateJson({
+        client,
+        system: BYTE_SYSTEM,
+        prompt,
+        maxTokens: 4096,
+        label: `run-task:${kind}`,
+        schema,
+        onUsage,
+      });
+      return Response.json({ payload });
     }
+    const text = await generateText({
+      client,
+      system: BYTE_SYSTEM,
+      prompt,
+      maxTokens: 4096,
+      label: `run-task:${kind}`,
+      onUsage,
+    });
     return Response.json({ text });
   } catch (err) {
-    console.error('[run-task] generation failed', err);
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    return Response.json({ error: 'generation_failed' }, { status });
+    return aiErrorResponse(err, 'generation_failed');
   }
 }

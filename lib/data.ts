@@ -11,11 +11,18 @@ export interface Task {
   run?: 'route' | 'draft';
   out: string;
   done?: boolean;
+  // Explicit deliverable type for tasks with no payload yet (e.g. byte-generated
+  // stage tasks). artType() honours this first; authored tasks omit it and are
+  // typed by the payload/run they carry.
+  kind?: string;
   // optional rich-outcome payloads merged from OUTCOMES / authored inline:
   site?: string;
+  // byte's structured site spec (what `site` HTML was rendered from) — kept so a
+  // revise pass edits the spec rather than re-parsing the generated markup.
+  siteSpec?: Record<string, unknown>;
   screens?: any[];
   sheet?: any;
-  pr?: any;
+  plan?: any;
   post?: any;
   email?: any;
   calendar?: any;
@@ -37,6 +44,9 @@ export interface Dept {
   need: string;
   byte: string;
   tasks: Task[];
+  // Set by the stage scaffold: this department has no work yet at the founder's
+  // current stage — shown quietly as "later" until they advance.
+  later?: boolean;
 }
 
 export interface Stage {
@@ -79,7 +89,7 @@ export interface LibItem {
   legal?: any;
   dms?: any[];
   checklist?: any[];
-  pr?: any;
+  plan?: any;
 }
 
 /* ===== real, shippable sites byte builds (rendered live in iframes) ===== */
@@ -258,21 +268,19 @@ export const DEPTS: Dept[] = [
     status: 'attention',
     pend: 2,
     need: 'Ship the two things the beta hinges on: a way to measure if testers stick, and the project-aware Dictionary.',
-    byte: "Engineering is your strongest muscle, so I'll prep the work and route the buildable parts to your agent, then verify each shipped. You approve before anything lands.",
+    byte: "Engineering is your strongest muscle, so I'll prep the work and draft a clear code-change plan for the buildable parts — the goal, the approach, and what it touches. You approve, then hand it to your coding agent to ship.",
     tasks: [
       {
         t: 'Instrument the dual go/no-go signal',
         d: 'Track "understands their code" + "feels more capable" after a week — the real beta question.',
-        who: 'does',
-        run: 'route',
-        out: '✓ Shipped to OnboardingView.swift + Analytics.swift — verified on a live run.\n\nEvents now firing through your Analytics façade (no new SDK):\n  • signup_completed — account created\n  • first_reflection_opened — first recap viewed\n  • dictionary_review_done — a term review finished\n  • week1_check_shown — day-7 in-app survey\n\nA “Comprehension + Capability” funnel is now in the dashboard.\nConfirmed: signup_completed fired on a real onboarding run.',
+        who: 'draft',
+        out: 'Code-change plan ready — measure whether testers understand their code and feel more capable after a week.\n\nApproach:\n  1. Add four funnel events to the analytics seam (no new SDK).\n  2. Fire them at signup, the first recap, a review, and the day-7 check.\n  3. Assemble a comprehension + capability funnel.\n\nHand this plan to your coding agent to implement.',
       },
       {
         t: 'Ship the project-aware Dictionary',
         d: 'Surface terms from the user’s own code with Encountered → Used → Mastered tracking.',
-        who: 'does',
-        run: 'route',
-        out: '✓ Branch feature/dictionary-project-aware opened — verified 6 terms populate from a real session.\n\nShipped:\n  • Extraction pass over the active project: closure, optional, async/await, OAuth, @EnvironmentObject, env var\n  • Evolution state machine — Encountered → Used → Mastered\n  • A term reappearing in your code now logs a rep automatically\n\nSuggested next: point it at a second repo to confirm extraction generalizes.',
+        who: 'draft',
+        out: 'Code-change plan ready — surface terms from the user’s own code with Encountered → Used → Mastered tracking.\n\nApproach:\n  1. Run an extraction pass over the active project to pull real terms.\n  2. Model an evolution state machine: Encountered → Used → Mastered.\n  3. Log a rep automatically when a term reappears in the user’s code.\n\nHand this plan to your coding agent to implement.',
       },
       {
         t: 'Spec the session-detection layer',
@@ -667,40 +675,47 @@ export const OUTCOMES: Record<string, any> = {
     ],
   },
   'Instrument the dual go/no-go signal': {
-    pr: {
-      repo: 'murror/codepet',
-      branch: 'feat/dual-go-no-go',
-      num: 42,
-      summary:
-        'Adds four funnel events through the Analytics façade (no new SDK): signup_completed, first_reflection_opened, dictionary_review_done, week1_check_shown.',
-      files: [
-        { name: 'Analytics.swift', add: 46, del: 4 },
-        { name: 'OnboardingView.swift', add: 12, del: 2 },
-        { name: 'ReflectionView.swift', add: 8, del: 0 },
+    plan: {
+      goal: 'Measure whether testers understand their code and feel more capable after a week — the real beta question.',
+      steps: [
+        'Add four funnel events to the analytics seam (no new SDK).',
+        'Fire them at signup, the first recap, a completed review, and the day-7 check.',
+        'Assemble a comprehension + capability funnel in the dashboard.',
       ],
-      checks: [
-        { n: 'build', ok: true },
-        { n: '218 tests', ok: true },
-        { n: 'lint', ok: true },
+      changes: [
+        {
+          area: 'Analytics layer',
+          edit: 'Declare signup_completed, first_reflection_opened, dictionary_review_done, week1_check_shown.',
+        },
+        { area: 'Onboarding flow', edit: 'Emit signup_completed when the account is created.' },
+        { area: 'Recap view', edit: 'Emit first_reflection_opened on the first recap.' },
       ],
+      verify: [
+        'Confirm signup_completed fires on a real onboarding run.',
+        'Add a test asserting each event emits exactly once.',
+      ],
+      risks: 'The day-7 check needs a survey trigger to exist — build that first if it does not.',
     },
   },
   'Ship the project-aware Dictionary': {
-    pr: {
-      repo: 'murror/codepet',
-      branch: 'feature/dictionary-project-aware',
-      num: 43,
-      summary:
-        'Extracts terms from the active project and tracks Encountered → Used → Mastered. A term reappearing in your code logs a rep automatically.',
-      files: [
-        { name: 'Dictionary.swift', add: 88, del: 12 },
-        { name: 'TermStore.swift', add: 54, del: 6 },
-        { name: 'SessionScanner.swift', add: 31, del: 0 },
+    plan: {
+      goal: 'Surface terms from the user’s own code with Encountered → Used → Mastered tracking.',
+      steps: [
+        'Run an extraction pass over the active project to pull real terms.',
+        'Model an evolution state machine: Encountered → Used → Mastered.',
+        'Log a rep automatically when a term reappears in the user’s code.',
       ],
-      checks: [
-        { n: 'build', ok: true },
-        { n: '224 tests', ok: true },
+      changes: [
+        { area: 'Dictionary module', edit: 'Hold the term list and each term’s evolution state.' },
+        { area: 'Term store', edit: 'Persist per-term reps and the current state.' },
+        { area: 'Session scanner', edit: 'Extract terms from the active project each session.' },
       ],
+      verify: [
+        'Confirm a handful of terms populate from a real session.',
+        'Point it at a second repo to check extraction generalizes.',
+      ],
+      risks:
+        'Extraction quality varies by language — validate on a non-Swift repo before shipping.',
     },
   },
 };
@@ -1080,6 +1095,12 @@ export const ENV: Record<string, EnvItem[]> = {
     { n: 'Migrator', ab: 'Mg', d: 'Runs large, repetitive refactors safely.', s: 0 },
   ],
 };
+// Pristine deep-clone snapshots of the seed catalogs, captured at module load BEFORE
+// any runtime mutation. The data-access layer resets the mutable DEPTS/ENV singletons
+// to these on every sign-in, so one account's edits can never linger into another
+// account's session (per-account isolation for the in-memory layer).
+export const DEPTS_SEED: Dept[] = structuredClone(DEPTS);
+export const ENV_SEED: Record<string, EnvItem[]> = structuredClone(ENV);
 export const ENV_CATS: [string, string, string, string, string][] = [
   ['skills', 'Skills', 'sk', 'Add', 'Active'],
   ['connectors', 'Connectors', 'cn', 'Connect', 'Connected'],
@@ -1150,13 +1171,13 @@ export const LIB_TAG: Record<string, string> = {
   legal: 'legal draft',
   dms: 'outreach DMs',
   checklist: 'checklist',
-  pr: 'pull request',
+  plan: 'code-change plan',
 };
 export const LIB_BUCKET: Record<string, string> = {
   site: 'Sites',
   screens: 'Prototypes',
   sheet: 'Models',
-  pr: 'Builds',
+  plan: 'Plans',
   build: 'Builds',
   post: 'Posts',
   email: 'Emails',
@@ -1183,7 +1204,7 @@ export const LIB_TC: Record<string, string> = {
   site: 'var(--accent)',
   screens: 'var(--violet)',
   sheet: 'var(--accent)',
-  pr: 'var(--accent)',
+  plan: 'var(--blue)',
   build: 'var(--accent)',
   post: 'var(--clay)',
   email: 'var(--clay)',
@@ -1199,7 +1220,7 @@ export const LIB_SKIN: Record<string, { tint: string; line: string; ink: string 
   site: { tint: '#fff', line: 'var(--hairline)', ink: 'var(--accent-deep)' },
   screens: { tint: 'var(--violet-tint)', line: 'var(--violet-line)', ink: '#7A23C0' },
   sheet: { tint: 'var(--accent-tint)', line: 'var(--accent-line)', ink: 'var(--accent-deep)' },
-  pr: { tint: 'var(--blue-tint)', line: 'var(--blue-line)', ink: '#1D4ED8' },
+  plan: { tint: 'var(--blue-tint)', line: 'var(--blue-line)', ink: '#1D4ED8' },
   build: { tint: 'var(--blue-tint)', line: 'var(--blue-line)', ink: '#1D4ED8' },
   post: { tint: 'var(--clay-tint)', line: 'var(--clay-line)', ink: '#C2410C' },
   email: { tint: 'var(--clay-tint)', line: 'var(--clay-line)', ink: '#C2410C' },

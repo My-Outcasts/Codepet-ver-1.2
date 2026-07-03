@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useApp } from '@/lib/store';
 import { fmt } from '@/lib/helpers';
+import { computeSheetModel } from '@/lib/ai/sheetModel';
 
 function useCopy() {
   const { toast } = useApp();
@@ -157,7 +158,23 @@ export function ScreensViewer({
         <span className="site-file">{file}</span>
       </div>
       <div className="sc-stage">
-        <div className="phone">
+        {/* Tap the phone to advance (wraps at the end) — matches the "tap through
+            all three screens" copy, and works even where the Back/Next row below
+            is scrolled out of view in the run modal. */}
+        <div
+          className="phone tappable"
+          role="button"
+          tabIndex={0}
+          aria-label={`Screen ${i + 1} of ${S.length} — tap to advance`}
+          title="Tap to advance"
+          onClick={() => setI((cur) => (cur + 1) % S.length)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              setI((cur) => (cur + 1) % S.length);
+            }
+          }}
+        >
           <div className="notch" />
           {S.map((s, k) => (
             <div className={`scr${k === i ? ' on' : ''}`} key={k}>
@@ -195,14 +212,10 @@ export function ScreensViewer({
 export function SheetViewer({ head, file, sheet }: { head: string; file: string; sheet: any }) {
   const [vals, setVals] = useState<number[]>(sheet.inputs.map((x: any) => x.val));
   const I = sheet.inputs;
-  const price = vals[0],
-    wl = vals[1],
-    conv = vals[2] / 100,
-    churn = vals[3] / 100;
-  const paid = Math.round(wl * conv),
-    mrr = paid * price,
-    arr = mrr * 12,
-    ltv = Math.round(price / churn);
+  const price = vals[0];
+  // The projection is a pure, finite-safe function (churn/price floored) shared
+  // with the tests — no division-by-zero from a live-generated input.
+  const { paid, mrr, arr, ltv, life, breakeven } = computeSheetModel(vals);
   return (
     <div className="sheetart">
       <div className="site-bar">
@@ -248,11 +261,11 @@ export function SheetViewer({ head, file, sheet }: { head: string; file: string;
         </div>
         <div className="sh-cell">
           <div className="l">Churn-adj. life</div>
-          <div className="v">{Math.round(1 / churn)}mo</div>
+          <div className="v">{life}mo</div>
         </div>
         <div className="sh-cell">
           <div className="l">Break-even users</div>
-          <div className="v">{Math.ceil(2500 / price).toLocaleString()}</div>
+          <div className="v">{breakeven.toLocaleString()}</div>
         </div>
       </div>
       <div className="sh-tiers">
@@ -507,51 +520,198 @@ export function ChecklistViewer({ checklist }: { checklist: any[] }) {
   );
 }
 
-/* ===== engineering PR ===== */
-export function PrViewer({ pr, title }: { pr: any; title?: string }) {
-  const bars = (a: number, d: number) => {
-    const tot = Math.min(5, Math.max(1, Math.round((a + d) / 20)));
-    const aCount = Math.round((tot * a) / (a + d || 1));
-    return Array.from({ length: 5 }, (_, i) => (
-      <i key={i} className={i < tot ? (i < aCount ? 'a' : 'd') : ''} />
-    ));
-  };
+/* ===== engineering code-change plan ===== */
+// Honest: the change byte WOULD make (goal / approach / areas touched / how to
+// verify) — never a fake "merged PR" with invented files, line counts, or green
+// checks. byte can't open PRs or run CI, so it drafts the plan to hand off instead.
+export function PlanViewer({ plan, title }: { plan: any; title?: string }) {
+  const steps: string[] = Array.isArray(plan?.steps) ? plan.steps : [];
+  const changes: Array<{ area?: string; edit?: string }> = Array.isArray(plan?.changes)
+    ? plan.changes
+    : [];
+  const verify: string[] = Array.isArray(plan?.verify) ? plan.verify : [];
+  const goal = typeof plan?.goal === 'string' ? plan.goal : '';
+  const risks = typeof plan?.risks === 'string' ? plan.risks : '';
   return (
-    <div className="prart">
-      <div className="pr-head">
-        <div className="pr-t">
-          <span className="pr-merged">✓ Merged</span>
-          <span className="pr-num">#{pr.num}</span>
-        </div>
-        <div className="pr-title">{title || pr.branch}</div>
-        <div className="pr-branch">
-          <code>{pr.branch}</code> → <code>main</code> · {pr.repo}
-        </div>
+    <div className="planart">
+      <div className="plan-head">
+        <span className="plan-chip">Code-change plan</span>
+        <div className="plan-title">{title || 'Change plan'}</div>
       </div>
-      <div className="pr-sum">{pr.summary}</div>
-      <div className="pr-files">
-        {pr.files.map((f: any, i: number) => (
-          <div className="pr-file" key={i}>
-            <span className="fn">{f.name}</span>
-            <span className="fa">+{f.add}</span>
-            <span className="fd">−{f.del}</span>
-            <span className="pr-bars">{bars(f.add, f.del)}</span>
+      {goal && (
+        <div className="plan-sec">
+          <div className="plan-lbl">Goal</div>
+          <p className="plan-goal">{goal}</p>
+        </div>
+      )}
+      {steps.length > 0 && (
+        <div className="plan-sec">
+          <div className="plan-lbl">Approach</div>
+          <ol className="plan-steps">
+            {steps.map((s, i) => (
+              <li key={i}>{s}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+      {changes.length > 0 && (
+        <div className="plan-sec">
+          <div className="plan-lbl">Changes</div>
+          <div className="plan-changes">
+            {changes.map((c, i) => (
+              <div className="plan-change" key={i}>
+                <span className="plan-area">{c.area}</span>
+                <span className="plan-edit">{c.edit}</span>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-      <div className="pr-checks">
-        {pr.checks.map((c: any, i: number) => (
-          <span className="pr-check" key={i}>
-            <span className="cok">✓</span>
-            {c.n}
-          </span>
-        ))}
-      </div>
+        </div>
+      )}
+      {verify.length > 0 && (
+        <div className="plan-sec">
+          <div className="plan-lbl">How to verify</div>
+          <ul className="plan-verify">
+            {verify.map((v, i) => (
+              <li key={i}>
+                <span className="plan-box">☐</span>
+                <span>{v}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {risks && (
+        <div className="plan-risk">
+          <span className="plan-rk">!</span>
+          <span>{risks}</span>
+        </div>
+      )}
+      <div className="plan-foot">Hand this plan to your coding agent to implement it.</div>
     </div>
   );
 }
 
 // dispatch a viewer by artifact type from a task/library item
+/* ===== plain-text deliverables (doc / prep / build) =====
+   byte writes these in light markdown. Render the small subset it actually emits —
+   #/##/### headings, **bold**, `code`, - / * bullets, numbered lists, paragraphs — as
+   real elements so the founder sees a finished document, not raw # and ** syntax. Only
+   used for the FINAL deliverable; the streaming/typewriter view stays raw on purpose. */
+
+// Resolve **bold** and `code` spans within a single line to React nodes.
+function inlineMd(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const re = /\*\*(.+?)\*\*|`([^`]+?)`/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1] !== undefined) out.push(<strong key={key++}>{m[1]}</strong>);
+    else out.push(<code key={key++}>{m[2]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function DocBody({ text }: { text: string }) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  let para: string[] = [];
+  let key = 0;
+
+  const flushPara = () => {
+    if (para.length) {
+      blocks.push(
+        <p key={key++} className="md-p">
+          {inlineMd(para.join(' '))}
+        </p>,
+      );
+      para = [];
+    }
+  };
+  const flushList = () => {
+    if (!list) return;
+    const items = list.items.map((it, i) => <li key={i}>{inlineMd(it)}</li>);
+    blocks.push(
+      list.ordered ? (
+        <ol key={key++} className="md-ol">
+          {items}
+        </ol>
+      ) : (
+        <ul key={key++} className="md-ul">
+          {items}
+        </ul>
+      ),
+    );
+    list = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    // A line of only dashes/underscores/asterisks (3+) is a section divider. Checked
+    // before the bullet rule, though they can't overlap — bullets require a space
+    // after the marker ("- text"), a rule has none.
+    const isRule = /^\s*([-_*])\1{2,}\s*$/.test(line);
+    const ul = /^[-*]\s+(.*)$/.exec(line);
+    const ol = /^\d+\.\s+(.*)$/.exec(line);
+    if (h) {
+      flushPara();
+      flushList();
+      const level = h[1].length;
+      const content = inlineMd(h[2]);
+      if (level === 1)
+        blocks.push(
+          <h3 key={key++} className="md-h md-h1">
+            {content}
+          </h3>,
+        );
+      else if (level === 2)
+        blocks.push(
+          <h4 key={key++} className="md-h md-h2">
+            {content}
+          </h4>,
+        );
+      else
+        blocks.push(
+          <h5 key={key++} className="md-h md-h3">
+            {content}
+          </h5>,
+        );
+    } else if (isRule) {
+      flushPara();
+      flushList();
+      blocks.push(<hr key={key++} className="md-hr" />);
+    } else if (ul) {
+      flushPara();
+      if (!list || list.ordered) {
+        flushList();
+        list = { ordered: false, items: [] };
+      }
+      list.items.push(ul[1]);
+    } else if (ol) {
+      flushPara();
+      if (!list || !list.ordered) {
+        flushList();
+        list = { ordered: true, items: [] };
+      }
+      list.items.push(ol[1]);
+    } else if (line.trim() === '') {
+      flushPara();
+      flushList();
+    } else {
+      flushList();
+      para.push(line);
+    }
+  }
+  flushPara();
+  flushList();
+  return <div className="md-body">{blocks}</div>;
+}
+
 export function ArtifactViewer({ item }: { item: any }) {
   const { head, file } = item;
   if (item.type === 'site') return <SiteViewer head={head} file={file} site={item.site} />;
@@ -564,7 +724,7 @@ export function ArtifactViewer({ item }: { item: any }) {
   if (item.type === 'legal') return <LegalViewer legal={item.legal} />;
   if (item.type === 'dms') return <DmsViewer dms={item.dms} />;
   if (item.type === 'checklist') return <ChecklistViewer checklist={item.checklist} />;
-  if (item.type === 'pr') return <PrViewer pr={item.pr} title={item.title} />;
+  if (item.type === 'plan') return <PlanViewer plan={item.plan} title={item.title} />;
   return (
     <div className="artifact">
       <div className={`art-bar ${item.type}`}>
@@ -572,7 +732,9 @@ export function ArtifactViewer({ item }: { item: any }) {
         <span className="art-file">{item.file}</span>
         <span dangerouslySetInnerHTML={{ __html: item.tag }} />
       </div>
-      <div className="art-body">{item.out}</div>
+      <div className="art-body">
+        <DocBody text={item.out ?? ''} />
+      </div>
     </div>
   );
 }

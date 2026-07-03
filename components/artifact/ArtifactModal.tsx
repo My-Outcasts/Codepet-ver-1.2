@@ -1,66 +1,41 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { DEPTS, reviseSite, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
+import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
-import { runByteTask, type DeliverableKind, type RunResult } from '@/lib/ai/runTask';
+import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
+import { LIVE_TYPES, liveKind, currentDraft, applyResult } from '@/lib/ai/applyResult';
 import { ArtifactViewer } from './viewers';
 
-// Deliverable types byte generates live via the Claude API (Phase 3). Plain-text
-// (doc/prep) come back as text; post/email/legal come back as structured payloads.
-// The remaining types (site/sheet/screens/calendar/dms/checklist/pr) still use
-// their authored payloads.
-const LIVE_TYPES = new Set(['doc', 'prep', 'post', 'email', 'legal']);
-
-function liveKind(type: string): DeliverableKind | null {
-  if (type === 'doc' || type === 'prep') return 'text';
-  if (type === 'post' || type === 'email' || type === 'legal') return type;
-  return null;
-}
-
-// The current draft byte revises against (structured payloads serialized to JSON).
-function currentDraft(t: Task, type: string): string {
-  if (type === 'post') return JSON.stringify(t.post ?? {});
-  if (type === 'email') return JSON.stringify(t.email ?? {});
-  if (type === 'legal') return JSON.stringify(t.legal ?? {});
-  return typeof t.out === 'string' ? t.out : '';
-}
-
-// Apply byte's result onto the task, merging structured payloads with the
-// presentational defaults the viewers expect (author/stats/from/updated).
-function applyResult(t: Task, type: string, res: RunResult): void {
-  if (type === 'post' && res.payload) {
-    const p = res.payload as { variants?: Array<{ label: string; body: string }> };
-    if (p.variants?.length) {
-      t.post = {
-        author: t.post?.author ?? 'byte',
-        handle: t.post?.handle ?? '@codepet',
-        stats: t.post?.stats ?? { replies: 18, reposts: 34, likes: 210 },
-        variants: p.variants,
-      };
-    }
-  } else if (type === 'email' && res.payload) {
-    const e = res.payload as Record<string, unknown>;
-    t.email = {
-      from: t.email?.from ?? 'byte',
-      fromAddr: t.email?.fromAddr ?? 'hello@code-pet.com',
-      subject: e.subject,
-      preheader: e.preheader,
-      body: e.body,
-      cta: e.cta,
-      seq: e.seq,
+// Scrollable modal body with a soft bottom fade that shows only while there's more
+// content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
+// every deliverable modal (view / run / result).
+function ModalBody({ children }: { children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollHeight - el.scrollTop - el.clientHeight > 8);
+    check();
+    el.addEventListener('scroll', check, { passive: true });
+    // Re-check when the body resizes OR its content changes height (viewer mounts,
+    // text types out, a revise swaps the payload).
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    const mo = new MutationObserver(check);
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
+    return () => {
+      el.removeEventListener('scroll', check);
+      ro.disconnect();
+      mo.disconnect();
     };
-  } else if (type === 'legal' && res.payload) {
-    const l = res.payload as Record<string, unknown>;
-    t.legal = {
-      docTitle: l.docTitle,
-      updated: t.legal?.updated ?? 'Draft · for your review',
-      sections: l.sections,
-      flag: l.flag,
-    };
-  } else if (typeof res.text === 'string' && res.text) {
-    t.out = res.text;
-  }
+  }, []);
+  return (
+    <div className={`mbody${more ? ' has-more' : ''}`} ref={ref}>
+      {children}
+    </div>
+  );
 }
 
 function Phx({ a }: { a: number }) {
@@ -72,9 +47,11 @@ function Phx({ a }: { a: number }) {
   );
   return (
     <div className="phx">
-      {ph(0, 'Execute')}
+      {ph(0, 'Outline')}
       <span className="pa">→</span>
-      {ph(1, 'Deliver')}
+      {ph(1, 'Execute')}
+      <span className="pa">→</span>
+      {ph(2, 'Deliver')}
     </div>
   );
 }
@@ -182,11 +159,48 @@ function TypeOut({ text, onDone }: { text: string; onDone: () => void }) {
   );
 }
 
-type Stage = 'exec' | 'deliver' | 'revise' | 'result';
+type Stage = 'outline' | 'exec' | 'deliver' | 'revise' | 'result';
+
+// One-line "what byte will make" for the Outline stage, by deliverable type. Pure
+// framing (no API call) — the personalized "why" comes from the department/task text.
+function planFor(type: string): string {
+  switch (type) {
+    case 'site':
+      return 'A one-page site — hero, how-it-works, feature cards, and a call-to-action. On-brand and shippable.';
+    case 'post':
+      return 'Three launch-post variants that take different angles, ready to A/B.';
+    case 'email':
+      return 'A launch email — subject, body, and a short follow-up sequence.';
+    case 'legal':
+      return 'A real, formatted legal document in plain language, flagged for review.';
+    case 'screens':
+      return 'Three onboarding screens that get a new user to their first value in under two minutes.';
+    case 'sheet':
+      return 'An interactive pricing model tuned to your numbers — drag the inputs, watch MRR and LTV move.';
+    case 'dms':
+      return 'Four personalized 1:1 outreach drafts — a per-person DM, not a broadcast.';
+    case 'calendar':
+      return 'A two-week content calendar tuned to your product and audience.';
+    case 'checklist':
+      return 'A concrete setup and launch checklist you can work through step by step.';
+    case 'plan':
+      return 'A code-change plan — the goal, the approach, and the areas it touches — ready to hand to your coding agent.';
+    case 'build':
+      return 'A real, working piece wired up and verified.';
+    case 'prep':
+      return 'A prepared brief you can act on.';
+    default:
+      return 'A real, ready-to-use deliverable — not a description of one.';
+  }
+}
 
 export function ArtifactModal() {
-  const { modal, closeModal, approveTask, viewItem, runTask, show, toast, brief } = useApp();
+  const { modal, closeModal, approveTask, openDeliverable, runTask, toast, brief, toggleCopilot } =
+    useApp();
   const [stage, setStage] = useState<Stage>('exec');
+  // Run mode docks as a right-hand panel so the map stays visible as context;
+  // "Expand" swaps to a full centered card for the rich deliverables that need room.
+  const [expanded, setExpanded] = useState(false);
   const [rev, setRev] = useState<string | null>(null);
   const [execKind, setExecKind] = useState<'task' | 'revise'>('task');
   const [deliverReady, setDeliverReady] = useState(false);
@@ -197,12 +211,18 @@ export function ArtifactModal() {
   const [picked, setPicked] = useState('');
   // Live-generation status for plain-text deliverables (Phase 3).
   const [genStatus, setGenStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  // The error code from a failed live pass, so the error line can be specific
+  // (e.g. the daily cost cap) rather than the generic "couldn't reach byte".
+  const [genError, setGenError] = useState<string>('');
 
   // (re)initialize when a run modal opens for a task
   const task = modal?.kind === 'run' ? modal.task : null;
   useEffect(() => {
     if (modal?.kind === 'run') {
-      setStage('exec');
+      // Open on the Outline stage — show why the task matters + what byte will make,
+      // and wait for the user to hit "Run it". Nothing executes (and no paid call
+      // fires) until they green-light it: comprehension + control before action.
+      setStage('outline');
       setRev(null);
       setExecKind('task');
       setDeliverReady(false);
@@ -210,34 +230,13 @@ export function ArtifactModal() {
       setReviseNote('');
       setPicked('');
       setGenStatus('idle');
-
-      // byte generates the real deliverable via the Claude API while the execute
-      // log animates. On failure we fall back to the authored draft so the loop
-      // never dead-ends.
-      const tk = modal.task;
-      const dp = modal.dept;
-      const ty = artType(tk, modal.walk);
-      const kind = liveKind(ty);
-      if (kind) {
-        setGenStatus('loading');
-        runByteTask({
-          kind,
-          taskTitle: tk.t,
-          taskHint: tk.d || (typeof tk.out === 'string' ? tk.out.slice(0, 160) : undefined),
-          deptName: dp.name,
-          brief,
-        })
-          .then((res) => {
-            applyResult(tk, ty, res);
-            setGenStatus('done');
-          })
-          .catch((err) => {
-            console.error('[byte] live generation failed', err);
-            setGenStatus('error');
-          });
-      }
+      setGenError('');
+      setExpanded(false);
+      // The work panel docks where the chat lives — collapse the chat so one thing
+      // owns the right at a time (it's a tap away on its floating button).
+      toggleCopilot(true);
     }
-  }, [modal, task]);
+  }, [modal, task, toggleCopilot]);
 
   if (!modal) return null;
 
@@ -257,9 +256,9 @@ export function ArtifactModal() {
               ✕
             </div>
           </div>
-          <div className="mbody">
+          <ModalBody>
             <ArtifactViewer item={item} />
-          </div>
+          </ModalBody>
           <div className="mfoot">
             <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
               Close
@@ -296,6 +295,38 @@ export function ArtifactModal() {
     M('<span class="ad">✓</span> revised — opening v2 below'),
   ];
 
+  // "Run it" from the Outline stage: move into Execute and kick off the live pass
+  // (the same generation that used to fire on open). On failure the loop falls back
+  // to the authored draft so it never dead-ends.
+  const startRun = () => {
+    setExecKind('task');
+    setDeliverReady(false);
+    setGenStatus('idle');
+    setGenError('');
+    setStage('exec');
+
+    const kind = liveKind(type);
+    if (kind) {
+      setGenStatus('loading');
+      runByteTask({
+        kind,
+        taskTitle: t.t,
+        taskHint: t.d || (typeof t.out === 'string' ? t.out.slice(0, 160) : undefined),
+        deptName: d.name,
+        brief,
+      })
+        .then((res) => {
+          applyResult(t, type, res);
+          setGenStatus('done');
+        })
+        .catch((err) => {
+          console.error('[byte] live generation failed', err);
+          setGenError(err instanceof GenerateError ? err.code : '');
+          setGenStatus('error');
+        });
+    }
+  };
+
   const sendRevision = () => {
     const note = reviseNote.trim() || picked || 'Tighten it up';
     setRev(note);
@@ -322,31 +353,33 @@ export function ArtifactModal() {
         })
         .catch((err) => {
           console.error('[byte] live revise failed', err);
+          setGenError(err instanceof GenerateError ? err.code : '');
           setGenStatus('error');
         });
     } else {
-      // Non-live types (site/sheet/...) still use the local mock revise.
-      if (type === 'site') t.site = reviseSite(t.site || '', note);
-      else t.out = reviseText(t.out, note);
+      // Non-live types still use the local mock revise.
+      t.out = reviseText(t.out, note);
     }
   };
 
   const onApprove = () => {
     const res = approveTask(t, d, type);
-    const built = type === 'build' || type === 'site' || type === 'pr';
+    const built = type === 'build' || type === 'site';
     setApproved({ ...res, built });
     setStage('result');
   };
 
   // header subtitle
   const ms =
-    stage === 'exec' && execKind === 'revise'
-      ? `${d.name} · Revising`
-      : stage === 'deliver'
-        ? `${d.name} · Deliver${rev ? ' · v2' : ''}`
-        : stage === 'revise'
-          ? `${d.name} · Request changes`
-          : `${d.name} · Execute`;
+    stage === 'outline'
+      ? `${d.name} · Outline`
+      : stage === 'exec' && execKind === 'revise'
+        ? `${d.name} · Revising`
+        : stage === 'deliver'
+          ? `${d.name} · Deliver${rev ? ' · v2' : ''}`
+          : stage === 'revise'
+            ? `${d.name} · Request changes`
+            : `${d.name} · Execute`;
 
   // deliver: vstat text & whether the body is a typed-out plain doc
   const item = { ...t, type, ...artMeta(t, type) };
@@ -379,14 +412,48 @@ export function ArtifactModal() {
       <>First draft ready — written from your brief, in your voice</>
     );
 
+  // The line shown when a live pass fails. A rate-limit is a friendly, specific
+  // message (the account hit today's cap); anything else falls back to the generic
+  // "showing the saved draft" note.
+  const liveErrorMsg =
+    genError === 'rate_limited'
+      ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
+      : 'Couldn’t reach byte just now — showing the saved draft.';
+
+  const olLabel: React.CSSProperties = {
+    fontSize: 11,
+    letterSpacing: '.08em',
+    textTransform: 'uppercase',
+    color: 'var(--t-3)',
+    marginBottom: 7,
+  };
+
   let bodyContent: React.ReactNode;
-  if (stage === 'exec') {
+  if (stage === 'outline') {
+    bodyContent = (
+      <>
+        <Phx a={0} />
+        <div style={{ padding: '4px 2px' }}>
+          <div style={{ marginBottom: 20 }}>
+            <div style={olLabel}>Why this matters</div>
+            <p style={{ margin: 0, color: 'var(--t-1)', lineHeight: 1.55 }}>{d.need}</p>
+          </div>
+          <div>
+            <div style={olLabel}>What byte will make</div>
+            <p style={{ margin: 0, color: 'var(--t-1)', lineHeight: 1.55 }}>
+              {t.d || planFor(type)}
+            </p>
+          </div>
+        </div>
+      </>
+    );
+  } else if (stage === 'exec') {
     const steps = execKind === 'revise' ? reviseSteps(rev || '') : buildLog(t, logType, d);
     const title =
       execKind === 'revise' ? <>byte is revising — “{rev}”</> : 'byte is doing the work…';
     bodyContent = (
       <>
-        <Phx a={0} />
+        <Phx a={1} />
         <ExecLog
           key={execKind}
           steps={steps}
@@ -401,7 +468,7 @@ export function ArtifactModal() {
   } else if (stage === 'deliver') {
     bodyContent = (
       <>
-        <Phx a={1} />
+        <Phx a={2} />
         {rev && (
           <div
             className="vstat"
@@ -445,7 +512,7 @@ export function ArtifactModal() {
                   )}
                   {LIVE_TYPES.has(type) && genStatus === 'error' && (
                     <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
-                      Couldn’t reach byte just now — showing the saved draft.
+                      {liveErrorMsg}
                     </div>
                   )}
                   <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
@@ -519,7 +586,18 @@ export function ArtifactModal() {
 
   // footer per stage
   let footer: React.ReactNode = null;
-  if (stage === 'deliver' && deliverReady) {
+  if (stage === 'outline') {
+    footer = (
+      <>
+        <button className="btn" onClick={startRun}>
+          Run it
+        </button>
+        <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
+          Not now
+        </button>
+      </>
+    );
+  } else if (stage === 'deliver' && deliverReady) {
     const okLabel =
       RICH_META[type]?.ok ||
       (type === 'site'
@@ -562,37 +640,28 @@ export function ArtifactModal() {
     const { item: it, next, built } = approved;
     footer = (
       <>
-        <button className="btn ghost" onClick={() => viewItem(it)}>
-          {type === 'site'
-            ? 'Open the site'
-            : type === 'screens'
-              ? 'Open the screens'
-              : type === 'sheet'
-                ? 'Open the model'
-                : 'Open the file'}
-        </button>
-        {next ? (
-          <button className="btn" onClick={() => runTask(next, d, next.who === 'you')}>
-            Do the next one →
-          </button>
-        ) : (
-          <button
-            className="btn"
-            onClick={() => {
-              closeModal();
-              show('home');
-            }}
-          >
-            Back to company
-          </button>
-        )}
+        {/* The deliverable is saved — the useful next move is back to byte, not a
+            pointless copy. byte already knows the advanced next step. */}
         <button
-          className="btn ghost"
-          style={{ marginLeft: 'auto' }}
+          className="btn"
           onClick={() => {
             closeModal();
+            toggleCopilot(false);
           }}
         >
+          Continue with byte
+        </button>
+        {next && (
+          <button className="btn ghost" onClick={() => runTask(next, d, next.who === 'you')}>
+            Do the next one →
+          </button>
+        )}
+        {type === 'site' && (
+          <button className="btn ghost" onClick={() => openDeliverable(it)}>
+            Open the site ↗
+          </button>
+        )}
+        <button className="btn ghost" style={{ marginLeft: 'auto' }} onClick={closeModal}>
           Close
         </button>
       </>
@@ -601,11 +670,24 @@ export function ArtifactModal() {
     void DEPTS;
   }
 
+  // Run flow docks to the right (map stays as context) unless the user expands it.
+  const wrapClass = `artmodal on run${expanded ? '' : ' docked'}`;
+  const expandBtn = (
+    <button
+      className="mexp"
+      onClick={() => setExpanded((e) => !e)}
+      title={expanded ? 'Dock to the side' : 'Expand to full screen'}
+      aria-label={expanded ? 'Dock' : 'Expand'}
+    >
+      {expanded ? 'Dock' : 'Expand'}
+    </button>
+  );
+
   // result mode uses its own header
   if (stage === 'result' && approved) {
     const built = approved.built;
     return (
-      <div className="artmodal on">
+      <div className={wrapClass}>
         <div className="mcard">
           <div className="mhead">
             <div className={`di c-${d.k}`}>{d.ab}</div>
@@ -615,11 +697,12 @@ export function ArtifactModal() {
               </div>
               <div className="ms">{d.name}</div>
             </div>
+            {expandBtn}
             <div className="mx" onClick={closeModal}>
               ✕
             </div>
           </div>
-          <div className="mbody">{bodyContent}</div>
+          <ModalBody>{bodyContent}</ModalBody>
           <div className="mfoot">{footer}</div>
         </div>
       </div>
@@ -627,7 +710,7 @@ export function ArtifactModal() {
   }
 
   return (
-    <div className="artmodal on">
+    <div className={wrapClass}>
       <div className="mcard">
         <div className="mhead">
           <div className={`di c-${d.k}`}>{d.ab}</div>
@@ -635,11 +718,12 @@ export function ArtifactModal() {
             <div className="mt">{t.t}</div>
             <div className="ms">{ms}</div>
           </div>
+          {expandBtn}
           <div className="mx" onClick={closeModal}>
             ✕
           </div>
         </div>
-        <div className="mbody">{bodyContent}</div>
+        <ModalBody>{bodyContent}</ModalBody>
         <div className="mfoot">{footer}</div>
       </div>
     </div>
@@ -693,8 +777,10 @@ function ResultBody({
       <>
         The live model is saved to your <b>Library</b> — re-open and adjust it any time.
       </>
-    ) : type === 'pr' ? (
-      <>The change is live in your project, verified.</>
+    ) : type === 'plan' ? (
+      <>
+        Saved to your <b>Library</b> — hand it to your coding agent to implement.
+      </>
     ) : type === 'checklist' ? (
       <>
         Tracked in your <b>plan</b> — tick items off any time.

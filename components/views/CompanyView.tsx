@@ -12,24 +12,32 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 // name + status + current task + to-do count. The whole company, readable at a
 // glance; click a row to enter.
 export function CompanyView() {
-  const { openDept, tick } = useApp();
+  const { openDept, regenerateCompany, tick } = useApp();
   void tick;
   const need = DEPTS.filter((d) => d.status === 'attention').length;
 
   return (
     <section className="view on" id="v-home">
-      <div className="vhead">
-        <h1>Your company</h1>
-        <div className="sub">Eight departments · {need} need you today</div>
+      <div className="vhead vhead-row">
+        <div>
+          <h1>Your company</h1>
+          <div className="sub">Eight departments · {need} need you today</div>
+        </div>
+        <button className="replan" onClick={regenerateCompany} title="Regenerate for your stage">
+          Re-plan for my stage
+        </button>
       </div>
       <div className="deptlist">
         {DEPTS.map((dep) => {
           const col = DCOL[dep.k] || '--accent';
-          const task = dep.tasks?.[0]?.t || 'All clear';
-          const st = STATUS[dep.status] || STATUS.ready;
+          const later = !!dep.later;
+          const task = later
+            ? dep.need || 'Comes later as you progress'
+            : dep.tasks?.[0]?.t || 'All clear';
+          const st = later ? { label: 'later', cls: 'idle' } : STATUS[dep.status] || STATUS.ready;
           return (
             <div
-              className="deptrow"
+              className={`deptrow${later ? ' later' : ''}`}
               key={dep.k}
               onClick={() => openDept(dep.k)}
               style={{ ['--rc' as string]: `var(${col})` }}
@@ -54,7 +62,9 @@ export function CompanyView() {
               </div>
               <div className="dr-right">
                 <span className="dr-count">
-                  {dep.pend ? (
+                  {later ? (
+                    'Later'
+                  ) : dep.pend ? (
                     <>
                       <b>{dep.pend}</b> to do
                     </>
@@ -62,7 +72,7 @@ export function CompanyView() {
                     'All clear'
                   )}
                 </span>
-                <span className="dr-open">Open</span>
+                <span className="dr-open">{later ? '' : 'Open'}</span>
               </div>
             </div>
           );

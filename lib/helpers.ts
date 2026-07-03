@@ -13,33 +13,54 @@ export const slug = (s: string): string =>
     .toLowerCase()
     .replace(/^-|-$/g, '');
 
+// The deliverable types a task can resolve to. A byte-generated task declares one
+// via `kind` (it has no payload yet); anything outside this set falls through to
+// payload/run-based typing so a bad value can never mistype a task.
+const KNOWN_KINDS = new Set([
+  'doc',
+  'prep',
+  'build',
+  'post',
+  'email',
+  'legal',
+  'screens',
+  'sheet',
+  'site',
+  'dms',
+  'calendar',
+  'checklist',
+  'plan',
+]);
+
 // type of artifact a task produces
 export const artType = (t: Task, walk?: boolean): string =>
-  t.site
-    ? 'site'
-    : t.screens
-      ? 'screens'
-      : t.sheet
-        ? 'sheet'
-        : t.pr
-          ? 'pr'
-          : t.post
-            ? 'post'
-            : t.email
-              ? 'email'
-              : t.calendar
-                ? 'calendar'
-                : t.legal
-                  ? 'legal'
-                  : t.dms
-                    ? 'dms'
-                    : t.checklist
-                      ? 'checklist'
-                      : t.run === 'route'
-                        ? 'build'
-                        : walk || t.who === 'you'
-                          ? 'prep'
-                          : 'doc';
+  t.kind && KNOWN_KINDS.has(t.kind)
+    ? t.kind
+    : t.site
+      ? 'site'
+      : t.screens
+        ? 'screens'
+        : t.sheet
+          ? 'sheet'
+          : t.plan
+            ? 'plan'
+            : t.post
+              ? 'post'
+              : t.email
+                ? 'email'
+                : t.calendar
+                  ? 'calendar'
+                  : t.legal
+                    ? 'legal'
+                    : t.dms
+                      ? 'dms'
+                      : t.checklist
+                        ? 'checklist'
+                        : t.run === 'route'
+                          ? 'build'
+                          : walk || t.who === 'you'
+                            ? 'prep'
+                            : 'doc';
 
 export interface TaskStateInfo {
   label: string;
@@ -129,15 +150,16 @@ export const RICH_META: Record<string, RichMeta> = {
     ho: '<b>byte prepared a checklist you can run.</b> Tick items off here — approve to track it in your plan.',
     saved: 'tracked in your <b>plan</b>',
   },
-  pr: {
-    file: 'pull-request.diff',
-    head: 'Pull request',
-    tag: artTag('--accent', 'merged'),
-    log: 'build',
-    vstat: 'Shipped & verified — merged to main, all checks green',
-    ok: 'Looks right — log it',
-    ho: '<b>byte shipped this and verified it.</b> Review the change and the checks — approve to log it, or send it back.',
-    saved: 'live in your project',
+  plan: {
+    file: 'change-plan.md',
+    head: 'Code-change plan',
+    tag: artTag('--blue', 'plan'),
+    log: 'doc',
+    vstat:
+      'A code-change plan drafted from your brief — the change byte would make, ready to hand to your coding agent',
+    ok: 'Approve the plan',
+    ho: '<b>byte drafted a code-change plan.</b> Review the goal, approach, and changes — approve to save it, or send it back for another pass.',
+    saved: 'in your <b>Library</b>',
   },
 };
 

@@ -62,7 +62,7 @@ export function LibraryView() {
         ) : (
           shown.map((x, i) => {
             const isSite = x.type === 'site';
-            const mono = x.type === 'pr' || x.type === 'build';
+            const mono = x.type === 'build';
             const sk = LIB_SKIN[x.type] || LIB_SKIN.doc;
             const pc = 'lib-prev' + (isSite ? ' site' : mono ? '' : ' txt-doc');
             const snip = isSite

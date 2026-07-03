@@ -70,7 +70,7 @@ function seedLibrary(): LibraryDoc[] {
         legal: t.legal,
         dms: t.dms,
         checklist: t.checklist,
-        pr: t.pr,
+        plan: t.plan,
       });
       break;
     }

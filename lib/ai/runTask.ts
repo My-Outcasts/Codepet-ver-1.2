@@ -6,14 +6,25 @@
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
 import type { CompanyBrief } from '../firebase/schema';
 
-async function authHeader(): Promise<Record<string, string>> {
+export async function authHeader(): Promise<Record<string, string>> {
   if (!isFirebaseConfigured) return {};
   const user = getFirebaseAuth().currentUser;
   if (!user) return {};
   return { authorization: `Bearer ${await user.getIdToken()}` };
 }
 
-export type DeliverableKind = 'text' | 'post' | 'email' | 'legal';
+export type DeliverableKind =
+  | 'text'
+  | 'post'
+  | 'email'
+  | 'legal'
+  | 'screens'
+  | 'sheet'
+  | 'site'
+  | 'dms'
+  | 'calendar'
+  | 'checklist'
+  | 'plan';
 
 export interface RunArgs {
   kind: DeliverableKind;
