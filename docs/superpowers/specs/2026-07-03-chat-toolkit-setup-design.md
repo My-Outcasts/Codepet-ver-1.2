@@ -53,13 +53,16 @@ grounded, not salesy. One short spoken lead-in line, then the tool call.
 ## Components
 
 ### 1. Grounding: `ENVIRONMENT TOOLKIT` context block
+
 `app/api/chat/route.ts` injects a block (sibling of `RUNNABLE TASKS`) listing each toolkit
 item: `category`, `name`, one-line `why`/`d`, and on/off state. byte is instructed to only
 suggest items currently **off**, choosing the one most relevant to the task/topic.
 A small serializer in `lib/data.ts` produces this from the live `ENV` state.
 
 ### 2. Tool: `setup_capability`
+
 Added to the chat tools alongside `run_task` and `navigate`.
+
 - Input schema: `{ category: 'skills' | 'connectors' | 'agents', name: string }`.
 - Server: after `finalMessage()`, find a `tool_use` block named `setup_capability`.
   Validate `category` is one of the three and `name` matches an item in `ENV[category]`
@@ -68,7 +71,9 @@ Added to the chat tools alongside `run_task` and `navigate`.
   `run_task`'s exact-title match.
 
 ### 3. Client: `SetupCard`
+
 A sibling of `ResultCard` in `components/Copilot.tsx`.
+
 - Parses the `setup` action off the stream onto the message (like `m.result` / `m.nav`).
 - Renders the item's abbreviation icon, name, category label, and "why" line, styled to
   match the recommended cards (`ENV_META` for label/verb/confirm copy + accent color).
@@ -78,6 +83,7 @@ A sibling of `ResultCard` in `components/Copilot.tsx`.
 - One suggestion per message (fits the existing single-action-per-message wire).
 
 ### 4. byte's behavior (system prompt)
+
 A short section describing the toolkit, the trigger policy above, and honest confirmation
 language (a flip means byte now treats the item as connected — the same meaning as the
 button). Instruct: suggest only currently-off items; one lead-in line then the tool call;
@@ -105,12 +111,12 @@ founder message
 
 ## Files touched
 
-| File | Change |
-|------|--------|
-| `app/api/chat/route.ts` | `SETUP_TOOL` def, `ENVIRONMENT TOOLKIT` grounding block, validate + emit `setup` action, prompt section |
-| `components/Copilot.tsx` | parse `setup` action, `SetupCard` component |
-| `lib/store.tsx` | (if needed) name-based `setupCapability(category, name)` helper wrapping `toggleEnv`, or resolve index in the card |
-| `lib/data.ts` | serializer for ENV state grounding + name→index lookup helper |
+| File                     | Change                                                                                                             |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `app/api/chat/route.ts`  | `SETUP_TOOL` def, `ENVIRONMENT TOOLKIT` grounding block, validate + emit `setup` action, prompt section            |
+| `components/Copilot.tsx` | parse `setup` action, `SetupCard` component                                                                        |
+| `lib/store.tsx`          | (if needed) name-based `setupCapability(category, name)` helper wrapping `toggleEnv`, or resolve index in the card |
+| `lib/data.ts`            | serializer for ENV state grounding + name→index lookup helper                                                      |
 
 None of Giang's Build Coach files are touched.
 

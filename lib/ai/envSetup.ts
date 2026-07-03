@@ -55,9 +55,7 @@ export function matchSetupItem(
 ): SetupItem | null {
   if (typeof category !== 'string' || typeof name !== 'string') return null;
   const n = name.trim().toLowerCase();
-  return (
-    items.find((i) => i.category === category && i.name.trim().toLowerCase() === n) ?? null
-  );
+  return items.find((i) => i.category === category && i.name.trim().toLowerCase() === n) ?? null;
 }
 
 /** Index of a named item within its category, or -1. Used to flip it on. */

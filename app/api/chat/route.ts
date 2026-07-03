@@ -93,7 +93,7 @@ const NAVIGATE_TOOL = {
 const SETUP_TOOL = {
   name: 'setup_capability',
   description:
-    "Turn on a currently-off toolkit item for the founder when it would clearly help the work at hand. Use the exact category and name from the SETUP TOOLKIT list. Only call this for an item in that list; for questions, advice, or status, do NOT call it. Always also give a one-line spoken lead-in.",
+    'Turn on a currently-off toolkit item for the founder when it would clearly help the work at hand. Use the exact category and name from the SETUP TOOLKIT list. Only call this for an item in that list; for questions, advice, or status, do NOT call it. Always also give a one-line spoken lead-in.',
   input_schema: {
     type: 'object' as const,
     additionalProperties: false,
@@ -327,7 +327,8 @@ export async function POST(req: Request): Promise<Response> {
             if (match) {
               controller.enqueue(
                 encoder.encode(
-                  ACTION_MARK + JSON.stringify({ setup: { category: match.category, name: match.name } }),
+                  ACTION_MARK +
+                    JSON.stringify({ setup: { category: match.category, name: match.name } }),
                 ),
               );
             }

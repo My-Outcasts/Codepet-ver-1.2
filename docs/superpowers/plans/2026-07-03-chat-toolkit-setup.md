@@ -24,10 +24,12 @@
 The shared, side-effect-free core: the DTO the client sends, the server-side defensive parse + match, and the name→index resolver the store uses to flip an item. Pure functions taking `ENV` as a parameter, so they're fully unit-testable.
 
 **Files:**
+
 - Create: `lib/ai/envSetup.ts`
 - Test: `lib/ai/envSetup.test.ts`
 
 **Interfaces:**
+
 - Consumes: `EnvItem` from `@/lib/data`.
 - Produces:
   - `type EnvCategory = 'skills' | 'connectors' | 'agents'`
@@ -174,9 +176,7 @@ export function matchSetupItem(
 ): SetupItem | null {
   if (typeof category !== 'string' || typeof name !== 'string') return null;
   const n = name.trim().toLowerCase();
-  return (
-    items.find((i) => i.category === category && i.name.trim().toLowerCase() === n) ?? null
-  );
+  return items.find((i) => i.category === category && i.name.trim().toLowerCase() === n) ?? null;
 }
 
 /** Index of a named item within its category, or -1. Used to flip it on. */
@@ -216,9 +216,11 @@ git commit -m "feat(env-setup): pure core for chat-driven toolkit setup"
 Add the tool, a `SETUP TOOLKIT` grounding block built from the client-sent off items, a system-prompt paragraph with the trigger policy, and the post-stream validate-and-emit of the `setup` action.
 
 **Files:**
+
 - Modify: `app/api/chat/route.ts`
 
 **Interfaces:**
+
 - Consumes: `parseSetupItems`, `matchSetupItem`, `SetupItem` from `@/lib/ai/envSetup`.
 - Produces: on the wire, `ACTION_MARK + JSON.stringify({ setup: { category, name } })` when byte validly suggests an off item.
 
@@ -250,7 +252,7 @@ After the `NAVIGATE_TOOL` definition (after line 85), add:
 const SETUP_TOOL = {
   name: 'setup_capability',
   description:
-    "Turn on a currently-off toolkit item for the founder when it would clearly help the work at hand. Use the exact category and name from the SETUP TOOLKIT list. Only call this for an item in that list; for questions, advice, or status, do NOT call it. Always also give a one-line spoken lead-in.",
+    'Turn on a currently-off toolkit item for the founder when it would clearly help the work at hand. Use the exact category and name from the SETUP TOOLKIT list. Only call this for an item in that list; for questions, advice, or status, do NOT call it. Always also give a one-line spoken lead-in.',
   input_schema: {
     type: 'object' as const,
     additionalProperties: false,
@@ -288,28 +290,28 @@ interface ChatBody {
 After the `runnableBlock` / `system` construction (after line 213), insert the setup block and fold it into the system string. Replace lines 204-213 (the `runnable` block through the `system` assignment) with:
 
 ```ts
-  // The tasks byte is allowed to run from chat. Included in the prompt so byte uses
-  // exact identifiers, and validated on the way back so a hallucinated title can't act.
-  const runnable = parseOpenTasks(body.openTasks);
-  const runnableBlock = runnable.length
-    ? `\n\nRUNNABLE TASKS (call run_task with the exact deptK + taskTitle to produce one here):\n${runnable
-        .map(
-          (r) =>
-            `- deptK:"${r.deptK}" taskTitle:"${r.taskTitle}" — ${r.hint || 'no hint'} (${r.deptName})`,
-        )
-        .join('\n')}`
-    : '\n\nRUNNABLE TASKS: none open right now — if the founder asks you to run something, tell them there are no open tasks to run.';
+// The tasks byte is allowed to run from chat. Included in the prompt so byte uses
+// exact identifiers, and validated on the way back so a hallucinated title can't act.
+const runnable = parseOpenTasks(body.openTasks);
+const runnableBlock = runnable.length
+  ? `\n\nRUNNABLE TASKS (call run_task with the exact deptK + taskTitle to produce one here):\n${runnable
+      .map(
+        (r) =>
+          `- deptK:"${r.deptK}" taskTitle:"${r.taskTitle}" — ${r.hint || 'no hint'} (${r.deptName})`,
+      )
+      .join('\n')}`
+  : '\n\nRUNNABLE TASKS: none open right now — if the founder asks you to run something, tell them there are no open tasks to run.';
 
-  // The currently-off toolkit items byte may offer to turn on. Grounded here (exact
-  // identifiers) and validated on the way back so an already-on/invented item can't act.
-  const setupItems = parseSetupItems(body.envSetup);
-  const setupBlock = setupItems.length
-    ? `\n\nSETUP TOOLKIT (call setup_capability with the exact category + name to turn one on):\n${setupItems
-        .map((s) => `- category:"${s.category}" name:"${s.name}" — ${s.why || 'no note'}`)
-        .join('\n')}`
-    : '';
+// The currently-off toolkit items byte may offer to turn on. Grounded here (exact
+// identifiers) and validated on the way back so an already-on/invented item can't act.
+const setupItems = parseSetupItems(body.envSetup);
+const setupBlock = setupItems.length
+  ? `\n\nSETUP TOOLKIT (call setup_capability with the exact category + name to turn one on):\n${setupItems
+      .map((s) => `- category:"${s.category}" name:"${s.name}" — ${s.why || 'no note'}`)
+      .join('\n')}`
+  : '';
 
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}`;
+const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}`;
 ```
 
 - [ ] **Step 6: Offer the tool to the model**
@@ -329,53 +331,51 @@ Replace the `tools:` line (line 224) with a computed list:
 In the post-stream block, add a `setupUse` finder next to `navUse` (after line 248) and an `else if` branch. Replace lines 245-275 (the `navUse` finder through the end of its `else if` block) with:
 
 ```ts
-          const navUse = final.content.find(
-            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
-              b.type === 'tool_use' && b.name === 'navigate',
-          );
-          const setupUse = final.content.find(
-            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
-              b.type === 'tool_use' && b.name === 'setup_capability',
-          );
-          if (toolUse) {
-            const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
-            const taskTitle = typeof input.taskTitle === 'string' ? input.taskTitle : '';
-            const deptK = typeof input.deptK === 'string' ? input.deptK : '';
-            const match =
-              runnable.find((r) => r.deptK === deptK && r.taskTitle === taskTitle) ||
-              runnable.find((r) => r.taskTitle === taskTitle);
-            if (match) {
-              controller.enqueue(
-                encoder.encode(
-                  ACTION_MARK + JSON.stringify({ deptK: match.deptK, taskTitle: match.taskTitle }),
-                ),
-              );
-            }
-          } else if (navUse) {
-            // byte wants to guide them somewhere. Emit the destination only if it's a real
-            // one; the client resolves it to a chip (and drops it if it can't). target is
-            // passed through for a department; the client resolves the exact key/name.
-            const input = navUse.input as { destination?: unknown; target?: unknown };
-            const dest = typeof input.destination === 'string' ? input.destination : '';
-            if ((NAV_DESTINATIONS as readonly string[]).includes(dest)) {
-              const target = typeof input.target === 'string' ? input.target : undefined;
-              controller.enqueue(
-                encoder.encode(ACTION_MARK + JSON.stringify({ nav: dest, target })),
-              );
-            }
-          } else if (setupUse) {
-            // byte wants to turn on a toolkit item. Emit it only if it's a real off item
-            // from SETUP TOOLKIT; the client renders an approval card and flips it on tap.
-            const input = setupUse.input as { category?: unknown; name?: unknown };
-            const match: SetupItem | null = matchSetupItem(setupItems, input.category, input.name);
-            if (match) {
-              controller.enqueue(
-                encoder.encode(
-                  ACTION_MARK + JSON.stringify({ setup: { category: match.category, name: match.name } }),
-                ),
-              );
-            }
-          }
+const navUse = final.content.find(
+  (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+    b.type === 'tool_use' && b.name === 'navigate',
+);
+const setupUse = final.content.find(
+  (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+    b.type === 'tool_use' && b.name === 'setup_capability',
+);
+if (toolUse) {
+  const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
+  const taskTitle = typeof input.taskTitle === 'string' ? input.taskTitle : '';
+  const deptK = typeof input.deptK === 'string' ? input.deptK : '';
+  const match =
+    runnable.find((r) => r.deptK === deptK && r.taskTitle === taskTitle) ||
+    runnable.find((r) => r.taskTitle === taskTitle);
+  if (match) {
+    controller.enqueue(
+      encoder.encode(
+        ACTION_MARK + JSON.stringify({ deptK: match.deptK, taskTitle: match.taskTitle }),
+      ),
+    );
+  }
+} else if (navUse) {
+  // byte wants to guide them somewhere. Emit the destination only if it's a real
+  // one; the client resolves it to a chip (and drops it if it can't). target is
+  // passed through for a department; the client resolves the exact key/name.
+  const input = navUse.input as { destination?: unknown; target?: unknown };
+  const dest = typeof input.destination === 'string' ? input.destination : '';
+  if ((NAV_DESTINATIONS as readonly string[]).includes(dest)) {
+    const target = typeof input.target === 'string' ? input.target : undefined;
+    controller.enqueue(encoder.encode(ACTION_MARK + JSON.stringify({ nav: dest, target })));
+  }
+} else if (setupUse) {
+  // byte wants to turn on a toolkit item. Emit it only if it's a real off item
+  // from SETUP TOOLKIT; the client renders an approval card and flips it on tap.
+  const input = setupUse.input as { category?: unknown; name?: unknown };
+  const match: SetupItem | null = matchSetupItem(setupItems, input.category, input.name);
+  if (match) {
+    controller.enqueue(
+      encoder.encode(
+        ACTION_MARK + JSON.stringify({ setup: { category: match.category, name: match.name } }),
+      ),
+    );
+  }
+}
 ```
 
 - [ ] **Step 8: Typecheck + lint**
@@ -397,9 +397,11 @@ git commit -m "feat(chat): setup_capability tool — byte turns on off toolkit i
 Carry the off-items list up and the `setup` action back down.
 
 **Files:**
+
 - Modify: `lib/ai/chat.ts`
 
 **Interfaces:**
+
 - Consumes: `SetupItem` from `@/lib/ai/envSetup`.
 - Produces: `ChatEvent` gains `{ type: 'setup'; category: string; name: string }`; `streamByteChat` gains an `envSetup?: SetupItem[]` parameter sent as `body.envSetup`.
 
@@ -487,9 +489,11 @@ git commit -m "feat(chat): carry off-toolkit items up and setup action back down
 ### Task 4: Store — `setup` on messages, `setupCapability` action, sendChat wiring (`lib/store.tsx`)
 
 **Files:**
+
 - Modify: `lib/store.tsx`
 
 **Interfaces:**
+
 - Consumes: `collectSetupItems`, `resolveEnvIndex` from `@/lib/ai/envSetup`; `streamByteChat` `setup` event.
 - Produces:
   - `ChatMessage.setup?: { category: string; name: string }`
@@ -526,24 +530,24 @@ Next to `toggleEnv` in the `AppState` interface (line 153), add:
 Immediately after the `toggleEnv` `useCallback` (after line 779), add:
 
 ```ts
-  // Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
-  // Idempotent (never flips an already-on item off) and persisted like toggleEnv.
-  const setupCapability = useCallback(
-    (category: string, name: string) => {
-      const idx = resolveEnvIndex(ENV, category, name);
-      if (idx === -1) return;
-      const item = ENV[category][idx];
-      if (item.s) return; // already on — nothing to do
-      item.s = 1;
-      bump();
-      if (companyId) {
-        persistEnv(companyId, envStateFromCatalog()).catch((err) => {
-          console.error('[store] persistEnv (setup) failed', err);
-        });
-      }
-    },
-    [companyId, bump],
-  );
+// Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
+// Idempotent (never flips an already-on item off) and persisted like toggleEnv.
+const setupCapability = useCallback(
+  (category: string, name: string) => {
+    const idx = resolveEnvIndex(ENV, category, name);
+    if (idx === -1) return;
+    const item = ENV[category][idx];
+    if (item.s) return; // already on — nothing to do
+    item.s = 1;
+    bump();
+    if (companyId) {
+      persistEnv(companyId, envStateFromCatalog()).catch((err) => {
+        console.error('[store] persistEnv (setup) failed', err);
+      });
+    }
+  },
+  [companyId, bump],
+);
 ```
 
 - [ ] **Step 5: Compute + send off items and handle the `setup` event in `sendChat`**
@@ -551,8 +555,8 @@ Immediately after the `toggleEnv` `useCallback` (after line 779), add:
 In `sendChat`, after the `openTasks` computation (after line 997), add:
 
 ```ts
-      // The currently-off toolkit items byte may offer to turn on from this turn.
-      const envSetup = collectSetupItems(ENV);
+// The currently-off toolkit items byte may offer to turn on from this turn.
+const envSetup = collectSetupItems(ENV);
 ```
 
 Pass it to the stream — change the `streamByteChat(...)` call (line 1005):
@@ -564,17 +568,17 @@ Pass it to the stream — change the `streamByteChat(...)` call (line 1005):
 Add a `setupChip` accumulator next to `navChip` (line 1003):
 
 ```ts
-        let navChip: NavChip | undefined;
-        let setupChip: { category: string; name: string } | undefined;
+let navChip: NavChip | undefined;
+let setupChip: { category: string; name: string } | undefined;
 ```
 
 Handle the event inside the loop, after the `nav` branch (after line 1014):
 
 ```ts
-            if (ev.type === 'setup') {
-              setupChip = { category: ev.category, name: ev.name };
-              continue;
-            }
+if (ev.type === 'setup') {
+  setupChip = { category: ev.category, name: ev.name };
+  continue;
+}
 ```
 
 - [ ] **Step 6: Fold `setupChip` into the final message + persistence**
@@ -582,25 +586,25 @@ Handle the event inside the loop, after the `nav` branch (after line 1014):
 Update the `finalText` fallback chain (lines 1030-1036) to cover a setup-only reply:
 
 ```ts
-        const finalText =
-          acc.trim() ||
-          (pending
-            ? `On it — running “${pending.taskTitle}”.`
-            : navChip
-              ? 'Here you go.'
-              : setupChip
-                ? 'I can turn that on for you — one tap.'
-                : fallback);
+const finalText =
+  acc.trim() ||
+  (pending
+    ? `On it — running “${pending.taskTitle}”.`
+    : navChip
+      ? 'Here you go.'
+      : setupChip
+        ? 'I can turn that on for you — one tap.'
+        : fallback);
 ```
 
 Attach `setup` when writing the final byte message (line 1037-1039):
 
 ```ts
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === byteMsg.id ? { ...m, text: finalText, nav: navChip, setup: setupChip } : m,
-          ),
-        );
+setChatMessages((prev) =>
+  prev.map((m) =>
+    m.id === byteMsg.id ? { ...m, text: finalText, nav: navChip, setup: setupChip } : m,
+  ),
+);
 ```
 
 Include `setupChip` in the persist condition (line 1043):
@@ -632,10 +636,12 @@ git commit -m "feat(store): setupCapability action + carry setup card through ch
 Render the approval card and its confirmed state, reading the live ENV item (like `ResultCard` reads the live task), so `bump()` after a flip re-renders it as done.
 
 **Files:**
+
 - Modify: `components/Copilot.tsx`
 - Modify: `app/globals.css`
 
 **Interfaces:**
+
 - Consumes: `setupCapability` from the store; `ENV`, `ENV_META` from `@/lib/data`; `resolveEnvIndex` from `@/lib/ai/envSetup`; `ChatMessage.setup`.
 
 - [ ] **Step 1: Import ENV data + resolver**
@@ -689,8 +695,8 @@ function SetupCard({ m }: { m: ChatMessage }) {
 In the `chatMessages.map`, next to the `m.result` short-circuit (line 224), add:
 
 ```tsx
-          if (m.result) return <ResultCard key={m.id} m={m} />;
-          if (m.setup) return <SetupCard key={m.id} m={m} />;
+if (m.result) return <ResultCard key={m.id} m={m} />;
+if (m.setup) return <SetupCard key={m.id} m={m} />;
 ```
 
 - [ ] **Step 4: Add the card styles**
@@ -792,12 +798,14 @@ git commit -m "feat(chat): SetupCard — one-tap turn on a toolkit item byte sug
 - [ ] **Step 1: Full test + lint + build**
 
 Run:
+
 ```bash
 npx vitest run
 npx eslint .
 npx prettier --check .
 npx next build
 ```
+
 Expected: all green. (Full `eslint .` guards the tracked `eslint-suppressions.json` gotcha.)
 
 - [ ] **Step 2: Push + open PR**
@@ -810,6 +818,7 @@ gh pr create --title "byte drives the toolkit from chat" --body "byte suggests a
 - [ ] **Step 3: Verify on the Vercel PR preview (not `next dev`)**
 
 On the preview URL, in a company whose brief implies a need (e.g. a beta launch):
+
 - Ask byte something task-shaped, e.g. "help me catch bugs before the beta ships" or "run a code review before I ship."
 - Confirm a `SetupCard` appears for an off item (e.g. Code review) with a lead-in line — and does NOT appear for plain Q&A like "what's my roadmap?".
 - Tap the button → card flips to `✓ byte turned this on` / `✓ Connected`.
