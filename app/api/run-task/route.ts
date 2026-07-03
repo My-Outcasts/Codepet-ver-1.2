@@ -10,8 +10,10 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import {
   STRUCTURED_SCHEMAS,
   DELIVERABLE_INSTRUCTIONS,
@@ -66,6 +68,7 @@ interface RunTaskBody {
 function buildPrompt(
   kind: Kind,
   context: string,
+  priorWork: string,
   fields: {
     taskTitle: string;
     taskHint?: string;
@@ -77,6 +80,7 @@ function buildPrompt(
   const { taskTitle, taskHint, deptName, reviseNote, current } = fields;
   const lines = [
     `Company context: ${context}`,
+    ...(priorWork ? ['', priorWork] : []),
     '',
     deptName ? `Department: ${deptName}` : null,
     `Task: ${taskTitle}`,
@@ -161,10 +165,19 @@ export async function POST(req: Request): Promise<Response> {
   // Prefer the caller's REAL persisted brief (loaded by the verified uid) over
   // whatever the client passed, so generation is always scoped to the signed-in
   // account; fall back to the client brief (e.g. mid-onboarding) then the baseline.
-  const serverBrief = await loadServerBrief(uid, idToken);
+  // Load the brief and the approved-deliverable library together (one round-trip of
+  // latency, not two). The library grounds byte in what the company has already
+  // shipped so a new deliverable stays consistent; fail-open — [] just skips grounding.
+  const [serverBrief, library] = await Promise.all([
+    loadServerBrief(uid, idToken),
+    loadServerLibrary(uid, idToken),
+  ]);
   const context = briefToContext(serverBrief) ?? briefToContext(body.brief) ?? CODEPET_CONTEXT;
+  const priorWork = composePriorWorkContext(
+    selectPriorWork(library, { deptName: fields.deptName, excludeTitle: fields.taskTitle }),
+  );
   const { schema } = KINDS[kind];
-  const prompt = buildPrompt(kind, context, fields);
+  const prompt = buildPrompt(kind, context, priorWork, fields);
   const onUsage = usageSink(uid, idToken, 'runTask');
 
   try {
