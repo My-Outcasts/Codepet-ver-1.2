@@ -3154,6 +3154,16 @@ body {
     linear-gradient(rgba(13, 5, 34, 0.52), rgba(13, 5, 34, 0.52)),
     radial-gradient(135% 95% at 50% 46%, transparent 32%, rgba(13, 5, 34, 0.5) 100%);
 }
+/* pointer-parallax glow — a pre-blurred radial gradient, NOT a runtime blur */
+.splash-glow {
+  position: absolute;
+  inset: -12%;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(38% 38% at 50% 44%, rgba(150, 100, 245, 0.3), transparent 70%);
+  transform: translate3d(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px), 0);
+  will-change: transform;
+}
 .splash.hide {
   opacity: 0;
   pointer-events: none;
@@ -3215,7 +3225,7 @@ body {
     titleGlow 5s ease-in-out 1.4s infinite;
 }
 .splash-sub {
-  animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.32s both;
+  animation: none;
 }
 .splash-btn {
   animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.48s both;
@@ -3224,6 +3234,36 @@ body {
   animation:
     riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.66s both,
     hintPulse 2.8s ease-in-out 1.6s infinite;
+}
+/* slow light-sweep across the wordmark */
+.splash-title {
+  position: relative;
+  overflow: hidden;
+}
+.splash-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.55) 50%, transparent 58%);
+  mix-blend-mode: overlay;
+  transform: translateX(-120%);
+  animation: titleSweep 4.6s ease-in-out 1.7s infinite;
+  pointer-events: none;
+}
+@keyframes titleSweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+/* word-by-word rise on the subtitle (replaces the single-block riseIn) */
+.splash-sub .w {
+  display: inline-block;
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(0.32s + var(--i) * 0.06s);
 }
 .splash-title {
   font-family: 'Codepet Pixel', var(--sans);
