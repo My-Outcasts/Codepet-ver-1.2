@@ -965,7 +965,7 @@ In `app/globals.css`, directly after the `/* ===== splash & onboarding motion ==
 
 - [ ] **Step 2: Extend the reduced-motion block**
 
-In the existing `@media (prefers-reduced-motion: reduce)` block (~line 7276), add the new selectors to the group so they collapse to static. Replace the selector list so it reads:
+In the existing `@media (prefers-reduced-motion: reduce)` block (~line 7276, now further down after Tasks 4–6 additions — find it with `grep -n "prefers-reduced-motion" app/globals.css` and edit the LAST one, which is the intro block containing `.splash` / `.ob-cold`), add the new selectors to the group so they collapse to static. Replace that whole block so it reads:
 
 ```css
 @media (prefers-reduced-motion: reduce) {
@@ -987,7 +987,6 @@ In the existing `@media (prefers-reduced-motion: reduce)` block (~line 7276), ad
   .ob-cold::after,
   .ob-cold-glow,
   .ob-cold-in > *,
-  .ob-art span,
   .ob-body > *,
   .dr-img,
   .dhero2,
@@ -999,8 +998,22 @@ In the existing `@media (prefers-reduced-motion: reduce)` block (~line 7276), ad
     opacity: 1 !important;
     transition: none !important;
   }
+  /* `.ob-art span` is a LAYERED stack (all 8 scenes mounted, only `.on` visible).
+     It must NOT be in the group above — a blanket `opacity: 1 !important` would
+     reveal all 8 layers at once. Kill its motion but let the base opacity:0 / .on
+     opacity:1 rules keep only the current scene visible. */
+  .ob-art span {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+  .ob-art span.on {
+    opacity: 1 !important;
+  }
 }
 ```
+
+**Why `.ob-art span` is handled separately:** the pre-existing reduced-motion block already contained `.ob-art span` with `opacity: 1 !important` back when the art panel was a single keyed `<span>`. Task 6 turned it into a stacked layer set, so that blanket rule now un-hides every layer. The corrected block above drops `.ob-art span` from the uniform group and gives it a targeted rule that stills motion without forcing opacity — so reduced-motion shows exactly the active scene, instantly, no crossfade.
 
 - [ ] **Step 3: Full gate — typecheck, lint, format, tests**
 
