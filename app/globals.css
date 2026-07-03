@@ -6984,6 +6984,37 @@ body {
   }
 }
 
+/* drifting particle layer (Starfield) — parallax via ancestor --px/--py */
+.starfield {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  transform: translate3d(calc(var(--px, 0) * 6px), calc(var(--py, 0) * 6px), 0);
+}
+.starfield i {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 6px rgba(180, 150, 255, 0.7);
+  opacity: 0;
+  animation-name: twinkle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-6px);
+  }
+}
+
 /* per-step content entrance (re-keyed on step change in Onboarding.tsx) */
 .ob-body > * {
   animation: riseIn 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
