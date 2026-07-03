@@ -35,7 +35,7 @@ beforeEach(() => {
 
 describe('POST /api/build-session/start', () => {
   it('refuses in remote mode without spawning', async () => {
-    mockDetectCapability.mockReturnValue({ mode: 'remote' } as any);
+    mockDetectCapability.mockReturnValue({ mode: 'remote', reason: 'test' });
     const res = await POST(body({ buildSessionId: 'b1', projectDir: '/p', plan, brief: 'x' }));
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ ok: false, reason: 'remote' });
@@ -43,7 +43,7 @@ describe('POST /api/build-session/start', () => {
   });
 
   it('starts a session in local mode', async () => {
-    mockDetectCapability.mockReturnValue({ mode: 'local' } as any);
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
     const res = await POST(body({ buildSessionId: 'b1', projectDir: '/p', plan, brief: 'do it' }));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
@@ -56,14 +56,14 @@ describe('POST /api/build-session/start', () => {
   });
 
   it('rejects a bad body in local mode', async () => {
-    mockDetectCapability.mockReturnValue({ mode: 'local' } as any);
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
     const res = await POST(body({ buildSessionId: '', projectDir: '', plan: null, brief: '' }));
     expect(res.status).toBe(400);
     expect(mockStartSession).not.toHaveBeenCalled();
   });
 
   it('rejects a plan with no steps array (would otherwise 500 in buildOpeningPrompt)', async () => {
-    mockDetectCapability.mockReturnValue({ mode: 'local' } as any);
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
     const res = await POST(
       body({ buildSessionId: 'b1', projectDir: '/p', plan: { title: 'x' }, brief: 'hi' }),
     );
@@ -72,7 +72,7 @@ describe('POST /api/build-session/start', () => {
   });
 
   it('rejects a null json body without throwing', async () => {
-    mockDetectCapability.mockReturnValue({ mode: 'local' } as any);
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
     const res = await POST(
       new Request('http://localhost/api/build-session/start', { method: 'POST', body: 'null' }),
     );
