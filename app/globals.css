@@ -4767,6 +4767,15 @@ body {
   display: flex;
   flex-direction: column;
 }
+/* .mbody is the single scroll region. Its children must keep their natural
+   height and never shrink: a rich viewer wrapper (.planart, .docart, …) sets
+   overflow:hidden, which zeroes its flex auto-min-size, so the default
+   flex-shrink:1 would squeeze it to fit and CLIP the overflow — the body then
+   never scrolls. Pinning shrink to 0 makes tall content overflow and scroll.
+   (.artifact opts back into growing via its own higher-specificity rule.) */
+.mbody > * {
+  flex-shrink: 0;
+}
 /* Soft scroll cue: fade the bottom edge whenever there's more below the fold
    (JS toggles .has-more). A mask touches no layout and can't skew the scroll math,
    so it never interferes with scrolling — it just hints "there's more". */

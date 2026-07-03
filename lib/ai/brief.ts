@@ -15,19 +15,29 @@ export function briefToContext(raw: unknown): string | null {
   const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
   const name = str(b.projectName, 120);
   const oneLiner = str(b.oneLiner, 240);
+  const summary = str(b.summary, 400);
   const notes = str(b.notes, 800);
   const categories = Array.isArray(b.categories)
     ? b.categories.filter((c): c is string => typeof c === 'string').slice(0, 6)
     : [];
   const audience = str(b.audience, 160);
   const link = str(b.link, 200);
-  if (!name && !oneLiner && !notes) return null;
+  if (!name && !oneLiner && !summary && !notes) return null;
 
   const parts: string[] = [`The company is ${name || "the founder's product"}.`];
-  if (oneLiner) parts.push(oneLiner.endsWith('.') ? oneLiner : `${oneLiner}.`);
+  // One product description, not three. byte's enriched `summary` is a distillation of the
+  // one-liner + notes, so when it exists it REPLACES both (avoids repeating the same
+  // description ~3x on every prompt). Without a summary, fall back to the one-liner and the
+  // raw notes the founder pasted.
+  const dot = (s: string) => (s.endsWith('.') ? s : `${s}.`);
+  if (summary) {
+    parts.push(dot(summary));
+  } else if (oneLiner) {
+    parts.push(dot(oneLiner));
+  }
   if (categories.length) parts.push(`It is a ${categories.join(' / ').toLowerCase()} product.`);
   if (audience) parts.push(`It's for ${audience}.`);
-  if (notes) parts.push(notes.endsWith('.') ? notes : `${notes}.`);
+  if (notes && !summary) parts.push(dot(notes));
   if (link) parts.push(`Reference: ${link}.`);
   const who: string[] = [];
   const role = str(b.role, 80);

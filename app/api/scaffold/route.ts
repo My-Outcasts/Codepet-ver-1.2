@@ -10,9 +10,48 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { departmentBlock } from '@/lib/ai/departments';
-import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { loadServerBrief, writeServerBrief } from '@/lib/firebase/serverBrief';
 import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import {
+  ENRICH_SCHEMA,
+  buildEnrichPrompt,
+  mergeEnrichment,
+  hasEnrichableSignal,
+  type BriefEnrichment,
+} from '@/lib/ai/enrichBrief';
+import type { CompanyBrief } from '@/lib/firebase/schema';
+
+// byte reads the founder's onboarding inputs into a richer brief (audience, categories, a
+// sharp summary) BEFORE scaffolding, so the plan is tailored to the real product — not the
+// three or four fields most founders bother to fill. Runs once (skipped once a summary
+// exists, i.e. on re-plans), only when there's something to read, and fail-open: any
+// failure just scaffolds from the brief as-is.
+async function enrichBrief(
+  client: ReturnType<typeof getClient>,
+  uid: string,
+  idToken: string,
+  brief: CompanyBrief,
+): Promise<CompanyBrief> {
+  if (brief.summary?.trim() || !hasEnrichableSignal(brief)) return brief;
+  try {
+    const enrichment = await generateJson<BriefEnrichment>({
+      client,
+      system:
+        "You read a founder's raw notes about their product and distill them into a crisp, faithful structured summary. You never invent details the founder did not give you.",
+      prompt: buildEnrichPrompt(brief),
+      maxTokens: 1024,
+      label: 'enrich',
+      schema: ENRICH_SCHEMA,
+      onUsage: usageSink(uid, idToken, 'enrich'),
+    });
+    const merged = mergeEnrichment(brief, enrichment);
+    await writeServerBrief(uid, idToken, merged);
+    return merged;
+  } catch {
+    return brief; // fail-open — scaffold from the brief as-is
+  }
+}
 
 export const runtime = 'nodejs';
 
@@ -131,7 +170,12 @@ export async function POST(req: Request): Promise<Response> {
     return aiErrorResponse(err, 'not_configured');
   }
 
-  const serverBrief = await loadServerBrief(uid, idToken);
+  const loaded = await loadServerBrief(uid, idToken);
+  // byte reads the founder's inputs into a richer brief before planning (once, fail-open).
+  const serverBrief =
+    loaded && typeof loaded === 'object'
+      ? await enrichBrief(client, uid, idToken, loaded as CompanyBrief)
+      : loaded;
   const context = briefToContext(serverBrief) ?? CODEPET_CONTEXT;
   const rawStage =
     serverBrief && typeof serverBrief === 'object'
