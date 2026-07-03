@@ -275,6 +275,14 @@ body {
   display: grid;
   grid-template-columns: 212px 1fr 340px;
   min-height: 0;
+  transition: grid-template-columns 0.22s ease;
+}
+/* User-toggled icon rail: sidebar shrinks to 64px, freeing width for the main + chat. */
+.shell.side-collapsed {
+  grid-template-columns: 64px 1fr 340px;
+}
+.shell.side-collapsed.cop-collapsed {
+  grid-template-columns: 64px 1fr 0;
 }
 
 /* ===== sidebar ===== */
@@ -303,6 +311,86 @@ body {
   font-family: var(--sans);
   font-size: 15px;
   color: var(--t-1);
+}
+.side-toggle {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  color: var(--t-3);
+  background: transparent;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.side-toggle:hover {
+  background: var(--well);
+  color: var(--t-1);
+}
+.side-toggle svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.2s;
+}
+.shell.side-collapsed .side-toggle svg {
+  transform: rotate(180deg);
+}
+
+/* ===== collapsed icon-rail treatment (toggled) ===== */
+.shell.side-collapsed .side {
+  padding: 16px 8px;
+}
+.shell.side-collapsed .side .brand {
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 0 12px;
+  justify-content: center;
+}
+.shell.side-collapsed .side .brand .nm {
+  display: none;
+}
+.shell.side-collapsed .side-toggle {
+  margin-left: 0;
+}
+.shell.side-collapsed .nav {
+  position: relative;
+  justify-content: center;
+  padding: 9px 0;
+}
+.shell.side-collapsed .nav span {
+  display: none;
+}
+.shell.side-collapsed .side .grp {
+  display: none;
+}
+/* Count badge → a small corner dot, so "something's here" still reads at a glance. */
+.shell.side-collapsed .nav .ct {
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  margin: 0;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  font-size: 0;
+  border-radius: 50%;
+}
+.shell.side-collapsed .nav .nav-dot,
+.shell.side-collapsed .nav .nav-ck {
+  position: absolute;
+  top: 5px;
+  right: 9px;
+  margin: 0;
+}
+.shell.side-collapsed .petcard {
+  justify-content: center;
+  padding: 10px 0;
+}
+.shell.side-collapsed .petcard .meta {
+  display: none;
 }
 .nav {
   display: flex;
