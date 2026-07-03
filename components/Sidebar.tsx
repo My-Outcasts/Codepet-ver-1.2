@@ -5,6 +5,20 @@ import { Byte } from './Byte';
 
 const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () => number }> = [
   {
+    view: 'summary',
+    label: 'Summary',
+    icon: (
+      <svg className="ic" viewBox="0 0 20 20" fill="none">
+        <path
+          d="M10 2.5l1.9 3.9 4.3.6-3.1 3 .7 4.3L10 12.3 6.2 14.3l.7-4.3-3.1-3 4.3-.6z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
+  },
+  {
     view: 'overview',
     label: 'Overview',
     icon: (
@@ -71,6 +85,28 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
           a + d.tasks.filter((t) => !t.done && (t.who === 'you' || t.who === 'draft')).length,
         0,
       ),
+  },
+  {
+    view: 'build',
+    label: "Let's build",
+    icon: (
+      <svg className="ic" viewBox="0 0 20 20" fill="none">
+        <path
+          d="M4 13.5 8.5 9l2.5 2.5L16 6"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M12.5 6H16v3.5"
+          stroke="currentColor"
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    ),
   },
   {
     view: 'library',
@@ -173,6 +209,20 @@ export function Sidebar() {
         </svg>,
         envPending || undefined,
       )}
+      {process.env.NODE_ENV === 'development' &&
+        item(
+          'settings',
+          'Settings',
+          <svg className="ic" viewBox="0 0 20 20" fill="none">
+            <circle cx="10" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.6" />
+            <path
+              d="M10 2.5v2M10 15.5v2M17.5 10h-2M4.5 10h-2M15.3 4.7l-1.4 1.4M6.1 13.9l-1.4 1.4M15.3 15.3l-1.4-1.4M6.1 6.1 4.7 4.7"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>,
+        )}
       <div className="petcard">
         <Byte size="s28" />
         <div className="meta" style={{ flex: 1 }}>

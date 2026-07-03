@@ -22,6 +22,8 @@ import { track } from './analytics';
 import { useAuth } from './firebase/auth';
 import {
   loadCompanyData,
+  loadTrackingSummary,
+  loadProjects,
   persistApproval,
   persistEnv,
   persistRoadmapStage,
@@ -61,9 +63,20 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 import type { CompanyBrief } from './firebase/schema';
+import { EMPTY_TRACKING, type TrackingSummary } from './tracking';
 
 export type View =
-  'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
+  | 'summary'
+  | 'overview'
+  | 'home'
+  | 'roadmap'
+  | 'dept'
+  | 'tasks'
+  | 'library'
+  | 'env'
+  | 'install'
+  | 'settings'
+  | 'build';
 
 export type Modal =
   { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
@@ -94,6 +107,10 @@ interface AppState {
   installed: boolean;
   setInstalled: (value: boolean) => void;
   library: LibItem[];
+  /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
+  tracking: TrackingSummary;
+  /** Distinct local projects the tracker has reported (empty until events arrive). */
+  projects: string[];
   modal: Modal;
   runTask: (task: Task, dept: Dept, walk?: boolean) => void;
   /** byte "arrives" in a department: fly there, open chat, drop an orientation + start chip. */
@@ -181,6 +198,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Library + business brief are owned here as state, hydrated from Firestore.
   const [library, setLibrary] = useState<LibItem[]>([]);
+  const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
+  const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
   const [hydrated, setHydrated] = useState(false);
 
@@ -245,6 +264,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error('[store] hydrate failed', err);
         if (!cancelled) setHydrated(true); // fail open to the seed rather than hang
       });
+    // Tracking loads independently — never block hydration on it, and a failure
+    // just leaves the empty summary (Summary falls back to its DEPTS-derived view).
+    loadTrackingSummary(companyId)
+      .then((t) => {
+        if (!cancelled) setTracking(t);
+      })
+      .catch(() => {});
+    // Projects load independently too — a failure just leaves the picker empty.
+    loadProjects(companyId)
+      .then((p) => {
+        if (!cancelled) setProjects(p);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -870,6 +902,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       library,
+      tracking,
+      projects,
       modal,
       runTask,
       briefDepartment,
@@ -915,6 +949,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       library,
+      tracking,
+      projects,
       modal,
       runTask,
       briefDepartment,

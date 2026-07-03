@@ -1,6 +1,8 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { useAuth } from '@/lib/firebase/auth';
+import { ensureIngestToken } from '@/lib/firebase/companyData';
 import { Byte } from '../Byte';
 import {
   getCapability,
@@ -25,6 +27,7 @@ type Result = {
 
 export function InstallView() {
   const { setInstalled, show } = useApp();
+  const { companyId } = useAuth();
   const [cap, setCap] = useState<Cap | null>(null);
   const [toolkit, setToolkit] = useState<Item[]>([]);
   const [status, setStatus] = useState<Status[]>([]);
@@ -34,6 +37,22 @@ export function InstallView() {
   const [copied, setCopied] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // The config the installed tracker needs to report activity: the company's ingest
+  // token (minted on demand) + this app's origin (which also hosts /api/track).
+  // undefined when signed-out — install then proceeds without the tracker.
+  const trackingConfig = async () => {
+    if (!companyId) return undefined;
+    try {
+      return {
+        companyId,
+        token: await ensureIngestToken(companyId),
+        apiUrl: window.location.origin,
+      };
+    } catch {
+      return undefined;
+    }
+  };
+
   const refresh = async () => {
     const [c, t, s] = await Promise.all([getCapability(), getToolkit(), getStatus()]);
     setCap(c as Cap);
@@ -41,11 +60,18 @@ export function InstallView() {
     setStatus(s as Status[]);
     // store `installed` = "any toolkit item installed" (coarse); the view uses `allInstalled` for the full-set gate
     setInstalled(s.some((x) => x.installed));
-    if (c.mode === 'remote') setCmd(await getInstallCommand(t.map((i) => i.id)));
+    // The copied CLI command carries the tracker config so remote installs auto-track too.
+    if (c.mode === 'remote')
+      setCmd(
+        await getInstallCommand(
+          t.map((i) => i.id),
+          await trackingConfig(),
+        ),
+      );
   };
   useEffect(() => {
     refresh();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(
     () => () => {
       if (copyTimer.current) clearTimeout(copyTimer.current);
@@ -60,7 +86,7 @@ export function InstallView() {
   const run = async () => {
     setBusy(true);
     try {
-      const res = await installToolkit(ids);
+      const res = await installToolkit(ids, await trackingConfig());
       if (res.ok) setResults(res.results);
       await refresh();
     } finally {
@@ -95,8 +121,8 @@ export function InstallView() {
         <h1>{allInstalled ? 'byte is ready' : "Let's wake byte up"}</h1>
         <div className="sub">
           {cap?.mode === 'remote'
-            ? "Hosted preview — copy the command below to install byte's toolkit on your machine."
-            : "One click installs byte's toolkit into ~/.claude on this machine."}
+            ? "Hosted preview — copy the command below to install byte's toolkit (and Summary activity tracking) on your machine."
+            : "One click installs byte's toolkit into ~/.claude — and turns on activity tracking to your Summary."}
         </div>
       </div>
       <div className="install">
