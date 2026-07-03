@@ -25,6 +25,14 @@ export interface SelectOptions {
   deptName?: string;
   /** The current task's title — excluded so byte isn't fed its own prior version. */
   excludeTitle?: string;
+  /**
+   * What the current task is about (its title + intended-deliverable hint + any revise
+   * note). When present, prior work is ranked by RELEVANCE to this — so a launch post
+   * pulls the pricing sheet and positioning doc it must be consistent with, even from
+   * other departments — instead of just the newest same-dept items. When absent, falls
+   * back to the recency + same-department strategy (no behaviour change).
+   */
+  query?: string;
   /** Max items to ground on (token budget). Default 4. */
   max?: number;
   /** Max same-department items before cross-department work gets slots. Default 2. */
@@ -33,22 +41,102 @@ export interface SelectOptions {
 
 const norm = (s: string) => s.trim().toLowerCase();
 
+// Words too common to carry signal for relevance matching.
+const STOPWORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'our',
+  'your',
+  'their',
+  'this',
+  'that',
+  'with',
+  'from',
+  'into',
+  'about',
+  'are',
+  'was',
+  'were',
+  'will',
+  'has',
+  'have',
+  'not',
+  'you',
+  'each',
+  'per',
+  'its',
+  'via',
+  'onto',
+]);
+
+/** Split text into lowercased, de-duped content tokens (≥3 chars, no stopwords). */
+function tokenize(s: string): Set<string> {
+  const out = new Set<string>();
+  for (const raw of s.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (raw.length >= 3 && !STOPWORDS.has(raw)) out.add(raw);
+  }
+  return out;
+}
+
+// Only the head of each deliverable is scanned for relevance — enough to capture the
+// subject without letting a long body dominate the token overlap (or cost cycles).
+const SCORE_SCAN = 600;
+// A title-token match is worth more than a body-token match: titles are dense signal.
+const TITLE_WEIGHT = 3;
+const OUT_WEIGHT = 1;
+// Gentle same-department nudge: enough that same-dept wins on a tie, but a cross-dept
+// item with a real title-token match still outranks an unrelated same-dept one.
+const SAME_DEPT_BONUS = 2;
+
+function overlap(a: Set<string>, b: Set<string>): number {
+  let n = 0;
+  for (const t of a) if (b.has(t)) n++;
+  return n;
+}
+
 /**
  * Choose which prior deliverables to ground the current task on. `items` are assumed
- * newest-first. Strategy: up to `sameDeptMax` from the current department (most
- * relevant), then fill remaining slots with the most-recent work from OTHER departments
- * (so byte stays consistent across the company), then top up with any leftover. The
- * current task's own approved version is excluded. Order-preserving and pure.
+ * newest-first.
+ *
+ * With a `query` (what the task is about): rank every usable item by relevance —
+ * weighted title/body token overlap with the query, plus a small same-department bonus
+ * — and take the top `max`. This spends the limited grounding budget on the work the
+ * current task must actually stay consistent with, across departments.
+ *
+ * Without a query: the original recency + same-department strategy (up to `sameDeptMax`
+ * same-dept, then newest cross-dept, then top up) — unchanged, so callers that don't
+ * pass a query behave exactly as before.
+ *
+ * The current task's own approved version is excluded. Pure and deterministic (ties
+ * keep newest-first order via a stable sort).
  */
 export function selectPriorWork(items: PriorItem[], opts: SelectOptions = {}): PriorItem[] {
   const max = opts.max ?? 4;
-  const sameDeptMax = opts.sameDeptMax ?? 2;
   const exclude = opts.excludeTitle ? norm(opts.excludeTitle) : '';
   const dept = opts.deptName ? norm(opts.deptName) : '';
 
   const usable = items.filter(
     (it) => it.title.trim() && it.out.trim() && (!exclude || norm(it.title) !== exclude),
   );
+
+  const queryTokens = opts.query ? tokenize(opts.query) : new Set<string>();
+  if (queryTokens.size > 0) {
+    // Relevance mode. Score with the original index as a stable, newest-first tiebreak.
+    const scored = usable.map((it, i) => {
+      const sameDept = dept ? norm(it.dept) === dept : false;
+      const score =
+        TITLE_WEIGHT * overlap(queryTokens, tokenize(it.title)) +
+        OUT_WEIGHT * overlap(queryTokens, tokenize(it.out.slice(0, SCORE_SCAN))) +
+        (sameDept ? SAME_DEPT_BONUS : 0);
+      return { it, i, score };
+    });
+    scored.sort((a, b) => b.score - a.score || a.i - b.i);
+    return scored.slice(0, max).map((s) => s.it);
+  }
+
+  // Fallback: recency + same-department (original behaviour).
+  const sameDeptMax = opts.sameDeptMax ?? 2;
   const sameDept = dept ? usable.filter((it) => norm(it.dept) === dept) : [];
   const otherDept = dept ? usable.filter((it) => norm(it.dept) !== dept) : usable;
 

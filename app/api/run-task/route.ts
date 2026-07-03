@@ -183,7 +183,13 @@ export async function POST(req: Request): Promise<Response> {
       shipped: library,
     }) || CODEPET_CONTEXT;
   const priorWork = composePriorWorkContext(
-    selectPriorWork(library, { deptName: fields.deptName, excludeTitle: fields.taskTitle }),
+    selectPriorWork(library, {
+      deptName: fields.deptName,
+      excludeTitle: fields.taskTitle,
+      // Rank prior work by relevance to what this task is actually about, so byte grounds
+      // on the pieces it must stay consistent with (across departments), not just recency.
+      query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
+    }),
   );
   const { schema } = KINDS[kind];
   const prompt = buildPrompt(kind, context, priorWork, fields);
