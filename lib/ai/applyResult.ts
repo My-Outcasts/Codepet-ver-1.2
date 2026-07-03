@@ -30,9 +30,10 @@ export const LIVE_TYPES = new Set([
 ]);
 
 export function liveKind(type: string): DeliverableKind | null {
-  // build is a plain-text outcome (renders t.out), same as doc/prep.
-  if (type === 'doc' || type === 'prep' || type === 'build') return 'text';
+  // prep/build are plain-text outcomes (render t.out); doc is now a structured document.
+  if (type === 'prep' || type === 'build') return 'text';
   if (
+    type === 'doc' ||
     type === 'post' ||
     type === 'email' ||
     type === 'legal' ||
@@ -50,6 +51,7 @@ export function liveKind(type: string): DeliverableKind | null {
 
 // The current draft byte revises against (structured payloads serialized to JSON).
 export function currentDraft(t: Task, type: string): string {
+  if (type === 'doc') return JSON.stringify(t.doc ?? {});
   if (type === 'post') return JSON.stringify(t.post ?? {});
   if (type === 'email') return JSON.stringify(t.email ?? {});
   if (type === 'legal') return JSON.stringify(t.legal ?? {});
@@ -67,7 +69,20 @@ export function currentDraft(t: Task, type: string): string {
 // Apply byte's result onto the task, merging structured payloads with the
 // presentational defaults the viewers expect (author/stats/from/updated).
 export function applyResult(t: Task, type: string, res: RunResult): void {
-  if (type === 'post' && res.payload) {
+  if (type === 'doc' && res.payload) {
+    // DocViewer leads with `call` and maps over `sections`; keep the seed if either is missing.
+    const d = res.payload as Record<string, unknown>;
+    if (typeof d.call === 'string' && Array.isArray(d.sections)) {
+      t.doc = {
+        title: typeof d.title === 'string' ? d.title : t.t,
+        call: d.call,
+        sections: d.sections,
+        next: Array.isArray(d.next) ? d.next : [],
+      };
+      const out = deriveOut('doc', res.payload);
+      if (out) t.out = out;
+    }
+  } else if (type === 'post' && res.payload) {
     const p = res.payload as { variants?: Array<{ label: string; body: string }> };
     if (p.variants?.length) {
       t.post = {
