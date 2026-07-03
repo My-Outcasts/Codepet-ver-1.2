@@ -2068,7 +2068,12 @@ body {
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 45%, rgba(255, 255, 255, 0.18) 50%, transparent 55%);
+  background: linear-gradient(
+    105deg,
+    transparent 45%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 55%
+  );
   transform: translateX(-120%);
   opacity: 0;
 }
@@ -3283,7 +3288,12 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.55) 50%, transparent 58%);
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 58%
+  );
   mix-blend-mode: overlay;
   transform: translateX(-120%);
   animation: titleSweep 4.6s ease-in-out 1.7s infinite;
@@ -7117,6 +7127,29 @@ body {
   }
 }
 
+/* mobile-lite: strip parallax / particles / sweeps from the intro (max-width:820px).
+   Starfield already returns null here; these hide the CSS-only heavy layers. */
+@media (max-width: 820px) {
+  .splash-glow,
+  .ob-cold-glow,
+  .starfield,
+  .splash-title::after,
+  .dr-img::before,
+  .dhero2::before {
+    display: none !important;
+  }
+  .ob-art span {
+    transition: opacity 0.5s ease;
+    transform: none;
+  }
+  .ob-art span.on {
+    transform: none;
+  }
+  .splash-sub .w {
+    animation-delay: 0.32s;
+  }
+}
+
 /* per-step content entrance (re-keyed on step change in Onboarding.tsx) */
 .ob-body > * {
   animation: riseIn 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -7414,17 +7447,40 @@ body {
   .signin-card,
   .splash,
   .splash::before,
+  .splash-glow,
   .splash-title,
+  .splash-title::after,
   .splash-sub,
+  .splash-sub .w,
   .splash-btn,
   .splash-hint,
+  .starfield,
+  .starfield i,
   .ob-cold,
   .ob-cold::after,
+  .ob-cold-glow,
   .ob-cold-in > *,
-  .ob-art span,
-  .ob-body > * {
+  .ob-body > *,
+  .dr-img,
+  .dhero2,
+  .dr-img::before,
+  .dhero2::before {
     animation: none !important;
     translate: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    transition: none !important;
+  }
+  /* `.ob-art span` is a LAYERED stack (all 8 scenes mounted, only `.on` visible).
+     It must NOT be in the group above — a blanket `opacity: 1 !important` would
+     reveal all 8 layers at once. Kill its motion but let the base opacity:0 / .on
+     opacity:1 rules keep only the current scene visible. */
+  .ob-art span {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+  .ob-art span.on {
     opacity: 1 !important;
   }
 }
