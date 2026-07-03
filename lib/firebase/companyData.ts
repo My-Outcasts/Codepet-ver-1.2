@@ -477,6 +477,16 @@ export async function persistPersonalization(companyId: string, depts: Dept[]): 
 }
 
 // ---- write-through ----
+/** Persist a single department's current tasks (e.g. after byte produces a draft,
+ * so the task's `drafted` flag + draft payload survive reload). Members may write
+ * department docs, so no rules change is needed. Optimistic: the in-memory task
+ * already updated; this write-through can fail without breaking the session. */
+export async function persistDepartmentTasks(companyId: string, dept: Dept): Promise<void> {
+  await setDoc(doc(getDb(), paths.department(companyId, dept.k)), serializeDept(dept), {
+    merge: true,
+  });
+}
+
 /** Persist a task approval: the updated department doc + a new library item. */
 export async function persistApproval(
   companyId: string,
