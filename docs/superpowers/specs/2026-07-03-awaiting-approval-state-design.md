@@ -11,8 +11,8 @@ A task byte hasn't drafted yet is labeled **"Needs approval"** — on the Tasks 
 tag), even though the only available action is **"Have byte draft it."** Those
 contradict: nothing has been produced, so there is nothing to approve.
 
-Root cause: task labels are keyed off `who` (the *workflow type* — draft / you /
-does), not the task's *current state*. And there is **no persisted "drafted,
+Root cause: task labels are keyed off `who` (the _workflow type_ — draft / you /
+does), not the task's _current state_. And there is **no persisted "drafted,
 awaiting approval" state** — producing a draft persists nothing (only approval
 writes to Firestore), so an un-approved draft is lost on reload and looks identical
 to a never-touched task.
@@ -39,7 +39,7 @@ from the audit) is an independent workstream with its own spec, built after this
 
 - Tasks live **inline** in each department doc: `DepartmentDoc.tasks: Task[]`, stored
   at `companies/{companyId}/departments/{k}`. `loadCompanyData` reads them back with
-  the department — so a flag stored *on the task* automatically rehydrates on reload.
+  the department — so a flag stored _on the task_ automatically rehydrates on reload.
 - Firestore rules already allow a company member to write department docs
   (`match /companies/{companyId}/{sub}/{document=**}` → read/write for owner/member).
   **No rules change is needed.**
@@ -63,12 +63,12 @@ drafted?: boolean;
 
 Derived state (single helper, `taskState(t): 'up-next' | 'awaiting' | 'your-move' | 'done'`):
 
-| Condition (first match wins) | State | Board lane | Label / action |
-|---|---|---|---|
-| `t.done` | done | **Done** | delivered (Shipped/Approved) |
-| `t.drafted` | awaiting | **Awaiting your approval** | review the draft → Approve / Revise |
-| `t.who === 'you'` | your-move | **Your move** | *Have byte do it* / you act |
-| else (`who` is `draft` or `does`, `!drafted`) | up-next | **Up next** | *Have byte draft it* / *Have byte do it* |
+| Condition (first match wins)                  | State     | Board lane                 | Label / action                           |
+| --------------------------------------------- | --------- | -------------------------- | ---------------------------------------- |
+| `t.done`                                      | done      | **Done**                   | delivered (Shipped/Approved)             |
+| `t.drafted`                                   | awaiting  | **Awaiting your approval** | review the draft → Approve / Revise      |
+| `t.who === 'you'`                             | your-move | **Your move**              | _Have byte do it_ / you act              |
+| else (`who` is `draft` or `does`, `!drafted`) | up-next   | **Up next**                | _Have byte draft it_ / _Have byte do it_ |
 
 Four lanes total — "byte handles" (`does`) is folded into **Up next** (byte's queue),
 per the design call.
@@ -88,15 +88,18 @@ per the design call.
 ## Components & changes
 
 ### `lib/data.ts`
+
 - Add `drafted?: boolean` to `Task`.
 - Add `taskState(t: Task)` helper (pure) returning the derived state above.
 
 ### `lib/firebase/companyData.ts`
+
 - Add `persistDepartmentTasks(companyId, dept)` — writes the department doc's `tasks`
   (with the updated `drafted` flag + draft payloads) via the existing member-write
   permission. (Or reuse the existing department write path if one already fits.)
 
 ### `lib/store.tsx`
+
 - In `runTaskInChat` and `reviseTaskInChat`, after `applyResult` succeeds: set
   `t.drafted = true` (unless ship/route), then call `persistDepartmentTasks`.
 - The run-modal approval flow (`ArtifactModal` → its produce step) likewise sets
@@ -104,11 +107,13 @@ per the design call.
 - No change to `approveTask` beyond it already flipping `done` (which supersedes `drafted`).
 
 ### `components/views/TasksView.tsx`
+
 - Replace the four `who`-keyed columns with the four **state**-keyed lanes above,
   using `taskState`. Rename labels: "Needs approval" is gone; lanes are **Up next /
   Awaiting your approval / Your move / Done**.
 
 ### `components/views/DepartmentDetail.tsx`
+
 - Derive each task card's status tag + primary button from `taskState`:
   - up-next → tag "Up next", button "Have byte draft it" / "Have byte do it".
   - awaiting → tag "Awaiting your approval", the draft preview + Approve / Revise.
