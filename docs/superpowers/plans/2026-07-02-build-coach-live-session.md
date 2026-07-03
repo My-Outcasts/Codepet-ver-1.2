@@ -25,10 +25,12 @@
 ### Task 1: Add `budgetActions` to the plan model
 
 **Files:**
+
 - Modify: `lib/ai/plan.ts`
 - Test: `lib/ai/plan.test.ts`
 
 **Interfaces:**
+
 - Produces: `BytePlan.budgetActions: number`; `PLAN_SCHEMA` requires `budgetActions`; `buildPlanPrompt` asks for it.
 
 - [ ] **Step 1: Write failing tests** — append to `lib/ai/plan.test.ts`:
@@ -45,7 +47,7 @@ describe('budgetActions in plan model', () => {
 //   import { PLAN_SCHEMA } from './plan';
 describe('PLAN_SCHEMA', () => {
   it('requires budgetActions as an integer', () => {
-    expect((PLAN_SCHEMA.required as string[])).toContain('budgetActions');
+    expect(PLAN_SCHEMA.required as string[]).toContain('budgetActions');
     const props = PLAN_SCHEMA.properties as Record<string, { type?: string }>;
     expect(props.budgetActions?.type).toBe('integer');
   });
@@ -60,12 +62,15 @@ Expected: FAIL (`PLAN_SCHEMA` has no `budgetActions`; prompt lacks the phrasing)
 - [ ] **Step 3: Implement** — in `lib/ai/plan.ts`:
 
 Add to `BytePlan`:
+
 ```ts
-  /** Expected number of agent actions (tool-uses) the plan should take —
-   *  the DURING "piggy bank" fills toward this. */
-  budgetActions: number;
+/** Expected number of agent actions (tool-uses) the plan should take —
+ *  the DURING "piggy bank" fills toward this. */
+budgetActions: number;
 ```
+
 In `buildPlanPrompt`, replace the budget sentence with:
+
 ```ts
     'Return a plan with 3-5 concrete, ordered steps (each a short imperative line),',
     'a suggested token budget in thousands (budgetK, between 100 and 800), an',
@@ -73,13 +78,16 @@ In `buildPlanPrompt`, replace the budget sentence with:
     "and 40), and a short encouraging title in Byte's warm voice. The last step",
     'should always be to double-check the work before calling it done.',
 ```
+
 In `PLAN_SCHEMA.properties` add and mark required:
+
 ```ts
     budgetActions: {
       type: 'integer',
       description: 'Expected number of agent actions/tool-uses (5-40).',
     },
 ```
+
 ```ts
   required: ['title', 'budgetK', 'budgetActions', 'steps'],
 ```
@@ -101,15 +109,31 @@ git commit -m "feat(build-coach): add budgetActions to the Byte plan model"
 ### Task 2: `reduceLive` — pure live-activity reducer
 
 **Files:**
+
 - Create: `lib/liveBuild.ts`
 - Test: `lib/liveBuild.test.ts`
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   type Millis = number;
-  interface LiveEvent { buildSessionId: string; sessionId: string; kind: 'start' | 'tool' | 'turn'; tool?: string; ts: Millis; }
-  interface LiveState { actionCount: number; turns: number; recentTools: string[]; startedAt: Millis; lastTs: Millis; ended: boolean; }
+  interface LiveEvent {
+    buildSessionId: string;
+    sessionId: string;
+    kind: 'start' | 'tool' | 'turn';
+    tool?: string;
+    ts: Millis;
+  }
+  interface LiveState {
+    actionCount: number;
+    turns: number;
+    recentTools: string[];
+    startedAt: Millis;
+    lastTs: Millis;
+    ended: boolean;
+  }
   function initialLive(ts: Millis): LiveState;
   function reduceLive(state: LiveState | null, event: LiveEvent): LiveState;
   function eventKindFor(hookEventName: string): LiveEvent['kind'] | null;
@@ -126,9 +150,23 @@ const base = { buildSessionId: 'b1', sessionId: 's1' };
 
 describe('reduceLive', () => {
   it('start resets state', () => {
-    const prev = { actionCount: 9, turns: 3, recentTools: ['Edit'], startedAt: 1, lastTs: 5, ended: true };
+    const prev = {
+      actionCount: 9,
+      turns: 3,
+      recentTools: ['Edit'],
+      startedAt: 1,
+      lastTs: 5,
+      ended: true,
+    };
     const s = reduceLive(prev, { ...base, kind: 'start', ts: 100 });
-    expect(s).toEqual({ actionCount: 0, turns: 0, recentTools: [], startedAt: 100, lastTs: 100, ended: false });
+    expect(s).toEqual({
+      actionCount: 0,
+      turns: 0,
+      recentTools: [],
+      startedAt: 100,
+      lastTs: 100,
+      ended: false,
+    });
   });
 
   it('start from null initialises', () => {
@@ -147,7 +185,8 @@ describe('reduceLive', () => {
 
   it('caps recentTools to the last RECENT_TOOLS_CAP', () => {
     let s = initialLive(0);
-    for (let i = 0; i < RECENT_TOOLS_CAP + 3; i++) s = reduceLive(s, { ...base, kind: 'tool', tool: `T${i}`, ts: i });
+    for (let i = 0; i < RECENT_TOOLS_CAP + 3; i++)
+      s = reduceLive(s, { ...base, kind: 'tool', tool: `T${i}`, ts: i });
     expect(s.recentTools).toHaveLength(RECENT_TOOLS_CAP);
     expect(s.recentTools[RECENT_TOOLS_CAP - 1]).toBe(`T${RECENT_TOOLS_CAP + 2}`);
     expect(s.actionCount).toBe(RECENT_TOOLS_CAP + 3);
@@ -260,10 +299,12 @@ git commit -m "feat(build-coach): reduceLive activity reducer + hook-kind mappin
 ### Task 3: arm-session pure helpers
 
 **Files:**
+
 - Create: `lib/armSession.ts`
 - Test: `lib/armSession.test.ts`
 
 **Interfaces:**
+
 - Consumes: `BytePlan` from `lib/ai/plan`.
 - Produces: `buildOpeningPrompt(plan, audience, doneLooks): string`; `terminalCommand(projectDir, prompt): string` (a `cd … && claude "…"` string, double-quote-escaped for a shell).
 
@@ -359,10 +400,12 @@ git commit -m "feat(build-coach): opening-prompt + terminal-command helpers"
 ### Task 4: live emitter hook script
 
 **Files:**
+
 - Create: `toolkit/hooks/codepet-live.mjs`
 - (No unit test — same untested-shell posture as `codepet-track.mjs`; its pure logic `eventKindFor` is already tested in Task 2. Verified by the manual e2e pass.)
 
 **Interfaces:**
+
 - Consumes: `~/.claude/codepet/current-build.json` (written by Task 7), `~/.claude/codepet/track.json` (existing, for `companyId`/`token`/`apiUrl`), hook JSON on stdin.
 - Produces: `POST {apiUrl}/api/track/live { companyId, token, event: LiveEvent }`.
 
@@ -411,7 +454,9 @@ async function main() {
   let build;
   let cfg;
   try {
-    build = JSON.parse(fs.readFileSync(path.join(claudeDir, 'codepet', 'current-build.json'), 'utf8'));
+    build = JSON.parse(
+      fs.readFileSync(path.join(claudeDir, 'codepet', 'current-build.json'), 'utf8'),
+    );
     cfg = JSON.parse(fs.readFileSync(path.join(claudeDir, 'codepet', 'track.json'), 'utf8'));
   } catch {
     return; // no active build or no config — nothing to do
@@ -460,10 +505,12 @@ git commit -m "feat(build-coach): live-activity hook emitter script"
 ### Task 5: install the live hooks alongside the tracker
 
 **Files:**
+
 - Modify: `lib/installer/tracking.mjs`
 - Test: `lib/installer/tracking.test.mjs` (extend), `lib/installer/settings.test.mjs` (already covers mergeHook — no change)
 
 **Interfaces:**
+
 - Consumes: `mergeHook(settings, eventName, entry)` (existing).
 - Produces: after `installTracking`, `settings.json` also contains `SessionStart`, `PostToolUse`, `Stop` hooks pointing at the copied `codepet-live.mjs`, and `<claudeDir>/codepet/codepet-live.mjs` exists.
 
@@ -482,6 +529,7 @@ it('installs the live emitter script and its three hooks', () => {
   }
 });
 ```
+
 (If the test file has no `mkTmpClaudeDir`/imports, mirror the existing setup in that file — use `fs`, `os.tmpdir()`, `path`, and the same import of `installTracking`.)
 
 - [ ] **Step 2: Run to verify fail**
@@ -492,25 +540,30 @@ Expected: FAIL (no live script, no live hooks).
 - [ ] **Step 3: Implement** — in `lib/installer/tracking.mjs`:
 
 Add a source helper next to `trackerSource`:
+
 ```js
 /** Repo source of the live-activity hook script. */
 export function liveSource(cwd = process.cwd()) {
   return path.join(cwd, 'toolkit', 'hooks', 'codepet-live.mjs');
 }
 ```
+
 In `installTracking`, after the tracker script + `track.json` are written and the `SessionEnd` hook is merged, add:
+
 ```js
-  // Live-activity emitter: copy the script and register the three during-session hooks.
-  const liveTarget = path.join(codepetDir, 'codepet-live.mjs');
-  fs.writeFileSync(liveTarget, fs.readFileSync(liveSource(cwd), 'utf8'));
-  const liveEntry = { type: 'command', command: `node ${liveTarget}` };
-  for (const evt of ['SessionStart', 'PostToolUse', 'Stop']) {
-    settings = mergeHook(settings, evt, liveEntry);
-  }
+// Live-activity emitter: copy the script and register the three during-session hooks.
+const liveTarget = path.join(codepetDir, 'codepet-live.mjs');
+fs.writeFileSync(liveTarget, fs.readFileSync(liveSource(cwd), 'utf8'));
+const liveEntry = { type: 'command', command: `node ${liveTarget}` };
+for (const evt of ['SessionStart', 'PostToolUse', 'Stop']) {
+  settings = mergeHook(settings, evt, liveEntry);
+}
 ```
+
 Ensure this runs against the same `settings` object that is written back to `settings.json` (place it before the final `writeFileSync(settingsTarget, …)`), and add `liveTarget`/`live` to the returned paths object:
+
 ```js
-  return { script: scriptTarget, config: configTarget, settings: settingsTarget, live: liveTarget };
+return { script: scriptTarget, config: configTarget, settings: settingsTarget, live: liveTarget };
 ```
 
 - [ ] **Step 4: Run to verify pass**
@@ -530,6 +583,7 @@ git commit -m "feat(build-coach): install live-activity hooks with the tracker"
 ### Task 6: `/api/track/live` ingest endpoint
 
 **Files:**
+
 - Create: `app/api/track/live/route.ts`
 - Modify: `lib/firebase/schema.ts` (path helper)
 - Test: `lib/liveBuild.test.ts` already covers the reducer; add a small `sanitizeLiveEvent` test in a new `app/api/track/live/sanitize.test.ts` OR co-locate a pure `sanitizeLiveEvent` in `lib/liveBuild.ts` and test it there.
@@ -537,6 +591,7 @@ git commit -m "feat(build-coach): install live-activity hooks with the tracker"
 Decision: put `sanitizeLiveEvent(raw): LiveEvent | null` in `lib/liveBuild.ts` (pure, testable), and have the route call it.
 
 **Interfaces:**
+
 - Consumes: `reduceLive`, `sanitizeLiveEvent` (Task 2 module), `adminDb`, `paths.liveBuild`.
 - Produces: upserts `companies/{companyId}/liveBuilds/{buildSessionId}` via a transaction.
 
@@ -547,7 +602,12 @@ import { sanitizeLiveEvent } from './liveBuild';
 
 describe('sanitizeLiveEvent', () => {
   it('accepts a well-formed tool event', () => {
-    const e = sanitizeLiveEvent({ buildSessionId: 'b', sessionId: 's', kind: 'tool', tool: 'Edit' });
+    const e = sanitizeLiveEvent({
+      buildSessionId: 'b',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+    });
     expect(e).toMatchObject({ buildSessionId: 'b', sessionId: 's', kind: 'tool', tool: 'Edit' });
     expect(typeof e?.ts).toBe('number');
   });
@@ -578,7 +638,8 @@ const KINDS = ['start', 'tool', 'turn'] as const;
 export function sanitizeLiveEvent(raw: unknown): LiveEvent | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
-  const buildSessionId = typeof r.buildSessionId === 'string' ? r.buildSessionId.trim().slice(0, 128) : '';
+  const buildSessionId =
+    typeof r.buildSessionId === 'string' ? r.buildSessionId.trim().slice(0, 128) : '';
   const sessionId = typeof r.sessionId === 'string' ? r.sessionId.trim().slice(0, 128) : '';
   const kind = KINDS.find((k) => k === r.kind);
   if (!buildSessionId || !sessionId || !kind) return null;
@@ -671,16 +732,20 @@ git commit -m "feat(build-coach): /api/track/live ingest + liveBuilds path helpe
 ### Task 7: `armBuildSession` server action
 
 **Files:**
+
 - Create: `app/actions/build.ts`
 - (No unit test — fs write + `osascript` spawn is an untested shell; its pure inputs `buildOpeningPrompt`/`terminalCommand` are tested in Task 3. Verified in the manual e2e pass.)
 
 **Interfaces:**
+
 - Consumes: `detectCapability`, `resolveClaudeDir`, `buildOpeningPrompt`, `terminalCommand`, `BytePlan`.
 - Produces:
+
   ```ts
   interface ArmInput { buildSessionId: string; projectDir: string; plan: BytePlan; audience: string; doneLooks: string; companyId: string; token: string; apiUrl: string; }
   armBuildSession(input: ArmInput): Promise<{ ok: true; launched: boolean } | { ok: false; reason: 'remote'; command: string }>
   ```
+
   `launched` is true when a Terminal was opened (macOS local mode); false + `command` returned when the caller should show a copy-paste line.
 
 - [ ] **Step 1: Implement** — `app/actions/build.ts`:
@@ -713,7 +778,17 @@ function writeArmFile(claudeDir: string, input: ArmInput) {
   fs.writeFileSync(
     path.join(dir, 'current-build.json'),
     JSON.stringify(
-      { buildSessionId, projectDir, plan, audience, doneLooks, companyId, token, apiUrl, startedAt: Date.now() },
+      {
+        buildSessionId,
+        projectDir,
+        plan,
+        audience,
+        doneLooks,
+        companyId,
+        token,
+        apiUrl,
+        startedAt: Date.now(),
+      },
       null,
       2,
     ),
@@ -763,11 +838,14 @@ git commit -m "feat(build-coach): armBuildSession server action (arm-file + Term
 ### Task 8: live-build client subscription + notebook write
 
 **Files:**
+
 - Modify: `lib/firebase/companyData.ts`
 - (No unit test — thin Firestore SDK wrappers; exercised by the manual e2e pass. Keep them minimal.)
 
 **Interfaces:**
+
 - Produces:
+
   ```ts
   subscribeLiveBuild(companyId: string, buildSessionId: string, cb: (state: LiveState | null) => void): () => void
   loadTrackEventForSession(companyId: string, sessionId: string): Promise<TrackEvent | null>
@@ -799,7 +877,10 @@ export async function loadTrackEventForSession(
   companyId: string,
   sessionId: string,
 ): Promise<TrackEvent | null> {
-  const q = query(collection(db(), paths.trackEvents(companyId)), where('sessionId', '==', sessionId));
+  const q = query(
+    collection(db(), paths.trackEvents(companyId)),
+    where('sessionId', '==', sessionId),
+  );
   const rows = await getDocs(q);
   const events = rows.docs.map((d) => d.data() as TrackEvent);
   events.sort((a, b) => b.ts - a.ts);
@@ -834,9 +915,11 @@ git commit -m "feat(build-coach): live-build subscription + trackEvent + noteboo
 ### Task 9: DURING step — real live meter
 
 **Files:**
+
 - Modify: `components/views/BuildCoachView.tsx`
 
 **Interfaces:**
+
 - Consumes: `subscribeLiveBuild`, `budgetState`, `DANGER_PCT`, the active `BytePlan` + `buildSessionId` + `companyId` (lifted into `BuildCoachView` state — see Task 11).
 
 - [ ] **Step 1: Rewrite `DuringStep`** to subscribe instead of using a slider. New props:
@@ -899,9 +982,11 @@ git commit -m "feat(build-coach): DURING meter driven by real live activity"
 ### Task 10: END step — real recap + notebook write
 
 **Files:**
+
 - Modify: `components/views/BuildCoachView.tsx`
 
 **Interfaces:**
+
 - Consumes: `loadTrackEventForSession`, `writeNotebookNote`, the session's `TrackEvent`, `plan`, `doneLooks`, `live.actionCount`.
 
 - [ ] **Step 1: Rewrite `EndStep`** to take real data:
@@ -968,9 +1053,11 @@ git commit -m "feat(build-coach): END recap from real trackEvent + notebook writ
 ### Task 11: START arm/launch wiring + container state
 
 **Files:**
+
 - Modify: `components/views/BuildCoachView.tsx`
 
 **Interfaces:**
+
 - Consumes: `armBuildSession`, `useApp()` (for `companyId`, `company.projects`, ingest token), `crypto.randomUUID()`.
 
 - [ ] **Step 1: Lift shared state into `BuildCoachView`** — hold `plan`, `audience`, `doneLooks`, `buildSessionId`, `sessionId`, `liveActions`, `unlocked`. Pass down to the three steps. The `sessionId` for END is the live doc's `sessionId` once activity arrives (thread it up from the DURING subscription via a callback, or read the live doc in the container instead of DURING). Simplest: subscribe to the live build in the container once `buildSessionId` is set, keep `live` in container state, and pass `live` down to both DURING and END. Refactor the DURING subscription (Task 9) up to the container accordingly.
@@ -982,16 +1069,23 @@ const { companyId, company } = useApp(); // match the real useApp() shape
 const startBuild = async () => {
   if (!plan) return;
   const buildSessionId = crypto.randomUUID();
-  const projectDir =
-    company?.projects?.find((p) => p.name === project)?.path ?? project; // name → path
+  const projectDir = company?.projects?.find((p) => p.name === project)?.path ?? project; // name → path
   const token = company?.ingestToken ?? '';
   const apiUrl = window.location.origin;
   const res = await armBuildSession({
-    buildSessionId, projectDir, plan, audience, doneLooks, companyId, token, apiUrl,
+    buildSessionId,
+    projectDir,
+    plan,
+    audience,
+    doneLooks,
+    companyId,
+    token,
+    apiUrl,
   });
   setBuildSessionId(buildSessionId);
   setStep('during');
-  if (res.ok === false || !res.launched) setLaunchCommand(res.ok === false ? res.command : /* macOS non-launch */ null);
+  if (res.ok === false || !res.launched)
+    setLaunchCommand(res.ok === false ? res.command : /* macOS non-launch */ null);
 };
 ```
 
@@ -1026,4 +1120,7 @@ git commit -m "feat(build-coach): START arms + launches the live session"
 - **Spec coverage:** ①START/arm → Tasks 3,7,11. ②hooks → Tasks 4,5. ③endpoint/Firestore → Tasks 2,6,8. ④DURING → Task 9. ⑤END → Task 10. Plan schema → Task 1. All spec components mapped.
 - **Type consistency:** `LiveEvent`/`LiveState`/`reduceLive`/`sanitizeLiveEvent` defined in Task 2, consumed in Tasks 6,8,9. `budgetActions` defined Task 1, consumed Tasks 3,9,10,11. `armBuildSession` signature defined Task 7, consumed Task 11.
 - **Known adaptation points (flagged inline, not placeholders):** the exact `useApp()` shape and `companyData.ts` db accessor must be matched to the real code during execution — Tasks 8 and 11 call this out explicitly.
+
+```
+
 ```

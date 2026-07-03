@@ -24,11 +24,13 @@
 Pure transcript-parsing + narration, unit-tested. Lives beside the hook so the hook's relative import resolves in-repo and after install.
 
 **Files:**
+
 - Create: `toolkit/hooks/narrate.mjs`
 - Test: `toolkit/hooks/narrate.test.mjs`
 - Modify: `package.json` (broaden `test:installer` to also scan `toolkit/hooks/`)
 
 **Interfaces:**
+
 - Produces:
   - `extractLastAssistantText(jsonl: string): string` — concatenated text of the last assistant message in a transcript JSONL string; `''` if none/unparseable.
   - `narrate(text: string, toolName?: string): string` — one short Byte-voice line; total (never throws).
@@ -84,7 +86,10 @@ test('extractLastAssistantText skips malformed lines and empties safely', () => 
 });
 
 test('narrate classifies test intent', () => {
-  assert.equal(narrate('I will add a test for login'), "Claude's running tests — nice, playing it safe 🧪");
+  assert.equal(
+    narrate('I will add a test for login'),
+    "Claude's running tests — nice, playing it safe 🧪",
+  );
 });
 
 test('narrate classifies fix intent', () => {
@@ -133,7 +138,7 @@ Expected: FAIL — `Cannot find module './narrate.mjs'`.
 
 Create `toolkit/hooks/narrate.mjs`:
 
-```js
+````js
 // Local narration for the Build Coach live hook. Pure, framework-free, and
 // unit-tested with `node --test`. The installed live hook (codepet-live.mjs)
 // imports these to turn Claude's raw assistant text into ONE short Byte-voice
@@ -203,7 +208,7 @@ export function narrate(text, toolName) {
     return `Byte sees Claude working with ${toolName.trim()}…`;
   return "Claude's thinking it through…";
 }
-```
+````
 
 - [ ] **Step 5: Run tests to verify they pass**
 
@@ -224,10 +229,12 @@ git commit -m "feat(build-coach): local narrate() + transcript text extractor"
 Carry `say`/`ask` on the wire; fold into new `lastSay`/`pendingAsk` state; map the `Notification` hook event.
 
 **Files:**
+
 - Modify: `lib/liveBuild.ts`
 - Test: `lib/liveBuild.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces:
   - `LiveEvent` gains `kind: 'ask'`, optional `say?: string`, optional `ask?: string`.
@@ -245,7 +252,12 @@ describe('reduceLive — narration', () => {
   const start = reduceLive(null, { ...base, kind: 'start', ts: 1 });
 
   it('turn stores the narrated line and bumps turns', () => {
-    const s = reduceLive(start, { ...base, kind: 'turn', say: "Claude's building a new piece ✨", ts: 2 });
+    const s = reduceLive(start, {
+      ...base,
+      kind: 'turn',
+      say: "Claude's building a new piece ✨",
+      ts: 2,
+    });
     expect(s.turns).toBe(1);
     expect(s.lastSay).toBe("Claude's building a new piece ✨");
   });
@@ -285,7 +297,12 @@ describe('eventKindFor — Notification', () => {
 
 describe('sanitizeLiveEvent — narration', () => {
   it('keeps say on a turn and caps its length', () => {
-    const e = sanitizeLiveEvent({ buildSessionId: 'b', sessionId: 's', kind: 'turn', say: 'x'.repeat(500) });
+    const e = sanitizeLiveEvent({
+      buildSessionId: 'b',
+      sessionId: 's',
+      kind: 'turn',
+      say: 'x'.repeat(500),
+    });
     expect(e?.kind).toBe('turn');
     expect(e?.say?.length).toBe(160);
   });
@@ -294,7 +311,14 @@ describe('sanitizeLiveEvent — narration', () => {
     expect(e).toEqual(expect.objectContaining({ kind: 'ask', ask: 'hi' }));
   });
   it('drops say/ask on the wrong kind', () => {
-    const e = sanitizeLiveEvent({ buildSessionId: 'b', sessionId: 's', kind: 'tool', tool: 'Edit', say: 'nope', ask: 'nope' });
+    const e = sanitizeLiveEvent({
+      buildSessionId: 'b',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+      say: 'nope',
+      ask: 'nope',
+    });
     expect(e).not.toHaveProperty('say');
     expect(e).not.toHaveProperty('ask');
   });
@@ -404,23 +428,23 @@ const KINDS = ['start', 'tool', 'turn', 'ask'] as const;
 Replace the tail of `sanitizeLiveEvent` (from the `tool` line to the return):
 
 ```ts
-  const tool =
-    kind === 'tool' && typeof r.tool === 'string' && r.tool.trim()
-      ? r.tool.trim().slice(0, 64)
-      : undefined;
-  const say =
-    kind === 'turn' && typeof r.say === 'string' && r.say.trim()
-      ? r.say.trim().slice(0, 160)
-      : undefined;
-  const ask =
-    kind === 'ask' && typeof r.ask === 'string' && r.ask.trim()
-      ? r.ask.trim().slice(0, 160)
-      : undefined;
-  const out: LiveEvent = { buildSessionId, sessionId, kind, ts: Date.now() };
-  if (tool !== undefined) out.tool = tool;
-  if (say !== undefined) out.say = say;
-  if (ask !== undefined) out.ask = ask;
-  return out;
+const tool =
+  kind === 'tool' && typeof r.tool === 'string' && r.tool.trim()
+    ? r.tool.trim().slice(0, 64)
+    : undefined;
+const say =
+  kind === 'turn' && typeof r.say === 'string' && r.say.trim()
+    ? r.say.trim().slice(0, 160)
+    : undefined;
+const ask =
+  kind === 'ask' && typeof r.ask === 'string' && r.ask.trim()
+    ? r.ask.trim().slice(0, 160)
+    : undefined;
+const out: LiveEvent = { buildSessionId, sessionId, kind, ts: Date.now() };
+if (tool !== undefined) out.tool = tool;
+if (say !== undefined) out.say = say;
+if (ask !== undefined) out.ask = ask;
+return out;
 ```
 
 (The previous implementation returned `{ ..., tool, ts }` with `tool` possibly
@@ -451,9 +475,11 @@ git commit -m "feat(build-coach): live say/ask events + lastSay/pendingAsk state
 Wire the hook to narrate on `Stop` and emit the ask line on `Notification`.
 
 **Files:**
+
 - Modify: `toolkit/hooks/codepet-live.mjs`
 
 **Interfaces:**
+
 - Consumes: `narrate`, `extractLastAssistantText` from `./narrate.mjs` (Task 1); the wire fields `say`/`ask`/`kind: 'ask'` accepted by `/api/track/live` (Task 2).
 - Produces: LiveEvents with `say` (on `turn`) / `ask` (on `ask`).
 
@@ -482,28 +508,30 @@ function kindFor(name) {
 Replace the `const event = { ... }` block in `main()` with:
 
 ```js
-  const event = {
-    buildSessionId: build.buildSessionId,
-    sessionId: input.session_id || `sess-${Date.now()}`,
-    kind,
-    ts: Date.now(),
-  };
-  if (kind === 'tool') {
-    event.tool = input.tool_name;
-  } else if (kind === 'turn') {
-    // Narrate what Claude just said — locally, so the raw text never leaves the
-    // machine. Any failure just omits `say`; the turn still counts.
-    try {
-      if (input.transcript_path) {
-        const line = narrate(extractLastAssistantText(fs.readFileSync(input.transcript_path, 'utf8')));
-        if (line) event.say = line;
-      }
-    } catch {
-      // transcript unreadable — emit the bare turn
+const event = {
+  buildSessionId: build.buildSessionId,
+  sessionId: input.session_id || `sess-${Date.now()}`,
+  kind,
+  ts: Date.now(),
+};
+if (kind === 'tool') {
+  event.tool = input.tool_name;
+} else if (kind === 'turn') {
+  // Narrate what Claude just said — locally, so the raw text never leaves the
+  // machine. Any failure just omits `say`; the turn still counts.
+  try {
+    if (input.transcript_path) {
+      const line = narrate(
+        extractLastAssistantText(fs.readFileSync(input.transcript_path, 'utf8')),
+      );
+      if (line) event.say = line;
     }
-  } else if (kind === 'ask') {
-    event.ask = "Claude's waiting on you — hop back to the Terminal and answer 🙋";
+  } catch {
+    // transcript unreadable — emit the bare turn
   }
+} else if (kind === 'ask') {
+  event.ask = "Claude's waiting on you — hop back to the Terminal and answer 🙋";
+}
 ```
 
 - [ ] **Step 3: Smoke-test the hook (Stop with a transcript)**
@@ -544,10 +572,12 @@ git commit -m "feat(build-coach): hook narrates Stop turns + emits Notification 
 ### Task 4: Installer registers Notification + installs narrate.mjs (`tracking.mjs`)
 
 **Files:**
+
 - Modify: `lib/installer/tracking.mjs`
 - Test: `lib/installer/tracking.test.mjs`
 
 **Interfaces:**
+
 - Consumes: `toolkit/hooks/narrate.mjs` (Task 1) as an install source.
 - Produces: `narrateSource(cwd)`; `LIVE_HOOK_EVENTS` includes `'Notification'`; `installTracking` writes `~/.claude/codepet/narrate.mjs` and returns its path as `narrate`.
 
@@ -561,7 +591,10 @@ test('installTracking registers the Notification live hook', () => {
   installTracking(dir, cfg);
   const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
   const cmds = (settings.hooks.Notification ?? []).flatMap((g) => g.hooks.map((h) => h.command));
-  assert.ok(cmds.some((c) => c.includes('codepet-live.mjs')), 'Notification hook registers the live emitter');
+  assert.ok(
+    cmds.some((c) => c.includes('codepet-live.mjs')),
+    'Notification hook registers the live emitter',
+  );
 });
 
 test('installTracking copies narrate.mjs beside the live hook', () => {
@@ -601,20 +634,20 @@ In `installTracking`, immediately after the `liveTarget` write
 (`fs.writeFileSync(liveTarget, fs.readFileSync(liveSource(cwd), 'utf8'));`), add:
 
 ```js
-  const narrateTarget = path.join(codepetDir, 'narrate.mjs');
-  fs.writeFileSync(narrateTarget, fs.readFileSync(narrateSource(cwd), 'utf8'));
+const narrateTarget = path.join(codepetDir, 'narrate.mjs');
+fs.writeFileSync(narrateTarget, fs.readFileSync(narrateSource(cwd), 'utf8'));
 ```
 
 Then update the return statement to include it:
 
 ```js
-  return {
-    script: scriptTarget,
-    config: configTarget,
-    settings: settingsTarget,
-    live: liveTarget,
-    narrate: narrateTarget,
-  };
+return {
+  script: scriptTarget,
+  config: configTarget,
+  settings: settingsTarget,
+  live: liveTarget,
+  narrate: narrateTarget,
+};
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -636,11 +669,13 @@ git commit -m "feat(build-coach): install narrate.mjs + register Notification ho
 Pure selector for the bubble line/mood, then wire it into the view.
 
 **Files:**
+
 - Modify: `lib/buildCoach.ts`
 - Test: `lib/buildCoach.test.ts`
 - Modify: `components/views/BuildCoachView.tsx` (`DuringStep`)
 
 **Interfaces:**
+
 - Consumes: `LiveState.pendingAsk`, `LiveState.lastSay` (Task 2); `budgetState(...).warn`.
 - Produces: `byteDuringLine(live, warn): { say: string; mood: 'idle' | 'worried' } | null`.
 
@@ -660,8 +695,14 @@ describe('byteDuringLine', () => {
   });
 
   it('shows the latest narrated line, mood following the budget', () => {
-    expect(byteDuringLine({ lastSay: 'building' }, false)).toEqual({ say: 'building', mood: 'idle' });
-    expect(byteDuringLine({ lastSay: 'building' }, true)).toEqual({ say: 'building', mood: 'worried' });
+    expect(byteDuringLine({ lastSay: 'building' }, false)).toEqual({
+      say: 'building',
+      mood: 'idle',
+    });
+    expect(byteDuringLine({ lastSay: 'building' }, true)).toEqual({
+      say: 'building',
+      mood: 'worried',
+    });
   });
 
   it('returns null when there is nothing to narrate', () => {
@@ -747,7 +788,7 @@ Replace it with (compute the line just above the `return`, then use it):
 And add this line in `DuringStep` right after `const recent = live?.recentTools ?? [];`:
 
 ```tsx
-  const line = byteDuringLine(live, bs.warn);
+const line = byteDuringLine(live, bs.warn);
 ```
 
 - [ ] **Step 6: Typecheck**
@@ -801,6 +842,7 @@ git add -A && git commit -m "chore(build-coach): response-narration verification
 ## Self-Review
 
 **Spec coverage:**
+
 - Narration module (`extractLastAssistantText` + `narrate`, English, local, total) → Task 1. ✓
 - Live hook `Stop`→say and `Notification`→ask, guarded, exit 0 → Task 3. ✓
 - Reducer `say`/`ask` + `lastSay`/`pendingAsk`, tool clears pendingAsk, undefined-safe, `eventKindFor('Notification')`, sanitize caps → Task 2. ✓

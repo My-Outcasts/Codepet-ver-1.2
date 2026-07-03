@@ -7,9 +7,9 @@
 
 ## Why this exists (differentiation)
 
-The first Build Coach view was an honest *simulation*: a drag slider, a mostly-static
+The first Build Coach view was an honest _simulation_: a drag slider, a mostly-static
 plan, nothing wired to real work. The obvious user question was "why not just open
-Claude Code?" — and it was fair, because the sim doesn't *do* anything Claude Code
+Claude Code?" — and it was fair, because the sim doesn't _do_ anything Claude Code
 doesn't.
 
 This iteration answers that question. **Claude Code is the engine; Codepet is the
@@ -27,7 +27,7 @@ burns budget without noticing, and doesn't build good habits. Byte accompanies t
 1. **Accompaniment level: passive/observe only.** DURING watches the real session
    live and reacts (meter, mood, activity feed). It does **not** inject context or
    gate tool calls. (Active intervention via `UserPromptSubmit`/`PreToolUse` is a
-   verified-possible *future* step, explicitly out of scope here.)
+   verified-possible _future_ step, explicitly out of scope here.)
 2. **Session launch: Codepet auto-opens a new Terminal.** In local mode, START opens
    a Terminal window running `claude` with the plan preloaded. **macOS-first**
    (`osascript`); Windows/Linux deferred.
@@ -51,7 +51,7 @@ Checked against code.claude.com docs (via claude-code-guide):
   why the budget is measured in **actions**, not tokens (and matches the earlier
   tracking spec, which also excluded tokens).
 - **Hooks run synchronously and block Claude Code** (UserPromptSubmit timeout 30s,
-  others up to 10min). Non-2xx / timeout = *non-blocking* error, session continues.
+  others up to 10min). Non-2xx / timeout = _non-blocking_ error, session continues.
   → The live emitter must POST fast and never wait on slow work.
 - `type: "http"` hooks can POST directly to an endpoint. We keep a thin local Node
   script instead (parity with the existing `codepet-track.mjs`, and it can read the
@@ -89,20 +89,20 @@ session**, correlated by `buildSessionId`.
      interface CurrentBuild {
        buildSessionId: string;
        projectDir: string;
-       plan: BytePlan;          // title, steps, budgetActions
+       plan: BytePlan; // title, steps, budgetActions
        audience: string;
        doneLooks: string;
        companyId: string;
-       token: string;           // ingest token (reuse tracking's)
+       token: string; // ingest token (reuse tracking's)
        apiUrl: string;
        startedAt: Millis;
      }
      ```
   3. Opens Terminal (macOS): `osascript -e 'tell app "Terminal" to do script
-     "cd <projectDir> && claude \"<plan-as-opening-prompt>\""'`. The opening prompt is
+"cd <projectDir> && claude \"<plan-as-opening-prompt>\""'`. The opening prompt is
      the plan rendered as a short instruction so the session starts on-scope.
 - **Remote/web fallback:** no fs, no spawn. Show a copy-paste block (the `cd … &&
-  claude "…"` line) + a note that live meter needs local mode; the flow still works
+claude "…"` line) + a note that live meter needs local mode; the flow still works
   via the SessionEnd summary.
 - **Pure helper (unit-tested):** `buildOpeningPrompt(plan, audience, doneLooks)` →
   the string handed to `claude`. And `terminalCommand(projectDir, prompt)` →
@@ -131,7 +131,7 @@ interface LiveEvent {
   buildSessionId: string;
   sessionId: string;
   kind: 'start' | 'tool' | 'turn';
-  tool?: string;     // for kind:'tool'
+  tool?: string; // for kind:'tool'
   ts: Millis;
 }
 ```
@@ -143,7 +143,7 @@ interface LiveEvent {
     `/api/track` auth pattern); else 401.
   - Upsert `companies/{companyId}/liveBuilds/{buildSessionId}`:
     - `kind:'start'` → create/reset `{ actionCount:0, turns:0, recentTools:[],
-      startedAt, lastTs, ended:false }`.
+startedAt, lastTs, ended:false }`.
     - `kind:'tool'` → `actionCount++`, push `tool` into `recentTools` (cap last ~8),
       `lastTs`.
     - `kind:'turn'` → `turns++`, `lastTs`.
@@ -177,14 +177,14 @@ interface LiveEvent {
 - Triggered when the live doc flips `ended:true` (or the user clicks Next).
 - **Real recap grid:** actions used vs `budgetActions`; commits + lines from the
   session's `trackEvent`; the `wins` (commit subjects).
-- **Checklist:** one row per `plan.steps`, plus "đối chiếu với *done trông thế nào*"
+- **Checklist:** one row per `plan.steps`, plus "đối chiếu với _done trông thế nào_"
   (echoes the START `doneLooks` for the user to self-confirm — no AI grading in MVP).
-- **Habit award:** "Kiểm tra kỹ" is *awarded as earned* if `pct` stayed < 100 **and**
+- **Habit award:** "Kiểm tra kỹ" is _awarded as earned_ if `pct` stayed < 100 **and**
   the session produced ≥1 commit (a directional "you finished something without blowing
-  budget"). Distinct from the DURING *reveal* of the reminder card.
+  budget"). Distinct from the DURING _reveal_ of the reminder card.
 - **Memory note (real this time):** "Ghi vào sổ tay" writes a small doc to Firestore
   (`companies/{id}/notebook` or reuse an existing collection) with `{ buildSessionId,
-  doneLooks, wins, ts }`. Client SDK write, guarded by rules to members.
+doneLooks, wins, ts }`. Client SDK write, guarded by rules to members.
 
 ## Pure logic to isolate + unit-test
 

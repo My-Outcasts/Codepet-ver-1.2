@@ -66,7 +66,9 @@ async function main() {
     // machine. Any failure just omits `say`; the turn still counts.
     try {
       if (input.transcript_path) {
-        const line = narrate(extractLastAssistantText(fs.readFileSync(input.transcript_path, 'utf8')));
+        const line = narrate(
+          extractLastAssistantText(fs.readFileSync(input.transcript_path, 'utf8')),
+        );
         if (line) event.say = line;
       }
     } catch {

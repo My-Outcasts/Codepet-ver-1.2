@@ -12,7 +12,7 @@ were intentionally excluded.
 
 ## Why hooks (not MCP, not OTEL) — verified
 
-- **MCP is the wrong tool.** MCP is request/response: Claude *calls* tools on a
+- **MCP is the wrong tool.** MCP is request/response: Claude _calls_ tools on a
   server; the server can't passively collect Claude's telemetry. (Channels are a
   research-preview inbound-message feature, not telemetry.)
 - **OpenTelemetry** exports exact metrics but requires standing up an OTLP
@@ -45,7 +45,7 @@ Refs: monitoring-usage, hooks, mcp docs at code.claude.com.
                                           └──────────────────────────┘
 ```
 
-**Web app can't read local Claude Code data** — so the local machine must *push*.
+**Web app can't read local Claude Code data** — so the local machine must _push_.
 The installer already writes to `~/.claude`, giving us the seam to drop the hook.
 
 ## Data model
@@ -54,17 +54,17 @@ The installer already writes to `~/.claude`, giving us the seam to drop the hook
 
 ```ts
 interface TrackEvent {
-  id: string;            // server-assigned
-  ts: Millis;            // session end time
+  id: string; // server-assigned
+  ts: Millis; // session end time
   sessionId: string;
   cwd?: string;
-  repo?: string;         // basename of cwd
+  repo?: string; // basename of cwd
   branch?: string;
-  commits: number;       // commits during the session
-  prs: number;           // PRs opened during the session (gh, best-effort)
+  commits: number; // commits during the session
+  prs: number; // PRs opened during the session (gh, best-effort)
   linesAdded: number;
   linesRemoved: number;
-  wins: string[];        // commit subjects (→ Recent wins)
+  wins: string[]; // commit subjects (→ Recent wins)
 }
 ```
 
@@ -92,7 +92,7 @@ hoursSaved = round( linesChanged / 150  +  commits * 0.4  +  sessions * 0.3 )
 ```
 
 Constants live at the top of the module so they're easy to tune. The point is a
-*directionally honest* proxy, clearly marked as an estimate.
+_directionally honest_ proxy, clearly marked as an estimate.
 
 ## Ingest endpoint — `app/api/track/route.ts`
 
@@ -170,6 +170,7 @@ writes hit the user's machine). In **remote/hosted** mode the UI falls back to a
 copy-paste CLI command — exactly like the existing toolkit install.
 
 **Wiring:**
+
 - `installToolkit(ids, tracking?)` (server action) — after `installItems`, when
   `tracking` is supplied and mode is local, also run
   `installTracking(resolveClaudeDir(), tracking)`. Returns a `tracker` status.

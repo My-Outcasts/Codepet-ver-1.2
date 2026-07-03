@@ -36,7 +36,10 @@ test('extractLastAssistantText skips malformed lines and empties safely', () => 
 });
 
 test('narrate classifies test intent', () => {
-  assert.equal(narrate('I will add a test for login'), "Claude's running tests — nice, playing it safe 🧪");
+  assert.equal(
+    narrate('I will add a test for login'),
+    "Claude's running tests — nice, playing it safe 🧪",
+  );
 });
 
 test('narrate classifies fix intent', () => {

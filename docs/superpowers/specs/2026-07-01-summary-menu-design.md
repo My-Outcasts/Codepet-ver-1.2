@@ -36,7 +36,7 @@ Sections top-to-bottom:
 1. **Header** (`.vhead`): h1 "Summary" · sub "Byte's week at a glance".
 2. **Greeting banner** (`.sum-hero`): `<Byte>` sprite (large) + headline
    "Byte's having a blast! 😊" + subline "AI pitched in this week — fixed 3 bugs, too"
-   + a `Lv 4` pill on the right.
+   - a `Lv 4` pill on the right.
 3. **Stat row** (`.sum-stats`, 3 cards): each card = small label + big value.
    - `coins spent` → **1.2M**
    - `cost` → **$18**
@@ -59,7 +59,11 @@ Sections top-to-bottom:
 Typed consts local to the file, e.g.:
 
 ```ts
-const HERO = { title: "Byte's having a blast! 😊", sub: 'AI pitched in this week — fixed 3 bugs, too', level: 4 };
+const HERO = {
+  title: "Byte's having a blast! 😊",
+  sub: 'AI pitched in this week — fixed 3 bugs, too',
+  level: 4,
+};
 const STATS = [
   { label: 'coins spent', value: '1.2M' },
   { label: 'cost', value: '$18' },

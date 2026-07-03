@@ -7,7 +7,7 @@
 ## Summary
 
 Port **Chapter 3** of the warm CodePet demo into a new React view in the existing
-Next.js app. It is an *interactive, self-contained coaching flow* that teaches
+Next.js app. It is an _interactive, self-contained coaching flow_ that teaches
 good AI-building habits in three steps:
 
 1. **START** — think before building (who is this for, what does "done" look like) → generate a plan.
@@ -21,11 +21,13 @@ in this iteration — those are separate, already-in-progress concerns.
 ## Scope
 
 **In scope**
+
 - One new view, reachable from a new Sidebar entry "Cùng làm".
 - The three-step START/DURING/END flow with Byte coaching, matching the demo's behavior.
 - Adaptation to the app's existing **light, warm** theme (not the demo's dark palette).
 
 **Out of scope (YAGNI)**
+
 - Persisting anything to Firestore.
 - Wiring the DURING budget to real Claude Code token usage.
 - Changing the `Byte` sprite component (kept as the static PNG).
@@ -46,14 +48,14 @@ in this iteration — those are separate, already-in-progress concerns.
 
 All in `components/views/BuildCoachView.tsx`, decomposed into focused units:
 
-| Unit | Responsibility | Depends on |
-|------|----------------|------------|
-| `BuildCoachView` | Container. Holds `step` state, renders rail + active step + Back/Next nav. | `Byte`, sub-steps, `budgetState` |
-| `StepRail` | Progress rail: START · DURING · END with active/done states. | — |
-| `CoachBubble` | Byte sprite + a line of coach text + a "lens" chip + an expandable "Byte kể nhỏ nghe nè" learn panel. Reused in all three steps. | `Byte` |
-| `StartStep` | Two inputs (làm cho ai / xong trông thế nào) + "sắp xếp thành kế hoạch" button that reveals a static plan card. | `CoachBubble` |
-| `DuringStep` | Budget meter ("heo đất xu") + slider. Dragging ≥80% flips Byte to worried and makes the "Kiểm tra kỹ" unlock card live. | `CoachBubble`, `budgetState` |
-| `EndStep` | Recap grid + a done checklist + a "ghi vào sổ tay" (context write) note. | `CoachBubble` |
+| Unit             | Responsibility                                                                                                                   | Depends on                       |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `BuildCoachView` | Container. Holds `step` state, renders rail + active step + Back/Next nav.                                                       | `Byte`, sub-steps, `budgetState` |
+| `StepRail`       | Progress rail: START · DURING · END with active/done states.                                                                     | —                                |
+| `CoachBubble`    | Byte sprite + a line of coach text + a "lens" chip + an expandable "Byte kể nhỏ nghe nè" learn panel. Reused in all three steps. | `Byte`                           |
+| `StartStep`      | Two inputs (làm cho ai / xong trông thế nào) + "sắp xếp thành kế hoạch" button that reveals a static plan card.                  | `CoachBubble`                    |
+| `DuringStep`     | Budget meter ("heo đất xu") + slider. Dragging ≥80% flips Byte to worried and makes the "Kiểm tra kỹ" unlock card live.          | `CoachBubble`, `budgetState`     |
+| `EndStep`        | Recap grid + a done checklist + a "ghi vào sổ tay" (context write) note.                                                         | `CoachBubble`                    |
 
 Sub-components may live in the same file (each small and focused) since they are
 only consumed by this view.
@@ -75,11 +77,11 @@ The expandable learn panels use their own local open/closed state inside `CoachB
 ```ts
 // Derives Byte's DURING-step reaction from the budget slider.
 function budgetState(pct: number): {
-  label: string;   // e.g. "đang ổn 😌" vs "lo quá! 😰"
+  label: string; // e.g. "đang ổn 😌" vs "lo quá! 😰"
   mood: 'ok' | 'worried';
-  warn: boolean;   // true at/above the danger threshold
+  warn: boolean; // true at/above the danger threshold
   unlock: boolean; // whether this reading should unlock the habit
-}
+};
 ```
 
 Threshold: `pct >= 80` → `mood: 'worried'`, `warn: true`, `unlock: true`; otherwise the calm state. The container latches `unlocked` so it stays unlocked once triggered.

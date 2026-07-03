@@ -44,10 +44,7 @@ export async function POST(req: Request): Promise<Response> {
 
   const input = sanitizePlanInput(body);
   if (!input) {
-    return Response.json(
-      { error: 'bad_request', message: 'brief is required.' },
-      { status: 400 },
-    );
+    return Response.json({ error: 'bad_request', message: 'brief is required.' }, { status: 400 });
   }
 
   const client = new Anthropic({ apiKey });

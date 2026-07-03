@@ -6,7 +6,7 @@
 ## Problem
 
 The Build Coach's DURING step already streams a live meter of a real Claude Code
-session: it counts tool actions and shows recent tool *names* ("Byte sees: Read ·
+session: it counts tool actions and shows recent tool _names_ ("Byte sees: Read ·
 Edit · Bash"). But the builder never sees **what Claude is actually saying or
 doing**, and — critically — never gets nudged when Claude **pauses to ask them a
 question** (a permission prompt or an idle wait). A founder watching the meter can
@@ -37,7 +37,7 @@ lines during the build, and to surface clearly when Claude is waiting on the use
 
 - **Signals tracked:** assistant text ("what Claude said") + Claude's questions
   back to the user ("Claude asks you back").
-- **Presentation:** Byte *re-interprets* — no raw Claude text shown in the UI.
+- **Presentation:** Byte _re-interprets_ — no raw Claude text shown in the UI.
 - **Where processing happens:** **locally, in the hook, with a heuristic.** Raw
   text is narrated on the user's machine; only Byte's short line (~120 chars) is
   POSTed. This is the privacy-preserving choice.
@@ -82,14 +82,14 @@ export function narrate(text, toolName)
 Behavior — classify intent, then speak as Byte; only fall back to a cleaned
 snippet when nothing matches:
 
-| Signal in text (case-insensitive) | Byte says |
-|---|---|
-| `test` | `Claude's running tests — nice, playing it safe 🧪` |
-| `fix` / `bug` / `error` | `Claude's patching something up 🔧` |
-| `add` / `create` / `implement` / `build` | `Claude's building a new piece ✨` |
-| `refactor` / `clean` / `tidy` | `Claude's tidying up the code 🧹` |
-| empty text (turn was all tool calls) | derive from `toolName` (e.g. `Byte sees Claude working with Edit…`); if no tool, `Claude's thinking it through…` |
-| anything else | `Byte sees Claude: "<first sentence, markdown-stripped, ≤120 chars>"` |
+| Signal in text (case-insensitive)        | Byte says                                                                                                        |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `test`                                   | `Claude's running tests — nice, playing it safe 🧪`                                                              |
+| `fix` / `bug` / `error`                  | `Claude's patching something up 🔧`                                                                              |
+| `add` / `create` / `implement` / `build` | `Claude's building a new piece ✨`                                                                               |
+| `refactor` / `clean` / `tidy`            | `Claude's tidying up the code 🧹`                                                                                |
+| empty text (turn was all tool calls)     | derive from `toolName` (e.g. `Byte sees Claude working with Edit…`); if no tool, `Claude's thinking it through…` |
+| anything else                            | `Byte sees Claude: "<first sentence, markdown-stripped, ≤120 chars>"`                                            |
 
 Cleaning rules for the fallback snippet: strip markdown emphasis/backticks/headers,
 collapse whitespace, take the first sentence, hard-cap length. Output is always a
@@ -116,7 +116,7 @@ both in the repo and after install.
 - On **`Notification`**: emit `kind: 'ask'` with `ask` = a Byte reminder derived
   from `input.message`. We rely only on the `message` field (stable), not on
   `notification_type`. Example: `ask = "Claude's waiting on you — hop back to the
-  Terminal and answer 🙋"`. (The raw `input.message` is not forwarded; Byte's line
+Terminal and answer 🙋"`. (The raw `input.message` is not forwarded; Byte's line
   is fixed/templated, so nothing sensitive leaves the machine.)
 - Everything stays guarded with try/catch, the POST keeps its short timeout, and
   the process always `exit 0`.
@@ -147,7 +147,7 @@ The Byte bubble's `say`/`mood` become derived, in priority order:
 3. else → existing default copy.
 
 The budget `warn` mood still wins for the meter color; the ask state only overrides
-the *bubble's* mood/line. The `recentTools` context line stays unchanged.
+the _bubble's_ mood/line. The `recentTools` context line stays unchanged.
 
 ### 5. Installer — `lib/installer/tracking.mjs` (+ `tracking.test.mjs`)
 
@@ -159,7 +159,7 @@ the *bubble's* mood/line. The `recentTools` context line stays unchanged.
 - Update `tracking.test.mjs` to assert the `Notification` hook is registered and
   `narrate.mjs` is written next to the hook.
 - Broaden the `test:installer` npm script to `node --test lib/installer/
-  toolkit/hooks/` so `narrate.test.mjs` runs in CI.
+toolkit/hooks/` so `narrate.test.mjs` runs in CI.
 
 ## Data flow example
 

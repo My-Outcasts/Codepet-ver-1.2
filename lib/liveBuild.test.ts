@@ -82,7 +82,12 @@ describe('eventKindFor', () => {
 
 describe('sanitizeLiveEvent', () => {
   it('accepts a well-formed tool event', () => {
-    const e = sanitizeLiveEvent({ buildSessionId: 'b', sessionId: 's', kind: 'tool', tool: 'Edit' });
+    const e = sanitizeLiveEvent({
+      buildSessionId: 'b',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+    });
     expect(e).toMatchObject({ buildSessionId: 'b', sessionId: 's', kind: 'tool', tool: 'Edit' });
     expect(typeof e?.ts).toBe('number');
   });
@@ -103,7 +108,12 @@ describe('reduceLive — narration', () => {
   const start = reduceLive(null, { ...base, kind: 'start', ts: 1 });
 
   it('turn stores the narrated line and bumps turns', () => {
-    const s = reduceLive(start, { ...base, kind: 'turn', say: "Claude's building a new piece ✨", ts: 2 });
+    const s = reduceLive(start, {
+      ...base,
+      kind: 'turn',
+      say: "Claude's building a new piece ✨",
+      ts: 2,
+    });
     expect(s.turns).toBe(1);
     expect(s.lastSay).toBe("Claude's building a new piece ✨");
   });
@@ -143,7 +153,12 @@ describe('eventKindFor — Notification', () => {
 
 describe('sanitizeLiveEvent — narration', () => {
   it('keeps say on a turn and caps its length', () => {
-    const e = sanitizeLiveEvent({ buildSessionId: 'b', sessionId: 's', kind: 'turn', say: 'x'.repeat(500) });
+    const e = sanitizeLiveEvent({
+      buildSessionId: 'b',
+      sessionId: 's',
+      kind: 'turn',
+      say: 'x'.repeat(500),
+    });
     expect(e?.kind).toBe('turn');
     expect(e?.say?.length).toBe(160);
   });
@@ -152,7 +167,14 @@ describe('sanitizeLiveEvent — narration', () => {
     expect(e).toEqual(expect.objectContaining({ kind: 'ask', ask: 'hi' }));
   });
   it('drops say/ask on the wrong kind', () => {
-    const e = sanitizeLiveEvent({ buildSessionId: 'b', sessionId: 's', kind: 'tool', tool: 'Edit', say: 'nope', ask: 'nope' });
+    const e = sanitizeLiveEvent({
+      buildSessionId: 'b',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+      say: 'nope',
+      ask: 'nope',
+    });
     expect(e).not.toHaveProperty('say');
     expect(e).not.toHaveProperty('ask');
   });

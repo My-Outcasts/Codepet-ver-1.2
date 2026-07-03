@@ -42,8 +42,14 @@ describe('byteDuringLine', () => {
   });
 
   it('shows the latest narrated line, mood following the budget', () => {
-    expect(byteDuringLine({ lastSay: 'building' }, false)).toEqual({ say: 'building', mood: 'idle' });
-    expect(byteDuringLine({ lastSay: 'building' }, true)).toEqual({ say: 'building', mood: 'worried' });
+    expect(byteDuringLine({ lastSay: 'building' }, false)).toEqual({
+      say: 'building',
+      mood: 'idle',
+    });
+    expect(byteDuringLine({ lastSay: 'building' }, true)).toEqual({
+      say: 'building',
+      mood: 'worried',
+    });
   });
 
   it('returns null when there is nothing to narrate', () => {
