@@ -4357,6 +4357,11 @@ body {
   border-radius: 4px;
   padding: 1px 5px;
 }
+.md-body .md-hr {
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  margin: 14px 0;
+}
 .handoff {
   display: flex;
   align-items: flex-start;
