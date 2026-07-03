@@ -3327,7 +3327,7 @@ body {
   background: url('/onboarding/ob-team.jpg') center / cover no-repeat;
   animation: kenburns 32s ease-in-out infinite alternate;
 }
-/* readability scrim */
+/* readability scrim — keeps the whole left column crisp while the scene shows through right */
 .ob-cold::before {
   content: '';
   position: absolute;
@@ -3335,30 +3335,26 @@ body {
   z-index: 1;
   background:
     linear-gradient(
-      90deg,
-      rgba(13, 5, 34, 0.9) 0%,
-      rgba(13, 5, 34, 0.72) 44%,
-      rgba(13, 5, 34, 0.3) 100%
+      96deg,
+      rgba(13, 5, 34, 0.96) 0%,
+      rgba(13, 5, 34, 0.9) 34%,
+      rgba(13, 5, 34, 0.62) 56%,
+      rgba(13, 5, 34, 0.12) 86%
     ),
-    linear-gradient(0deg, rgba(13, 5, 34, 0.6) 0%, transparent 46%);
+    linear-gradient(0deg, rgba(13, 5, 34, 0.7) 0%, transparent 42%),
+    radial-gradient(120% 90% at 18% 42%, rgba(124, 58, 237, 0.16), transparent 60%);
 }
 .ob-cold-in > * {
   animation: riseIn 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
-.ob-cold-byte {
-  animation-delay: 0.12s;
-}
 .ob-cold-in h1 {
-  animation-delay: 0.24s;
+  animation-delay: 0.1s;
 }
 .ob-cold-in p {
-  animation-delay: 0.38s;
+  animation-delay: 0.24s;
 }
 .ob-cold-in .splash-btn {
-  animation-delay: 0.52s;
-}
-.ob-cold-meta {
-  animation-delay: 0.66s;
+  animation-delay: 0.5s;
 }
 .ob-cold .skip-pre {
   background: rgba(255, 255, 255, 0.14);
@@ -3376,42 +3372,77 @@ body {
   margin: auto 0 auto clamp(40px, 9vw, 150px);
   padding-right: 40px;
 }
-.ob-cold-byte {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
-}
 .ob-cold-in h1 {
   font-family: var(--sans);
   font-size: clamp(34px, 4vw, 52px);
+  font-weight: 700;
   line-height: 1.08;
   letter-spacing: -0.5px;
   color: #fff;
   text-shadow: 0 2px 30px rgba(12, 4, 36, 0.55);
 }
-.ob-cold-in p {
-  margin-top: 20px;
-  font-size: 16px;
-  line-height: 1.6;
-  color: rgba(245, 243, 255, 0.82);
-  max-width: 520px;
+/* gradient accent on the punchline */
+.ob-hl {
+  background: linear-gradient(100deg, #c9a6ff, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-.ob-cold-in p b {
+/* NOTE: `.ob p` (dark, for the light question screens) has equal specificity and
+   comes later in the file, so it wins by source order — qualify with .ob-cold to
+   keep the cold-open paragraph light and readable. */
+.ob-cold .ob-cold-in p {
+  margin-top: 20px;
+  font-size: 16.5px;
+  line-height: 1.6;
+  color: rgba(240, 238, 252, 0.95);
+  max-width: 500px;
+}
+.ob-cold .ob-cold-in p b {
   color: #fff;
+  font-weight: 700;
+}
+/* department preview — the signature that shows what byte will set up */
+.ob-depts {
+  margin-top: 26px;
+  animation-delay: 0.5s;
+}
+.ob-depts-ey {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 11px;
+}
+.ob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 540px;
+}
+.ob-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(4px);
+}
+.ob-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dc);
+  box-shadow: 0 0 8px var(--dc);
 }
 .ob-cold-in .splash-btn {
   margin-top: 30px;
-}
-.ob-cold-meta {
-  margin-top: 22px;
-  font-family: var(--sans);
-  font-size: 12px;
-  color: rgba(245, 243, 255, 0.55);
 }
 /* taller question screens (the project step) align to the top and scroll */
 .ob-body.tall {
