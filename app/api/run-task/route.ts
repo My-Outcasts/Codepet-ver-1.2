@@ -37,6 +37,7 @@ type Kind = 'text' | StructuredKind;
 
 const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction: string }> = {
   text: { schema: null, instruction: DELIVERABLE_INSTRUCTIONS.text },
+  doc: { schema: STRUCTURED_SCHEMAS.doc, instruction: DELIVERABLE_INSTRUCTIONS.doc },
   post: { schema: STRUCTURED_SCHEMAS.post, instruction: DELIVERABLE_INSTRUCTIONS.post },
   email: { schema: STRUCTURED_SCHEMAS.email, instruction: DELIVERABLE_INSTRUCTIONS.email },
   legal: { schema: STRUCTURED_SCHEMAS.legal, instruction: DELIVERABLE_INSTRUCTIONS.legal },

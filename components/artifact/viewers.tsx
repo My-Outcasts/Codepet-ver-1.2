@@ -453,6 +453,93 @@ export function LegalViewer({ legal }: { legal: any }) {
   );
 }
 
+/* ===== decision doc ===== */
+interface DocSection {
+  h: string;
+  p: string;
+}
+interface DocDoc {
+  title?: string;
+  call: string;
+  sections: DocSection[];
+  next?: string[];
+}
+export function DocViewer({ doc, fallback }: { doc?: Partial<DocDoc> | null; fallback?: string }) {
+  const { copied, copy } = useCopy();
+  const { toast } = useApp();
+  // Legacy / plain docs (no structured payload) render as their text body.
+  if (!doc || typeof doc.call !== 'string' || !Array.isArray(doc.sections)) {
+    return (
+      <div className="artifact">
+        <div className="art-body">
+          <DocBody text={fallback ?? ''} />
+        </div>
+      </div>
+    );
+  }
+  const call = doc.call;
+  const title = doc.title;
+  const sections = doc.sections;
+  const next: string[] = Array.isArray(doc.next) ? doc.next : [];
+  const plain =
+    call +
+    '\n\n' +
+    sections.map((s) => `${s.h}\n${s.p}`).join('\n\n') +
+    (next.length ? '\n\nNext:\n' + next.map((n) => `- ${n}`).join('\n') : '');
+  return (
+    <div className="docart">
+      <div className="doc-sheet">
+        {title && <div className="doc-title">{title}</div>}
+        <div className="doc-call">
+          <span className="doc-call-k">The call</span>
+          <p>{call}</p>
+        </div>
+        {sections.map((s, i) => (
+          <div className="doc-sec" key={i}>
+            <h5>{s.h}</h5>
+            <p>{s.p}</p>
+          </div>
+        ))}
+        {next.length > 0 && (
+          <div className="doc-next">
+            <h5>Next</h5>
+            <ul>
+              {next.map((n, i) => (
+                <li key={i}>{n}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+      <div className="doc-foot">
+        <button
+          className={`copybtn${copied === 'doc' ? ' ok' : ''}`}
+          onClick={() => copy('doc', plain)}
+        >
+          {copied === 'doc' ? 'Copied ✓' : 'Copy text'}
+        </button>
+        <button
+          className="markbtn"
+          onClick={() => {
+            const md =
+              (title ? '# ' + title + '\n\n' : '') +
+              '**' +
+              call +
+              '**\n\n' +
+              sections.map((s) => '## ' + s.h + '\n\n' + s.p).join('\n\n') +
+              (next.length ? '\n\n## Next\n\n' + next.map((n) => '- ' + n).join('\n') : '');
+            const fn = (title || 'document').toLowerCase().replace(/\s+/g, '-') + '.md';
+            download(fn, md, 'text/markdown');
+            toast('Downloaded ' + fn);
+          }}
+        >
+          Download .md
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ===== sales DMs ===== */
 export function DmsViewer({ dms }: { dms: any[] }) {
   const { copied, copy } = useCopy();
@@ -725,6 +812,7 @@ export function ArtifactViewer({ item }: { item: any }) {
   if (item.type === 'dms') return <DmsViewer dms={item.dms} />;
   if (item.type === 'checklist') return <ChecklistViewer checklist={item.checklist} />;
   if (item.type === 'plan') return <PlanViewer plan={item.plan} title={item.title} />;
+  if (item.type === 'doc') return <DocViewer doc={item.doc} fallback={item.out} />;
   return (
     <div className="artifact">
       <div className={`art-bar ${item.type}`}>
