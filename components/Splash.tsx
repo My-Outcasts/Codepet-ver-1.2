@@ -1,5 +1,5 @@
 'use client';
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { useParallax } from '@/lib/ui/useParallax';
 import { Starfield } from '@/components/ui/Starfield';
 
@@ -8,7 +8,7 @@ import { Starfield } from '@/components/ui/Starfield';
 export function Splash({ onContinue }: { onContinue: () => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
   useParallax(rootRef);
-  const sub = "Let's learn how to run your company with AI.";
+  const words = "Let's learn how to run your company with AI.".split(' ');
 
   return (
     <div className="splash" ref={rootRef} onClick={onContinue}>
@@ -17,11 +17,16 @@ export function Splash({ onContinue }: { onContinue: () => void }) {
       <div className="splash-in">
         <h1 className="splash-title pixel">Codepet</h1>
         <p className="splash-sub">
-          {sub.split(' ').map((w, i) => (
-            <span className="w" key={i} style={{ ['--i' as string]: i }}>
-              {w}
-              {i < sub.split(' ').length - 1 ? ' ' : ''}
-            </span>
+          {/* Each word rises on its own; the space lives BETWEEN the inline-block
+              spans as a real text node — a trailing space inside an inline-block is
+              trimmed, which is what ran the words together. */}
+          {words.map((w, i) => (
+            <Fragment key={i}>
+              <span className="w" style={{ ['--i' as string]: i }}>
+                {w}
+              </span>
+              {i < words.length - 1 ? ' ' : ''}
+            </Fragment>
           ))}
         </p>
         <button
