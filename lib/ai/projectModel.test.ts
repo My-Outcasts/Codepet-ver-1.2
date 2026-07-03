@@ -166,4 +166,10 @@ describe('composeDecisions', () => {
     expect(block).toContain('- pricing: Plus is $4/mo');
     expect(block).toContain('- positioning: lead with roommate money-tension');
   });
+
+  it('tells byte to flag a conflict rather than silently override it', () => {
+    const block = composeDecisions([{ topic: 'pricing', statement: 'no lifetime deal' }]);
+    expect(block).toContain('do NOT quietly override');
+    expect(block.toLowerCase()).toContain('flag');
+  });
 });
