@@ -16,6 +16,7 @@ import React, {
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType } from './helpers';
 import { runByteTask, GenerateError } from './ai/runTask';
+import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
@@ -542,6 +543,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         persistApproval(companyId, d, item, Date.now()).catch((err) => {
           console.error('[store] persistApproval failed', err);
           toast('Saved locally — sync failed');
+        });
+        // Fire-and-forget: let byte extract any durable decision this deliverable locks
+        // in (server-gated by AI_MEMORY_ENABLED; never blocks or surfaces errors).
+        rememberApproval({
+          title: item.title,
+          dept: item.dept,
+          type,
+          out: typeof item.out === 'string' ? item.out : '',
         });
       }
       computeNextStep(); // this task is done now — advance the next step
