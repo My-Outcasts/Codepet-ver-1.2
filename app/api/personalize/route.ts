@@ -9,10 +9,11 @@
 // loads the brief from Firestore by the VERIFIED uid (client brief only as fallback).
 // The canonical structure comes from DEPTS_SEED on the server — never the client — so
 // the response always maps cleanly back onto the seed by department key + task index.
-import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { usageSink } from '@/lib/firebase/serverUsage';
+import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { DEPTS_SEED } from '@/lib/data';
 
 export const runtime = 'nodejs';
@@ -126,12 +127,11 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: 'not_configured', message: 'ANTHROPIC_API_KEY is not set on the server.' },
-      { status: 503 },
-    );
+  let client: ReturnType<typeof getClient>;
+  try {
+    client = getClient();
+  } catch (err) {
+    return aiErrorResponse(err, 'not_configured');
   }
 
   let body: PersonalizeBody = {};
@@ -151,37 +151,16 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ departments: [] });
   }
 
-  const client = new Anthropic({ apiKey });
   try {
-    const message = await client.messages.create({
-      model: 'claude-opus-4-8',
-      max_tokens: 8192,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: PERSONALIZE_SCHEMA } },
+    const parsed = await generateJson<{ departments?: GenDept[] }>({
+      client,
       system: BYTE_SYSTEM,
-      messages: [{ role: 'user', content: buildPrompt(context) }],
+      prompt: buildPrompt(context),
+      maxTokens: 8192,
+      label: 'personalize',
+      schema: PERSONALIZE_SCHEMA,
+      onUsage: usageSink(uid, idToken, 'personalize'),
     });
-
-    if (message.stop_reason === 'refusal') {
-      return Response.json({ error: 'refused' }, { status: 422 });
-    }
-
-    const text = message.content
-      .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n')
-      .trim();
-    if (!text) {
-      return Response.json({ error: 'empty' }, { status: 502 });
-    }
-
-    let parsed: { departments?: GenDept[] };
-    try {
-      parsed = JSON.parse(text) as { departments?: GenDept[] };
-    } catch {
-      console.error('[personalize] structured output was not valid JSON');
-      return Response.json({ error: 'parse_failed' }, { status: 502 });
-    }
 
     // Keep only departments whose key matches the seed and whose task count lines up,
     // so the client can merge by key + index without ever corrupting the structure.
@@ -197,8 +176,6 @@ export async function POST(req: Request): Promise<Response> {
 
     return Response.json({ departments });
   } catch (err) {
-    console.error('[personalize] generation failed', err);
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    return Response.json({ error: 'generation_failed' }, { status });
+    return aiErrorResponse(err, 'generation_failed');
   }
 }

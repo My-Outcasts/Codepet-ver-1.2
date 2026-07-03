@@ -3,12 +3,12 @@
 // server-side by the VERIFIED uid (never trusted from the client), and a compact
 // department snapshot is passed as context so byte can talk about what's actually on
 // the founder's plate. ANTHROPIC_API_KEY stays server-side; Node runtime for the SDK.
-import Anthropic from '@anthropic-ai/sdk';
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
-import { enforceDailyLimit } from '@/lib/firebase/serverUsage';
+import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
+import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
 
 export const runtime = 'nodejs';
 
@@ -93,12 +93,11 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return Response.json(
-      { error: 'not_configured', message: 'ANTHROPIC_API_KEY is not set on the server.' },
-      { status: 503 },
-    );
+  let client: ReturnType<typeof getClient>;
+  try {
+    client = getClient();
+  } catch (err) {
+    return aiErrorResponse(err, 'not_configured');
   }
 
   let body: ChatBody;
@@ -152,16 +151,15 @@ export async function POST(req: Request): Promise<Response> {
     : '\n\nRUNNABLE TASKS: none open right now — if the founder asks you to run something, tell them there are no open tasks to run.';
   const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${deptSummary}${runnableBlock}`;
 
-  const client = new Anthropic({ apiKey });
   try {
-    const mstream = client.messages.stream({
-      model: 'claude-opus-4-8',
-      max_tokens: 2048,
-      thinking: { type: 'adaptive' },
-      output_config: { effort: 'low' },
+    const mstream = streamMessage({
+      client,
       system,
       messages: claudeMessages,
+      maxTokens: 2048,
+      label: 'chat',
       tools: runnable.length ? [RUN_TASK_TOOL] : undefined,
+      onUsage: usageSink(uid, idToken, 'chat'),
     });
 
     const encoder = new TextEncoder();
@@ -213,7 +211,6 @@ export async function POST(req: Request): Promise<Response> {
     });
   } catch (err) {
     console.error('[chat] generation failed', err);
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    return Response.json({ error: 'generation_failed' }, { status });
+    return aiErrorResponse(err, 'generation_failed');
   }
 }
