@@ -9,6 +9,7 @@
 // maps cleanly onto the app; byte only decides active/dormant + the tasks.
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
+import { departmentBlock } from '@/lib/ai/departments';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
 import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
@@ -138,7 +139,9 @@ export async function POST(req: Request): Promise<Response> {
       : undefined;
   const stage = typeof rawStage === 'string' && rawStage.trim() ? rawStage.trim() : 'unspecified';
 
-  const deptList = DEPARTMENTS.map((d) => `- ${d.k} (${d.name}): ${d.role}`).join('\n');
+  const deptList = DEPARTMENTS.map(
+    (d) => `- ${d.k} (${d.name}):\n${departmentBlock(d.k, stage)}`,
+  ).join('\n\n');
   const prompt = `Company: ${context}
 
 The founder's current stage: ${stage}.
