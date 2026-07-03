@@ -48,13 +48,15 @@ export function LibraryView() {
         style={{ ['--c' as string]: ink }}
         onClick={() => viewItem(x)}
       >
-        <span className={`lt-tag${live ? '' : ' draft'}`}>
-          <span className="lib-pip" />
-          {LIB_TAG[x.type]}
-        </span>
-        <div className="lt-title">{x.title}</div>
-        {desc && <div className="lt-desc">{desc}</div>}
-        <div className="lt-foot">
+        <div className="lt-main">
+          <span className={`lt-tag${live ? '' : ' draft'}`}>
+            <span className="lib-pip" />
+            {LIB_TAG[x.type]}
+          </span>
+          <div className="lt-title">{x.title}</div>
+          {desc && <div className="lt-desc">{desc}</div>}
+        </div>
+        <div className="lt-meta">
           <div className={`di c-${x.k}`}>{x.ab}</div>
           <div className="lt-dept">{x.dept}</div>
           <span className="lt-open">{x.type === 'site' ? 'open live' : 'open'}</span>
