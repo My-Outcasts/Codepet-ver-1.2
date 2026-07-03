@@ -62,7 +62,11 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 import type { CompanyBrief } from './firebase/schema';
-import { buildRevealSummary, type RevealSummary } from './onboarding/firstRun';
+import {
+  buildRevealSummary,
+  buildFirstRunGreeting,
+  type RevealSummary,
+} from './onboarding/firstRun';
 
 export type View =
   'overview' | 'home' | 'roadmap' | 'dept' | 'tasks' | 'library' | 'env' | 'install';
@@ -275,6 +279,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
+
+  // First-run only: byte opens chat and greets the founder by name with the single best
+  // first move as a one-tap INLINE action (produces the deliverable in-thread). Seeds
+  // immediately from the authored fallback, then upgrades to byte's own pick when
+  // /api/next-step resolves — the greeting message updates in place (stable id).
+  const greetFirstRun = useCallback(
+    (briefData: CompanyBrief) => {
+      toggleCopilot(false); // open the chat panel so the greeting is seen
+      const gid = newId();
+      const seed = (ns: NextStep | null) => {
+        const g = buildFirstRunGreeting(briefData, ns);
+        setChatMessages((prev) => {
+          const msg: ChatMessage = {
+            id: gid,
+            role: 'byte',
+            text: g.text,
+            ts: Date.now(),
+            action: g.action,
+          };
+          const i = prev.findIndex((m) => m.id === gid);
+          return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+        });
+        if (g.action) track('firstrun.action_offered', { dept: g.action.deptK });
+      };
+      const fb = nextAction();
+      const fallback: NextStep | null = fb
+        ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+        : null;
+      setNextStep(fallback);
+      seed(fallback);
+      if (!fallback) return;
+      fetchNextStep()
+        .then((pick) => {
+          if (pick) {
+            setNextStep(pick);
+            seed(pick);
+          }
+        })
+        .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
+    },
+    [toggleCopilot],
+  );
+
   // Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
   // so the founder watches byte build their actual company instead of a fake animation.
   // Marks scaffoldedInWizard so finishOnboarding won't run it a second time. Returns a
@@ -311,8 +358,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
       }
+      if (briefData) greetFirstRun(briefData);
     },
-    [companyId, bump],
+    [companyId, bump, greetFirstRun],
   );
 
   // Manual re-plan: regenerate the stage-aware company for the current account
