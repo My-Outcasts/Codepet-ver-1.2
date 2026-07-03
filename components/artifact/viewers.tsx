@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useApp } from '@/lib/store';
 import { fmt } from '@/lib/helpers';
 import { computeSheetModel } from '@/lib/ai/sheetModel';
@@ -592,6 +592,118 @@ export function PlanViewer({ plan, title }: { plan: any; title?: string }) {
 }
 
 // dispatch a viewer by artifact type from a task/library item
+/* ===== plain-text deliverables (doc / prep / build) =====
+   byte writes these in light markdown. Render the small subset it actually emits —
+   #/##/### headings, **bold**, `code`, - / * bullets, numbered lists, paragraphs — as
+   real elements so the founder sees a finished document, not raw # and ** syntax. Only
+   used for the FINAL deliverable; the streaming/typewriter view stays raw on purpose. */
+
+// Resolve **bold** and `code` spans within a single line to React nodes.
+function inlineMd(text: string): ReactNode[] {
+  const out: ReactNode[] = [];
+  const re = /\*\*(.+?)\*\*|`([^`]+?)`/g;
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[1] !== undefined) out.push(<strong key={key++}>{m[1]}</strong>);
+    else out.push(<code key={key++}>{m[2]}</code>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function DocBody({ text }: { text: string }) {
+  const lines = text.replace(/\r\n/g, '\n').split('\n');
+  const blocks: ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+  let para: string[] = [];
+  let key = 0;
+
+  const flushPara = () => {
+    if (para.length) {
+      blocks.push(
+        <p key={key++} className="md-p">
+          {inlineMd(para.join(' '))}
+        </p>,
+      );
+      para = [];
+    }
+  };
+  const flushList = () => {
+    if (!list) return;
+    const items = list.items.map((it, i) => <li key={i}>{inlineMd(it)}</li>);
+    blocks.push(
+      list.ordered ? (
+        <ol key={key++} className="md-ol">
+          {items}
+        </ol>
+      ) : (
+        <ul key={key++} className="md-ul">
+          {items}
+        </ul>
+      ),
+    );
+    list = null;
+  };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h = /^(#{1,3})\s+(.*)$/.exec(line);
+    const ul = /^[-*]\s+(.*)$/.exec(line);
+    const ol = /^\d+\.\s+(.*)$/.exec(line);
+    if (h) {
+      flushPara();
+      flushList();
+      const level = h[1].length;
+      const content = inlineMd(h[2]);
+      if (level === 1)
+        blocks.push(
+          <h3 key={key++} className="md-h md-h1">
+            {content}
+          </h3>,
+        );
+      else if (level === 2)
+        blocks.push(
+          <h4 key={key++} className="md-h md-h2">
+            {content}
+          </h4>,
+        );
+      else
+        blocks.push(
+          <h5 key={key++} className="md-h md-h3">
+            {content}
+          </h5>,
+        );
+    } else if (ul) {
+      flushPara();
+      if (!list || list.ordered) {
+        flushList();
+        list = { ordered: false, items: [] };
+      }
+      list.items.push(ul[1]);
+    } else if (ol) {
+      flushPara();
+      if (!list || !list.ordered) {
+        flushList();
+        list = { ordered: true, items: [] };
+      }
+      list.items.push(ol[1]);
+    } else if (line.trim() === '') {
+      flushPara();
+      flushList();
+    } else {
+      flushList();
+      para.push(line);
+    }
+  }
+  flushPara();
+  flushList();
+  return <div className="md-body">{blocks}</div>;
+}
+
 export function ArtifactViewer({ item }: { item: any }) {
   const { head, file } = item;
   if (item.type === 'site') return <SiteViewer head={head} file={file} site={item.site} />;
@@ -612,7 +724,9 @@ export function ArtifactViewer({ item }: { item: any }) {
         <span className="art-file">{item.file}</span>
         <span dangerouslySetInnerHTML={{ __html: item.tag }} />
       </div>
-      <div className="art-body">{item.out}</div>
+      <div className="art-body">
+        <DocBody text={item.out ?? ''} />
+      </div>
     </div>
   );
 }
