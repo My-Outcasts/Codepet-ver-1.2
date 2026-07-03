@@ -20,14 +20,24 @@ export async function POST(req: Request): Promise<Response> {
   if (detectCapability(process.env).mode !== 'local') {
     return NextResponse.json({ ok: false, reason: 'remote' }, { status: 409 });
   }
-  let body: StartBody;
+  let body: unknown;
   try {
-    body = (await req.json()) as StartBody;
+    body = await req.json();
   } catch {
     return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
   }
-  const { buildSessionId, projectDir, plan, brief } = body;
-  if (!buildSessionId || !projectDir || !plan || typeof plan !== 'object' || !brief) {
+  if (!body || typeof body !== 'object') {
+    return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
+  }
+  const { buildSessionId, projectDir, plan, brief } = body as StartBody;
+  if (
+    !buildSessionId ||
+    !projectDir ||
+    !brief ||
+    !plan ||
+    typeof plan !== 'object' ||
+    !Array.isArray((plan as { steps?: unknown }).steps)
+  ) {
     return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
   }
   startSession({

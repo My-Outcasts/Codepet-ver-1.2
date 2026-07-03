@@ -61,4 +61,22 @@ describe('POST /api/build-session/start', () => {
     expect(res.status).toBe(400);
     expect(mockStartSession).not.toHaveBeenCalled();
   });
+
+  it('rejects a plan with no steps array (would otherwise 500 in buildOpeningPrompt)', async () => {
+    mockDetectCapability.mockReturnValue({ mode: 'local' } as any);
+    const res = await POST(
+      body({ buildSessionId: 'b1', projectDir: '/p', plan: { title: 'x' }, brief: 'hi' }),
+    );
+    expect(res.status).toBe(400);
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a null json body without throwing', async () => {
+    mockDetectCapability.mockReturnValue({ mode: 'local' } as any);
+    const res = await POST(
+      new Request('http://localhost/api/build-session/start', { method: 'POST', body: 'null' }),
+    );
+    expect(res.status).toBe(400);
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
 });

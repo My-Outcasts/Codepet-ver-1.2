@@ -17,24 +17,48 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   const encoder = new TextEncoder();
+  let onEvent: ((e: SessionEvent) => void) | null = null;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
-      const send = (e: SessionEvent) =>
-        controller.enqueue(encoder.encode(JSON.stringify(e) + '\n'));
+      let closed = false;
+      const safeSend = (e: SessionEvent) => {
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(e) + '\n'));
+        } catch {
+          closed = true;
+        }
+      };
       // Replay what already happened.
-      for (const e of session.buffer) send(e);
+      for (const e of session.buffer) safeSend(e);
       if (session.status !== 'running') {
-        controller.close();
+        try {
+          controller.close();
+        } catch {
+          /* already closed */
+        }
         return;
       }
-      const onEvent = (e: SessionEvent) => {
-        send(e);
+      onEvent = (e: SessionEvent) => {
+        safeSend(e);
         if (e.kind === 'result' || e.kind === 'exit' || e.kind === 'error') {
-          session.emitter.off('event', onEvent);
-          controller.close();
+          if (onEvent) session.emitter.off('event', onEvent);
+          onEvent = null;
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
         }
       };
       session.emitter.on('event', onEvent);
+    },
+    cancel() {
+      if (onEvent) {
+        session.emitter.off('event', onEvent);
+        onEvent = null;
+      }
     },
   });
 
