@@ -128,6 +128,8 @@ interface AppState {
   approveChatResult: (deptK: string, taskTitle: string) => void;
   /** Open an inline chat result the minimal way (site → new tab, else copy). */
   openChatResult: (deptK: string, taskTitle: string) => void;
+  /** Drop a chat message's one-tap action once it has been used. */
+  dismissChatAction: (msgId: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
   toastMsg: string;
@@ -301,7 +303,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const i = prev.findIndex((m) => m.id === gid);
           return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
         });
-        if (g.action) track('firstrun.action_offered', { dept: g.action.deptK });
       };
       const fb = nextAction();
       const fallback: NextStep | null = fb
@@ -310,6 +311,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setNextStep(fallback);
       seed(fallback);
       if (!fallback) return;
+      track('firstrun.action_offered', { dept: fallback.deptK });
       fetchNextStep()
         .then((pick) => {
           if (pick) {
@@ -766,6 +768,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [approveTask],
   );
 
+  // Drop a chat message's one-tap action once it's been used (e.g. after the
+  // first-run greeting's "Do it with me" is tapped) so it can't be re-run.
+  const dismissChatAction = useCallback((msgId: string) => {
+    setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, action: undefined } : m)));
+  }, []);
+
   // Open an inline chat result the minimal way (site → new tab, else copy) — reuses
   // the shared openDeliverable behavior, built from the live task.
   const openChatResult = useCallback(
@@ -935,6 +943,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reviseTaskInChat,
       approveChatResult,
       openChatResult,
+      dismissChatAction,
       nextStep,
       toastMsg,
       toast,
@@ -979,6 +988,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       reviseTaskInChat,
       approveChatResult,
       openChatResult,
+      dismissChatAction,
       nextStep,
       toastMsg,
       toast,
