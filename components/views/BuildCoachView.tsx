@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { Byte } from '../Byte';
-import { budgetState, DANGER_PCT } from '@/lib/buildCoach';
+import { budgetState, byteDuringLine, DANGER_PCT } from '@/lib/buildCoach';
 import { requestBuildPlan } from '@/lib/ai/buildPlan';
 import { buildOpeningPrompt, terminalCommand } from '@/lib/armSession';
 import { armBuildSession } from '@/app/actions/build';
@@ -194,18 +194,20 @@ function DuringStep({
   const pct = Math.min(100, Math.round((actions / target) * 100));
   const bs = budgetState(pct);
   const recent = live?.recentTools ?? [];
+  const line = byteDuringLine(live, bs.warn);
 
   return (
     <div>
       <div className="bc-panel-h">Step 2 · building now</div>
       <CoachBubble
-        mood={bs.warn ? 'worried' : 'idle'}
+        mood={line?.mood ?? (bs.warn ? 'worried' : 'idle')}
         say={
-          bs.warn
+          line?.say ??
+          (bs.warn
             ? "Whoa, we're using a lot of steps! Let's slow down and double-check before we go further 😟"
             : live
               ? "Byte's watching your session — every step lands here in real time 👀"
-              : 'Byte is waiting to see your session start…'
+              : 'Byte is waiting to see your session start…')
         }
         lens="🐷 It's like feeding a piggy bank"
         learn={

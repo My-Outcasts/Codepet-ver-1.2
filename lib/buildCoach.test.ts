@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { budgetState, DANGER_PCT } from './buildCoach';
+import { budgetState, byteDuringLine, DANGER_PCT } from './buildCoach';
 
 describe('budgetState', () => {
   it('is calm and locked well below the danger threshold', () => {
@@ -30,5 +30,24 @@ describe('budgetState', () => {
     expect(s.mood).toBe('worried');
     expect(s.warn).toBe(true);
     expect(s.unlock).toBe(true);
+  });
+});
+
+describe('byteDuringLine', () => {
+  it('prioritises a pending ask with a worried mood', () => {
+    expect(byteDuringLine({ pendingAsk: 'answer me', lastSay: 'x' }, false)).toEqual({
+      say: 'answer me',
+      mood: 'worried',
+    });
+  });
+
+  it('shows the latest narrated line, mood following the budget', () => {
+    expect(byteDuringLine({ lastSay: 'building' }, false)).toEqual({ say: 'building', mood: 'idle' });
+    expect(byteDuringLine({ lastSay: 'building' }, true)).toEqual({ say: 'building', mood: 'worried' });
+  });
+
+  it('returns null when there is nothing to narrate', () => {
+    expect(byteDuringLine(null, false)).toBeNull();
+    expect(byteDuringLine({}, true)).toBeNull();
   });
 });

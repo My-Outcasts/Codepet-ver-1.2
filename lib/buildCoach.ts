@@ -26,3 +26,21 @@ export function budgetState(pct: number): BudgetState {
     unlock: warn,
   };
 }
+
+/** Minimal shape the DURING bubble reads from the live doc. */
+export interface DuringNarration {
+  pendingAsk?: string;
+  lastSay?: string;
+}
+
+/** Byte's DURING bubble line + mood, in priority order: a pending question wins
+ *  (worried), else the latest narrated line (mood follows the budget), else null
+ *  so the caller keeps its default copy. */
+export function byteDuringLine(
+  live: DuringNarration | null,
+  warn: boolean,
+): { say: string; mood: 'idle' | 'worried' } | null {
+  if (live?.pendingAsk) return { say: live.pendingAsk, mood: 'worried' };
+  if (live?.lastSay) return { say: live.lastSay, mood: warn ? 'worried' : 'idle' };
+  return null;
+}
