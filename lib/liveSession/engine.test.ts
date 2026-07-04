@@ -1,6 +1,14 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { startSession, stopSession, sendTurn, CLAUDE_ARGS } from './engine';
+import {
+  startSession,
+  stopSession,
+  sendTurn,
+  CLAUDE_ARGS,
+  enqueuePermission,
+  resolvePermission,
+  PERMISSION_TIMEOUT_MS,
+} from './engine';
 import { getSession } from './registry';
 import type { SessionEvent } from './parseEvents';
 
@@ -40,7 +48,11 @@ describe('startSession', () => {
     const spawnFn = vi.fn(() => child) as never;
     startSession({ buildSessionId: 'b1', projectDir: '/proj', openingPrompt: 'build X', spawnFn });
 
-    expect(spawnFn).toHaveBeenCalledWith('claude', CLAUDE_ARGS, { cwd: '/proj' });
+    expect(spawnFn).toHaveBeenCalledWith(
+      'claude',
+      [...CLAUDE_ARGS, '--permission-prompt-tool', 'codepet_permit', '--mcp-config', expect.any(String)],
+      { cwd: '/proj' },
+    );
     // opening prompt written as a stream-json user message, then stdin closed (P1 one-shot).
     expect(child.stdin.writes.length).toBe(1);
     const sent = JSON.parse(child.stdin.writes[0]);
@@ -174,4 +186,66 @@ describe('two-way session', () => {
     child.emit('close', 1); // non-zero exit → error
     expect(sendTurn('tw4', 'hi')).toBe(false);
   });
+});
+
+describe('permission bridge', () => {
+  it('enqueue emits a permission-request and resolves when the user decides', async () => {
+    const child = fakeChild();
+    const events: SessionEvent[] = [];
+    startSession({
+      buildSessionId: 'pm1',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      spawnFn: (() => child) as never,
+    });
+    getSession('pm1')!.emitter.on('event', (e: SessionEvent) => events.push(e));
+
+    const p = enqueuePermission('pm1', { requestId: 'r1', tool: 'Bash', input: { command: 'ls' } });
+    expect(events).toContainEqual({
+      kind: 'permission-request',
+      requestId: 'r1',
+      tool: 'Bash',
+      input: { command: 'ls' },
+    });
+
+    const resolved = resolvePermission('pm1', 'r1', { decision: 'allow' });
+    expect(resolved).toBe(true);
+    await expect(p).resolves.toEqual({ decision: 'allow' });
+  });
+
+  it('enqueue on a missing session resolves to deny', async () => {
+    await expect(
+      enqueuePermission('nope', { requestId: 'r', tool: 'X', input: {} }),
+    ).resolves.toEqual({
+      decision: 'deny',
+      reason: 'no such session',
+    });
+  });
+
+  it('resolvePermission for an unknown request returns false', () => {
+    const child = fakeChild();
+    startSession({
+      buildSessionId: 'pm2',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      spawnFn: (() => child) as never,
+    });
+    expect(resolvePermission('pm2', 'ghost', { decision: 'allow' })).toBe(false);
+  });
+
+  it('spawns claude with the permission-prompt-tool wiring (no acceptEdits)', () => {
+    const child = fakeChild();
+    const spawnFn = vi.fn(() => child) as never;
+    startSession({ buildSessionId: 'pm3', projectDir: '/p', openingPrompt: 'x', spawnFn });
+    const args: string[] = (spawnFn as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0][1] as string[];
+    expect(args).not.toContain('acceptEdits');
+    expect(args).toContain('--permission-prompt-tool');
+    expect(args).toContain('codepet_permit');
+    expect(args).toContain('--mcp-config');
+  });
+});
+
+it('PERMISSION_TIMEOUT_MS is a positive number', () => {
+  expect(PERMISSION_TIMEOUT_MS).toBeGreaterThan(0);
 });

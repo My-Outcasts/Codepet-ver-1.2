@@ -5,11 +5,14 @@
 import type { EventEmitter } from 'node:events';
 import type { SessionEvent } from './parseEvents';
 
+export type PermissionDecision = { decision: 'allow' | 'deny'; reason?: string };
+
 export interface LiveSession {
   emitter: EventEmitter;
   child: { stdin: { write(s: string): void; end(): void }; kill(): void };
   status: 'running' | 'ended' | 'error';
   buffer: SessionEvent[];
+  pending: Map<string, (d: PermissionDecision) => void>;
 }
 
 const sessions = new Map<string, LiveSession>();

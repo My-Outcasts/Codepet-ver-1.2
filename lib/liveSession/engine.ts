@@ -5,11 +5,18 @@
 // fake child (no real binary). See the in-UI Claude session design spec.
 import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { StreamParser, type SessionEvent } from './parseEvents';
 import { getSession, setSession, deleteSession, type LiveSession } from './registry';
+import type { PermissionDecision } from './registry';
 
-/** Headless streaming args. `acceptEdits` is the Phase 1 permission mode (UI
- *  permission prompts arrive in Phase 3). */
+export const PERMISSION_TIMEOUT_MS = 120_000;
+
+/** Base headless streaming args. The permission wiring (--permission-prompt-tool +
+ *  --mcp-config) is appended per session in startSession, since the mcp-config path
+ *  is session-specific. */
 export const CLAUDE_ARGS = [
   '-p',
   '--input-format',
@@ -17,8 +24,6 @@ export const CLAUDE_ARGS = [
   '--output-format',
   'stream-json',
   '--verbose',
-  '--permission-mode',
-  'acceptEdits',
 ];
 
 interface ChildLike {
@@ -41,6 +46,28 @@ function userLine(text: string): string {
   );
 }
 
+/** Write a per-session MCP config that launches the permission bridge server for
+ *  this build session. The server reads CODEPET_BUILD_SESSION_ID + CODEPET_API_URL
+ *  to call back into the app. Returns the config file path. */
+function writeMcpConfig(buildSessionId: string): string {
+  const serverPath = path.join(process.cwd(), 'lib', 'liveSession', 'permissionServer.mjs');
+  const cfg = {
+    mcpServers: {
+      codepet_permit: {
+        command: 'node',
+        args: [serverPath],
+        env: {
+          CODEPET_BUILD_SESSION_ID: buildSessionId,
+          CODEPET_API_URL: process.env.CODEPET_API_URL || 'http://127.0.0.1:3000',
+        },
+      },
+    },
+  };
+  const file = path.join(os.tmpdir(), `codepet-mcp-${buildSessionId}.json`);
+  fs.writeFileSync(file, JSON.stringify(cfg));
+  return file;
+}
+
 export function startSession(opts: {
   buildSessionId: string;
   projectDir: string;
@@ -48,9 +75,17 @@ export function startSession(opts: {
   spawnFn?: SpawnFn;
 }): void {
   const spawnFn = opts.spawnFn ?? defaultSpawn;
-  const child = spawnFn('claude', CLAUDE_ARGS, { cwd: opts.projectDir });
+  const mcpConfigPath = writeMcpConfig(opts.buildSessionId);
+  const args = [
+    ...CLAUDE_ARGS,
+    '--permission-prompt-tool',
+    'codepet_permit',
+    '--mcp-config',
+    mcpConfigPath,
+  ];
+  const child = spawnFn('claude', args, { cwd: opts.projectDir });
   const emitter = new EventEmitter();
-  const session: LiveSession = { emitter, child, status: 'running', buffer: [] };
+  const session: LiveSession = { emitter, child, status: 'running', buffer: [], pending: new Map() };
   setSession(opts.buildSessionId, session);
 
   const emit = (e: SessionEvent) => {
@@ -89,6 +124,50 @@ export function sendTurn(buildSessionId: string, text: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Park a permission request: emit it to the UI and return a promise that resolves
+ *  when the user decides (via resolvePermission) or after PERMISSION_TIMEOUT_MS
+ *  (auto-deny). A missing session resolves to deny immediately. */
+export function enqueuePermission(
+  buildSessionId: string,
+  req: { requestId: string; tool: string; input: unknown },
+): Promise<PermissionDecision> {
+  const s = getSession(buildSessionId);
+  if (!s) return Promise.resolve({ decision: 'deny', reason: 'no such session' });
+  return new Promise<PermissionDecision>((resolve) => {
+    let done = false;
+    const finish = (d: PermissionDecision) => {
+      if (done) return;
+      done = true;
+      s.pending.delete(req.requestId);
+      resolve(d);
+    };
+    s.pending.set(req.requestId, finish);
+    setTimeout(() => finish({ decision: 'deny', reason: 'timed out' }), PERMISSION_TIMEOUT_MS);
+    // Emit through the same buffer/emitter path so the stream + UI see it.
+    const event = {
+      kind: 'permission-request' as const,
+      requestId: req.requestId,
+      tool: req.tool,
+      input: req.input,
+    };
+    s.buffer.push(event);
+    s.emitter.emit('event', event);
+  });
+}
+
+/** Resolve a parked permission with the user's decision. False if not found. */
+export function resolvePermission(
+  buildSessionId: string,
+  requestId: string,
+  decision: PermissionDecision,
+): boolean {
+  const s = getSession(buildSessionId);
+  const resolver = s?.pending.get(requestId);
+  if (!resolver) return false;
+  resolver(decision);
+  return true;
 }
 
 export function stopSession(buildSessionId: string): void {
