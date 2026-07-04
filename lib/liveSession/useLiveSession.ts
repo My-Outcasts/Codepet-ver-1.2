@@ -94,11 +94,16 @@ export function useLiveSession(opts: {
       if (!t) return;
       setState((s) => applyUserTurn(s, t));
       try {
-        await fetch('/api/build-session/send', {
+        const res = await fetch('/api/build-session/send', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ buildSessionId: opts.buildSessionId, text: t }),
         });
+        if (!res.ok) {
+          setState((s) =>
+            reduceTranscript(s, { kind: 'error', message: 'Could not send that message.' }),
+          );
+        }
       } catch {
         setState((s) =>
           reduceTranscript(s, { kind: 'error', message: 'Could not send that message.' }),
