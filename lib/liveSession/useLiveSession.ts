@@ -86,7 +86,19 @@ export function useLiveSession(opts: {
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
-  }, []);
+    // Tell the server to kill the persistent claude child. keepalive lets this
+    // POST survive component unmount / tab close. Best-effort — ignore failures.
+    try {
+      fetch('/api/build-session/stop', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ buildSessionId: opts.buildSessionId }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }, [opts.buildSessionId]);
 
   const send = useCallback(
     async (text: string) => {
