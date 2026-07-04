@@ -7696,6 +7696,17 @@ body {
 .lc-msg {
   white-space: pre-wrap;
   line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: 10px;
+  max-width: 85%;
+}
+.lc-msg.assistant {
+  background: #fff;
+  align-self: flex-start;
+}
+.lc-msg.user {
+  background: #efe6ff;
+  align-self: flex-end;
 }
 .lc-tool {
   font-size: 13px;
@@ -7707,10 +7718,43 @@ body {
 .lc-tool-sum {
   opacity: 0.7;
 }
+.lc-status {
+  opacity: 0.6;
+  font-size: 13px;
+  font-style: italic;
+}
 .lc-err {
   color: #c0392b;
 }
 .lc-done {
   opacity: 0.6;
   font-size: 13px;
+}
+.lc-composer {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.lc-composer textarea {
+  flex: 1;
+  resize: vertical;
+  border-radius: 10px;
+  padding: 8px 10px;
+  border: 1px solid #e3d9f5;
+  font: inherit;
+}
+.lc-composer textarea:disabled {
+  opacity: 0.55;
+}
+.lc-send {
+  padding: 0 16px;
+  border-radius: 10px;
+  border: none;
+  background: #7c4dff;
+  color: #fff;
+  cursor: pointer;
+}
+.lc-send:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

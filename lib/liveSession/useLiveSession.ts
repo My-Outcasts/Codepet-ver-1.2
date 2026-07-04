@@ -27,6 +27,11 @@ export function applyLine(state: TranscriptState, line: string): TranscriptState
   return reduceTranscript(state, event);
 }
 
+/** Pure: optimistically append the user's own turn and return to running. */
+export function applyUserTurn(state: TranscriptState, text: string): TranscriptState {
+  return reduceTranscript(state, { kind: 'user-text', text });
+}
+
 export function useLiveSession(opts: {
   buildSessionId: string;
   projectDir: string;
@@ -83,5 +88,25 @@ export function useLiveSession(opts: {
     abortRef.current?.abort();
   }, []);
 
-  return { state, start, stop };
+  const send = useCallback(
+    async (text: string) => {
+      const t = text.trim();
+      if (!t) return;
+      setState((s) => applyUserTurn(s, t));
+      try {
+        await fetch('/api/build-session/send', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ buildSessionId: opts.buildSessionId, text: t }),
+        });
+      } catch {
+        setState((s) =>
+          reduceTranscript(s, { kind: 'error', message: 'Could not send that message.' }),
+        );
+      }
+    },
+    [opts.buildSessionId],
+  );
+
+  return { state, start, stop, send };
 }

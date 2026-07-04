@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyLine } from './useLiveSession';
+import { applyLine, applyUserTurn } from './useLiveSession';
 import { initialTranscript } from './transcript';
 
 describe('applyLine', () => {
@@ -19,5 +19,13 @@ describe('applyLine', () => {
     expect(applyLine(s0, '')).toBe(s0);
     expect(applyLine(s0, '{bad')).toBe(s0);
     expect(applyLine(s0, JSON.stringify({ no: 'kind' }))).toBe(s0);
+  });
+});
+
+describe('applyUserTurn', () => {
+  it('appends the user message and sets running', () => {
+    const s = applyUserTurn(initialTranscript(), 'now add tests');
+    expect(s.messages).toEqual([{ role: 'user', text: 'now add tests' }]);
+    expect(s.status).toBe('running');
   });
 });
