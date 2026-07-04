@@ -13,10 +13,11 @@ export interface ToolActivity {
 
 export interface TranscriptState {
   sessionId?: string;
-  status: 'running' | 'awaiting-input' | 'ended' | 'error';
+  status: 'running' | 'awaiting-input' | 'awaiting-permission' | 'ended' | 'error';
   messages: Array<{ role: 'user' | 'assistant'; text: string }>;
   tools: ToolActivity[];
   actionCount: number;
+  pendingPermission?: { requestId: string; tool: string; input: unknown };
   error?: string;
 }
 
@@ -40,12 +41,15 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
         status: 'running',
         messages: [...state.messages, { role: 'user', text: event.text }],
       };
-    case 'tool-use':
+    case 'tool-use': {
+      const { pendingPermission: _drop, ...rest } = state;
       return {
-        ...state,
+        ...rest,
+        status: 'running',
         tools: [...state.tools, { id: event.id, name: event.name, input: event.input }],
         actionCount: state.actionCount + 1,
       };
+    }
     case 'tool-result':
       return {
         ...state,
@@ -56,19 +60,23 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
     case 'result':
       // A turn finished — the session stays alive, waiting for the next user turn.
       return { ...state, sessionId: event.sessionId || state.sessionId, status: 'awaiting-input' };
-    case 'error':
-      return { ...state, status: 'error', error: event.message };
-    case 'exit':
-      // The process is gone. A clean exit ends the session; anything else is an
-      // error. Never overwrite an error we already recorded.
-      if (state.status === 'error') return state;
+    case 'permission-request':
+      return {
+        ...state,
+        status: 'awaiting-permission',
+        pendingPermission: { requestId: event.requestId, tool: event.tool, input: event.input },
+      };
+    case 'error': {
+      const { pendingPermission: _d, ...rest } = state;
+      return { ...rest, status: 'error', error: event.message };
+    }
+    case 'exit': {
+      const { pendingPermission: _d, ...rest } = state;
+      if (rest.status === 'error') return { ...rest, pendingPermission: undefined } as TranscriptState;
       return event.code === 0
-        ? { ...state, status: 'ended' }
-        : {
-            ...state,
-            status: 'error',
-            error: state.error ?? `claude exited with code ${event.code}`,
-          };
+        ? { ...rest, status: 'ended' }
+        : { ...rest, status: 'error', error: rest.error ?? `claude exited with code ${event.code}` };
+    }
     default:
       return state;
   }

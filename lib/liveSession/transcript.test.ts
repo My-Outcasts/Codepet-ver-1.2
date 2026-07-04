@@ -91,4 +91,30 @@ describe('reduceTranscript', () => {
     reduceTranscript(s0, { kind: 'assistant-text', text: 'x' });
     expect(s0.messages).toEqual([]);
   });
+
+  it('a permission-request parks a pending permission and awaits it', () => {
+    const s = run([
+      { kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: { command: 'ls' } },
+    ]);
+    expect(s.pendingPermission).toEqual({ requestId: 'r1', tool: 'Bash', input: { command: 'ls' } });
+    expect(s.status).toBe('awaiting-permission');
+  });
+
+  it('a tool-use clears a pending permission and returns to running', () => {
+    const s = run([
+      { kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: {} },
+      { kind: 'tool-use', id: 't1', name: 'Bash', input: {} },
+    ]);
+    expect(s.pendingPermission).toBeUndefined();
+    expect(s.status).toBe('running');
+  });
+
+  it('an error clears a pending permission', () => {
+    const s = run([
+      { kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: {} },
+      { kind: 'error', message: 'boom' },
+    ]);
+    expect(s.pendingPermission).toBeUndefined();
+    expect(s.status).toBe('error');
+  });
 });

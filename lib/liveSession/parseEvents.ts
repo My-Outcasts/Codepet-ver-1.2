@@ -12,7 +12,8 @@ export type SessionEvent =
   | { kind: 'tool-result'; id: string; ok: boolean; summary: string }
   | { kind: 'result'; text: string; sessionId: string }
   | { kind: 'error'; message: string }
-  | { kind: 'exit'; code: number | null };
+  | { kind: 'exit'; code: number | null }
+  | { kind: 'permission-request'; requestId: string; tool: string; input: unknown };
 
 /** Coerce tool_result `content` (string, or an array of text blocks) to a string. */
 function resultSummary(content: unknown): string {
