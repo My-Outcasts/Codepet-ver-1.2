@@ -184,5 +184,10 @@ export function stopSession(buildSessionId: string): void {
   } catch {
     // already gone
   }
+  try {
+    fs.rmSync(path.join(os.tmpdir(), `codepet-mcp-${buildSessionId}.json`), { force: true });
+  } catch {
+    // best-effort temp cleanup
+  }
   deleteSession(buildSessionId);
 }

@@ -26,63 +26,66 @@ export function initialTranscript(): TranscriptState {
 }
 
 export function reduceTranscript(state: TranscriptState, event: SessionEvent): TranscriptState {
+  // Any event other than a NEW permission-request resolves/supersedes a pending
+  // permission (allow → tool-use, deny → the model continues with text/result).
+  // Dropping it here also stops a stale, already-resolved card from reappearing
+  // when the buffer is replayed to a reconnecting client.
+  const base: TranscriptState =
+    event.kind === 'permission-request' || !state.pendingPermission
+      ? state
+      : (() => {
+          const { pendingPermission: _drop, ...rest } = state;
+          return rest;
+        })();
   switch (event.kind) {
     case 'init':
-      return { ...state, sessionId: event.sessionId };
+      return { ...base, sessionId: event.sessionId };
     case 'assistant-text':
       return {
-        ...state,
+        ...base,
         status: 'running',
-        messages: [...state.messages, { role: 'assistant', text: event.text }],
+        messages: [...base.messages, { role: 'assistant', text: event.text }],
       };
     case 'user-text':
       return {
-        ...state,
+        ...base,
         status: 'running',
-        messages: [...state.messages, { role: 'user', text: event.text }],
+        messages: [...base.messages, { role: 'user', text: event.text }],
       };
-    case 'tool-use': {
-      const { pendingPermission: _drop, ...rest } = state;
+    case 'tool-use':
       return {
-        ...rest,
+        ...base,
         status: 'running',
-        tools: [...state.tools, { id: event.id, name: event.name, input: event.input }],
-        actionCount: state.actionCount + 1,
+        tools: [...base.tools, { id: event.id, name: event.name, input: event.input }],
+        actionCount: base.actionCount + 1,
       };
-    }
     case 'tool-result':
       return {
-        ...state,
-        tools: state.tools.map((t) =>
+        ...base,
+        tools: base.tools.map((t) =>
           t.id === event.id ? { ...t, ok: event.ok, summary: event.summary } : t,
         ),
       };
-    case 'result':
-      // A turn finished — the session stays alive, waiting for the next user turn.
-      return { ...state, sessionId: event.sessionId || state.sessionId, status: 'awaiting-input' };
     case 'permission-request':
       return {
-        ...state,
+        ...base,
         status: 'awaiting-permission',
         pendingPermission: { requestId: event.requestId, tool: event.tool, input: event.input },
       };
-    case 'error': {
-      const { pendingPermission: _d, ...rest } = state;
-      return { ...rest, status: 'error', error: event.message };
-    }
-    case 'exit': {
-      const { pendingPermission: _d, ...rest } = state;
-      if (rest.status === 'error')
-        return { ...rest, pendingPermission: undefined } as TranscriptState;
+    case 'result':
+      return { ...base, sessionId: event.sessionId || base.sessionId, status: 'awaiting-input' };
+    case 'error':
+      return { ...base, status: 'error', error: event.message };
+    case 'exit':
+      if (base.status === 'error') return base;
       return event.code === 0
-        ? { ...rest, status: 'ended' }
+        ? { ...base, status: 'ended' }
         : {
-            ...rest,
+            ...base,
             status: 'error',
-            error: rest.error ?? `claude exited with code ${event.code}`,
+            error: base.error ?? `claude exited with code ${event.code}`,
           };
-    }
     default:
-      return state;
+      return base;
   }
 }

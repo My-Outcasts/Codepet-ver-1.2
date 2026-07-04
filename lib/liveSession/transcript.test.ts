@@ -121,4 +121,20 @@ describe('reduceTranscript', () => {
     expect(s.pendingPermission).toBeUndefined();
     expect(s.status).toBe('error');
   });
+
+  it('a deny that continues as assistant text clears the stale permission card', () => {
+    const s = run([
+      { kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: {} },
+      { kind: 'assistant-text', text: 'ok, skipping that' },
+    ]);
+    expect(s.pendingPermission).toBeUndefined();
+  });
+
+  it('a result clears a pending permission', () => {
+    const s = run([
+      { kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: {} },
+      { kind: 'result', text: 'done', sessionId: 's' },
+    ]);
+    expect(s.pendingPermission).toBeUndefined();
+  });
 });
