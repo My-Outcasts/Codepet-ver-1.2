@@ -41,7 +41,7 @@ export async function GET(req: Request): Promise<Response> {
       }
       onEvent = (e: SessionEvent) => {
         safeSend(e);
-        if (e.kind === 'result' || e.kind === 'exit' || e.kind === 'error') {
+        if (e.kind === 'exit' || e.kind === 'error') {
           if (onEvent) session.emitter.off('event', onEvent);
           onEvent = null;
           closed = true;
