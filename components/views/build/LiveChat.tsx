@@ -17,7 +17,12 @@ export function LiveChat({
   plan: BytePlan;
   brief: string;
 }) {
-  const { state, start, stop, send } = useLiveSession({ buildSessionId, projectDir, plan, brief });
+  const { state, start, stop, send, decide } = useLiveSession({
+    buildSessionId,
+    projectDir,
+    plan,
+    brief,
+  });
   const [draft, setDraft] = useState('');
 
   useEffect(() => {
@@ -47,11 +52,38 @@ export function LiveChat({
           </div>
         ))}
         {state.status === 'running' && <div className="lc-status">Claude is working…</div>}
+        {state.status === 'awaiting-permission' && (
+          <div className="lc-status">Waiting for your Allow / Deny…</div>
+        )}
         {state.status === 'error' && (
           <div className="lc-err">{state.error ?? 'Something went wrong.'}</div>
         )}
         {state.status === 'ended' && <div className="lc-done">Session finished.</div>}
       </div>
+      {state.pendingPermission && (
+        <div className="lc-perm">
+          <div className="lc-perm-q">
+            Claude wants to use <b>{state.pendingPermission.tool}</b>
+          </div>
+          <pre className="lc-perm-in">
+            {JSON.stringify(state.pendingPermission.input, null, 2).slice(0, 400)}
+          </pre>
+          <div className="lc-perm-btns">
+            <button
+              className="lc-allow"
+              onClick={() => decide(state.pendingPermission!.requestId, 'allow')}
+            >
+              Allow
+            </button>
+            <button
+              className="lc-deny"
+              onClick={() => decide(state.pendingPermission!.requestId, 'deny')}
+            >
+              Deny
+            </button>
+          </div>
+        </div>
+      )}
       <div className="lc-composer">
         <textarea
           value={draft}

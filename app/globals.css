@@ -7758,3 +7758,41 @@ body {
   opacity: 0.4;
   cursor: default;
 }
+.lc-perm {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e0b3ff;
+  background: #faf0ff;
+  border-radius: 12px;
+}
+.lc-perm-q {
+  margin-bottom: 6px;
+}
+.lc-perm-in {
+  max-height: 120px;
+  overflow: auto;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.lc-perm-btns {
+  display: flex;
+  gap: 8px;
+}
+.lc-allow,
+.lc-deny {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+}
+.lc-allow {
+  background: #2ecc71;
+  color: #fff;
+}
+.lc-deny {
+  background: #e74c3c;
+  color: #fff;
+}

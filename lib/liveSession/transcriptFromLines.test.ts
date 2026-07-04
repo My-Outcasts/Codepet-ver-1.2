@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyLine, applyUserTurn } from './useLiveSession';
+import { applyLine, applyUserTurn, applyDecision } from './useLiveSession';
 import { initialTranscript } from './transcript';
 
 describe('applyLine', () => {
@@ -26,6 +26,19 @@ describe('applyUserTurn', () => {
   it('appends the user message and sets running', () => {
     const s = applyUserTurn(initialTranscript(), 'now add tests');
     expect(s.messages).toEqual([{ role: 'user', text: 'now add tests' }]);
+    expect(s.status).toBe('running');
+  });
+});
+
+describe('applyDecision', () => {
+  it('clears the pending permission and returns to running', () => {
+    const withPerm = applyLine(
+      initialTranscript(),
+      JSON.stringify({ kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: {} }),
+    );
+    expect(withPerm.pendingPermission).toBeDefined();
+    const s = applyDecision(withPerm);
+    expect(s.pendingPermission).toBeUndefined();
     expect(s.status).toBe('running');
   });
 });

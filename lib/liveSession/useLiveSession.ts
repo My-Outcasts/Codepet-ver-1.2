@@ -32,6 +32,14 @@ export function applyUserTurn(state: TranscriptState, text: string): TranscriptS
   return reduceTranscript(state, { kind: 'user-text', text });
 }
 
+/** Pure: optimistically clear the pending permission and return to running once the
+ *  user has decided (the real proceed/skip arrives as tool events over the stream). */
+export function applyDecision(state: TranscriptState): TranscriptState {
+  if (!state.pendingPermission) return state;
+  const { pendingPermission: _drop, ...rest } = state;
+  return { ...rest, status: 'running' };
+}
+
 export function useLiveSession(opts: {
   buildSessionId: string;
   projectDir: string;
@@ -125,5 +133,28 @@ export function useLiveSession(opts: {
     [opts.buildSessionId],
   );
 
-  return { state, start, stop, send };
+  const decide = useCallback(
+    async (requestId: string, decision: 'allow' | 'deny') => {
+      setState((s) => applyDecision(s));
+      try {
+        const res = await fetch('/api/build-session/permission', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ buildSessionId: opts.buildSessionId, requestId, decision }),
+        });
+        if (!res.ok) {
+          setState((s) =>
+            reduceTranscript(s, { kind: 'error', message: 'Could not send that decision.' }),
+          );
+        }
+      } catch {
+        setState((s) =>
+          reduceTranscript(s, { kind: 'error', message: 'Could not send that decision.' }),
+        );
+      }
+    },
+    [opts.buildSessionId],
+  );
+
+  return { state, start, stop, send, decide };
 }
