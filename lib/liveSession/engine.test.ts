@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { startSession, stopSession, CLAUDE_ARGS } from './engine';
+import { startSession, stopSession, sendTurn, CLAUDE_ARGS } from './engine';
 import { getSession } from './registry';
 import type { SessionEvent } from './parseEvents';
 
@@ -48,7 +48,7 @@ describe('startSession', () => {
       type: 'user',
       message: { role: 'user', content: [{ type: 'text', text: 'build X' }] },
     });
-    expect(child.stdin.ended).toBe(true);
+    expect(child.stdin.ended).toBe(false);
   });
 
   it('parses stdout into events on the session emitter and buffers them', () => {
@@ -108,5 +108,70 @@ describe('startSession', () => {
     stopSession('b4');
     expect(child.killed).toBe(true);
     expect(getSession('b4')).toBeUndefined();
+  });
+});
+
+describe('two-way session', () => {
+  it('startSession keeps stdin open (does not end it)', () => {
+    const child = fakeChild();
+    startSession({
+      buildSessionId: 'tw1',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      spawnFn: (() => child) as never,
+    });
+    expect(child.stdin.writes.length).toBe(1); // opening prompt
+    expect(child.stdin.ended).toBe(false); // stays open for follow-ups
+  });
+
+  it('a result event does not mark the session ended (still awaiting input)', () => {
+    const child = fakeChild();
+    startSession({
+      buildSessionId: 'tw2',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      spawnFn: (() => child) as never,
+    });
+    child.stdout.emit(
+      'data',
+      Buffer.from(
+        JSON.stringify({ type: 'result', subtype: 'success', result: 'done', session_id: 's' }) +
+          '\n',
+      ),
+    );
+    expect(getSession('tw2')!.status).toBe('running');
+  });
+
+  it('sendTurn writes a user-turn line to stdin and returns true', () => {
+    const child = fakeChild();
+    startSession({
+      buildSessionId: 'tw3',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      spawnFn: (() => child) as never,
+    });
+    const ok = sendTurn('tw3', 'now write tests');
+    expect(ok).toBe(true);
+    const sent = JSON.parse(child.stdin.writes[1]);
+    expect(sent).toEqual({
+      type: 'user',
+      message: { role: 'user', content: [{ type: 'text', text: 'now write tests' }] },
+    });
+  });
+
+  it('sendTurn on a missing session returns false', () => {
+    expect(sendTurn('nope', 'hi')).toBe(false);
+  });
+
+  it('sendTurn after the session errored returns false', () => {
+    const child = fakeChild();
+    startSession({
+      buildSessionId: 'tw4',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      spawnFn: (() => child) as never,
+    });
+    child.emit('close', 1); // non-zero exit → error
+    expect(sendTurn('tw4', 'hi')).toBe(false);
   });
 });

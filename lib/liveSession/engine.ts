@@ -55,8 +55,8 @@ export function startSession(opts: {
 
   const emit = (e: SessionEvent) => {
     session.buffer.push(e);
-    if (e.kind === 'result') session.status = 'ended';
     if (e.kind === 'error' || (e.kind === 'exit' && e.code !== 0)) session.status = 'error';
+    if (e.kind === 'exit' && e.code === 0) session.status = 'ended';
     emitter.emit('event', e);
   };
 
@@ -73,10 +73,22 @@ export function startSession(opts: {
   );
   child.on('close', (code) => emit({ kind: 'exit', code: typeof code === 'number' ? code : null }));
 
-  // Phase 1: single turn — send the opening prompt then close stdin so claude runs
-  // and exits. Phase 2 keeps stdin open for follow-ups.
+  // Send the opening prompt. Phase 2: keep stdin OPEN so follow-up turns can be
+  // written via sendTurn; the session ends on stopSession or child exit.
   child.stdin.write(userLine(opts.openingPrompt));
-  child.stdin.end();
+}
+
+/** Write a follow-up user turn to the live child's stdin. No-op (returns false)
+ *  if the session is missing or no longer running. */
+export function sendTurn(buildSessionId: string, text: string): boolean {
+  const s = getSession(buildSessionId);
+  if (!s || s.status !== 'running') return false;
+  try {
+    s.child.stdin.write(userLine(text));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function stopSession(buildSessionId: string): void {
