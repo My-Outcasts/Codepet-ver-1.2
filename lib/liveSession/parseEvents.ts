@@ -7,6 +7,7 @@
 export type SessionEvent =
   | { kind: 'init'; sessionId: string }
   | { kind: 'assistant-text'; text: string }
+  | { kind: 'user-text'; text: string }
   | { kind: 'tool-use'; id: string; name: string; input: unknown }
   | { kind: 'tool-result'; id: string; ok: boolean; summary: string }
   | { kind: 'result'; text: string; sessionId: string }

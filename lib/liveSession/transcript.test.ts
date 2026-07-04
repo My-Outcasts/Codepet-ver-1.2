@@ -44,29 +44,46 @@ describe('reduceTranscript', () => {
     expect(s.actionCount).toBe(1);
   });
 
-  it('ends on result and error on error/exit', () => {
-    expect(run([{ kind: 'result', text: 'done', sessionId: 's' }]).status).toBe('ended');
-    expect(run([{ kind: 'error', message: 'boom' }]).status).toBe('error');
-    const ex = run([{ kind: 'exit', code: 1 }]);
-    expect(ex.status).toBe('error');
-    const ok = run([
-      { kind: 'result', text: 'd', sessionId: 's' },
-      { kind: 'exit', code: 0 },
+  it('a result means the turn is done and the session awaits input', () => {
+    const s = run([{ kind: 'result', text: 'done', sessionId: 's' }]);
+    expect(s.status).toBe('awaiting-input');
+  });
+
+  it('a user-text turn appends a user message and returns to running', () => {
+    const s = run([
+      { kind: 'result', text: 'done', sessionId: 's' },
+      { kind: 'user-text', text: 'now add tests' },
     ]);
-    expect(ok.status).toBe('ended'); // a clean exit after result stays ended
+    expect(s.messages).toEqual([{ role: 'user', text: 'now add tests' }]);
+    expect(s.status).toBe('running');
   });
 
-  it('treats a clean exit before any result as an error', () => {
-    expect(run([{ kind: 'exit', code: 0 }]).status).toBe('error');
+  it('a clean exit ends the session; a non-zero exit errors', () => {
+    expect(run([{ kind: 'exit', code: 0 }]).status).toBe('ended');
+    expect(run([{ kind: 'exit', code: 1 }]).status).toBe('error');
   });
 
-  it('keeps an existing error when a clean exit follows', () => {
+  it('error stands, and a later clean exit does not overwrite it', () => {
     const s = run([
       { kind: 'error', message: 'boom' },
       { kind: 'exit', code: 0 },
     ]);
     expect(s.status).toBe('error');
     expect(s.error).toBe('boom');
+  });
+
+  it('interleaves user and assistant messages in order', () => {
+    const s = run([
+      { kind: 'assistant-text', text: 'hi' },
+      { kind: 'result', text: '', sessionId: 's' },
+      { kind: 'user-text', text: 'more please' },
+      { kind: 'assistant-text', text: 'ok' },
+    ]);
+    expect(s.messages).toEqual([
+      { role: 'assistant', text: 'hi' },
+      { role: 'user', text: 'more please' },
+      { role: 'assistant', text: 'ok' },
+    ]);
   });
 
   it('does not mutate the input state', () => {

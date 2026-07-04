@@ -13,8 +13,8 @@ export interface ToolActivity {
 
 export interface TranscriptState {
   sessionId?: string;
-  status: 'running' | 'ended' | 'error';
-  messages: Array<{ role: 'assistant'; text: string }>;
+  status: 'running' | 'awaiting-input' | 'ended' | 'error';
+  messages: Array<{ role: 'user' | 'assistant'; text: string }>;
   tools: ToolActivity[];
   actionCount: number;
   error?: string;
@@ -29,7 +29,17 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
     case 'init':
       return { ...state, sessionId: event.sessionId };
     case 'assistant-text':
-      return { ...state, messages: [...state.messages, { role: 'assistant', text: event.text }] };
+      return {
+        ...state,
+        status: 'running',
+        messages: [...state.messages, { role: 'assistant', text: event.text }],
+      };
+    case 'user-text':
+      return {
+        ...state,
+        status: 'running',
+        messages: [...state.messages, { role: 'user', text: event.text }],
+      };
     case 'tool-use':
       return {
         ...state,
@@ -44,19 +54,17 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
         ),
       };
     case 'result':
-      return { ...state, sessionId: event.sessionId || state.sessionId, status: 'ended' };
+      // A turn finished — the session stays alive, waiting for the next user turn.
+      return { ...state, sessionId: event.sessionId || state.sessionId, status: 'awaiting-input' };
     case 'error':
       return { ...state, status: 'error', error: event.message };
     case 'exit':
-      // A result already succeeded → a trailing exit stays ended.
-      if (state.status === 'ended') return state;
-      // Any exit while still running (no result yet) or already errored, and any
-      // non-zero exit, is a failure. Keep the original error message if we have one.
-      return {
-        ...state,
-        status: 'error',
-        error: state.error ?? `claude exited with code ${event.code}`,
-      };
+      // The process is gone. A clean exit ends the session; anything else is an
+      // error. Never overwrite an error we already recorded.
+      if (state.status === 'error') return state;
+      return event.code === 0
+        ? { ...state, status: 'ended' }
+        : { ...state, status: 'error', error: state.error ?? `claude exited with code ${event.code}` };
     default:
       return state;
   }
