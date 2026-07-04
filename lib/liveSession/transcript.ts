@@ -72,10 +72,15 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
     }
     case 'exit': {
       const { pendingPermission: _d, ...rest } = state;
-      if (rest.status === 'error') return { ...rest, pendingPermission: undefined } as TranscriptState;
+      if (rest.status === 'error')
+        return { ...rest, pendingPermission: undefined } as TranscriptState;
       return event.code === 0
         ? { ...rest, status: 'ended' }
-        : { ...rest, status: 'error', error: rest.error ?? `claude exited with code ${event.code}` };
+        : {
+            ...rest,
+            status: 'error',
+            error: rest.error ?? `claude exited with code ${event.code}`,
+          };
     }
     default:
       return state;

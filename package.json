@@ -14,7 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rules": "firebase emulators:exec --only firestore --project demo-codepet-rules \"vitest run --config vitest.rules.config.ts\"",
-    "test:installer": "node --test lib/installer/ toolkit/hooks/"
+    "test:installer": "node --test lib/installer/ toolkit/hooks/ lib/liveSession/"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",

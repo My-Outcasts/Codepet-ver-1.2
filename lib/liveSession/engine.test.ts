@@ -50,7 +50,13 @@ describe('startSession', () => {
 
     expect(spawnFn).toHaveBeenCalledWith(
       'claude',
-      [...CLAUDE_ARGS, '--permission-prompt-tool', 'codepet_permit', '--mcp-config', expect.any(String)],
+      [
+        ...CLAUDE_ARGS,
+        '--permission-prompt-tool',
+        'codepet_permit',
+        '--mcp-config',
+        expect.any(String),
+      ],
       { cwd: '/proj' },
     );
     // opening prompt written as a stream-json user message, then stdin closed (P1 one-shot).

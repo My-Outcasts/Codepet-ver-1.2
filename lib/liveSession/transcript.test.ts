@@ -96,7 +96,11 @@ describe('reduceTranscript', () => {
     const s = run([
       { kind: 'permission-request', requestId: 'r1', tool: 'Bash', input: { command: 'ls' } },
     ]);
-    expect(s.pendingPermission).toEqual({ requestId: 'r1', tool: 'Bash', input: { command: 'ls' } });
+    expect(s.pendingPermission).toEqual({
+      requestId: 'r1',
+      tool: 'Bash',
+      input: { command: 'ls' },
+    });
     expect(s.status).toBe('awaiting-permission');
   });
 

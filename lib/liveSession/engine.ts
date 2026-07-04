@@ -85,7 +85,13 @@ export function startSession(opts: {
   ];
   const child = spawnFn('claude', args, { cwd: opts.projectDir });
   const emitter = new EventEmitter();
-  const session: LiveSession = { emitter, child, status: 'running', buffer: [], pending: new Map() };
+  const session: LiveSession = {
+    emitter,
+    child,
+    status: 'running',
+    buffer: [],
+    pending: new Map(),
+  };
   setSession(opts.buildSessionId, session);
 
   const emit = (e: SessionEvent) => {
