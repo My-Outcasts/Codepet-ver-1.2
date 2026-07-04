@@ -64,7 +64,11 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
       if (state.status === 'error') return state;
       return event.code === 0
         ? { ...state, status: 'ended' }
-        : { ...state, status: 'error', error: state.error ?? `claude exited with code ${event.code}` };
+        : {
+            ...state,
+            status: 'error',
+            error: state.error ?? `claude exited with code ${event.code}`,
+          };
     default:
       return state;
   }
