@@ -87,6 +87,28 @@ function logUsage(
   );
 }
 
+// Prompt caching. byte re-sends a large, stable prefix on every call — the system prompt
+// (which carries the whole project model) and, in chat, the tool set. Marking that prefix
+// `cache_control: ephemeral` bills it at ~10% on a cache hit within the 5-min TTL. Below the
+// model's minimum cacheable size (~1024 tokens) the API simply doesn't cache it, so tagging
+// a short system (enrich / next-step) is harmless. Hit-rate shows up in the [ai] log's
+// cache_read/cache_write and in onUsage. One place — see the header note.
+const CACHE: Anthropic.CacheControlEphemeral = { type: 'ephemeral' };
+
+function cachedSystem(system: string): Anthropic.TextBlockParam[] {
+  return [{ type: 'text', text: system, cache_control: CACHE }];
+}
+
+/** Mark the tool set cacheable by tagging the last tool (cache_control applies to the whole
+ *  prefix up to and including it). No-op when there are no tools. */
+function cacheTools(
+  tools: Anthropic.MessageCreateParams['tools'],
+): Anthropic.MessageCreateParams['tools'] {
+  if (!tools?.length) return tools;
+  const last = tools.length - 1;
+  return tools.map((t, i) => (i === last ? { ...t, cache_control: CACHE } : t));
+}
+
 function extractText(message: Anthropic.Message): string {
   return message.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
@@ -129,7 +151,7 @@ export async function generateText(opts: GenerateOptions): Promise<string> {
     output_config: opts.schema
       ? { effort: opts.effort ?? 'low', format: { type: 'json_schema', schema: opts.schema } }
       : { effort: opts.effort ?? 'low' },
-    system: opts.system,
+    system: cachedSystem(opts.system),
     messages,
   };
 
@@ -194,9 +216,9 @@ export function streamMessage(opts: StreamOptions) {
     max_tokens: opts.maxTokens,
     thinking: { type: 'adaptive' },
     output_config: { effort: opts.effort ?? 'low' },
-    system: opts.system,
+    system: cachedSystem(opts.system),
     messages: opts.messages,
-    tools: opts.tools,
+    tools: cacheTools(opts.tools),
   });
   stream
     .finalMessage()
