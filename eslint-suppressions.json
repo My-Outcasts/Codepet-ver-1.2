@@ -45,16 +45,7 @@
   },
   "components/views/OverviewView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 12
-    },
-    "react-hooks/immutability": {
-      "count": 2
-    },
-    "react-hooks/preserve-manual-memoization": {
-      "count": 1
-    },
-    "react-hooks/refs": {
-      "count": 1
+      "count": 13
     }
   },
   "components/views/overview/StageDrawer.tsx": {
