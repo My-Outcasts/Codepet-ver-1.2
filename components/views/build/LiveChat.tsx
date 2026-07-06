@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLiveSession } from '@/lib/liveSession/useLiveSession';
 import type { BytePlan } from '@/lib/ai/plan';
 
@@ -24,10 +24,26 @@ export function LiveChat({
     brief,
   });
   const [draft, setDraft] = useState('');
+  const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // A pending teardown means this is React strict-mode's immediate remount after a
+    // transient unmount — cancel it so we don't kill the just-spawned claude child.
+    if (stopTimer.current) {
+      clearTimeout(stopTimer.current);
+      stopTimer.current = null;
+    }
     start();
-    return () => stop();
+    return () => {
+      // Defer teardown. Strict mode (dev) unmounts then synchronously remounts; a
+      // synchronous stop() would kill the claude child that the remount won't respawn
+      // (useLiveSession's `started` guard). The next mount clears this timer; a real
+      // unmount lets it fire on the next tick.
+      stopTimer.current = setTimeout(() => {
+        stopTimer.current = null;
+        stop();
+      }, 0);
+    };
   }, [start, stop]);
 
   const canSend = state.status === 'awaiting-input' && draft.trim().length > 0;
