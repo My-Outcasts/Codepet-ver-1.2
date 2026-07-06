@@ -14,6 +14,15 @@ import type { PermissionDecision } from './registry';
 
 export const PERMISSION_TIMEOUT_MS = 120_000;
 
+/** MCP server key that hosts the permission-prompt tool (see writeMcpConfig). */
+const PERMIT_SERVER = 'codepet_permit';
+/** The fully-qualified name Claude Code exposes an MCP tool under is
+ *  `mcp__<serverKey>__<toolName>`. Our server (key PERMIT_SERVER) registers one tool
+ *  also named codepet_permit (see permissionServer.mjs). `--permission-prompt-tool`
+ *  MUST get this qualified name, not the bare tool name, or claude errors with
+ *  "MCP tool codepet_permit ... not found". */
+const PERMIT_TOOL = `mcp__${PERMIT_SERVER}__codepet_permit`;
+
 /** Base headless streaming args. The permission wiring (--permission-prompt-tool +
  *  --mcp-config) is appended per session in startSession, since the mcp-config path
  *  is session-specific. */
@@ -61,7 +70,7 @@ function writeMcpConfig(buildSessionId: string): string {
   const serverPath = path.join(process.cwd(), 'lib', 'liveSession', 'permissionServer.mjs');
   const cfg = {
     mcpServers: {
-      codepet_permit: {
+      [PERMIT_SERVER]: {
         command: 'node',
         args: [serverPath],
         env: {
@@ -87,7 +96,7 @@ export function startSession(opts: {
   const args = [
     ...CLAUDE_ARGS,
     '--permission-prompt-tool',
-    'codepet_permit',
+    PERMIT_TOOL,
     '--mcp-config',
     mcpConfigPath,
   ];

@@ -53,7 +53,7 @@ describe('startSession', () => {
       [
         ...CLAUDE_ARGS,
         '--permission-prompt-tool',
-        'codepet_permit',
+        'mcp__codepet_permit__codepet_permit',
         '--mcp-config',
         expect.any(String),
       ],
@@ -272,7 +272,9 @@ describe('permission bridge', () => {
       .calls[0][1] as string[];
     expect(args).not.toContain('acceptEdits');
     expect(args).toContain('--permission-prompt-tool');
-    expect(args).toContain('codepet_permit');
+    // Claude Code needs the fully-qualified MCP tool name (mcp__<server>__<tool>),
+    // not the bare tool name, or it errors "MCP tool codepet_permit ... not found".
+    expect(args).toContain('mcp__codepet_permit__codepet_permit');
     expect(args).toContain('--mcp-config');
   });
 });
