@@ -37,12 +37,31 @@ function toTokenUsage(usage: Anthropic.Usage | null | undefined): TokenUsage {
 
 // Canonical failure kinds a generation can end in. Routes translate these to their
 // own error codes via aiErrorResponse() so the public API contract is unchanged.
+// `billing` is split out from `upstream` so a credit/quota outage is named — the exact
+// blindside we hit — instead of a vague 502.
 type Failure =
   | { kind: 'not_configured' }
   | { kind: 'refused' }
   | { kind: 'empty' }
   | { kind: 'parse_failed' }
+  | { kind: 'billing' }
   | { kind: 'upstream'; status: number };
+
+/**
+ * Classify an upstream API error into a failure kind from its status + message. A 400/402
+ * whose message names a credit/quota/billing problem is `billing` (Anthropic returns 400
+ * "Your credit balance is too low…" when the org runs out); everything else is `upstream`.
+ * Pure + exported so it's unit-tested against the real messages.
+ */
+export function classifyFailureKind(status: number, message: string): 'billing' | 'upstream' {
+  if (
+    (status === 400 || status === 402) &&
+    /credit balance|billing|insufficient|quota/i.test(message)
+  ) {
+    return 'billing';
+  }
+  return 'upstream';
+}
 
 /** Thrown by getClient()/generate* so a route's catch can map it to a Response. */
 export class GenerationError extends Error {
@@ -85,6 +104,13 @@ function logUsage(
       `cache_read=${usage?.cache_read_input_tokens ?? 0} ` +
       `cache_write=${usage?.cache_creation_input_tokens ?? 0} stop=${stopReason ?? '?'}`,
   );
+}
+
+// One structured, greppable line per FAILED model call — the counterpart to logUsage. A
+// credit outage becomes `grep 'FAILURE kind=billing'` instead of a buried stack trace; a
+// log drain can alert on it. Emitted on both the non-streaming and streaming paths.
+function logFailure(label: string, kind: string, status: number): void {
+  console.error(`[ai] label=${label} FAILURE kind=${kind} status=${status}`);
 }
 
 // Prompt caching. byte re-sends a large, stable prefix on every call — the system prompt
@@ -160,9 +186,13 @@ export async function generateText(opts: GenerateOptions): Promise<string> {
   try {
     message = await opts.client.messages.create(params);
   } catch (err) {
-    console.error(`[ai] label=${opts.label} generation failed`, err);
     const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    throw new GenerationError({ kind: 'upstream', status });
+    const errMessage = err instanceof Anthropic.APIError ? (err.message ?? '') : String(err);
+    const kind = classifyFailureKind(status, errMessage);
+    logFailure(opts.label, kind, status);
+    throw new GenerationError(
+      kind === 'billing' ? { kind: 'billing' } : { kind: 'upstream', status },
+    );
   }
 
   logUsage(opts.label, params.model, startedAt, message.usage, message.stop_reason);
@@ -226,8 +256,14 @@ export function streamMessage(opts: StreamOptions) {
       logUsage(opts.label, MODEL, startedAt, m.usage, m.stop_reason);
       opts.onUsage?.(toTokenUsage(m.usage));
     })
-    .catch(() => {
-      /* aborted or errored mid-stream — the route surfaces the error to the client */
+    .catch((err) => {
+      // The route surfaces the error to the client; here we just emit the ops signal, so a
+      // mid-stream credit outage is greppable on the chat path too (not only run-task).
+      // A deliberate abort (sign-out / new send) isn't a real failure — skip it.
+      if (err?.name === 'AbortError') return;
+      const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
+      const msg = err instanceof Anthropic.APIError ? (err.message ?? '') : String(err);
+      logFailure(opts.label, classifyFailureKind(status, msg), status);
     });
   return stream;
 }
@@ -252,6 +288,11 @@ export function aiErrorResponse(err: unknown, fallbackCode: string): Response {
         return Response.json({ error: 'empty' }, { status: 502 });
       case 'parse_failed':
         return Response.json({ error: 'parse_failed' }, { status: 502 });
+      case 'billing':
+        // The AI provider is out of credit/quota — an operator problem, not the caller's.
+        // A distinct, honest 503 (not a vague 502) so clients can say "temporarily
+        // unavailable" and it stands out in logs/metrics.
+        return Response.json({ error: 'ai_unavailable' }, { status: 503 });
       case 'upstream':
         return Response.json({ error: fallbackCode }, { status: err.failure.status });
     }
