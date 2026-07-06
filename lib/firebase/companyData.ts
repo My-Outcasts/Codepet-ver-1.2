@@ -41,6 +41,7 @@ import {
   type TrackingSummary,
 } from '../tracking';
 import { normalizeDecisions, type DecisionEntry } from '../ai/projectModel';
+import { dayKey } from '../ai/rateLimit';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -290,6 +291,13 @@ export async function loadTrackingSummary(companyId: string): Promise<TrackingSu
   } catch {
     return EMPTY_TRACKING;
   }
+}
+
+/** Today's AI-run count for the company (the daily cost-guard counter), or 0 if none yet. */
+export async function loadTodayUsage(companyId: string): Promise<number> {
+  const snap = await getDoc(doc(getDb(), `companies/${companyId}/usage/${dayKey(new Date())}`));
+  const n = snap.exists() ? (snap.data() as { n?: unknown }).n : 0;
+  return typeof n === 'number' && Number.isFinite(n) ? n : 0;
 }
 
 /** Local projects for the Build Coach's "Which project?" picker. Prefers the
