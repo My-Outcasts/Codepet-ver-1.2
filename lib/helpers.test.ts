@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { esc, fmt, slug, artType, taskState, artMeta } from './helpers';
+import {
+  esc,
+  fmt,
+  slug,
+  artType,
+  taskState,
+  artMeta,
+  stepCountLabel,
+  type LogStep,
+} from './helpers';
 import type { Task } from './data';
 
 const task = (over: Partial<Task> = {}): Task => ({
@@ -91,5 +100,14 @@ describe('artMeta', () => {
   });
   it('derives a slugged filename for site/sheet types', () => {
     expect(artMeta(task({ t: 'Pricing Model' }), 'sheet').file).toBe('pricing-model.model');
+  });
+});
+
+describe('stepCountLabel', () => {
+  it('pluralizes by count', () => {
+    expect(stepCountLabel([])).toBe('0 steps');
+    expect(stepCountLabel([{ t: 'a' }])).toBe('1 step');
+    const three: LogStep[] = [{ t: 'a' }, { mono: true, t: 'b' }, { ck: 'c' }];
+    expect(stepCountLabel(three)).toBe('3 steps');
   });
 });

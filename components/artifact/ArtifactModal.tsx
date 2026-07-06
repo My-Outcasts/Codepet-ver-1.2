@@ -6,6 +6,7 @@ import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpe
 import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
 import { LIVE_TYPES, liveKind, currentDraft, applyResult } from '@/lib/ai/applyResult';
 import { ArtifactViewer } from './viewers';
+import { ExecLog } from './ExecLog';
 
 // Scrollable modal body with a soft bottom fade that shows only while there's more
 // content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
@@ -52,82 +53,6 @@ function Phx({ a }: { a: number }) {
       {ph(1, 'Execute')}
       <span className="pa">→</span>
       {ph(2, 'Deliver')}
-    </div>
-  );
-}
-
-/* streaming execute log */
-function ExecLog({
-  steps,
-  title,
-  onDone,
-}: {
-  steps: LogStep[];
-  title: string;
-  onDone: () => void;
-}) {
-  const [shown, setShown] = useState(0);
-  const [complete, setComplete] = useState(false);
-  const actions = useRef(0);
-  const [actionCount, setActionCount] = useState(0);
-
-  useEffect(() => {
-    setShown(0);
-    setComplete(false);
-    actions.current = 0;
-    setActionCount(0);
-    let i = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const tick = () => {
-      if (i < steps.length) {
-        const s = steps[i];
-        actions.current += 3 + ((s.t || s.ck || '').length % 6);
-        setActionCount(actions.current);
-        i++;
-        setShown(i);
-        timers.push(setTimeout(tick, s.ck ? 700 : s.mono ? 340 : 520));
-      } else {
-        setComplete(true);
-        timers.push(setTimeout(onDone, 320));
-      }
-    };
-    timers.push(setTimeout(tick, 40));
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps]);
-
-  return (
-    <div className="exec">
-      <div className="exec-h">
-        <span className="spin" />
-        <span>{title}</span>
-        <span className="ec">Ran {actionCount} actions</span>
-      </div>
-      <div className="exec-log">
-        {steps.slice(0, shown).map((s, i) => {
-          const live = i === shown - 1 && !complete;
-          if (s.ck)
-            return (
-              <div className="exec-ck" key={i}>
-                <span className="ckd" />
-                <span>{s.ck}</span>
-              </div>
-            );
-          if (s.mono)
-            return (
-              <div className={`wrow mono${live ? ' live' : ''}`} key={i}>
-                <span className="wk tk0">›</span>
-                <span className="wm" dangerouslySetInnerHTML={{ __html: s.t || '' }} />
-              </div>
-            );
-          return (
-            <div className={`wrow${live ? ' live' : ''}`} key={i}>
-              <span className="wk">{live ? '' : '✓'}</span>
-              <span>{s.t}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -470,7 +395,7 @@ export function ArtifactModal() {
         <ExecLog
           key={execKind}
           steps={steps}
-          title={title as unknown as string}
+          title={title}
           onDone={() => {
             setDeliverReady(false);
             setStage('deliver');

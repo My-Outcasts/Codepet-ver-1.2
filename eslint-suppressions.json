@@ -1,4 +1,9 @@
 {
+  "components/Copilot.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "components/Onboarding.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
@@ -15,7 +20,12 @@
       "count": 2
     },
     "react-hooks/set-state-in-effect": {
-      "count": 3
+      "count": 2
+    }
+  },
+  "components/artifact/ExecLog.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "components/artifact/viewers.tsx": {

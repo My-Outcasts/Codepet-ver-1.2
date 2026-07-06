@@ -14,7 +14,7 @@ import React, {
   useState,
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
-import { artMeta, artType } from './helpers';
+import { artMeta, artType, buildLog, type LogStep } from './helpers';
 import { runByteTask, GenerateError, postEnrichAnswer } from './ai/runTask';
 import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
 import { rememberApproval } from './ai/remember';
@@ -73,6 +73,9 @@ export interface ChatMessage {
    * falsy, the chat renders an answer input + Skip; once answered/skipped it's a plain
    * past question. See lib/ai/enrichInterview. */
   interview?: { gap: Gap; answered?: boolean };
+  /** The execute-log steps for this run — streamed live in the card, then kept as the
+   * "What byte did" record. Generated once (buildLog) when the run starts. */
+  steps?: LogStep[];
   /** A "Noted" chip: a durable fact/decision byte captured from the founder's last message
    * into company memory, with an undo. `undone` strikes it once the founder undoes. */
   noted?: { topic: string; statement: string; undone?: boolean };
@@ -970,6 +973,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           text: '',
           ts: Date.now(),
           running: true,
+          steps: buildLog(t, type, d),
           result: { deptK, taskTitle, type },
         },
       ]);
@@ -1017,7 +1021,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const kind = liveKind(type);
       if (!kind) return;
       const trimmed = note.trim();
-      setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: true } : m)));
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId ? { ...m, running: true, steps: buildLog(t, type, d) } : m,
+        ),
+      );
       try {
         const res = await runByteTask({
           kind,
