@@ -73,7 +73,7 @@ export interface ChatMessage {
   /** A "stage complete — advance?" prompt: the rung the founder can move up to. */
   advance?: { toStage: string };
   /** A build plan Byte generated in chat — rendered as a plan card + "Start building". */
-  buildPlan?: import('./ai/plan').BytePlan;
+  buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
   buildAction?: { kind: 'to-plan' | 'start-building'; label: string };
 }
@@ -272,15 +272,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBuildStep(stepForLive(s));
       if (s?.ended && !buildEndedNudged.current) {
         buildEndedNudged.current = true;
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: newId(),
+        const nudge: ChatMessage = {
+          id: newId(),
+          role: 'byte',
+          text: "Nice — your session wrapped up! Pop over to the recap and let's write down what we learned. 📒",
+          ts: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, nudge]);
+        if (companyId) {
+          persistChatMessage(companyId, {
+            id: nudge.id,
             role: 'byte',
-            text: "Nice — your session wrapped up! Pop over to the recap and let's write down what we learned. 📒",
-            ts: Date.now(),
-          },
-        ]);
+            text: nudge.text,
+            createdAt: nudge.ts,
+          }).catch((err) => console.error('[store] persist build message failed', err));
+        }
       }
     });
   }, [companyId, buildSessionId]);
@@ -960,12 +966,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildIntakeActive(true);
     setBuildBrief('');
     setBuildPlanState(null);
-    setChatMessages((prev) => [
-      ...prev,
-      { id: newId(), role: 'byte', text: INTAKE_OPENING, ts: Date.now() },
-    ]);
+    const opening: ChatMessage = {
+      id: newId(),
+      role: 'byte',
+      text: INTAKE_OPENING,
+      ts: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, opening]);
+    if (companyId) {
+      persistChatMessage(companyId, {
+        id: opening.id,
+        role: 'byte',
+        text: opening.text,
+        createdAt: opening.ts,
+      }).catch((err) => console.error('[store] persist build message failed', err));
+    }
     track('build.intake.start', {});
-  }, []);
+  }, [companyId]);
 
   const addIntakeTurn = useCallback(
     (raw: string) => {
@@ -974,9 +991,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const first = buildBrief.trim().length === 0;
       setBuildBrief((b) => appendBrief(b, text));
       const now = Date.now();
+      const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
       setChatMessages((prev) => [
         ...prev,
-        { id: newId(), role: 'me', text, ts: now },
+        userMsg,
         // After the first answer, Byte nudges once and surfaces the "to plan" button.
         {
           id: newId(),
@@ -986,13 +1004,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
         },
       ]);
+      // Persist the founder's real answer; the byte follow-up carries an in-memory-only
+      // buildAction button (dead after reload) so it stays transient, like result cards.
+      if (companyId) {
+        persistChatMessage(companyId, {
+          id: userMsg.id,
+          role: 'me',
+          text,
+          createdAt: userMsg.ts,
+        }).catch((err) => console.error('[store] persist build message failed', err));
+      }
     },
-    [buildBrief],
+    [buildBrief, companyId],
   );
 
   const generateBuildPlan = useCallback(() => {
     const brief = buildBrief.trim();
     if (!brief) return;
+    // The thinking → plan-card message carries an in-memory-only buildPlan +
+    // buildAction (dead after reload), so it stays transient like the result cards.
     const thinkingId = newId();
     setChatMessages((prev) => [
       ...prev,
@@ -1063,15 +1093,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setBuildStep('during');
         }
         setView('build');
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: newId(),
+        const live: ChatMessage = {
+          id: newId(),
+          role: 'byte',
+          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+          ts: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, live]);
+        if (companyId) {
+          persistChatMessage(companyId, {
+            id: live.id,
             role: 'byte',
-            text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
-            ts: Date.now(),
-          },
-        ]);
+            text: live.text,
+            createdAt: live.ts,
+          }).catch((err) => console.error('[store] persist build message failed', err));
+        }
         track('build.arm', {});
       } finally {
         setBuildArming(false);
