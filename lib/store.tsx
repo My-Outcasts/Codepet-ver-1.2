@@ -32,6 +32,9 @@ import {
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
+  subscribeLiveBuild,
+  ensureIngestToken,
+  loadProjectDirs,
 } from './firebase/companyData';
 import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -39,6 +42,19 @@ import { streamByteChat, ChatError } from './ai/chat';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
 import { nextAction, setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
+import {
+  appendBrief,
+  stepForLive,
+  INTAKE_OPENING,
+  INTAKE_FOLLOWUP,
+  type BuildStep,
+} from './buildFlow';
+import { requestBuildPlan } from './ai/buildPlan';
+import { buildOpeningPrompt, terminalCommand } from './armSession';
+import { armBuildSession } from '@/app/actions/build';
+import { getCapability } from '@/app/actions/install';
+import type { BytePlan } from './ai/plan';
+import type { LiveState } from './liveBuild';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -56,6 +72,10 @@ export interface ChatMessage {
   result?: { deptK: string; taskTitle: string; type: string; approved?: boolean };
   /** A "stage complete — advance?" prompt: the rung the founder can move up to. */
   advance?: { toStage: string };
+  /** A build plan Byte generated in chat — rendered as a plan card + "Start building". */
+  buildPlan?: import('./ai/plan').BytePlan;
+  /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
+  buildAction?: { kind: 'to-plan' | 'start-building'; label: string };
 }
 
 const newId = (): string =>
@@ -144,6 +164,25 @@ interface AppState {
   nextStep: NextStep | null;
   toastMsg: string;
   toast: (msg: string) => void;
+  /** "Let's build" flow — lifted from BuildCoachView so the chat panel drives START
+   * and the main view renders DURING/END from one shared source. */
+  buildStep: BuildStep;
+  buildProject: string;
+  setBuildProject: (v: string) => void;
+  buildBrief: string;
+  buildPlan: BytePlan | null;
+  buildSessionId: string | null;
+  buildLive: LiveState | null;
+  buildLocal: boolean;
+  buildLaunchCommand: string | null;
+  buildProjectDir: string;
+  buildArming: boolean;
+  buildIntakeActive: boolean;
+  startBuildIntake: () => void;
+  addIntakeTurn: (text: string) => void;
+  generateBuildPlan: () => void;
+  armBuild: () => void;
+  resetBuildFlow: () => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -206,6 +245,45 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
+
+  // "Let's build" flow (was BuildCoachView local state; lifted here so the chat
+  // panel drives START and the main view renders DURING/END from one source).
+  const [buildStep, setBuildStep] = useState<BuildStep>('during');
+  const [buildProject, setBuildProject] = useState('');
+  const [buildBrief, setBuildBrief] = useState('');
+  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(null);
+  const [buildSessionId, setBuildSessionId] = useState<string | null>(null);
+  const [buildLive, setBuildLive] = useState<LiveState | null>(null);
+  const [buildLocal, setBuildLocal] = useState(false);
+  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(null);
+  const [buildProjectDir, setBuildProjectDir] = useState('');
+  const [buildArming, setBuildArming] = useState(false);
+  const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // Guards the one-time "session ended" nudge so the live subscription posts it once.
+  const buildEndedNudged = useRef(false);
+
+  // Subscribe to the live build doc once a session is armed. Updating state from the
+  // subscription is intended; when the rollup marks the doc ended we flip to END and
+  // post one closing nudge in chat.
+  useEffect(() => {
+    if (!companyId || !buildSessionId) return;
+    return subscribeLiveBuild(companyId, buildSessionId, (s) => {
+      setBuildLive(s);
+      setBuildStep(stepForLive(s));
+      if (s?.ended && !buildEndedNudged.current) {
+        buildEndedNudged.current = true;
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: 'byte',
+            text: "Nice — your session wrapped up! Pop over to the recap and let's write down what we learned. 📒",
+            ts: Date.now(),
+          },
+        ]);
+      }
+    });
+  }, [companyId, buildSessionId]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
   // never disagree. Set instantly to the authored golden path (so nothing is ever
@@ -878,6 +956,143 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, chatMessages, chatStreaming, nextStep, runTaskInChat],
   );
 
+  const startBuildIntake = useCallback(() => {
+    setBuildIntakeActive(true);
+    setBuildBrief('');
+    setBuildPlanState(null);
+    setChatMessages((prev) => [
+      ...prev,
+      { id: newId(), role: 'byte', text: INTAKE_OPENING, ts: Date.now() },
+    ]);
+    track('build.intake.start', {});
+  }, []);
+
+  const addIntakeTurn = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text) return;
+      const first = buildBrief.trim().length === 0;
+      setBuildBrief((b) => appendBrief(b, text));
+      const now = Date.now();
+      setChatMessages((prev) => [
+        ...prev,
+        { id: newId(), role: 'me', text, ts: now },
+        // After the first answer, Byte nudges once and surfaces the "to plan" button.
+        {
+          id: newId(),
+          role: 'byte',
+          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
+          ts: now + 1,
+          buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
+        },
+      ]);
+    },
+    [buildBrief],
+  );
+
+  const generateBuildPlan = useCallback(() => {
+    const brief = buildBrief.trim();
+    if (!brief) return;
+    const thinkingId = newId();
+    setChatMessages((prev) => [
+      ...prev,
+      { id: thinkingId, role: 'byte', text: 'Byte is turning this into a plan…', ts: Date.now() },
+    ]);
+    (async () => {
+      try {
+        const plan = await requestBuildPlan({ brief, project: buildProject || undefined });
+        setBuildPlanState(plan);
+        setBuildIntakeActive(false);
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? {
+                  ...m,
+                  text: `Here's the plan — aim for ~${plan.budgetActions} actions.`,
+                  buildPlan: plan,
+                  buildAction: { kind: 'start-building', label: 'Start building' },
+                }
+              : m,
+          ),
+        );
+      } catch {
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? { ...m, text: "Byte couldn't put the plan together just now. Give it another go?" }
+              : m,
+          ),
+        );
+      }
+    })();
+  }, [buildBrief, buildProject]);
+
+  const armBuild = useCallback(() => {
+    if (!buildPlan || !companyId || buildArming) return;
+    setBuildArming(true);
+    buildEndedNudged.current = false;
+    (async () => {
+      try {
+        const id = crypto.randomUUID();
+        const dirs = await loadProjectDirs(companyId);
+        const dir = dirs.find((p) => p.name === buildProject)?.path ?? (buildProject.trim() || '.');
+        setBuildProjectDir(dir);
+        const cap = await getCapability();
+        if (cap.mode === 'local') {
+          setBuildLocal(true);
+          setBuildLaunchCommand(null);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        } else {
+          setBuildLocal(false);
+          const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
+          const token = await ensureIngestToken(companyId);
+          const res = await armBuildSession({
+            buildSessionId: id,
+            projectDir: dir,
+            plan: buildPlan,
+            brief: buildBrief,
+            companyId,
+            token,
+            apiUrl: window.location.origin,
+          });
+          setBuildLaunchCommand(res.ok && res.launched ? null : command);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        }
+        setView('build');
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: 'byte',
+            text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+            ts: Date.now(),
+          },
+        ]);
+        track('build.arm', {});
+      } finally {
+        setBuildArming(false);
+      }
+    })();
+  }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
+
+  const resetBuildFlow = useCallback(() => {
+    setBuildStep('during');
+    setBuildProject('');
+    setBuildBrief('');
+    setBuildPlanState(null);
+    setBuildSessionId(null);
+    setBuildLive(null);
+    setBuildLocal(false);
+    setBuildLaunchCommand(null);
+    setBuildProjectDir('');
+    setBuildIntakeActive(false);
+    buildEndedNudged.current = false;
+  }, []);
+
   const value = useMemo<AppState>(
     () => ({
       tick,
@@ -925,6 +1140,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       nextStep,
       toastMsg,
       toast,
+      buildStep,
+      buildProject,
+      setBuildProject,
+      buildBrief,
+      buildPlan,
+      buildSessionId,
+      buildLive,
+      buildLocal,
+      buildLaunchCommand,
+      buildProjectDir,
+      buildArming,
+      buildIntakeActive,
+      startBuildIntake,
+      addIntakeTurn,
+      generateBuildPlan,
+      armBuild,
+      resetBuildFlow,
     }),
     [
       tick,
@@ -972,6 +1204,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       nextStep,
       toastMsg,
       toast,
+      buildStep,
+      buildProject,
+      setBuildProject,
+      buildBrief,
+      buildPlan,
+      buildSessionId,
+      buildLive,
+      buildLocal,
+      buildLaunchCommand,
+      buildProjectDir,
+      buildArming,
+      buildIntakeActive,
+      startBuildIntake,
+      addIntakeTurn,
+      generateBuildPlan,
+      armBuild,
+      resetBuildFlow,
     ],
   );
 
