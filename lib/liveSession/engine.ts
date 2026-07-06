@@ -33,6 +33,11 @@ export const CLAUDE_ARGS = [
   '--output-format',
   'stream-json',
   '--verbose',
+  // `default` (not the headless bypassPermissions default) so state-changing tool
+  // calls route through the permission-prompt-tool → the Allow/Deny card. Safe reads
+  // still run without prompting; writes/edits/risky commands wait for the user.
+  '--permission-mode',
+  'default',
 ];
 
 interface ChildLike {

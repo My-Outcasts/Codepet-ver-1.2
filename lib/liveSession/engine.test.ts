@@ -271,6 +271,10 @@ describe('permission bridge', () => {
     const args: string[] = (spawnFn as unknown as { mock: { calls: unknown[][] } }).mock
       .calls[0][1] as string[];
     expect(args).not.toContain('acceptEdits');
+    // Must run in `default` mode (not bypassPermissions) so tool calls are actually
+    // gated by the Allow/Deny card instead of running unattended.
+    expect(args).toContain('--permission-mode');
+    expect(args).toContain('default');
     expect(args).toContain('--permission-prompt-tool');
     // Claude Code needs the fully-qualified MCP tool name (mcp__<server>__<tool>),
     // not the bare tool name, or it errors "MCP tool codepet_permit ... not found".
