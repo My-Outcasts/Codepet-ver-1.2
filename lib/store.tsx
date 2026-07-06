@@ -945,7 +945,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // If byte chose to run a task but said nothing, synthesize a short lead-in so
         // the run never appears out of nowhere.
         const finalText =
-          acc.trim() || (pending ? `On it — running “${pending.taskTitle}”.` : fallback);
+          acc.trim() ||
+          (pending
+            ? `On it — running “${pending.taskTitle}”.`
+            : offerBuild
+              ? 'Love it — let’s build it.'
+              : fallback);
         setChatMessages((prev) =>
           prev.map((m) =>
             m.id === byteMsg.id
