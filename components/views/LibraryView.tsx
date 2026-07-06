@@ -1,7 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useApp } from '@/lib/store';
-import { LIB_TAG, LIB_BUCKET, LIB_BORDER, LIB_SKIN, DEPTS } from '@/lib/data';
+import { LIB_TAG, LIB_BUCKET, LIB_BORDER, LIB_TC, DEPTS } from '@/lib/data';
+import { OutcomePreview } from '@/components/library/OutcomePreview';
 
 const libBucket = (t: string) => LIB_BUCKET[t] || 'Docs';
 
@@ -52,26 +53,25 @@ export function LibraryView() {
       .join(' ');
 
   const Row = ({ x }: { x: LibItem }) => {
-    const ink = (LIB_SKIN[x.type] || LIB_SKIN.doc).ink;
+    const tc = LIB_TC[x.type] || 'var(--t-3)';
     const desc = descOf(x);
     const live = libState(x.type) === 'live';
     return (
-      <div
-        className="lib-tile libopen"
-        style={{ ['--c' as string]: ink }}
-        onClick={() => viewItem(x)}
-      >
-        <div className="lt-main">
-          <span className="lt-tag">{LIB_TAG[x.type]}</span>
+      <div className="lib-tile libopen" onClick={() => viewItem(x)}>
+        <OutcomePreview item={x} />
+        <div className="lt-info">
+          <span className="lt-tag" style={{ color: tc }}>
+            {LIB_TAG[x.type]}
+          </span>
           <div className="lt-title">{x.title}</div>
           {desc && <div className="lt-desc">{desc}</div>}
-        </div>
-        <div className="lt-meta">
-          <span className={`lt-state${live ? ' live' : ''}`}>
-            <span className={`lib-pip${live ? '' : ' hollow'}`} />
-            {live ? 'Live' : 'Draft'}
-          </span>
-          <span className="lt-open">open</span>
+          <div className="lt-metarow">
+            <span className={`lt-state${live ? ' live' : ''}`}>
+              <span className={`lib-pip${live ? '' : ' hollow'}`} />
+              {live ? 'Live' : 'Draft'}
+            </span>
+            <span className="lt-open">open →</span>
+          </div>
         </div>
       </div>
     );
@@ -80,19 +80,17 @@ export function LibraryView() {
   return (
     <section className="view on" id="v-library">
       <div className="vhead lib-mast">
-        <div>
-          <h1>Library</h1>
-          {library.length > 0 && (
-            <div className="lib-idx">
-              {pad2(library.length)} {library.length === 1 ? 'item' : 'items'}
-              {liveN > 0 && <> · {pad2(liveN)} live</>}
-              {library.length - liveN > 0 && <> · {pad2(library.length - liveN)} draft</>}
-            </div>
-          )}
-        </div>
+        <h1>Library</h1>
         <div className="sub lib-say">
           Everything byte has shipped or drafted — approved by you, kept in one place.
         </div>
+        {library.length > 0 && (
+          <div className="lib-idx">
+            {pad2(library.length)} {library.length === 1 ? 'item' : 'items'}
+            {liveN > 0 && <> · {pad2(liveN)} live</>}
+            {library.length - liveN > 0 && <> · {pad2(library.length - liveN)} draft</>}
+          </div>
+        )}
       </div>
 
       {library.length > 0 && (
