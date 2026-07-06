@@ -67,7 +67,9 @@ export default function OverviewIntro({
         >
           I&apos;ll build your company with you — one move at a time.
         </div>
-        <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(245,243,255,.72)', marginTop: 12 }}>
+        <div
+          style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(245,243,255,.72)', marginTop: 12 }}
+        >
           This whole map is your company. I always keep{' '}
           <b style={{ color: '#F5F3FF' }}>one move lit</b> — the single next thing that matters. Let
           me show you.

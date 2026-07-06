@@ -22,10 +22,12 @@
 ### Task 1: Pure first-run phase module
 
 **Files:**
+
 - Create: `lib/overviewIntro.ts`
 - Test: `lib/overviewIntro.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `INTRO_SEEN_KEY: string` (= `'codepet:overview-intro-seen'`)
@@ -161,9 +163,11 @@ git commit -m "feat(overview): pure first-run phase machine + tests"
 ### Task 2: Rewrite OverviewIntro as a controlled slim card
 
 **Files:**
+
 - Modify (full replace): `components/views/overview/OverviewIntro.tsx`
 
 **Interfaces:**
+
 - Consumes: `GUIDE_HEX` from `lib/overviewIntro`.
 - Produces: `OverviewIntro({ onReveal, onDismiss, showLegend }: { onReveal: () => void; onDismiss: () => void; showLegend: boolean })` — presentational only. No `localStorage`, no camera. `onReveal` = CTA; `onDismiss` = backdrop click; `showLegend` appends the full color key (true when reopened).
 
@@ -241,7 +245,9 @@ export default function OverviewIntro({
         >
           I&apos;ll build your company with you — one move at a time.
         </div>
-        <div style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(245,243,255,.72)', marginTop: 12 }}>
+        <div
+          style={{ fontSize: 13.5, lineHeight: 1.6, color: 'rgba(245,243,255,.72)', marginTop: 12 }}
+        >
           This whole map is your company. I always keep{' '}
           <b style={{ color: '#F5F3FF' }}>one move lit</b> — the single next thing that matters. Let
           me show you.
@@ -327,7 +333,7 @@ function LegendRow({ c, t }: { c: string; t: string }) {
 - [ ] **Step 2: Typecheck**
 
 Run: `npx tsc --noEmit`
-Expected: FAIL — `OverviewIntro` is still rendered with no props at `components/views/OverviewView.tsx` (`<OverviewIntro />`). This is expected; Task 4 fixes the call site. If any *other* error appears in this file, fix it.
+Expected: FAIL — `OverviewIntro` is still rendered with no props at `components/views/OverviewView.tsx` (`<OverviewIntro />`). This is expected; Task 4 fixes the call site. If any _other_ error appears in this file, fix it.
 
 - [ ] **Step 3: Lint the file**
 
@@ -346,9 +352,11 @@ git commit -m "feat(overview): slim value-first intro card, controlled by parent
 ### Task 3: Extend ByteGuide with a spotlight prop
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` — the `ByteGuide` function (around lines 655–700) and its type.
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: `ByteGuide({ here, onStart, spotlight }: { here: HereInfo; onStart: () => void; spotlight?: boolean })` — when `spotlight` is true, adds a cyan glow ring (box-shadow only, no layout shift) and one guide-star line. Defaults to the current appearance.
 
@@ -401,26 +409,28 @@ Replace the `boxShadow` line with:
 Find the dept · label line:
 
 ```tsx
-        <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
-          {here.dept.name} · {st.label}
-        </div>
+<div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
+  {here.dept.name} · {st.label}
+</div>
 ```
 
 Immediately after that `</div>`, insert:
 
 ```tsx
-        {spotlight && (
-          <div
-            style={{
-              marginTop: 9,
-              fontSize: 11.5,
-              lineHeight: 1.45,
-              color: 'rgba(125,227,255,.9)',
-            }}
-          >
-            The bright cyan star is always your next move.
-          </div>
-        )}
+{
+  spotlight && (
+    <div
+      style={{
+        marginTop: 9,
+        fontSize: 11.5,
+        lineHeight: 1.45,
+        color: 'rgba(125,227,255,.9)',
+      }}
+    >
+      The bright cyan star is always your next move.
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 4: Typecheck**
@@ -440,9 +450,11 @@ git commit -m "feat(overview): ByteGuide gains a spotlight ring + guide-star lin
 ### Task 4: Wire the phase machine into OverviewView
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` — imports, `flyTo` signature, new state/handlers, the `<OverviewIntro />` render.
 
 **Interfaces:**
+
 - Consumes: `introInitialPhase`, `revealAction`, `INTRO_SEEN_KEY`, `type IntroPhase` from `lib/overviewIntro`; existing `flyTo`, `fitView`, `beaconId`, `here`, `portalToTask`.
 - Produces: `introPhase` state + `handleIntroReveal` / `handleIntroDismiss`, consumed by Task 5's visuals.
 
@@ -487,14 +499,12 @@ const markIntroSeen = () => {
 Inside `OverviewView`, right after the `useApp()` destructure block (after `} = useApp();` and `void tick;`), add:
 
 ```tsx
-  // First-run spotlight handoff. OverviewView owns the phase + the localStorage
-  // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
-  // OverviewView is imported ssr:false, so reading localStorage in the lazy
-  // initializer is safe.
-  const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
-    introInitialPhase(readIntroSeen()),
-  );
-  const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => readIntroSeen());
+// First-run spotlight handoff. OverviewView owns the phase + the localStorage
+// flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
+// OverviewView is imported ssr:false, so reading localStorage in the lazy
+// initializer is safe.
+const [introPhase, setIntroPhase] = useState<IntroPhase>(() => introInitialPhase(readIntroSeen()));
+const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => readIntroSeen());
 ```
 
 - [ ] **Step 4: Make flyTo honor reduced motion**
@@ -514,13 +524,13 @@ Replace with:
 Then find the `cameraPosition` call inside `flyTo`:
 
 ```tsx
-    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
+fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
 ```
 
 Replace with:
 
 ```tsx
-    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, ms);
+fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, ms);
 ```
 
 - [ ] **Step 5: Add the handoff handlers + settle effect**
@@ -530,34 +540,34 @@ Anchor: place this block **immediately before the `return (`** in `OverviewView`
 defined above it — avoiding any `no-use-before-define`. Add:
 
 ```tsx
-  // Skip the camera glide (jump-cut) for users who prefer reduced motion.
-  const introReduceMotion = () =>
-    typeof window !== 'undefined' &&
-    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+// Skip the camera glide (jump-cut) for users who prefer reduced motion.
+const introReduceMotion = () =>
+  typeof window !== 'undefined' &&
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // CTA in the intro: remember it's seen, then either fly to the lit beacon or
-  // (no live move) recenter the whole map, and enter the spotlight.
-  const handleIntroReveal = () => {
-    markIntroSeen();
-    setHasSeenIntro(true);
-    if (revealAction(here) === 'fly') flyTo(beaconId, introReduceMotion() ? 0 : 900);
-    else fitView();
-    setIntroPhase('spotlight');
-  };
+// CTA in the intro: remember it's seen, then either fly to the lit beacon or
+// (no live move) recenter the whole map, and enter the spotlight.
+const handleIntroReveal = () => {
+  markIntroSeen();
+  setHasSeenIntro(true);
+  if (revealAction(here) === 'fly') flyTo(beaconId, introReduceMotion() ? 0 : 900);
+  else fitView();
+  setIntroPhase('spotlight');
+};
 
-  // Backdrop click: dismiss without flying, but still mark it seen.
-  const handleIntroDismiss = () => {
-    markIntroSeen();
-    setHasSeenIntro(true);
-    setIntroPhase('done');
-  };
+// Backdrop click: dismiss without flying, but still mark it seen.
+const handleIntroDismiss = () => {
+  markIntroSeen();
+  setHasSeenIntro(true);
+  setIntroPhase('done');
+};
 
-  // The spotlight is a light touch, not a second modal — auto-settle after a beat.
-  useEffect(() => {
-    if (introPhase !== 'spotlight') return;
-    const id = setTimeout(() => setIntroPhase('done'), 6000);
-    return () => clearTimeout(id);
-  }, [introPhase]);
+// The spotlight is a light touch, not a second modal — auto-settle after a beat.
+useEffect(() => {
+  if (introPhase !== 'spotlight') return;
+  const id = setTimeout(() => setIntroPhase('done'), 6000);
+  return () => clearTimeout(id);
+}, [introPhase]);
 ```
 
 - [ ] **Step 6: Replace the intro render**
@@ -565,19 +575,21 @@ defined above it — avoiding any `no-use-before-define`. Add:
 Find:
 
 ```tsx
-      <OverviewIntro />
+<OverviewIntro />
 ```
 
 Replace with:
 
 ```tsx
-      {introPhase === 'intro' && (
-        <OverviewIntro
-          showLegend={hasSeenIntro}
-          onReveal={handleIntroReveal}
-          onDismiss={handleIntroDismiss}
-        />
-      )}
+{
+  introPhase === 'intro' && (
+    <OverviewIntro
+      showLegend={hasSeenIntro}
+      onReveal={handleIntroReveal}
+      onDismiss={handleIntroDismiss}
+    />
+  );
+}
 ```
 
 - [ ] **Step 7: Typecheck + lint**
@@ -602,9 +614,11 @@ git commit -m "feat(overview): own first-run phase + wire the intro handoff"
 ### Task 5: Spotlight visuals — pass the prop, vignette, reopen chip
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` — the `<ByteGuide />` render, plus two new sibling elements in the returned section.
 
 **Interfaces:**
+
 - Consumes: `introPhase`, `setIntroPhase`, `here`, `portalToTask` from Task 4.
 - Produces: the final first-run UX (verified on preview).
 
@@ -613,30 +627,30 @@ git commit -m "feat(overview): own first-run phase + wire the intro handoff"
 Find the `ByteGuide` usage:
 
 ```tsx
-            <ByteGuide
-              here={here}
-              // One shared arrival: byte opens the chat + briefs you, then the
-              // portalSignal effect glides the camera to the department AFTER the
-              // chat has docked — so the fly frames the settled (narrower) layout
-              // instead of being yanked back by the resize-driven auto-fit.
-              onStart={() => portalToTask(here.dept.k, here.task.t)}
-            />
+<ByteGuide
+  here={here}
+  // One shared arrival: byte opens the chat + briefs you, then the
+  // portalSignal effect glides the camera to the department AFTER the
+  // chat has docked — so the fly frames the settled (narrower) layout
+  // instead of being yanked back by the resize-driven auto-fit.
+  onStart={() => portalToTask(here.dept.k, here.task.t)}
+/>
 ```
 
 Replace with:
 
 ```tsx
-            <ByteGuide
-              here={here}
-              spotlight={introPhase === 'spotlight'}
-              // One shared arrival: byte opens the chat + briefs you, then the
-              // portalSignal effect glides the camera to the department AFTER the
-              // chat has docked. Starting also settles any active spotlight.
-              onStart={() => {
-                setIntroPhase('done');
-                portalToTask(here.dept.k, here.task.t);
-              }}
-            />
+<ByteGuide
+  here={here}
+  spotlight={introPhase === 'spotlight'}
+  // One shared arrival: byte opens the chat + briefs you, then the
+  // portalSignal effect glides the camera to the department AFTER the
+  // chat has docked. Starting also settles any active spotlight.
+  onStart={() => {
+    setIntroPhase('done');
+    portalToTask(here.dept.k, here.task.t);
+  }}
+/>
 ```
 
 - [ ] **Step 2: Add the spotlight vignette**
@@ -644,31 +658,35 @@ Replace with:
 Find the intro render you added in Task 4:
 
 ```tsx
-      {introPhase === 'intro' && (
-        <OverviewIntro
-          showLegend={hasSeenIntro}
-          onReveal={handleIntroReveal}
-          onDismiss={handleIntroDismiss}
-        />
-      )}
+{
+  introPhase === 'intro' && (
+    <OverviewIntro
+      showLegend={hasSeenIntro}
+      onReveal={handleIntroReveal}
+      onDismiss={handleIntroDismiss}
+    />
+  );
+}
 ```
 
 Immediately after that block, add:
 
 ```tsx
-      {introPhase === 'spotlight' && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 3,
-            pointerEvents: 'none',
-            background:
-              'radial-gradient(closest-side at 50% 50%, rgba(4,3,10,0) 45%, rgba(4,3,10,0.5) 100%)',
-          }}
-        />
-      )}
+{
+  introPhase === 'spotlight' && (
+    <div
+      aria-hidden
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 3,
+        pointerEvents: 'none',
+        background:
+          'radial-gradient(closest-side at 50% 50%, rgba(4,3,10,0) 45%, rgba(4,3,10,0.5) 100%)',
+      }}
+    />
+  );
+}
 ```
 
 - [ ] **Step 3: Add the reopen affordance to the existing legend strip**
@@ -676,7 +694,7 @@ Immediately after that block, add:
 Both bottom corners are already occupied — the permanent color legend sits
 bottom-left, and the app-shell "Ask byte" launcher (`components/Copilot.tsx`)
 sits bottom-right. So the reopen control goes as a trailing item **on the
-legend strip itself** (semantically correct — it *is* "how to read this map").
+legend strip itself** (semantically correct — it _is_ "how to read this map").
 The legend container has `pointerEvents: 'none'`, so the button re-enables its
 own clicks with `pointerEvents: 'auto'`.
 

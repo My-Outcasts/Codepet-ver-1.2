@@ -7,8 +7,8 @@
 ## Problem
 
 A first-time founder lands on the Overview map and meets `OverviewIntro` —
-a one-shot modal that teaches how to *read* the map (journey ribbon, lit next
-move, a 4-color legend) before they know *why* they'd want to. Two concrete
+a one-shot modal that teaches how to _read_ the map (journey ribbon, lit next
+move, a 4-color legend) before they know _why_ they'd want to. Two concrete
 faults:
 
 1. **It front-loads mechanics before value.** ~110 words, a full 4-color legend
@@ -25,7 +25,7 @@ contextually — supporting the product's own "first value < 2 min" target.
 
 **Spotlight handoff.** Slim the intro to a value-first card, and make its CTA
 physically glide the camera to the already-existing beacon, dim the rest, and
-spotlight the beacon card that is *already on screen* — teaching only the one
+spotlight the beacon card that is _already on screen_ — teaching only the one
 color that matters, right then. Rejected alternatives: a multi-step modal tour
 (still makes them read before acting) and a fully ambient non-modal nudge (loses
 the deliberate "here is the one thing" framing on first arrival).
@@ -33,32 +33,34 @@ the deliberate "here is the one thing" framing on first arrival).
 Reuse over rebuild: the handoff targets the **existing** on-map beacon callout
 (`ByteGuide`, tethered to the beacon node) and the **existing** `flyTo()` camera
 glide in `OverviewView`. No second "next move" card is created. Note: `flyTo`
-only *frames* the beacon — it does not start the task; Start stays a separate
+only _frames_ the beacon — it does not start the task; Start stays a separate
 user action via `ByteGuide`'s existing `portalToTask` wiring.
 
 ## The two-frame flow
 
 **Frame 1 — Slim intro (`OverviewIntro`, rewritten).**
-- Eyebrow `byte · your companion`; title *"I'll build your company with you —
-  one move at a time."*; one body line establishing the map = your company and
-  the single rule (*"I always keep one move lit"*). No 4-color legend.
+
+- Eyebrow `byte · your companion`; title _"I'll build your company with you —
+  one move at a time."_; one body line establishing the map = your company and
+  the single rule (_"I always keep one move lit"_). No 4-color legend.
 - One primary CTA: **Show me my next move ▸**, plus a muted reassurance line
-  *"I'll explain the map as we go."*
+  _"I'll explain the map as we go."_
 - Target ~60 words (down from ~110).
 - Dropping the legend from the card is doubly safe: the Overview **already**
   renders a permanent color legend strip at bottom-left (`Project / byte does /
-  Needs approval / Needs you / Done`), so the upfront legend in the modal was
+Needs approval / Needs you / Done`), so the upfront legend in the modal was
   redundant. The colors are always available on the map itself.
 
 **Frame 2 — Spotlight handoff (triggered by the CTA).**
+
 1. Camera glides to the beacon node (`flyTo(beaconId)`).
 2. The rest of the map dims; the lit beacon + its trail stay bright.
 3. The existing `ByteGuide` callout ("byte · do this next") gets a one-time glow
    ring **and** one extra line teaching the color that is actually lit — the
    beacon node is recolored **cyan** (`BEACON_HEX`) as byte's guide star, so the
-   line names that: *"The bright cyan star is always your next move."* Folded
+   line names that: _"The bright cyan star is always your next move."_ Folded
    into `ByteGuide` (already tethered at the node), so no second tethered element
-   is introduced. Ownership — *who* does the task — is already shown by
+   is introduced. Ownership — _who_ does the task — is already shown by
    `ByteGuide` via `st.label` ("Awaiting your approval", "Your move", …), so the
    spotlight doesn't repeat it. The full purple/gold/blue/green **node** legend
    lives in the "?" explainer, not the spotlight.
