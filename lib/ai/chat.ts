@@ -21,7 +21,8 @@ export type ChatEvent =
   | { type: 'text'; text: string }
   | { type: 'action'; deptK: string; taskTitle: string }
   | { type: 'nav'; dest: string; target?: string }
-  | { type: 'setup'; category: string; name: string };
+  | { type: 'setup'; category: string; name: string }
+  | { type: 'noted'; items: { topic: string; statement: string }[] };
 
 export class ChatError extends Error {
   constructor(public code: string) {
@@ -86,7 +87,10 @@ export async function* streamByteChat(
         nav?: unknown;
         target?: unknown;
         setup?: unknown;
+        noted?: unknown;
       };
+      // The action tools are mutually exclusive; memory (noted) is orthogonal and may
+      // accompany any of them, so it's yielded independently of the action branch.
       if (typeof a.deptK === 'string' && typeof a.taskTitle === 'string') {
         yield { type: 'action', deptK: a.deptK, taskTitle: a.taskTitle };
       } else if (typeof a.nav === 'string') {
@@ -100,6 +104,16 @@ export async function* streamByteChat(
         if (typeof s.category === 'string' && typeof s.name === 'string') {
           yield { type: 'setup', category: s.category, name: s.name };
         }
+      }
+      if (Array.isArray(a.noted)) {
+        const items = a.noted
+          .map((n) => n as { topic?: unknown; statement?: unknown })
+          .filter(
+            (n): n is { topic: string; statement: string } =>
+              typeof n.topic === 'string' && typeof n.statement === 'string',
+          )
+          .map((n) => ({ topic: n.topic, statement: n.statement }));
+        if (items.length) yield { type: 'noted', items };
       }
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */
