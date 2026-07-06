@@ -1,12 +1,16 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth';
+import { useApp } from '@/lib/store';
+import { SupportModal } from './SupportModal';
 
 export function Topbar() {
   const { user, signOutUser } = useAuth();
+  const { show } = useApp();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [support, setSupport] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
 
   // Close the menu on a click OUTSIDE it. The listener is attached only while the
@@ -79,11 +83,45 @@ export function Topbar() {
               <b>{name}</b>
               {email && <span>{email}</span>}
             </div>
-            <a onClick={askSignOut}>Sign out</a>
+            <div className="tb-sep" />
+            <a
+              onClick={() => {
+                setOpen(false);
+                show('settings');
+              }}
+            >
+              Settings
+            </a>
+            <a
+              onClick={() => {
+                setOpen(false);
+                show('billing');
+              }}
+            >
+              Billing &amp; Usage
+            </a>
+            <a
+              onClick={() => {
+                setOpen(false);
+                setSupport(true);
+              }}
+            >
+              Support
+            </a>
+            <div className="tb-sep" />
+            <a onClick={askSignOut}>Log out</a>
           </div>
         </button>
         <span className="right">
-          <span className="upg">Upgrade</span>
+          <button
+            className="upg"
+            onClick={() => {
+              setOpen(false);
+              show('billing');
+            }}
+          >
+            Upgrade
+          </button>
         </span>
       </div>
       {confirming && (
@@ -111,6 +149,7 @@ export function Topbar() {
           </div>
         </div>
       )}
+      <SupportModal open={support} onClose={() => setSupport(false)} />
     </>
   );
 }

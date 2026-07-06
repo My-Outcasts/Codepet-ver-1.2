@@ -151,6 +151,7 @@ body {
   font-weight: 600;
   color: #fff;
   background: var(--t-1);
+  border: none;
   border-radius: 8px;
   padding: 6px 12px;
   cursor: pointer;
@@ -208,8 +209,6 @@ body {
 }
 .tb-menu .who {
   padding: 8px 10px 9px;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 5px;
 }
 .tb-menu .who b {
   display: block;
@@ -234,6 +233,24 @@ body {
 .tb-menu a:hover {
   background: var(--well);
   color: var(--t-1);
+}
+/* account menu — grouped rows */
+.tb-menu .tb-sep {
+  height: 1px;
+  background: var(--hairline);
+  margin: 6px 0;
+}
+.tb-menu a {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--t-1);
+  font-size: 13.5px;
+}
+.tb-menu a:hover {
+  background: var(--surface-2, #f4f1fb);
+  color: var(--accent-deep, #5b27b0);
 }
 .tb-ic {
   width: 30px;
