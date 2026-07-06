@@ -6,7 +6,7 @@
 
 ## Goal
 
-Make the Library page show, at a glance, *what each deliverable actually is* — a visual
+Make the Library page show, at a glance, _what each deliverable actually is_ — a visual
 preview of the Outcome per card — instead of a plain two-line text snippet. Keep the existing
 department grouping, and move the page description under the heading.
 
@@ -35,20 +35,20 @@ New `components/library/OutcomePreview.tsx` exporting `<OutcomePreview item={x} 
 on `item.type` and renders a small, purpose-built preview from the item's **real structured
 data**, with a graceful fallback when a seed item carries only `out` text.
 
-| type | preview | reads |
-|------|---------|-------|
-| `site` | browser chrome (dots + url bar, headline + 2 bars) | structural |
-| `build` | browser chrome + green "✓ shipped & verified" ribbon | structural |
-| `screens` | two stacked phone frames | structural |
-| `plan` | numbered steps 1·2·3 (count from `plan.steps`, cap 3) | `plan.steps` |
-| `sheet` | mini table / number band | structural |
-| `post` | social card: byte avatar + real post body | `post.variants[0].body` |
-| `email` | subject line + body lines + "N-email sequence" | `email.subject`, `email.seq.length` |
-| `calendar` | 2-week day grid, marked days = posts | `calendar.weeks[].items` |
-| `legal` | document page + section title, "review" flag if `legal.flag` | `legal.docTitle`, `legal.flag` |
-| `doc` / `prep` | document page (title + text lines) | `doc.title` or `out` |
-| `dms` | chat bubbles with a real message snippet | `dms[0].msg` |
-| `checklist` | up to 4 checkbox rows with real done state | `checklist[].done` |
+| type           | preview                                                      | reads                               |
+| -------------- | ------------------------------------------------------------ | ----------------------------------- |
+| `site`         | browser chrome (dots + url bar, headline + 2 bars)           | structural                          |
+| `build`        | browser chrome + green "✓ shipped & verified" ribbon         | structural                          |
+| `screens`      | two stacked phone frames                                     | structural                          |
+| `plan`         | numbered steps 1·2·3 (count from `plan.steps`, cap 3)        | `plan.steps`                        |
+| `sheet`        | mini table / number band                                     | structural                          |
+| `post`         | social card: byte avatar + real post body                    | `post.variants[0].body`             |
+| `email`        | subject line + body lines + "N-email sequence"               | `email.subject`, `email.seq.length` |
+| `calendar`     | 2-week day grid, marked days = posts                         | `calendar.weeks[].items`            |
+| `legal`        | document page + section title, "review" flag if `legal.flag` | `legal.docTitle`, `legal.flag`      |
+| `doc` / `prep` | document page (title + text lines)                           | `doc.title` or `out`                |
+| `dms`          | chat bubbles with a real message snippet                     | `dms[0].msg`                        |
+| `checklist`    | up to 4 checkbox rows with real done state                   | `checklist[].done`                  |
 
 **Fallback:** if the expected structured field is missing/empty, render the generic "document
 page" preview (title + lines seeded from `out`). No preview ever throws on missing data.
@@ -61,6 +61,7 @@ list. All hues come from existing CSS tokens (`--accent`, `--blue`, `--clay`, `-
 ## CSS
 
 Add a `.lib-*` poster-row block to `app/globals.css`:
+
 - `.lib-mast` → single column (drop the flex split); `.lib-say` sits under `h1`.
 - `.lib-grid` (per dept) → `display:flex; flex-direction:column; gap`.
 - `.lib-tile` → horizontal flex (`min-height:150px`); `.lt-prev` left panel (300px, tinted,
