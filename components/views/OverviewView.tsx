@@ -134,6 +134,7 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [zoomedIn, setZoomedIn] = useState(false);
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -149,6 +150,32 @@ export default function OverviewView() {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Reveal task labels when the camera is close. Watched per-frame with
+  // hysteresis (enter < 200, exit > 260) so it doesn't flicker at the threshold;
+  // on a cross we flip state + refresh so nodeThreeObject re-runs. Task labels
+  // otherwise stay hidden (hover still shows them via nodeLabel).
+  useEffect(() => {
+    if (!dims.w) return;
+    let raf = 0;
+    let cur = false;
+    const tick = () => {
+      const fg = fgRef.current;
+      const cam = fg?.camera();
+      if (cam) {
+        const d = Math.hypot(cam.position.x, cam.position.y, cam.position.z);
+        const next = cur ? d < 260 : d < 200;
+        if (next !== cur) {
+          cur = next;
+          setZoomedIn(next);
+          fg?.refresh();
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [dims.w]);
 
   const { data, adj } = useMemo(() => {
     const nodes: GNode[] = [];
@@ -434,10 +461,12 @@ export default function OverviewView() {
   };
 
   const nodeThreeObject = (n: GNode): any => {
-    if (n.kind === 'task') return undefined; // default sphere; label on hover
+    // Task labels appear only when zoomed in (hover still reveals them via
+    // nodeLabel); departments/project always show.
+    if (n.kind === 'task' && !zoomedIn) return undefined;
     const s = new SpriteText(n.name);
     s.color = '#FFFFFF';
-    s.textHeight = n.kind === 'project' ? 6 : 4;
+    s.textHeight = n.kind === 'project' ? 6 : n.kind === 'task' ? 3 : 4;
     s.fontFace = 'Inter, system-ui, sans-serif';
     s.fontWeight = n.kind === 'project' ? '700' : '600';
     // a dark pill behind the text so labels stay legible over bright / bloomed
