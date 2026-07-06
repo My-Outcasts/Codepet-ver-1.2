@@ -8230,57 +8230,43 @@ body {
   color: var(--t-1);
 }
 
-/* "Noted" chip — a fact/decision byte captured from chat into company memory. */
+/* "Noted" chip — a fact/decision byte quietly captured from chat into company memory.
+   Deliberately minimal: one muted line, no box/tint/icon, with a subtle undo. */
 .cnote {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px 11px;
-  margin: 2px 0 4px;
-  border-radius: 10px;
-  border: 1px solid var(--hairline);
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 2px 4px;
+  margin: 0 0 2px;
   font-size: 12px;
-  line-height: 1.4;
-  max-width: 90%;
+  line-height: 1.45;
+  color: var(--t-3);
 }
-.cnote-dot {
-  color: var(--accent);
-  font-size: 9px;
-  line-height: 1.7;
-}
-.cnote-body {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+.cnote-txt {
   flex: 1;
   min-width: 0;
 }
 .cnote-k {
-  font-weight: 700;
-  font-size: 10px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--accent-deep);
-}
-.cnote-s {
   color: var(--t-2);
+  font-weight: 600;
 }
 .cnote-undo {
   border: 0;
   background: transparent;
-  color: var(--t-3);
+  color: var(--t-4);
   font-size: 11.5px;
-  font-weight: 600;
   cursor: pointer;
-  padding: 0 2px;
+  padding: 0;
   flex: none;
 }
 .cnote-undo:hover {
-  color: var(--t-1);
+  color: var(--t-2);
   text-decoration: underline;
 }
 .cnote-off {
+  padding: 0 2px 4px;
+  margin: 0 0 2px;
+  font-size: 12px;
   color: var(--t-4);
   font-style: italic;
   text-decoration: line-through;

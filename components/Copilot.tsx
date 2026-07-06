@@ -237,12 +237,8 @@ function NotedChip({ m }: { m: ChatMessage }) {
   }
   return (
     <div className="cnote">
-      <span className="cnote-dot" aria-hidden>
-        ◉
-      </span>
-      <span className="cnote-body">
-        <span className="cnote-k">Noted · {n.topic}</span>
-        <span className="cnote-s">{n.statement}</span>
+      <span className="cnote-txt">
+        <span className="cnote-k">Noted · {n.topic}</span> — {n.statement}
       </span>
       <button className="cnote-undo" onClick={() => undoNoted(m.id, n.topic)}>
         undo
