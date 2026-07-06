@@ -542,3 +542,14 @@ export async function persistEnv(companyId: string, env: EnvState): Promise<void
   const db = getDb();
   await updateDoc(doc(db, paths.company(companyId)), { env, updatedAt: Date.now() });
 }
+
+/** A founder-initiated support message → the existing `feedback` collection (kind:'support'). */
+export async function sendSupportMessage(msg: string, name: string, email: string): Promise<void> {
+  await addDoc(collection(getDb(), 'feedback'), {
+    kind: 'support',
+    message: msg.trim(),
+    name,
+    email,
+    ts: Date.now(),
+  });
+}
