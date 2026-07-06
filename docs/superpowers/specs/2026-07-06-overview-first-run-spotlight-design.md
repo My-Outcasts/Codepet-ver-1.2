@@ -138,12 +138,10 @@ the chip and the node can never disagree.
 
 ## Dependencies & sequencing
 
-`OverviewIntro` currently exists **only** on `origin/feat/inline-run-transparency`
-(PR #71), not on `main`. This redesign edits that component, so implementation
-must either (a) branch off / stack on that PR, or (b) wait for #71 to merge and
-branch fresh off `origin/main`. Recommendation: **(b)** — keep this a clean PR
-off `origin/main` after #71 lands, consistent with the "branch fresh off
-origin/main, touch only my files" practice and avoiding a stacked-PR tangle. If
-#71 stalls, revisit. The implementation plan should confirm #71 is merged before
-starting, and use an isolated git worktree given concurrent sessions on the local
-checkout.
+PR #71 (which introduced `OverviewIntro`) is **merged** — the component is now on
+`origin/main` (verified 2026-07-06). This redesign therefore branches fresh off
+`origin/main` as a clean, standalone PR touching only the first-run files
+(`OverviewIntro`, `OverviewView`, `HereCard`, and the new color-chip / re-open
+affordances), consistent with the "branch fresh off origin/main, touch only my
+files" practice. Given concurrent sessions on the local checkout, do the work in
+an isolated git worktree.
