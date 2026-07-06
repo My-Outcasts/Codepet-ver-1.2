@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph3D, { type ForceGraphMethods } from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
-import { deptRingPosition, taskRingPosition } from '@/lib/overview/layout';
+import { deptRingPosition, taskRingPosition, DEPT_R } from '@/lib/overview/layout';
 import * as THREE from 'three';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - addons ship without bundled types in some setups
@@ -452,8 +452,13 @@ export default function OverviewView() {
     const fg = fgRef.current as any;
     if (!fg) return;
     const aspect = dims.w / Math.max(1, dims.h);
-    const dist = 360 * Math.max(1, 1.55 / aspect);
-    fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
+    // Extra margin (1.7 vs 1.55) + a horizontal pan: shifting the camera and its
+    // target right by ~a third of the ring pushes the disc left on screen, so the
+    // ring stays framed AND the tethered beacon card on the right never covers
+    // the project center. Explicit flyTo/portal moves are unaffected (separate).
+    const dist = 360 * Math.max(1, 1.7 / aspect);
+    const bx = DEPT_R * 0.35;
+    fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
   };
 
   const onEngineStop = () => {
