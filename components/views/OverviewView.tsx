@@ -24,12 +24,7 @@ import { stageComplete, nextStageOf } from '@/lib/stages';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
-import {
-  INTRO_SEEN_KEY,
-  introInitialPhase,
-  revealAction,
-  type IntroPhase,
-} from '@/lib/overviewIntro';
+import { INTRO_SEEN_KEY, introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
 
 // First-run "seen" flag. Reads default to seen (true) on failure so we never
 // re-trap a user behind a broken storage read.
@@ -478,9 +473,16 @@ export default function OverviewView() {
   const handleIntroReveal = () => {
     markIntroSeen();
     setHasSeenIntro(true);
-    if (revealAction(here) === 'fly') flyTo(beaconId, introReduceMotion() ? 0 : 900);
-    else fitView();
-    setIntroPhase('spotlight');
+    // Only enter the spotlight when the beacon callout will actually render
+    // (ByteGuide is gated by showCallout) — otherwise there's nothing to
+    // illuminate, so just recenter the map and finish.
+    if (showCallout && beaconId) {
+      flyTo(beaconId, introReduceMotion() ? 0 : 900);
+      setIntroPhase('spotlight');
+    } else {
+      fitView();
+      setIntroPhase('done');
+    }
   };
 
   // Backdrop click: dismiss without flying, but still mark it seen.
@@ -495,6 +497,21 @@ export default function OverviewView() {
     if (introPhase !== 'spotlight') return;
     const id = setTimeout(() => setIntroPhase('done'), 6000);
     return () => clearTimeout(id);
+  }, [introPhase]);
+
+  // Settle the spotlight the moment the founder actually grabs the map
+  // (deliberate pointer-down or wheel-zoom) — not on mere mouse movement.
+  useEffect(() => {
+    if (introPhase !== 'spotlight') return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const settle = () => setIntroPhase('done');
+    el.addEventListener('pointerdown', settle);
+    el.addEventListener('wheel', settle, { passive: true });
+    return () => {
+      el.removeEventListener('pointerdown', settle);
+      el.removeEventListener('wheel', settle);
+    };
   }, [introPhase]);
 
   return (
@@ -566,6 +583,7 @@ export default function OverviewView() {
         <Legend dot="#34D399" label="Done" />
         {introPhase === 'done' && (
           <button
+            type="button"
             onClick={() => setIntroPhase('intro')}
             style={{
               pointerEvents: 'auto',
