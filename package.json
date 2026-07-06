@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "eval": "npx -y tsx scripts/eval.mts",
     "test:rules": "firebase emulators:exec --only firestore --project demo-codepet-rules \"vitest run --config vitest.rules.config.ts\"",
     "test:installer": "node --test lib/installer/ toolkit/hooks/"
   },

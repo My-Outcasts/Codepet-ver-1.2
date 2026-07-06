@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFailureKind } from './client';
+import { classifyFailureKind, errorInfo } from './client';
+
+describe('errorInfo', () => {
+  it('reads status + message off any error shape (duck-typed, not instanceof)', () => {
+    // A plain object mirroring an SDK error not recognized by instanceof — the case the
+    // eval harness surfaced.
+    const like = { status: 400, message: 'Your credit balance is too low' };
+    expect(errorInfo(like)).toEqual({ status: 400, message: 'Your credit balance is too low' });
+  });
+  it('falls back to 502 + stringified error for a non-HTTP throw', () => {
+    expect(errorInfo(new Error('boom'))).toEqual({ status: 502, message: 'boom' });
+    expect(errorInfo('nope').status).toBe(502);
+  });
+  it('composes with classifyFailureKind to catch billing regardless of error class', () => {
+    const { status, message } = errorInfo({ status: 400, message: 'credit balance too low' });
+    expect(classifyFailureKind(status, message)).toBe('billing');
+  });
+});
 
 describe('classifyFailureKind', () => {
   it('classifies the real Anthropic credit-exhaustion error as billing', () => {

@@ -63,6 +63,21 @@ export function classifyFailureKind(status: number, message: string): 'billing' 
   return 'upstream';
 }
 
+/**
+ * Pull status + message off a thrown error by DUCK-TYPING (not `instanceof APIError`).
+ * The SDK's error class identity isn't reliable across every runtime/bundle, so relying on
+ * `instanceof` can silently mislabel a real billing 400 as a generic 502 — the eval harness
+ * caught exactly that. Every Anthropic API error still carries a numeric `status` and a
+ * `message`, so read those directly; fall back to 502 for a non-HTTP throw.
+ */
+export function errorInfo(err: unknown): { status: number; message: string } {
+  const e = err as { status?: unknown; message?: unknown };
+  return {
+    status: typeof e?.status === 'number' ? e.status : 502,
+    message: typeof e?.message === 'string' ? e.message : String(err),
+  };
+}
+
 /** Thrown by getClient()/generate* so a route's catch can map it to a Response. */
 export class GenerationError extends Error {
   constructor(readonly failure: Failure) {
@@ -186,8 +201,7 @@ export async function generateText(opts: GenerateOptions): Promise<string> {
   try {
     message = await opts.client.messages.create(params);
   } catch (err) {
-    const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-    const errMessage = err instanceof Anthropic.APIError ? (err.message ?? '') : String(err);
+    const { status, message: errMessage } = errorInfo(err);
     const kind = classifyFailureKind(status, errMessage);
     logFailure(opts.label, kind, status);
     throw new GenerationError(
@@ -261,9 +275,8 @@ export function streamMessage(opts: StreamOptions) {
       // mid-stream credit outage is greppable on the chat path too (not only run-task).
       // A deliberate abort (sign-out / new send) isn't a real failure — skip it.
       if (err?.name === 'AbortError') return;
-      const status = err instanceof Anthropic.APIError ? (err.status ?? 502) : 502;
-      const msg = err instanceof Anthropic.APIError ? (err.message ?? '') : String(err);
-      logFailure(opts.label, classifyFailureKind(status, msg), status);
+      const { status, message } = errorInfo(err);
+      logFailure(opts.label, classifyFailureKind(status, message), status);
     });
   return stream;
 }
