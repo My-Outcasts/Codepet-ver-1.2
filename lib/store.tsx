@@ -223,7 +223,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tick, setTick] = useState(0);
   const bump = useCallback(() => setTick((n) => n + 1), []);
 
-  const [view, setView] = useState<View>('home');
+  // Land on the Overview (the company map) by default.
+  const [view, setView] = useState<View>('overview');
   const [deptKey, setDeptKey] = useState<string | null>(null);
   const [selStage, setSelStage] = useState(6);
   const [drawerOpen, setDrawerOpen] = useState(false);
