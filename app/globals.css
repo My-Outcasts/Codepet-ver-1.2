@@ -7964,12 +7964,25 @@ body {
   }
 }
 
-/* Settings (dev-only) ------------------------------------------------------ */
+/* Settings & Billing ------------------------------------------------------- */
+.set-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 26px 44px;
+  max-width: 760px;
+}
 .set-card {
   background: var(--surface);
   border: 1px solid var(--hairline);
-  border-radius: 14px;
-  padding: 4px 20px;
+  border-radius: 16px;
+  padding: 4px 22px;
+}
+/* account card — a touch of accent so "you" reads as the hero of Settings */
+.set-card.you {
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--surface) 62%);
+  border-color: var(--accent-line);
+  padding: 6px 22px;
 }
 .set-row {
   display: flex;
@@ -8001,16 +8014,20 @@ body {
   gap: 14px;
 }
 .acct-av {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
-  background: var(--accent, #7c3aed);
+  background: linear-gradient(150deg, #8b5cf6, #6d28d9);
   color: #fff;
   display: grid;
   place-items: center;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 18px;
   flex: none;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.28);
+}
+.acct .set-txt b {
+  font-size: 15px;
 }
 .set-link {
   flex-shrink: 0;
@@ -8076,6 +8093,83 @@ body {
   height: 100%;
   background: var(--accent, #7c3aed);
   transition: width 0.4s ease;
+}
+
+/* today's usage — the run count is the hero */
+.usage-card {
+  padding: 20px 22px;
+}
+.usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.usage-head b {
+  color: var(--t-1);
+  font-size: 14px;
+  font-weight: 650;
+}
+.usage-left {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  border-radius: 99px;
+  padding: 2px 10px;
+}
+.usage-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 12px 0;
+}
+.usage-n {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+  color: var(--t-1);
+}
+.usage-tot {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--t-3);
+}
+.usage-card .bill-meter {
+  margin: 0;
+}
+.usage-cap {
+  display: block;
+  margin-top: 11px;
+  font-size: 12px;
+  color: var(--t-4);
+}
+.usage-note {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: 13px;
+  color: var(--t-3);
+}
+
+/* plan — an accent hairline marks the upgrade path */
+.plan-card {
+  border-color: var(--accent-line);
+}
+/* deliberately inert, still branded — reads as "coming", not "broken" */
+.upg-soon {
+  flex-shrink: 0;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  white-space: nowrap;
 }
 
 /* ===== Build Coach view ("Cùng làm") — Chapter 3, light-theme adaptation ===== */
