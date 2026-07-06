@@ -23,10 +23,12 @@
 ### Task 1: Pure ring-layout module
 
 **Files:**
+
 - Create: `lib/overview/layout.ts`
 - Test: `lib/overview/layout.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing.
 - Produces:
   - `DEPT_R = 140`, `TASK_R = 46`, `DEPTH = 0.25`, `GOLDEN` (all exported `const`)
@@ -135,11 +137,7 @@ const pin = (x: number, y: number, z: number): Pos => ({ x, y, z, fx: x, fy: y, 
 // count >= 1 (there is always at least the calling department), so no div-by-zero.
 export function deptRingPosition(index: number, count: number): Pos {
   const a = -Math.PI / 2 + (index / count) * Math.PI * 2;
-  return pin(
-    Math.cos(a) * DEPT_R,
-    Math.sin(a) * DEPT_R,
-    Math.sin(GOLDEN * index) * DEPT_R * DEPTH,
-  );
+  return pin(Math.cos(a) * DEPT_R, Math.sin(a) * DEPT_R, Math.sin(GOLDEN * index) * DEPT_R * DEPTH);
 }
 
 // Task `index` of `total` in a small ring around its department. total >= 1.
@@ -177,9 +175,11 @@ git commit -m "feat(overview): pure deterministic ring layout + tests"
 ### Task 2: Flatten & pin the layout in OverviewView
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` — the layout constants, the `data` `useMemo` (project/dept/task seeding), and the force `useEffect`.
 
 **Interfaces:**
+
 - Consumes: `deptRingPosition`, `taskRingPosition` from `lib/overview/layout`.
 - Produces: pinned node positions consumed by the renderer; `GOLDEN`/`DEPT_R`/`TASK_R` no longer defined locally (the component uses only the helpers; `DEPT_R` is re-imported later in Task 4 for framing).
 
@@ -210,34 +210,34 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 Find the project node push:
 
 ```tsx
-    nodes.push({
-      id: 'project',
-      name: brief.projectName?.trim() || 'Your company',
-      kind: 'project',
-      color: '#D8D2F5',
-      val: 12,
-      x: 0,
-      y: 0,
-      z: 0,
-    });
+nodes.push({
+  id: 'project',
+  name: brief.projectName?.trim() || 'Your company',
+  kind: 'project',
+  color: '#D8D2F5',
+  val: 12,
+  x: 0,
+  y: 0,
+  z: 0,
+});
 ```
 
 Replace the `x/y/z` tail with pinned coordinates:
 
 ```tsx
-    nodes.push({
-      id: 'project',
-      name: brief.projectName?.trim() || 'Your company',
-      kind: 'project',
-      color: '#D8D2F5',
-      val: 12,
-      x: 0,
-      y: 0,
-      z: 0,
-      fx: 0,
-      fy: 0,
-      fz: 0,
-    });
+nodes.push({
+  id: 'project',
+  name: brief.projectName?.trim() || 'Your company',
+  kind: 'project',
+  color: '#D8D2F5',
+  val: 12,
+  x: 0,
+  y: 0,
+  z: 0,
+  fx: 0,
+  fy: 0,
+  fz: 0,
+});
 ```
 
 - [ ] **Step 4: Replace the department position math**
@@ -245,25 +245,25 @@ Replace the `x/y/z` tail with pinned coordinates:
 Find:
 
 ```tsx
-      const did = `dept:${d.k}`;
-      const yy = 1 - (di / (DEPTS.length - 1)) * 2;
-      const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
-      const th = GOLDEN * di;
-      const dx = Math.cos(th) * rr * DEPT_R,
-        dy = yy * DEPT_R,
-        dz = Math.sin(th) * rr * DEPT_R;
-      const allDone = total > 0 && done === total;
+const did = `dept:${d.k}`;
+const yy = 1 - (di / (DEPTS.length - 1)) * 2;
+const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+const th = GOLDEN * di;
+const dx = Math.cos(th) * rr * DEPT_R,
+  dy = yy * DEPT_R,
+  dz = Math.sin(th) * rr * DEPT_R;
+const allDone = total > 0 && done === total;
 ```
 
 Replace with:
 
 ```tsx
-      const did = `dept:${d.k}`;
-      const dp = deptRingPosition(di, DEPTS.length);
-      const dx = dp.x,
-        dy = dp.y,
-        dz = dp.z;
-      const allDone = total > 0 && done === total;
+const did = `dept:${d.k}`;
+const dp = deptRingPosition(di, DEPTS.length);
+const dx = dp.x,
+  dy = dp.y,
+  dz = dp.z;
+const allDone = total > 0 && done === total;
 ```
 
 - [ ] **Step 5: Pin the department node**
@@ -296,50 +296,50 @@ Replace with:
 Find:
 
 ```tsx
-        const st = taskState(t, true);
-        const tHex = STATE_HEX[st.cls] || '#94A3B8';
-        const tid = `task:${d.k}:${i}`;
-        const tyy = 1 - ((i + 0.5) / total) * 2;
-        const trr = Math.sqrt(Math.max(0, 1 - tyy * tyy));
-        const tth = GOLDEN * (i + 1);
-        nodes.push({
-          id: tid,
-          name: t.t,
-          kind: 'task',
-          color: rgba(tHex, t.done ? 0.28 : 0.95),
-          val: t.done ? 0.7 : 1.1,
-          dept: d,
-          task: t,
-          sub: `${d.name} · ${st.label}`,
-          x: dx + Math.cos(tth) * trr * TASK_R,
-          y: dy + tyy * TASK_R,
-          z: dz + Math.sin(tth) * trr * TASK_R,
-        });
+const st = taskState(t, true);
+const tHex = STATE_HEX[st.cls] || '#94A3B8';
+const tid = `task:${d.k}:${i}`;
+const tyy = 1 - ((i + 0.5) / total) * 2;
+const trr = Math.sqrt(Math.max(0, 1 - tyy * tyy));
+const tth = GOLDEN * (i + 1);
+nodes.push({
+  id: tid,
+  name: t.t,
+  kind: 'task',
+  color: rgba(tHex, t.done ? 0.28 : 0.95),
+  val: t.done ? 0.7 : 1.1,
+  dept: d,
+  task: t,
+  sub: `${d.name} · ${st.label}`,
+  x: dx + Math.cos(tth) * trr * TASK_R,
+  y: dy + tyy * TASK_R,
+  z: dz + Math.sin(tth) * trr * TASK_R,
+});
 ```
 
 Replace with:
 
 ```tsx
-        const st = taskState(t, true);
-        const tHex = STATE_HEX[st.cls] || '#94A3B8';
-        const tid = `task:${d.k}:${i}`;
-        const tp = taskRingPosition({ x: dx, y: dy, z: dz }, i, total);
-        nodes.push({
-          id: tid,
-          name: t.t,
-          kind: 'task',
-          color: rgba(tHex, t.done ? 0.28 : 0.95),
-          val: t.done ? 0.7 : 1.1,
-          dept: d,
-          task: t,
-          sub: `${d.name} · ${st.label}`,
-          x: tp.x,
-          y: tp.y,
-          z: tp.z,
-          fx: tp.fx,
-          fy: tp.fy,
-          fz: tp.fz,
-        });
+const st = taskState(t, true);
+const tHex = STATE_HEX[st.cls] || '#94A3B8';
+const tid = `task:${d.k}:${i}`;
+const tp = taskRingPosition({ x: dx, y: dy, z: dz }, i, total);
+nodes.push({
+  id: tid,
+  name: t.t,
+  kind: 'task',
+  color: rgba(tHex, t.done ? 0.28 : 0.95),
+  val: t.done ? 0.7 : 1.1,
+  dept: d,
+  task: t,
+  sub: `${d.name} · ${st.label}`,
+  x: tp.x,
+  y: tp.y,
+  z: tp.z,
+  fx: tp.fx,
+  fy: tp.fy,
+  fz: tp.fz,
+});
 ```
 
 - [ ] **Step 7: Remove the force sim (positions are now pinned)**
@@ -347,20 +347,20 @@ Replace with:
 Find and delete this entire effect:
 
 ```tsx
-  // gentle forces (positions are seeded)
-  useEffect(() => {
-    if (!dims.w) return;
-    const fg = fgRef.current as any;
-    if (!fg) return;
-    try {
-      fg.d3Force('charge')?.strength(-90);
-      fg.d3Force('link')
-        ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
-        .strength(0.25);
-    } catch {
-      /* forces not ready */
-    }
-  }, [dims.w, data]);
+// gentle forces (positions are seeded)
+useEffect(() => {
+  if (!dims.w) return;
+  const fg = fgRef.current as any;
+  if (!fg) return;
+  try {
+    fg.d3Force('charge')?.strength(-90);
+    fg.d3Force('link')
+      ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
+      .strength(0.25);
+  } catch {
+    /* forces not ready */
+  }
+}, [dims.w, data]);
 ```
 
 Pinned `fx/fy/fz` nodes ignore forces, so this block is now inert; removing it keeps the layout purely deterministic.
@@ -385,9 +385,11 @@ git commit -m "feat(overview): flatten the map to a pinned even-ring disc"
 ### Task 3: Task-label zoom level-of-detail
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` — add `zoomedIn` state + a camera-distance watcher, and render task labels when zoomed in.
 
 **Interfaces:**
+
 - Consumes: `fgRef`, `dims` (existing).
 - Produces: `zoomedIn` state read by `nodeThreeObject`.
 
@@ -396,13 +398,13 @@ git commit -m "feat(overview): flatten the map to a pinned even-ring disc"
 Find the hover state line:
 
 ```tsx
-  const [hoverId, setHoverId] = useState<string | null>(null);
+const [hoverId, setHoverId] = useState<string | null>(null);
 ```
 
 Add directly after it:
 
 ```tsx
-  const [zoomedIn, setZoomedIn] = useState(false);
+const [zoomedIn, setZoomedIn] = useState(false);
 ```
 
 - [ ] **Step 2: Add the camera-distance watcher**
@@ -410,31 +412,31 @@ Add directly after it:
 Add this effect right after the `measure container` effect (the one that ends with `return () => ro.disconnect();`):
 
 ```tsx
-  // Reveal task labels when the camera is close. Watched per-frame with
-  // hysteresis (enter < 200, exit > 260) so it doesn't flicker at the threshold;
-  // on a cross we flip state + refresh so nodeThreeObject re-runs. Task labels
-  // otherwise stay hidden (hover still shows them via nodeLabel).
-  useEffect(() => {
-    if (!dims.w) return;
-    let raf = 0;
-    let cur = false;
-    const tick = () => {
-      const fg = fgRef.current as any;
-      const cam = fg?.camera?.();
-      if (cam) {
-        const d = Math.hypot(cam.position.x, cam.position.y, cam.position.z);
-        const next = cur ? d < 260 : d < 200;
-        if (next !== cur) {
-          cur = next;
-          setZoomedIn(next);
-          fg.refresh?.();
-        }
+// Reveal task labels when the camera is close. Watched per-frame with
+// hysteresis (enter < 200, exit > 260) so it doesn't flicker at the threshold;
+// on a cross we flip state + refresh so nodeThreeObject re-runs. Task labels
+// otherwise stay hidden (hover still shows them via nodeLabel).
+useEffect(() => {
+  if (!dims.w) return;
+  let raf = 0;
+  let cur = false;
+  const tick = () => {
+    const fg = fgRef.current as any;
+    const cam = fg?.camera?.();
+    if (cam) {
+      const d = Math.hypot(cam.position.x, cam.position.y, cam.position.z);
+      const next = cur ? d < 260 : d < 200;
+      if (next !== cur) {
+        cur = next;
+        setZoomedIn(next);
+        fg.refresh?.();
       }
-      raf = requestAnimationFrame(tick);
-    };
+    }
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [dims.w]);
+  };
+  raf = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(raf);
+}, [dims.w]);
 ```
 
 - [ ] **Step 3: Render task labels when zoomed in**
@@ -460,13 +462,13 @@ Replace those three lines with:
 Then find the label sizing line inside the same function:
 
 ```tsx
-    s.textHeight = n.kind === 'project' ? 6 : 4;
+s.textHeight = n.kind === 'project' ? 6 : 4;
 ```
 
 Replace with (tasks get a smaller label than departments):
 
 ```tsx
-    s.textHeight = n.kind === 'project' ? 6 : n.kind === 'task' ? 3 : 4;
+s.textHeight = n.kind === 'project' ? 6 : n.kind === 'task' ? 3 : 4;
 ```
 
 - [ ] **Step 4: Typecheck + lint**
@@ -486,9 +488,11 @@ git commit -m "feat(overview): reveal task labels on zoom-in (LOD)"
 ### Task 4: Auto-frame bias (center clear of the beacon card)
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` — the `fitView` function.
 
 **Interfaces:**
+
 - Consumes: `fgRef`, `dims` (existing), and `DEPT_R` (re-imported in this task).
 - Produces: framing that leaves the right side clear for the tethered `ByteGuide`.
 
@@ -511,30 +515,30 @@ import { deptRingPosition, taskRingPosition, DEPT_R } from '@/lib/overview/layou
 Find `fitView`:
 
 ```tsx
-  const fitView = () => {
-    const fg = fgRef.current as any;
-    if (!fg) return;
-    const aspect = dims.w / Math.max(1, dims.h);
-    const dist = 360 * Math.max(1, 1.55 / aspect);
-    fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
-  };
+const fitView = () => {
+  const fg = fgRef.current as any;
+  if (!fg) return;
+  const aspect = dims.w / Math.max(1, dims.h);
+  const dist = 360 * Math.max(1, 1.55 / aspect);
+  fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
+};
 ```
 
 Replace with:
 
 ```tsx
-  const fitView = () => {
-    const fg = fgRef.current as any;
-    if (!fg) return;
-    const aspect = dims.w / Math.max(1, dims.h);
-    // Extra margin (1.7 vs 1.55) + a horizontal pan: shifting the camera and its
-    // target right by ~a third of the ring pushes the disc left on screen, so the
-    // ring stays framed AND the tethered beacon card on the right never covers
-    // the project center. Explicit flyTo/portal moves are unaffected (separate).
-    const dist = 360 * Math.max(1, 1.7 / aspect);
-    const bx = DEPT_R * 0.35;
-    fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
-  };
+const fitView = () => {
+  const fg = fgRef.current as any;
+  if (!fg) return;
+  const aspect = dims.w / Math.max(1, dims.h);
+  // Extra margin (1.7 vs 1.55) + a horizontal pan: shifting the camera and its
+  // target right by ~a third of the ring pushes the disc left on screen, so the
+  // ring stays framed AND the tethered beacon card on the right never covers
+  // the project center. Explicit flyTo/portal moves are unaffected (separate).
+  const dist = 360 * Math.max(1, 1.7 / aspect);
+  const bx = DEPT_R * 0.35;
+  fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
+};
 ```
 
 - [ ] **Step 3: Typecheck + lint + format**

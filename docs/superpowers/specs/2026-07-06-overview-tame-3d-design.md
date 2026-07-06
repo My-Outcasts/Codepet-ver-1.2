@@ -26,8 +26,8 @@ roughly half the perceived clutter — with three surgical changes.
 Rejected alternatives (from brainstorm): a full 2D-radial renderer rewrite with
 tasks-expanding-on-map and a 2D/3D toggle (B+C) — more legible still, but a large
 rewrite of a 700-line 3D component and a second renderer to maintain. "Tame the
-3D" gets most of the legibility win by changing only *where nodes sit*, *which
-labels show*, and *how the camera frames* — inside the renderer we already ship.
+3D" gets most of the legibility win by changing only _where nodes sit_, _which
+labels show_, and _how the camera frames_ — inside the renderer we already ship.
 
 Three changes:
 
@@ -73,12 +73,13 @@ departments crowd the center anymore. Node **size and color are unchanged**
 cyan beacon), so status information is preserved; only positions become orderly.
 
 **Pure, testable unit — `lib/overview/layout.ts`:**
+
 - `deptRingPosition(index: number, count: number): { x; y; z; fx; fy; fz }`
 - `taskRingPosition(deptPos, index: number, total: number): { x; y; z; fx; fy; fz }`
-(pure functions of index/count and the `DEPT_R`/`TASK_R`/`DEPTH` constants, moved
-here). Node objects spread these in. `OverviewView`'s `data` `useMemo` becomes a
-thin consumer. This is the one part unit-testable under node-env Vitest (the stack
-has no React Testing Library); the rendering/camera are verified on the preview.
+  (pure functions of index/count and the `DEPT_R`/`TASK_R`/`DEPTH` constants, moved
+  here). Node objects spread these in. `OverviewView`'s `data` `useMemo` becomes a
+  thin consumer. This is the one part unit-testable under node-env Vitest (the stack
+  has no React Testing Library); the rendering/camera are verified on the preview.
 
 ### 2. Task-label level-of-detail
 
