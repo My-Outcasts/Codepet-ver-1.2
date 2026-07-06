@@ -6407,6 +6407,16 @@ body {
   color: var(--t-3);
 }
 
+/* Quiet trust/liability line under finance/legal/advice deliverables. One muted line,
+   no icon — informational, not alarming (see DelivNote in viewers.tsx). */
+.deliv-note {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-1, rgba(255, 255, 255, 0.06));
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--t-3);
+}
+
 /* ===== first install ===== */
 .install {
   padding: 8px 26px 40px;

@@ -1277,9 +1277,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
             : errCode === 'unauthorized'
               ? 'Your session looks expired — sign in again and I’ll pick right back up.'
-              : errCode === 'network'
-                ? 'I couldn’t reach the model — check your connection, then Retry.'
-                : 'I couldn’t reach the model just now.';
+              : errCode === 'ai_unavailable'
+                ? 'I’m temporarily unavailable — try again shortly and I’ll pick right back up.'
+                : errCode === 'network'
+                  ? 'I couldn’t reach the model — check your connection, then Retry.'
+                  : 'I couldn’t reach the model just now.';
         // Errored = a real failure that produced nothing usable → show the Retry affordance.
         const errored = failed && !acc.trim() && !pending && !navChip && !setupChip;
         // If byte chose to act but said nothing, synthesize a short lead-in so the run or
