@@ -101,3 +101,22 @@ export function productProgress(): GroupProgress {
 export function companyProgress(): GroupProgress {
   return progressFor((k) => !PRODUCT_DEPTS.has(k));
 }
+
+/**
+ * How far through the current stage: the done-fraction of active (non-`later`)
+ * department tasks — the same universe `stageComplete()` measures, so `pct === 100`
+ * iff `stageComplete()` (when there is at least one active task). Reads the live
+ * DEPTS singleton — call per render.
+ */
+export function currentStageProgress(): GroupProgress {
+  let done = 0;
+  let total = 0;
+  for (const d of DEPTS) {
+    if (d.later) continue;
+    for (const t of d.tasks) {
+      total += 1;
+      if (t.done) done += 1;
+    }
+  }
+  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+}

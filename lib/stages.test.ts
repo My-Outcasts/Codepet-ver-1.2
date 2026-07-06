@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { DEPTS, type Task } from './data';
-import { nextStageOf, stageComplete } from './stages';
+import { nextStageOf, stageComplete, currentStageProgress } from './stages';
 
 describe('nextStageOf', () => {
   it('returns the next rung on the ladder', () => {
@@ -66,5 +66,41 @@ describe('stageComplete', () => {
       d.tasks = [];
     });
     expect(stageComplete()).toBe(false);
+  });
+});
+
+describe('currentStageProgress', () => {
+  const snap = DEPTS.map((d) => ({ tasks: d.tasks, later: d.later }));
+  const task = (done: boolean): Task => ({ t: 'x', done }) as Task;
+  afterEach(() => {
+    DEPTS.forEach((d, i) => {
+      d.tasks = snap[i].tasks;
+      d.later = snap[i].later;
+    });
+  });
+
+  it('is the done-fraction of active (non-later) tasks', () => {
+    DEPTS.forEach((d) => {
+      d.later = false;
+      d.tasks = [task(true), task(false)];
+    });
+    const p = currentStageProgress();
+    expect(p.pct).toBe(50);
+  });
+
+  it('excludes dormant "later" departments', () => {
+    DEPTS.forEach((d, i) => {
+      d.later = i > 0; // only the first dept is active
+      d.tasks = i === 0 ? [task(true), task(true)] : [task(false)];
+    });
+    expect(currentStageProgress()).toMatchObject({ done: 2, total: 2, pct: 100 });
+  });
+
+  it('is 0% (not NaN) with no active tasks', () => {
+    DEPTS.forEach((d) => {
+      d.later = true;
+      d.tasks = [];
+    });
+    expect(currentStageProgress().pct).toBe(0);
   });
 });
