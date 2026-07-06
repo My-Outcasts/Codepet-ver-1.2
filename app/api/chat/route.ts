@@ -209,7 +209,9 @@ export async function POST(req: Request): Promise<Response> {
           typeof (m as ChatTurn).text === 'string',
       ) as ChatTurn[])
     : [];
-  const claudeMessages = toClaudeMessages(turns).slice(-20); // cap history sent upstream
+  // toClaudeMessages windows to MAX_CHAT_TURNS internally (before trimming a leading
+  // assistant), so the conversation stays bounded AND always starts user-first.
+  const claudeMessages = toClaudeMessages(turns);
   if (!claudeMessages.length) {
     return Response.json({ error: 'bad_request', message: 'no messages' }, { status: 400 });
   }
