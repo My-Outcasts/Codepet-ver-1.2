@@ -393,7 +393,10 @@ export function ArtifactModal() {
     const steps =
       execKind === 'revise'
         ? reviseSteps(rev || '')
-        : runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, logType));
+        : // `logType` is the log's rendering family (RICH_META remaps post→doc, etc.); the
+          // toolkit `fits` tags are keyed on the REAL deliverable type, and credit uses `type`
+          // too — so name items off `type` to keep the mention and the receipt in sync.
+          runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, type));
     const title =
       execKind === 'revise' ? <>byte is revising — “{rev}”</> : 'byte is doing the work…';
     bodyContent = (
