@@ -89,7 +89,7 @@ export default function OverviewView() {
   const {
     openDept,
     runTask,
-    briefDepartment,
+    portalToTask,
     tick,
     brief,
     nextStep,
@@ -339,8 +339,14 @@ export default function OverviewView() {
   useEffect(() => {
     if (!dims.w) return;
     if (bloomRef.current) bloomRef.current.setSize(dims.w, dims.h);
-    const t1 = setTimeout(() => fitView(), 500);
-    const t2 = setTimeout(() => fitView(), 2400);
+    // Only auto-fit while the user (or a Start/portal) hasn't framed something.
+    // Without this guard, opening the chat panel resizes the container and yanks
+    // the camera off the department a Start just flew to.
+    const fit = () => {
+      if (!tookControlRef.current) fitView();
+    };
+    const t1 = setTimeout(fit, 500);
+    const t2 = setTimeout(fit, 2400);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -592,10 +598,11 @@ export default function OverviewView() {
           >
             <ByteGuide
               here={here}
-              onStart={() => {
-                flyTo(`dept:${here.dept.k}`); // glide to the department…
-                briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
-              }}
+              // One shared arrival: byte opens the chat + briefs you, then the
+              // portalSignal effect glides the camera to the department AFTER the
+              // chat has docked — so the fly frames the settled (narrower) layout
+              // instead of being yanked back by the resize-driven auto-fit.
+              onStart={() => portalToTask(here.dept.k, here.task.t)}
             />
           </div>
         )}
