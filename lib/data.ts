@@ -1073,7 +1073,13 @@ export const ENV: Record<string, EnvItem[]> = {
       why: 'Catch bugs before they reach your beta testers.',
       fits: ['build'],
     },
-    { n: 'Changelog', ab: 'Ch', d: 'Auto-drafts release notes from your commits.', s: 0, fits: ['post', 'doc'] },
+    {
+      n: 'Changelog',
+      ab: 'Ch',
+      d: 'Auto-drafts release notes from your commits.',
+      s: 0,
+      fits: ['post', 'doc'],
+    },
   ],
   connectors: [
     {
@@ -1094,13 +1100,43 @@ export const ENV: Record<string, EnvItem[]> = {
       why: 'You collect beta feedback in Notion — connect it so byte can write there.',
       fits: ['doc', 'plan', 'prep', 'post', 'dms', 'checklist', 'calendar'],
     },
-    { n: 'Figma', ab: 'Fi', d: 'Pull designs and components into context.', s: 0, fits: ['screens', 'site'] },
-    { n: 'Slack', ab: 'Sl', d: 'Post updates and gather feedback.', s: 0, fits: ['dms', 'post', 'calendar'] },
-    { n: 'Linear', ab: 'Li', d: 'Create and update issues from your tasks.', s: 0, fits: ['checklist', 'plan', 'build'] },
+    {
+      n: 'Figma',
+      ab: 'Fi',
+      d: 'Pull designs and components into context.',
+      s: 0,
+      fits: ['screens', 'site'],
+    },
+    {
+      n: 'Slack',
+      ab: 'Sl',
+      d: 'Post updates and gather feedback.',
+      s: 0,
+      fits: ['dms', 'post', 'calendar'],
+    },
+    {
+      n: 'Linear',
+      ab: 'Li',
+      d: 'Create and update issues from your tasks.',
+      s: 0,
+      fits: ['checklist', 'plan', 'build'],
+    },
   ],
   agents: [
-    { n: 'Code Reviewer', ab: 'Cr', d: 'A subagent that audits changes for correctness.', s: 0, fits: ['build'] },
-    { n: 'Explorer', ab: 'Ex', d: 'Searches the codebase to answer questions fast.', s: 1, fits: ['build', 'doc'] },
+    {
+      n: 'Code Reviewer',
+      ab: 'Cr',
+      d: 'A subagent that audits changes for correctness.',
+      s: 0,
+      fits: ['build'],
+    },
+    {
+      n: 'Explorer',
+      ab: 'Ex',
+      d: 'Searches the codebase to answer questions fast.',
+      s: 1,
+      fits: ['build', 'doc'],
+    },
     {
       n: 'Test Writer',
       ab: 'Tw',
@@ -1110,7 +1146,13 @@ export const ENV: Record<string, EnvItem[]> = {
       why: 'Writes tests as byte ships each new beta feature.',
       fits: ['build'],
     },
-    { n: 'Migrator', ab: 'Mg', d: 'Runs large, repetitive refactors safely.', s: 0, fits: ['build'] },
+    {
+      n: 'Migrator',
+      ab: 'Mg',
+      d: 'Runs large, repetitive refactors safely.',
+      s: 0,
+      fits: ['build'],
+    },
   ],
 };
 // Pristine deep-clone snapshots of the seed catalogs, captured at module load BEFORE

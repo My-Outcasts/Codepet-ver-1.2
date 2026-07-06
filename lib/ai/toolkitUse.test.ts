@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  toolkitUsedFor,
-  appendTaskUse,
-  usageReceipt,
-  runLogWithToolkit,
-} from './toolkitUse';
+import { toolkitUsedFor, appendTaskUse, usageReceipt, runLogWithToolkit } from './toolkitUse';
 import type { LogStep } from '../helpers';
 
 const env = {
@@ -46,7 +41,9 @@ describe('usageReceipt', () => {
     expect(usageReceipt(undefined)).toBeNull();
     expect(usageReceipt([])).toBeNull();
     expect(usageReceipt(['Draft copy'])).toBe("Used in 1 task · last: 'Draft copy'");
-    expect(usageReceipt(['A', 'Launch narrative'])).toBe("Used in 2 tasks · last: 'Launch narrative'");
+    expect(usageReceipt(['A', 'Launch narrative'])).toBe(
+      "Used in 2 tasks · last: 'Launch narrative'",
+    );
   });
 });
 

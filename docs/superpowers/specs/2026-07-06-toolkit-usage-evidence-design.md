@@ -8,7 +8,7 @@
 
 Turning on a skill / connecting a connector / enabling an agent in the Environment view is a
 **pure in-app state flip** — the only feedback is a `Connected ✓` / `byte turned this on ✓`
-label. There is no way to see that the item is actually *doing* anything. A founder can't tell
+label. There is no way to see that the item is actually _doing_ anything. A founder can't tell
 a real, working capability from a cosmetic checkbox.
 
 We keep the setup **manual and simulated** for now (no real OAuth, no live connections — per
@@ -20,20 +20,20 @@ byte **using it in real work**: naming it while it runs, and accruing a visible 
 - **Evidence-through-use (Level 1).** Two surfaces, kept in sync:
   1. **In-run mention** — when byte runs a task, the execute log names the on-items that fit
      that task ("✓ Reviewed the diff with **Code review**").
-  2. **Persistent receipt** — each Environment item shows *"Used in N tasks · last: '<task
-     title>'."*
+  2. **Persistent receipt** — each Environment item shows _"Used in N tasks · last: '<task
+     title>'."_
 - **Fit-map (Option A), keyed on deliverable type.** Each item declares what work it fits; on a
   run we credit **only the on-items whose fit includes that task's deliverable type**. A
   marketing post never claims it used GitHub.
 - **Receipt shows the last real task by name (Option C).**
-- **Credited on *run* (produce), not approve** — byte used it to do the work regardless of
+- **Credited on _run_ (produce), not approve** — byte used it to do the work regardless of
   whether the founder keeps the draft; this keeps the receipt in sync with the in-run mention.
-- **Deduped by task title** — "Used in N tasks" means N *distinct* tasks.
+- **Deduped by task title** — "Used in N tasks" means N _distinct_ tasks.
 
 ## Non-goals
 
 - **No real integrations / OAuth / live connections.** Execution stays simulated; this feature
-  makes the *simulated* work visible and honest, it does not make connections real.
+  makes the _simulated_ work visible and honest, it does not make connections real.
 - No usage analytics dashboard, no per-run history feed (Option D) — just the count + last task.
 - Nothing in Giang's Build Coach surface. `lib/data.ts`, `lib/helpers.ts`,
   `components/views/EnvironmentView.tsx`, and the store's run/apply path are all ours.
@@ -66,7 +66,7 @@ byte **using it in real work**: naming it while it runs, and accruing a visible 
   whose `fits` includes `type`. Single source of truth for BOTH surfaces (so the log mention
   and the receipt always agree). Pure, unit-tested.
 - `usageReceipt(item): string | null` — from `item.tasks`, returns `"Used in 3 tasks · last:
-  '…'"` (or `"Used in 1 task · last: '…'"`), or `null` when there are none. Pure, unit-tested.
+'…'"` (or `"Used in 1 task · last: '…'"`), or `null` when there are none. Pure, unit-tested.
 
 ### 3. Surface A — in-run mention (`buildLog`)
 
@@ -80,8 +80,8 @@ unchanged — backward compatible.
 ### 4. Surface B — the receipt (`EnvironmentView.tsx`)
 
 Each rendered item (recommended cards + the browse-all rows) shows `usageReceipt(item)` when
-non-null — a quiet line under the item, e.g. *"Used in 3 tasks · last: 'Draft the launch
-narrative'."* Unused items show nothing (optionally a subtle "Not used yet"). Reads live via
+non-null — a quiet line under the item, e.g. _"Used in 3 tasks · last: 'Draft the launch
+narrative'."_ Unused items show nothing (optionally a subtle "Not used yet"). Reads live via
 the existing `tick` re-render.
 
 ### 5. Credit on run (store action)
@@ -130,8 +130,8 @@ run a task (type ty)
   excluded); `usageReceipt` (0 → null, 1 → "1 task", N → "N tasks" + last name);
   the dedupe/cap logic for appending a task title.
 - **Manual on the Vercel PR preview** (not `next dev`): turn on Code review + GitHub → run a
-  build-type task → the execute log names both → the Environment card shows *"Used in 1 task ·
-  last: '<title>'"* → run a second build task → count goes to 2, last updates → re-run the same
+  build-type task → the execute log names both → the Environment card shows _"Used in 1 task ·
+  last: '<title>'"_ → run a second build task → count goes to 2, last updates → re-run the same
   task → count does NOT change → run a marketing post → GitHub is NOT credited.
 
 ## Ship

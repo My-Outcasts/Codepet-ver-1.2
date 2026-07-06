@@ -14,7 +14,7 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 
 - **Honesty:** an item is credited only when it is **on** (`s === 1`) AND a task of a **fitting** deliverable type is produced. Off items and non-fitting tasks never accrue credit or appear in the log. The receipt reflects real in-app run events — it must not imply a live external connection.
 - **One source of truth:** `toolkitUsedFor(env, type)` decides who's credited; both the execute-log mention and the receipt derive from it so they never disagree.
-- **Credit on run (produce), deduped by task title** — "Used in N tasks" = N *distinct* tasks; re-running/revising the same task never inflates it.
+- **Credit on run (produce), deduped by task title** — "Used in N tasks" = N _distinct_ tasks; re-running/revising the same task never inflates it.
 - **Persist additively:** usage stores in a NEW `envUsage` field on the company doc — the existing `env` on/off field is untouched (no migration). Persist through the same Firestore channel pattern as `env`.
 - **Reduce edit surface:** reuse the existing `buildLog` and the existing produce path (`applyResult` call sites) — no parallel machinery.
 - **Do NOT touch Giang's Build Coach files** (`BuildCoachView`, `InstallView`, `SummaryView`, `app/api/track*`, `app/api/build-plan`, `app/actions/install.ts`, installer core, `toolkit/hooks`). Ours: `lib/data.ts`, `lib/ai/toolkitUse.ts`, `lib/helpers.ts`, `lib/firebase/companyData.ts`, `lib/firebase/schema.ts`, `lib/store.tsx`, `components/artifact/ArtifactModal.tsx`, `components/views/EnvironmentView.tsx`, `app/globals.css`.
@@ -26,10 +26,12 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 ## File Structure
 
 **Create:**
+
 - `lib/ai/toolkitUse.ts` — pure core: `toolkitUsedFor`, `appendTaskUse`, `usageReceipt`, `runLogWithToolkit`.
 - `lib/ai/toolkitUse.test.ts` — unit tests for all four.
 
 **Modify:**
+
 - `lib/data.ts` — `EnvItem` gains `fits?`/`tasks?`; seed `fits` on the catalog items.
 - `lib/firebase/schema.ts` — `EnvUsage` type + `envUsage?` on the company doc.
 - `lib/firebase/companyData.ts` — `envUsageFromCatalog`, `applyEnvUsage`, `persistEnvUsage`; apply on load.
@@ -43,9 +45,11 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 ### Task 1: Data model — `fits` / `tasks` on `EnvItem` + seed the catalog
 
 **Files:**
+
 - Modify: `lib/data.ts` (`EnvItem` interface ~line 69; the `ENV` catalog ~lines 78–140)
 
 **Interfaces:**
+
 - Produces: `EnvItem` gains `fits?: string[]` (deliverable types the item applies to) and `tasks?: string[]` (distinct task titles it's been used on). The catalog items are seeded with `fits`.
 
 - [ ] **Step 1: Extend `EnvItem`**
@@ -111,10 +115,12 @@ git commit -m "feat(env): fits/tasks on EnvItem + seed fit tags on the toolkit c
 ### Task 2: Pure core — `lib/ai/toolkitUse.ts`
 
 **Files:**
+
 - Create: `lib/ai/toolkitUse.ts`
 - Test: `lib/ai/toolkitUse.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LogStep` from `../helpers`; the catalog shape from Task 1 (`{ n, s, fits?, tasks? }`).
 - Produces:
   - `type UsedItem = { name: string; category: string }`
@@ -129,12 +135,7 @@ Create `lib/ai/toolkitUse.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import {
-  toolkitUsedFor,
-  appendTaskUse,
-  usageReceipt,
-  runLogWithToolkit,
-} from './toolkitUse';
+import { toolkitUsedFor, appendTaskUse, usageReceipt, runLogWithToolkit } from './toolkitUse';
 import type { LogStep } from '../helpers';
 
 const env = {
@@ -176,7 +177,9 @@ describe('usageReceipt', () => {
     expect(usageReceipt(undefined)).toBeNull();
     expect(usageReceipt([])).toBeNull();
     expect(usageReceipt(['Draft copy'])).toBe("Used in 1 task · last: 'Draft copy'");
-    expect(usageReceipt(['A', 'Launch narrative'])).toBe("Used in 2 tasks · last: 'Launch narrative'");
+    expect(usageReceipt(['A', 'Launch narrative'])).toBe(
+      "Used in 2 tasks · last: 'Launch narrative'",
+    );
   });
 });
 
@@ -275,10 +278,12 @@ git commit -m "feat(toolkit): pure core — who's credited, the receipt, and the
 ### Task 3: Persist usage additively (`envUsage`)
 
 **Files:**
+
 - Modify: `lib/firebase/schema.ts` (`EnvUsage` type + company doc field)
 - Modify: `lib/firebase/companyData.ts` (`envUsageFromCatalog`, `applyEnvUsage`, `persistEnvUsage`; apply on load ~line 167)
 
 **Interfaces:**
+
 - Consumes: the `ENV` catalog (`tasks` from Task 1).
 - Produces:
   - `type EnvUsage = Record<string, Record<string, string[]>>` (category → itemName → task titles).
@@ -337,7 +342,7 @@ export async function persistEnvUsage(companyId: string, usage: EnvUsage): Promi
 In `loadCompanyData` (the hydration, right after `applyEnvState((company?.env ?? {}) as EnvState);` at line ~167), add:
 
 ```ts
-  applyEnvUsage((company?.envUsage ?? {}) as EnvUsage);
+applyEnvUsage((company?.envUsage ?? {}) as EnvUsage);
 ```
 
 _(No separate reset step is needed: `applyEnvUsage` is self-resetting, and it runs on every hydration — a new account with no `envUsage` loads an empty map, which clears every item's `tasks`.)_
@@ -359,10 +364,12 @@ git commit -m "feat(env): persist toolkit usage additively as envUsage (no env m
 ### Task 4: Credit on run + name items in the execute log
 
 **Files:**
+
 - Modify: `lib/store.tsx` (`AppState` API ~line 165; new `creditToolkitUse` ~near `toggleEnv`; call it in `runTaskInChat` after `applyResult` line ~989; expose in the context value)
 - Modify: `components/artifact/ArtifactModal.tsx` (buildLog call ~line 464; credit after `applyResult` line ~254)
 
 **Interfaces:**
+
 - Consumes: `toolkitUsedFor`, `runLogWithToolkit`, `appendTaskUse` (Task 2); `envUsageFromCatalog`, `persistEnvUsage` (Task 3); `buildLog` (`lib/helpers`).
 - Produces: `creditToolkitUse(taskTitle: string, type: string): void` on the app store.
 
@@ -387,24 +394,24 @@ import { envUsageFromCatalog, persistEnvUsage } from './firebase/companyData';
 3. Define the action near `toggleEnv` (which is ~line 869 and shows the `companyId`/`persistEnv` pattern — mirror it):
 
 ```tsx
-  const creditToolkitUse = useCallback(
-    (taskTitle: string, type: string) => {
-      const used = toolkitUsedFor(ENV, type);
-      if (!used.length) return;
-      for (const u of used) {
-        const item = ENV[u.category]?.find((x) => x.n === u.name);
-        if (item) item.tasks = appendTaskUse(item.tasks, taskTitle);
-      }
-      bump();
-      const cid = companyId.current;
-      if (cid) {
-        persistEnvUsage(cid, envUsageFromCatalog()).catch((err) => {
-          console.error('[store] persistEnvUsage failed', err);
-        });
-      }
-    },
-    [bump],
-  );
+const creditToolkitUse = useCallback(
+  (taskTitle: string, type: string) => {
+    const used = toolkitUsedFor(ENV, type);
+    if (!used.length) return;
+    for (const u of used) {
+      const item = ENV[u.category]?.find((x) => x.n === u.name);
+      if (item) item.tasks = appendTaskUse(item.tasks, taskTitle);
+    }
+    bump();
+    const cid = companyId.current;
+    if (cid) {
+      persistEnvUsage(cid, envUsageFromCatalog()).catch((err) => {
+        console.error('[store] persistEnvUsage failed', err);
+      });
+    }
+  },
+  [bump],
+);
 ```
 
 _(Match the exact `companyId` accessor `toggleEnv` uses — copy its shape; `toggleEnv` at line ~869 shows whether it's `companyId.current`, a ref, or a variable.)_
@@ -416,7 +423,7 @@ _(Match the exact `companyId` accessor `toggleEnv` uses — copy its shape; `tog
 In `runTaskInChat`, right after `applyResult(t, type, res);` (line ~989), add:
 
 ```tsx
-        creditToolkitUse(t.t, type);
+creditToolkitUse(t.t, type);
 ```
 
 (Add `creditToolkitUse` to that `useCallback`'s dependency array.)
@@ -437,16 +444,16 @@ import { ENV } from '@/lib/data';
 3. At the buildLog call (line ~464), wrap the non-revise branch so the log names the fitting on-items:
 
 ```tsx
-    const steps =
-      execKind === 'revise'
-        ? reviseSteps(rev || '')
-        : runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, logType));
+const steps =
+  execKind === 'revise'
+    ? reviseSteps(rev || '')
+    : runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, logType));
 ```
 
 4. After `applyResult(t, type, res);` at line ~254 (the run/produce path), add:
 
 ```tsx
-          creditToolkitUse(t.t, type);
+creditToolkitUse(t.t, type);
 ```
 
 - [ ] **Step 4: Typecheck + scoped lint**
@@ -466,10 +473,12 @@ git commit -m "feat(toolkit): credit fitting on-items on run + name them in the 
 ### Task 5: Show the receipt in the Environment view
 
 **Files:**
+
 - Modify: `components/views/EnvironmentView.tsx` (recommended cards ~line 58; browse rows ~line 96)
 - Modify: `app/globals.css` (receipt styles, near the `.rcard`/`.erow` rules)
 
 **Interfaces:**
+
 - Consumes: `usageReceipt` (Task 2); `EnvItem.tasks` (Task 1).
 - Produces: the `Used in N tasks · last: '…'` line on each used item.
 
@@ -486,7 +495,9 @@ import { usageReceipt } from '@/lib/ai/toolkitUse';
 After the `rc-why` div (line ~58), add:
 
 ```tsx
-                {usageReceipt(x.tasks) && <div className="rc-used">{usageReceipt(x.tasks)}</div>}
+{
+  usageReceipt(x.tasks) && <div className="rc-used">{usageReceipt(x.tasks)}</div>;
+}
 ```
 
 - [ ] **Step 3: Receipt on the browse rows**
@@ -494,10 +505,10 @@ After the `rc-why` div (line ~58), add:
 Replace the `en` name div (line ~98) so the name and receipt stack:
 
 ```tsx
-                      <div className="en">
-                        <span className="en-n">{x.n}</span>
-                        {usageReceipt(x.tasks) && <span className="en-used">{usageReceipt(x.tasks)}</span>}
-                      </div>
+<div className="en">
+  <span className="en-n">{x.n}</span>
+  {usageReceipt(x.tasks) && <span className="en-used">{usageReceipt(x.tasks)}</span>}
+</div>
 ```
 
 - [ ] **Step 4: Add the CSS**
@@ -534,7 +545,7 @@ Expected: typecheck baseline unchanged; Vitest green (includes `lib/ai/toolkitUs
 
 - [ ] **Step 7: Manual verification (deferred to the Vercel PR preview)**
 
-_Not runnable here (`next build`/`next dev` unreliable). Checklist:_ turn on **Code review** + **GitHub** → run a **build**-type task from a department (the modal) → the execute log names both ("Reviewed the work with the Code review skill", "Worked through your GitHub connection") → the Environment card shows *"Used in 1 task · last: '<title>'"* → run a second build task → count → 2, last updates → re-run the same task → count unchanged → run a **marketing post** → GitHub is NOT credited/named → reload → the receipts persist.
+_Not runnable here (`next build`/`next dev` unreliable). Checklist:_ turn on **Code review** + **GitHub** → run a **build**-type task from a department (the modal) → the execute log names both ("Reviewed the work with the Code review skill", "Worked through your GitHub connection") → the Environment card shows _"Used in 1 task · last: '<title>'"_ → run a second build task → count → 2, last updates → re-run the same task → count unchanged → run a **marketing post** → GitHub is NOT credited/named → reload → the receipts persist.
 
 - [ ] **Step 8: Commit**
 
