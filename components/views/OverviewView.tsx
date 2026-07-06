@@ -20,13 +20,9 @@ import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
-import {
-  stageIndexOf,
-  stageLabelOf,
-  currentPhaseName,
-  productProgress,
-  companyProgress,
-} from '@/lib/stages';
+import { stageComplete, nextStageOf } from '@/lib/stages';
+import StageRibbon from '@/components/views/overview/StageRibbon';
+import { StageDrawer } from '@/components/views/overview/StageDrawer';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -93,9 +89,10 @@ export default function OverviewView() {
     tick,
     brief,
     nextStep,
-    show,
-    selectStage,
     portalSignal,
+    advanceStage,
+    selStage,
+    drawerOpen,
   } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -146,13 +143,14 @@ export default function OverviewView() {
       const dx = Math.cos(th) * rr * DEPT_R,
         dy = yy * DEPT_R,
         dz = Math.sin(th) * rr * DEPT_R;
+      const allDone = total > 0 && done === total;
       nodes.push({
         id: did,
         name: d.name,
         kind: 'dept',
         deptColor: dHex,
-        color: rgba(dHex, alpha),
-        val: d.status === 'attention' ? 7 : 5,
+        color: rgba(dHex, allDone ? 0.32 : alpha),
+        val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
         sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
         x: dx,
@@ -178,8 +176,8 @@ export default function OverviewView() {
           id: tid,
           name: t.t,
           kind: 'task',
-          color: rgba(tHex, t.done ? 0.55 : 0.95),
-          val: 1.1,
+          color: rgba(tHex, t.done ? 0.28 : 0.95),
+          val: t.done ? 0.7 : 1.1,
           dept: d,
           task: t,
           sub: `${d.name} · ${st.label}`,
@@ -230,6 +228,11 @@ export default function OverviewView() {
     () => (here ? STATE_HEX[taskState(here.task, true).cls] || '#FFFFFF' : '#FFFFFF'),
     [here],
   );
+  // When the founder opens a stage that isn't where they are now, the map has no
+  // real nodes to show for it (tasks are scaffolded for the current stage only),
+  // so we dim the live map to background and let the drawer carry that stage's
+  // authored checklist. Opening the current stage keeps the map fully lit.
+  const mapDimmed = drawerOpen && selStage !== stageWatermark();
   // Slow breathe for the beacon (color/size only — never touches the sim). Runs
   // only while a beacon exists.
   const [beat, setBeat] = useState(0);
@@ -380,14 +383,14 @@ export default function OverviewView() {
       className="view on"
       style={{ position: 'absolute', inset: 0, background: '#000000', overflow: 'hidden' }}
     >
+      <StageRibbon />
+
       <div
         style={{
           position: 'absolute',
-          top: 22,
+          top: 58,
           left: 26,
-          // Leave room for the Progress card (top-right) so the subtitle wraps before
-          // it runs underneath and gets hidden.
-          right: 268,
+          right: 26,
           maxWidth: 640,
           zIndex: 5,
           pointerEvents: 'none',
@@ -402,22 +405,18 @@ export default function OverviewView() {
         </div>
       </div>
 
-      <ProgressCard
-        stage={brief.stage}
-        onOpen={() => {
-          show('roadmap');
-          selectStage(stageWatermark()); // open the stage you're on now
-        }}
-      />
-
-      {here && (
-        <HereCard
-          here={here}
-          onStart={() => {
-            flyTo(`dept:${here.dept.k}`); // glide to the department…
-            briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
-          }}
-        />
+      {stageComplete() ? (
+        <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />
+      ) : (
+        here && (
+          <HereCard
+            here={here}
+            onStart={() => {
+              flyTo(`dept:${here.dept.k}`); // glide to the department…
+              briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
+            }}
+          />
+        )
       )}
       <div
         style={{
@@ -441,6 +440,19 @@ export default function OverviewView() {
       </div>
 
       <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
+        {mapDimmed && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 4,
+              background: 'rgba(7,5,16,0.62)',
+              transition: 'opacity .25s',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         {dims.w > 0 && (
           <ForceGraph3D<GNode, GLink>
             ref={fgRef}
@@ -509,6 +521,8 @@ export default function OverviewView() {
           />
         )}
       </div>
+
+      <StageDrawer />
     </section>
   );
 }
@@ -526,7 +540,7 @@ function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
     <div
       style={{
         position: 'absolute',
-        top: 92,
+        top: 126,
         left: 26,
         zIndex: 6,
         width: 264,
@@ -586,6 +600,72 @@ function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
   );
 }
 
+// Shown in place of the next-step card when every current-stage task is done:
+// the one move left is to advance the journey. Same overlay slot + styling.
+function AdvanceCard({ next, onAdvance }: { next: string | null; onAdvance: () => void }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: 126,
+        left: 26,
+        zIndex: 6,
+        width: 264,
+        padding: '15px 17px 16px',
+        background: 'rgba(16,14,28,0.74)',
+        backdropFilter: 'blur(10px)',
+        WebkitBackdropFilter: 'blur(10px)',
+        border: '1px solid rgba(255,255,255,0.1)',
+        borderRadius: 14,
+        boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: '1.4px',
+          fontWeight: 700,
+          color: 'rgba(52,211,153,.75)',
+          textTransform: 'uppercase',
+        }}
+      >
+        Stage complete
+      </div>
+      <div
+        style={{
+          fontSize: 15,
+          fontWeight: 650,
+          color: '#F7F5FF',
+          letterSpacing: '-.2px',
+          marginTop: 9,
+          lineHeight: 1.35,
+        }}
+      >
+        You&apos;ve finished this stage&apos;s work.
+      </div>
+      {next && (
+        <button
+          onClick={onAdvance}
+          style={{
+            marginTop: 15,
+            fontFamily: 'inherit',
+            fontSize: 13,
+            fontWeight: 650,
+            color: '#0B0616',
+            background: '#F5F3FF',
+            border: 0,
+            borderRadius: 9,
+            padding: '9px 24px',
+            cursor: 'pointer',
+          }}
+        >
+          Advance to {next}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function Legend({ dot, label }: { dot: string; label: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -600,110 +680,5 @@ function Legend({ dot, label }: { dot: string; label: string }) {
       />
       {label}
     </span>
-  );
-}
-
-// Compact progress read — where you are on the stage ladder, and how far Product
-// vs Company have come. Display-only (pointer-events off so the map stays draggable).
-function Meter({ label, pct, hex }: { label: string; pct: number; hex: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-      <span style={{ width: 54, fontSize: 11, color: 'rgba(245,243,255,.6)', flex: 'none' }}>
-        {label}
-      </span>
-      <div
-        style={{
-          flex: 1,
-          height: 5,
-          borderRadius: 3,
-          background: 'rgba(255,255,255,.08)',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ width: `${pct}%`, height: '100%', background: hex, borderRadius: 3 }} />
-      </div>
-      <span
-        style={{
-          width: 30,
-          textAlign: 'right',
-          fontSize: 11,
-          color: 'rgba(245,243,255,.7)',
-          flex: 'none',
-        }}
-      >
-        {pct}%
-      </span>
-    </div>
-  );
-}
-
-function ProgressCard({ stage, onOpen }: { stage?: string; onOpen: () => void }) {
-  const [hover, setHover] = useState(false);
-  const prod = productProgress();
-  const comp = companyProgress();
-  const label = stageLabelOf(stageIndexOf(stage));
-  const phase = currentPhaseName(stage); // the roadmap phase — keeps this in step with the Roadmap
-  return (
-    <div
-      onClick={onOpen}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      title="Open the roadmap"
-      style={{
-        position: 'absolute',
-        top: 22,
-        right: 26,
-        zIndex: 5,
-        width: 216,
-        padding: '13px 15px 14px',
-        background: hover ? 'rgba(24,20,42,0.82)' : 'rgba(16,14,28,0.72)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: `1px solid rgba(255,255,255,${hover ? 0.2 : 0.09})`,
-        borderRadius: 13,
-        boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
-        cursor: 'pointer',
-        transition: 'background .15s, border-color .15s',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div
-          style={{
-            fontSize: 10,
-            letterSpacing: '1.2px',
-            fontWeight: 700,
-            color: 'rgba(245,243,255,.42)',
-            textTransform: 'uppercase',
-          }}
-        >
-          Progress
-        </div>
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 16 16"
-          fill="none"
-          style={{ opacity: hover ? 0.75 : 0.4, transition: 'opacity .15s' }}
-        >
-          <path
-            d="M6 4l4 4-4 4"
-            stroke="#F5F3FF"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      {(phase || label) && (
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#F5F3FF', marginTop: 6 }}>
-          {phase || 'In progress'}
-          {label && (
-            <span style={{ color: 'rgba(245,243,255,.5)', fontWeight: 500 }}> · {label}</span>
-          )}
-        </div>
-      )}
-      <Meter label="Product" pct={prod.pct} hex="#8B5CF6" />
-      <Meter label="Company" pct={comp.pct} hex="#2DD4BF" />
-    </div>
   );
 }
