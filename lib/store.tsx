@@ -449,7 +449,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const askInterviewGap = useCallback((gap: Gap) => {
     setChatMessages((prev) => [
       ...prev,
-      { id: newId(), role: 'byte', text: QUESTION_FOR[gap].ask, ts: Date.now(), interview: { gap } },
+      {
+        id: newId(),
+        role: 'byte',
+        text: QUESTION_FOR[gap].ask,
+        ts: Date.now(),
+        interview: { gap },
+      },
     ]);
   }, []);
 
@@ -470,7 +476,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const lead =
         `${who ? `${who}, your` : 'Your'} company for ${proj} is ready. ` +
         `A couple quick questions first, so I plan the right moves — not generic ones.`;
-      setChatMessages((prev) => [...prev, { id: newId(), role: 'byte', text: lead, ts: Date.now() }]);
+      setChatMessages((prev) => [
+        ...prev,
+        { id: newId(), role: 'byte', text: lead, ts: Date.now() },
+      ]);
       track('firstrun.interview_started', { gaps: gaps.length });
       askInterviewGap(gaps[0]);
     },

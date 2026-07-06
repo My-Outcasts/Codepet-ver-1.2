@@ -42,7 +42,7 @@ export const QUESTION_FOR: Record<Gap, { ask: string; why: string }> = {
   },
   traction: {
     ask: 'Where are you right now — waitlist, users, revenue, anything live yet?',
-    why: "so the numbers in your plan are yours, not made up",
+    why: 'so the numbers in your plan are yours, not made up',
   },
   problem: {
     ask: 'What problem does it solve, and who feels it most?',
@@ -63,7 +63,7 @@ export const INTERVIEW_SCHEMA: Record<string, unknown> = {
     value: {
       type: 'string',
       description:
-        "A concise, plain-language capture of what the founder actually said for this field, in their terms. Keep their real numbers and specifics verbatim; do not embellish, infer beyond, or invent. Empty string if the reply contains no usable answer (e.g. they deflected or skipped).",
+        'A concise, plain-language capture of what the founder actually said for this field, in their terms. Keep their real numbers and specifics verbatim; do not embellish, infer beyond, or invent. Empty string if the reply contains no usable answer (e.g. they deflected or skipped).',
     },
   },
   required: ['value'],

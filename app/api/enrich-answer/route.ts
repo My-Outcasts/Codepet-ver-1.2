@@ -73,8 +73,7 @@ export async function POST(req: Request): Promise<Response> {
 
   // Load the founder's real brief so we never override a field they already filled.
   const loaded = await loadServerBrief(uid, idToken);
-  const brief: CompanyBrief =
-    loaded && typeof loaded === 'object' ? (loaded as CompanyBrief) : {};
+  const brief: CompanyBrief = loaded && typeof loaded === 'object' ? (loaded as CompanyBrief) : {};
 
   try {
     const distilled = await generateJson<InterviewAnswer>({
