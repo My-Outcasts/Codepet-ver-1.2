@@ -76,6 +76,9 @@ export interface ChatMessage {
   /** The execute-log steps for this run — streamed live in the card, then kept as the
    * "What byte did" record. Generated once (buildLog) when the run starts. */
   steps?: LogStep[];
+  /** A "Noted" chip: a durable fact/decision byte captured from the founder's last message
+   * into company memory, with an undo. `undone` strikes it once the founder undoes. */
+  noted?: { topic: string; statement: string; undone?: boolean };
 }
 
 const newId = (): string =>
@@ -94,7 +97,6 @@ export type View =
   | 'summary'
   | 'overview'
   | 'home'
-  | 'roadmap'
   | 'dept'
   | 'tasks'
   | 'library'
@@ -182,6 +184,8 @@ interface AppState {
    * a real answer into the brief, then the interview advances to the next gap or hands off
    * to the "best first move" greeting. */
   answerInterview: (msgId: string, gap: Gap, answer: string | null) => void;
+  /** Undo a "Noted" chip: strike it in the thread and forget that fact from company memory. */
+  undoNoted: (msgId: string, topic: string) => void;
   /** Mark a task as awaiting the founder's approval and persist so it survives reload. */
   persistTaskDraft: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
@@ -343,7 +347,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const navigateTo = useCallback((dest: NavDest, target?: string) => {
     switch (dest) {
       case 'roadmap':
-        setView('roadmap');
+        setView('overview'); // Roadmap retired — the Overview carries the journey now
         break;
       case 'tasks':
         setView('tasks');
@@ -611,6 +615,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setDecisions((prev) => {
         if (index < 0 || index >= prev.length) return prev;
         const next = prev.filter((_, i) => i !== index);
+        if (companyId) persistDecisions(companyId, next).catch(() => {});
+        return next;
+      });
+    },
+    [companyId],
+  );
+  // Undo a "Noted" chip: strike it in the thread and forget that topic from company memory
+  // (local + persisted), so byte stops grounding on something the founder didn't mean to keep.
+  const undoNoted = useCallback(
+    (msgId: string, topic: string) => {
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId && m.noted ? { ...m, noted: { ...m.noted, undone: true } } : m,
+        ),
+      );
+      const k = topic.trim().toLowerCase();
+      setDecisions((prev) => {
+        const next = prev.filter((d) => d.topic.trim().toLowerCase() !== k);
         if (companyId) persistDecisions(companyId, next).catch(() => {});
         return next;
       });
@@ -1175,6 +1197,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               setupChip = { category: ev.category, name: ev.name };
               continue;
             }
+            if (ev.type === 'noted') {
+              // byte recorded durable facts (in this same generation — no extra call). The
+              // server already merged them into memory; reflect them locally as a quiet
+              // "Noted" chip per fact and fold into decisions so grounding updates now.
+              const now = Date.now();
+              setChatMessages((prev) => [
+                ...prev,
+                ...ev.items.map((c) => ({
+                  id: newId(),
+                  role: 'byte' as const,
+                  text: '',
+                  ts: now,
+                  noted: { topic: c.topic, statement: c.statement },
+                })),
+              ]);
+              setDecisions((prev) => {
+                const byTopic = new Map(prev.map((d) => [d.topic.trim().toLowerCase(), d]));
+                for (const c of ev.items) {
+                  byTopic.set(c.topic.trim().toLowerCase(), {
+                    topic: c.topic,
+                    statement: c.statement,
+                    source: 'chat',
+                    updatedAt: now,
+                  });
+                }
+                return [...byTopic.values()];
+              });
+              continue;
+            }
             acc += ev.text;
             setChatMessages((prev) =>
               prev.map((m) => (m.id === byteMsg.id ? { ...m, text: acc } : m)),
@@ -1274,6 +1325,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openChatResult,
       dismissChatAction,
       answerInterview,
+      undoNoted,
       persistTaskDraft,
       nextStep,
       toastMsg,
@@ -1330,6 +1382,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openChatResult,
       dismissChatAction,
       answerInterview,
+      undoNoted,
       persistTaskDraft,
       nextStep,
       toastMsg,

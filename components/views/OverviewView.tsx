@@ -20,13 +20,10 @@ import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
-import {
-  stageIndexOf,
-  stageLabelOf,
-  currentPhaseName,
-  productProgress,
-  companyProgress,
-} from '@/lib/stages';
+import { stageComplete, nextStageOf } from '@/lib/stages';
+import StageRibbon from '@/components/views/overview/StageRibbon';
+import { StageDrawer } from '@/components/views/overview/StageDrawer';
+import OverviewIntro from '@/components/views/overview/OverviewIntro';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -46,6 +43,9 @@ const STATE_HEX: Record<string, string> = {
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
 const DIM_NODE = 'rgba(150,150,170,0.09)';
 const DIM_LINK = 'rgba(150,150,170,0.03)';
+// byte's "do this next" guide color — deliberately outside the state palette
+// (purple/gold/blue/green) so the beacon + its trail pop from the field.
+const BEACON_HEX = '#7DE3FF';
 
 function rgba(hex: string, a: number) {
   const h = hex.replace('#', '');
@@ -89,16 +89,19 @@ export default function OverviewView() {
   const {
     openDept,
     runTask,
-    briefDepartment,
+    portalToTask,
     tick,
     brief,
     nextStep,
-    show,
-    selectStage,
     portalSignal,
+    advanceStage,
+    selStage,
+    drawerOpen,
   } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
+  const calloutRef = useRef<HTMLDivElement>(null);
+  const hereRef = useRef<HereInfo | null>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
   const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -146,13 +149,14 @@ export default function OverviewView() {
       const dx = Math.cos(th) * rr * DEPT_R,
         dy = yy * DEPT_R,
         dz = Math.sin(th) * rr * DEPT_R;
+      const allDone = total > 0 && done === total;
       nodes.push({
         id: did,
         name: d.name,
         kind: 'dept',
         deptColor: dHex,
-        color: rgba(dHex, alpha),
-        val: d.status === 'attention' ? 7 : 5,
+        color: rgba(dHex, allDone ? 0.32 : alpha),
+        val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
         sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
         x: dx,
@@ -178,8 +182,8 @@ export default function OverviewView() {
           id: tid,
           name: t.t,
           kind: 'task',
-          color: rgba(tHex, t.done ? 0.55 : 0.95),
-          val: 1.1,
+          color: rgba(tHex, t.done ? 0.28 : 0.95),
+          val: t.done ? 0.7 : 1.1,
           dept: d,
           task: t,
           sub: `${d.name} · ${st.label}`,
@@ -226,10 +230,11 @@ export default function OverviewView() {
     const idx = here.dept.tasks.indexOf(here.task);
     return idx >= 0 ? `task:${here.dept.k}:${idx}` : null;
   }, [here]);
-  const beaconHex = useMemo(
-    () => (here ? STATE_HEX[taskState(here.task, true).cls] || '#FFFFFF' : '#FFFFFF'),
-    [here],
-  );
+  // When the founder opens a stage that isn't where they are now, the map has no
+  // real nodes to show for it (tasks are scaffolded for the current stage only),
+  // so we dim the live map to background and let the drawer carry that stage's
+  // authored checklist. Opening the current stage keeps the map fully lit.
+  const mapDimmed = drawerOpen && selStage !== stageWatermark();
   // Slow breathe for the beacon (color/size only — never touches the sim). Runs
   // only while a beacon exists.
   const [beat, setBeat] = useState(0);
@@ -239,6 +244,55 @@ export default function OverviewView() {
     return () => clearInterval(id);
   }, [beaconId]);
   const pulse = 0.5 + 0.5 * Math.sin(beat * 0.16); // 0..1
+
+  hereRef.current = here;
+  // The lit trail byte draws from the center to your move: project → the active
+  // department → the next task. These two link keys get the guide color +
+  // particles that stream OUTWARD (source→target) from "Your company" to the node.
+  const pathLinkIds = useMemo(() => {
+    if (!here) return new Set<string>();
+    const dk = here.dept.k;
+    const idx = here.dept.tasks.indexOf(here.task);
+    return new Set([`project->dept:${dk}`, `dept:${dk}->task:${dk}:${idx}`]);
+  }, [here]);
+  const beaconNode = useMemo(
+    () => data.nodes.find((n) => n.id === beaconId) ?? null,
+    [data, beaconId],
+  );
+  // byte's on-map callout shows whenever there's a live next move (not while a
+  // non-current stage drawer has dimmed the map, and not when the stage is done).
+  const showCallout = !!beaconId && !mapDimmed && !stageComplete();
+
+  // Tether the callout to the beacon node: project its live 3D position to screen
+  // coords each frame and move the HTML callout there. Writes the DOM transform
+  // directly (no React re-render per frame); hides it if the node goes off-screen.
+  useEffect(() => {
+    if (!showCallout || !dims.w) return;
+    let raf = 0;
+    const draw = () => {
+      const fg = fgRef.current;
+      const el = calloutRef.current;
+      if (fg && el && beaconNode && Number.isFinite(beaconNode.x)) {
+        const sc = fg.graph2ScreenCoords(beaconNode.x, beaconNode.y, beaconNode.z);
+        if (
+          sc &&
+          Number.isFinite(sc.x) &&
+          sc.x > -240 &&
+          sc.x < dims.w + 240 &&
+          sc.y > -240 &&
+          sc.y < dims.h + 240
+        ) {
+          el.style.opacity = '1';
+          el.style.transform = `translate(${sc.x}px, ${sc.y}px)`;
+        } else {
+          el.style.opacity = '0';
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [showCallout, dims.w, dims.h, beaconNode]);
 
   // Glide the camera to frame a node — the "jump to the step" on Start, so the
   // docked work panel opens with its node in view (map stays as context behind it).
@@ -285,8 +339,14 @@ export default function OverviewView() {
   useEffect(() => {
     if (!dims.w) return;
     if (bloomRef.current) bloomRef.current.setSize(dims.w, dims.h);
-    const t1 = setTimeout(() => fitView(), 500);
-    const t2 = setTimeout(() => fitView(), 2400);
+    // Only auto-fit while the user (or a Start/portal) hasn't framed something.
+    // Without this guard, opening the chat panel resizes the container and yanks
+    // the camera off the department a Start just flew to.
+    const fit = () => {
+      if (!tookControlRef.current) fitView();
+    };
+    const t1 = setTimeout(fit, 500);
+    const t2 = setTimeout(fit, 2400);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -318,7 +378,7 @@ export default function OverviewView() {
     if (idleRef.current) clearTimeout(idleRef.current);
     idleRef.current = setTimeout(() => {
       const cc = (fgRef.current as any)?.controls?.();
-      if (cc) cc.autoRotate = true;
+      if (cc && !hereRef.current) cc.autoRotate = true; // stay at rest while a move is pinned
     }, 3500);
   }, []);
 
@@ -326,7 +386,9 @@ export default function OverviewView() {
     if (!dims.w) return;
     const c = (fgRef.current as any)?.controls?.();
     if (c) {
-      c.autoRotate = true;
+      // Rest the map (no auto-spin) while byte is pointing at a move, so the
+      // tethered callout holds steady; gently spin only when there's no move.
+      c.autoRotate = !here;
       c.autoRotateSpeed = 0.5;
     }
     const el = wrapRef.current;
@@ -338,7 +400,7 @@ export default function OverviewView() {
       el?.removeEventListener('pointerdown', noteInteract);
       el?.removeEventListener('wheel', noteInteract);
     };
-  }, [dims.w, noteInteract]);
+  }, [dims.w, noteInteract, here]);
 
   // The graph's world size is fixed (department orbit radius is constant), so a
   // fixed camera distance reliably frames it — scaled by viewport aspect so the
@@ -380,14 +442,15 @@ export default function OverviewView() {
       className="view on"
       style={{ position: 'absolute', inset: 0, background: '#000000', overflow: 'hidden' }}
     >
+      <OverviewIntro />
+      <StageRibbon />
+
       <div
         style={{
           position: 'absolute',
-          top: 22,
+          top: 58,
           left: 26,
-          // Leave room for the Progress card (top-right) so the subtitle wraps before
-          // it runs underneath and gets hidden.
-          right: 268,
+          right: 26,
           maxWidth: 640,
           zIndex: 5,
           pointerEvents: 'none',
@@ -402,23 +465,7 @@ export default function OverviewView() {
         </div>
       </div>
 
-      <ProgressCard
-        stage={brief.stage}
-        onOpen={() => {
-          show('roadmap');
-          selectStage(stageWatermark()); // open the stage you're on now
-        }}
-      />
-
-      {here && (
-        <HereCard
-          here={here}
-          onStart={() => {
-            flyTo(`dept:${here.dept.k}`); // glide to the department…
-            briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
-          }}
-        />
-      )}
+      {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
       <div
         style={{
           position: 'absolute',
@@ -441,6 +488,19 @@ export default function OverviewView() {
       </div>
 
       <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
+        {mapDimmed && (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 4,
+              background: 'rgba(7,5,16,0.62)',
+              transition: 'opacity .25s',
+              pointerEvents: 'none',
+            }}
+          />
+        )}
         {dims.w > 0 && (
           <ForceGraph3D<GNode, GLink>
             ref={fgRef}
@@ -457,7 +517,7 @@ export default function OverviewView() {
               return hoverId === n.id ? n.val * 1.7 : n.val;
             }}
             nodeColor={(n) => {
-              if (n.id === beaconId) return rgba(beaconHex, 0.9 + pulse * 0.1); // always lit
+              if (n.id === beaconId) return rgba(BEACON_HEX, 0.85 + pulse * 0.15); // byte's guide star
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
             nodeOpacity={0.95}
@@ -473,24 +533,38 @@ export default function OverviewView() {
               `<div style="font:600 12px Inter,sans-serif;color:#fff;background:rgba(12,10,23,.92);border:1px solid rgba(255,255,255,.14);padding:6px 9px;border-radius:8px;max-width:240px">${n.name}${n.sub ? `<div style='font-weight:500;color:rgba(255,255,255,.6);margin-top:2px;font-size:11px'>${n.sub}</div>` : ''}</div>`
             }
             linkColor={(l) => {
-              if (!hoverId) return l.color;
-              const s = linkId(l.source),
-                t = linkId(l.target);
-              return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
+              if (hoverId) {
+                const s = linkId(l.source),
+                  t = linkId(l.target);
+                return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
+              }
+              return pathLinkIds.has(key) ? rgba(BEACON_HEX, 0.9) : l.color;
             }}
             linkWidth={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
-              const hot = hoverId && (s === hoverId || t === hoverId);
-              return hot ? 2.4 : l.kind === 'pd' ? 1.1 : 0.4;
+              if (hoverId && (s === hoverId || t === hoverId)) return 2.4;
+              if (pathLinkIds.has(key)) return 2;
+              return l.kind === 'pd' ? 1.1 : 0.4;
             }}
             linkDirectionalParticles={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
               if (hoverId && (s === hoverId || t === hoverId)) return 4;
+              if (pathLinkIds.has(key)) return 4;
               return l.active ? 3 : 0;
             }}
-            linkDirectionalParticleWidth={1.8}
+            linkDirectionalParticleColor={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
+              return pathLinkIds.has(key) ? BEACON_HEX : rgba(l.hex, 0.9);
+            }}
+            linkDirectionalParticleWidth={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
+              return pathLinkIds.has(key) ? 3 : 1.8;
+            }}
             linkDirectionalParticleSpeed={0.006}
             enableNodeDrag
             cooldownTime={4000}
@@ -508,7 +582,33 @@ export default function OverviewView() {
             }}
           />
         )}
+        {showCallout && here && (
+          <div
+            ref={calloutRef}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              zIndex: 5,
+              opacity: 0,
+              pointerEvents: 'none',
+              willChange: 'transform, opacity',
+              transition: 'opacity .2s',
+            }}
+          >
+            <ByteGuide
+              here={here}
+              // One shared arrival: byte opens the chat + briefs you, then the
+              // portalSignal effect glides the camera to the department AFTER the
+              // chat has docked — so the fly frames the settled (narrower) layout
+              // instead of being yanked back by the resize-driven auto-fit.
+              onStart={() => portalToTask(here.dept.k, here.task.t)}
+            />
+          </div>
+        )}
       </div>
+
+      <StageDrawer />
     </section>
   );
 }
@@ -518,15 +618,97 @@ interface HereInfo {
   task: Task;
 }
 
-// The beacon — byte's single next move. One thing to read, one thing to do:
-// the task, and Start (which opens the run loop). Nothing else. Fixed overlay.
-function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
+// byte's single next move, tethered to the beacon node on the map (its wrapper is
+// positioned at the node's screen coords each frame). A pointer nub aims back at
+// the node; the card sits to its right, vertically centered. One thing to read,
+// one thing to do: the task + Start (which opens the run loop).
+function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
   const st = taskState(here.task, true);
+  return (
+    <div style={{ position: 'relative', width: 250, transform: 'translate(18px, -50%)' }}>
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: -5,
+          top: '50%',
+          width: 10,
+          height: 10,
+          marginTop: -5,
+          background: 'rgba(16,14,28,0.92)',
+          borderLeft: '1px solid rgba(125,227,255,0.5)',
+          borderBottom: '1px solid rgba(125,227,255,0.5)',
+          transform: 'rotate(45deg)',
+        }}
+      />
+      <div
+        style={{
+          pointerEvents: 'auto',
+          padding: '13px 15px 15px',
+          background: 'rgba(16,14,28,0.92)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: '1px solid rgba(125,227,255,0.35)',
+          borderRadius: 13,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '1.3px',
+            fontWeight: 700,
+            color: BEACON_HEX,
+            textTransform: 'uppercase',
+          }}
+        >
+          byte · do this next
+        </div>
+        <div
+          style={{
+            fontSize: 14.5,
+            fontWeight: 650,
+            color: '#F7F5FF',
+            letterSpacing: '-.2px',
+            marginTop: 8,
+            lineHeight: 1.35,
+          }}
+        >
+          {here.task.t}
+        </div>
+        <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
+          {here.dept.name} · {st.label}
+        </div>
+        <button
+          onClick={onStart}
+          style={{
+            marginTop: 13,
+            fontFamily: 'inherit',
+            fontSize: 13,
+            fontWeight: 650,
+            color: '#0B0616',
+            background: BEACON_HEX,
+            border: 0,
+            borderRadius: 9,
+            padding: '8px 22px',
+            cursor: 'pointer',
+          }}
+        >
+          Start
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Shown in place of the next-step card when every current-stage task is done:
+// the one move left is to advance the journey. Same overlay slot + styling.
+function AdvanceCard({ next, onAdvance }: { next: string | null; onAdvance: () => void }) {
   return (
     <div
       style={{
         position: 'absolute',
-        top: 92,
+        top: 126,
         left: 26,
         zIndex: 6,
         width: 264,
@@ -544,11 +726,11 @@ function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
           fontSize: 10,
           letterSpacing: '1.4px',
           fontWeight: 700,
-          color: 'rgba(245,243,255,.45)',
+          color: 'rgba(52,211,153,.75)',
           textTransform: 'uppercase',
         }}
       >
-        Next step
+        Stage complete
       </div>
       <div
         style={{
@@ -560,28 +742,27 @@ function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
           lineHeight: 1.35,
         }}
       >
-        {here.task.t}
+        You&apos;ve finished this stage&apos;s work.
       </div>
-      <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
-        {here.dept.name} · {st.label}
-      </div>
-      <button
-        onClick={onStart}
-        style={{
-          marginTop: 15,
-          fontFamily: 'inherit',
-          fontSize: 13,
-          fontWeight: 650,
-          color: '#0B0616',
-          background: '#F5F3FF',
-          border: 0,
-          borderRadius: 9,
-          padding: '9px 24px',
-          cursor: 'pointer',
-        }}
-      >
-        Start
-      </button>
+      {next && (
+        <button
+          onClick={onAdvance}
+          style={{
+            marginTop: 15,
+            fontFamily: 'inherit',
+            fontSize: 13,
+            fontWeight: 650,
+            color: '#0B0616',
+            background: '#F5F3FF',
+            border: 0,
+            borderRadius: 9,
+            padding: '9px 24px',
+            cursor: 'pointer',
+          }}
+        >
+          Advance to {next}
+        </button>
+      )}
     </div>
   );
 }
@@ -600,110 +781,5 @@ function Legend({ dot, label }: { dot: string; label: string }) {
       />
       {label}
     </span>
-  );
-}
-
-// Compact progress read — where you are on the stage ladder, and how far Product
-// vs Company have come. Display-only (pointer-events off so the map stays draggable).
-function Meter({ label, pct, hex }: { label: string; pct: number; hex: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
-      <span style={{ width: 54, fontSize: 11, color: 'rgba(245,243,255,.6)', flex: 'none' }}>
-        {label}
-      </span>
-      <div
-        style={{
-          flex: 1,
-          height: 5,
-          borderRadius: 3,
-          background: 'rgba(255,255,255,.08)',
-          overflow: 'hidden',
-        }}
-      >
-        <div style={{ width: `${pct}%`, height: '100%', background: hex, borderRadius: 3 }} />
-      </div>
-      <span
-        style={{
-          width: 30,
-          textAlign: 'right',
-          fontSize: 11,
-          color: 'rgba(245,243,255,.7)',
-          flex: 'none',
-        }}
-      >
-        {pct}%
-      </span>
-    </div>
-  );
-}
-
-function ProgressCard({ stage, onOpen }: { stage?: string; onOpen: () => void }) {
-  const [hover, setHover] = useState(false);
-  const prod = productProgress();
-  const comp = companyProgress();
-  const label = stageLabelOf(stageIndexOf(stage));
-  const phase = currentPhaseName(stage); // the roadmap phase — keeps this in step with the Roadmap
-  return (
-    <div
-      onClick={onOpen}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      title="Open the roadmap"
-      style={{
-        position: 'absolute',
-        top: 22,
-        right: 26,
-        zIndex: 5,
-        width: 216,
-        padding: '13px 15px 14px',
-        background: hover ? 'rgba(24,20,42,0.82)' : 'rgba(16,14,28,0.72)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: `1px solid rgba(255,255,255,${hover ? 0.2 : 0.09})`,
-        borderRadius: 13,
-        boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
-        cursor: 'pointer',
-        transition: 'background .15s, border-color .15s',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div
-          style={{
-            fontSize: 10,
-            letterSpacing: '1.2px',
-            fontWeight: 700,
-            color: 'rgba(245,243,255,.42)',
-            textTransform: 'uppercase',
-          }}
-        >
-          Progress
-        </div>
-        <svg
-          width="13"
-          height="13"
-          viewBox="0 0 16 16"
-          fill="none"
-          style={{ opacity: hover ? 0.75 : 0.4, transition: 'opacity .15s' }}
-        >
-          <path
-            d="M6 4l4 4-4 4"
-            stroke="#F5F3FF"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </div>
-      {(phase || label) && (
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#F5F3FF', marginTop: 6 }}>
-          {phase || 'In progress'}
-          {label && (
-            <span style={{ color: 'rgba(245,243,255,.5)', fontWeight: 500 }}> · {label}</span>
-          )}
-        </div>
-      )}
-      <Meter label="Product" pct={prod.pct} hex="#8B5CF6" />
-      <Meter label="Company" pct={comp.pct} hex="#2DD4BF" />
-    </div>
   );
 }
