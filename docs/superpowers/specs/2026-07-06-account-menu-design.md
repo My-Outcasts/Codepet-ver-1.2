@@ -78,9 +78,9 @@ A new `'billing'` view. `BillingView`:
 
 - Reads today's usage doc `companies/{uid}/usage/<yyyy-mm-dd>` (field `n`) via the client Firestore
   SDK (owner-readable), and the limit from `DEFAULT_DAILY_LIMIT` (constant in `lib/ai/rateLimit.ts`).
-- Renders **Today's usage** — *"You've used N of LIMIT runs · resets at midnight"* with a small
-  meter, and **Plan** — *Free (beta)* with an **Upgrade** CTA that opens an honest *"Pro is coming —
-  we'll let you know"* state (no checkout).
+- Renders **Today's usage** — _"You've used N of LIMIT runs · resets at midnight"_ with a small
+  meter, and **Plan** — _Free (beta)_ with an **Upgrade** CTA that opens an honest _"Pro is coming —
+  we'll let you know"_ state (no checkout).
 - Loading/empty: no usage doc yet → "0 of LIMIT". Read failure → a quiet "couldn't load usage right
   now" (never blocks the page).
 

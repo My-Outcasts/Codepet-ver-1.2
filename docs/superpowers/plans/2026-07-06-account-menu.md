@@ -28,12 +28,14 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 ## File Structure
 
 **Create:**
+
 - `lib/billing.ts` — pure `usageMeter` + `canSendSupport` helpers.
 - `lib/billing.test.ts` — their unit tests.
 - `components/views/BillingView.tsx` — the Billing & Usage view.
 - `components/SupportModal.tsx` — the Support message modal.
 
 **Modify:**
+
 - `lib/firebase/companyData.ts` — `loadTodayUsage(companyId)` + `sendSupportMessage(...)`.
 - `lib/store.tsx` — add `'billing'` to the `View` type.
 - `components/AppRoot.tsx` — route `'billing'` → `BillingView`.
@@ -46,10 +48,12 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 ### Task 1: Pure helpers — `lib/billing.ts`
 
 **Files:**
+
 - Create: `lib/billing.ts`
 - Test: `lib/billing.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `usageMeter(n: number, limit: number): { used: number; limit: number; pct: number; label: string }` — clamps `used` to `[0, limit]`, `pct` = round(used/limit\*100) clamped `[0,100]`, `label` = `"N of LIMIT runs"`.
   - `canSendSupport(message: string): boolean` — true iff the trimmed message is non-empty.
@@ -132,6 +136,7 @@ git commit -m "feat(billing): pure usageMeter + canSendSupport helpers"
 ### Task 2: Billing & Usage view + route
 
 **Files:**
+
 - Modify: `lib/firebase/companyData.ts` (add `loadTodayUsage`; ensure `collection` not needed here)
 - Modify: `lib/store.tsx` (`View` type ~line 93 — add `'billing'`)
 - Create: `components/views/BillingView.tsx`
@@ -139,6 +144,7 @@ git commit -m "feat(billing): pure usageMeter + canSendSupport helpers"
 - Modify: `app/globals.css`
 
 **Interfaces:**
+
 - Consumes: `usageMeter` (Task 1); `DEFAULT_DAILY_LIMIT`, `dayKey` (`lib/ai/rateLimit.ts`); `getDb`/`doc`/`getDoc` (already in `companyData.ts`).
 - Produces: `loadTodayUsage(companyId: string): Promise<number>`; the `'billing'` view.
 
@@ -299,10 +305,12 @@ git commit -m "feat(billing): Billing & Usage view — today's usage vs the dail
 ### Task 3: Settings — real Account section
 
 **Files:**
+
 - Modify: `components/views/SettingsView.tsx`
 - Modify: `app/globals.css`
 
 **Interfaces:**
+
 - Consumes: `useAuth()` (`user` with `displayName`/`email`).
 - Produces: a real Account section rendered for all users; the dev toggle gated behind `NODE_ENV==='development'`.
 
@@ -311,11 +319,11 @@ git commit -m "feat(billing): Billing & Usage view — today's usage vs the dail
 In `components/views/SettingsView.tsx`, add `import { useAuth } from '@/lib/firebase/auth';` and, inside the component, derive identity:
 
 ```tsx
-  const { user } = useAuth();
-  const name = user?.displayName || user?.email?.split('@')[0] || 'You';
-  const email = user?.email ?? '';
-  const initial = (name.trim()[0] || 'Y').toUpperCase();
-  const isDev = process.env.NODE_ENV === 'development';
+const { user } = useAuth();
+const name = user?.displayName || user?.email?.split('@')[0] || 'You';
+const email = user?.email ?? '';
+const initial = (name.trim()[0] || 'Y').toUpperCase();
+const isDev = process.env.NODE_ENV === 'development';
 ```
 
 Update the header sub-copy and insert an Account card as the FIRST card, then wrap the existing dev `set-card` so it only renders in development:
@@ -389,11 +397,13 @@ git commit -m "feat(settings): real Account section; dev toggle gated to develop
 ### Task 4: Support modal + feedback write
 
 **Files:**
+
 - Modify: `lib/firebase/companyData.ts` (add `sendSupportMessage`; ensure `addDoc`/`collection` imported)
 - Create: `components/SupportModal.tsx`
 - Modify: `app/globals.css`
 
 **Interfaces:**
+
 - Consumes: `canSendSupport` (Task 1); `useAuth()`; `getDb`/`addDoc`/`collection`.
 - Produces: `sendSupportMessage(msg: string, name: string, email: string): Promise<void>`; `<SupportModal open onClose>`.
 
@@ -479,11 +489,7 @@ export function SupportModal({ open, onClose }: { open: boolean; onClose: () => 
               <button className="so-cancel" onClick={onClose} disabled={busy}>
                 Cancel
               </button>
-              <button
-                className="so-confirm"
-                onClick={send}
-                disabled={!canSendSupport(msg) || busy}
-              >
+              <button className="so-confirm" onClick={send} disabled={!canSendSupport(msg) || busy}>
                 {busy ? 'Sending…' : 'Send'}
               </button>
             </div>
@@ -539,10 +545,12 @@ git commit -m "feat(support): support modal → writes to the feedback collectio
 ### Task 5: The account menu (`Topbar.tsx`)
 
 **Files:**
+
 - Modify: `components/Topbar.tsx`
 - Modify: `app/globals.css`
 
 **Interfaces:**
+
 - Consumes: `useApp()` (`show`); `SupportModal` (Task 4); the `'billing'`/`'settings'` views (Tasks 2/3).
 - Produces: the grouped account menu.
 
@@ -555,59 +563,59 @@ In `components/Topbar.tsx`:
 3. Replace the menu body (the `tb-menu` div, currently `who` + a single `Sign out` link) with the grouped menu:
 
 ```tsx
-          <div className="tb-menu" onClick={(e) => e.stopPropagation()}>
-            <div className="who">
-              <b>{name}</b>
-              {email && <span>{email}</span>}
-            </div>
-            <div className="tb-sep" />
-            <a
-              onClick={() => {
-                setOpen(false);
-                show('settings');
-              }}
-            >
-              Settings
-            </a>
-            <a
-              onClick={() => {
-                setOpen(false);
-                show('billing');
-              }}
-            >
-              Billing &amp; Usage
-            </a>
-            <a
-              onClick={() => {
-                setOpen(false);
-                setSupport(true);
-              }}
-            >
-              Support
-            </a>
-            <div className="tb-sep" />
-            <a onClick={askSignOut}>Log out</a>
-          </div>
+<div className="tb-menu" onClick={(e) => e.stopPropagation()}>
+  <div className="who">
+    <b>{name}</b>
+    {email && <span>{email}</span>}
+  </div>
+  <div className="tb-sep" />
+  <a
+    onClick={() => {
+      setOpen(false);
+      show('settings');
+    }}
+  >
+    Settings
+  </a>
+  <a
+    onClick={() => {
+      setOpen(false);
+      show('billing');
+    }}
+  >
+    Billing &amp; Usage
+  </a>
+  <a
+    onClick={() => {
+      setOpen(false);
+      setSupport(true);
+    }}
+  >
+    Support
+  </a>
+  <div className="tb-sep" />
+  <a onClick={askSignOut}>Log out</a>
+</div>
 ```
 
 4. Wire the topbar **Upgrade** span to open Billing — replace `<span className="upg">Upgrade</span>` with:
 
 ```tsx
-          <button
-            className="upg"
-            onClick={() => {
-              setOpen(false);
-              show('billing');
-            }}
-          >
-            Upgrade
-          </button>
+<button
+  className="upg"
+  onClick={() => {
+    setOpen(false);
+    show('billing');
+  }}
+>
+  Upgrade
+</button>
 ```
 
 5. Render the Support modal at the end of the fragment (next to the sign-out `confirming` modal):
 
 ```tsx
-      <SupportModal open={support} onClose={() => setSupport(false)} />
+<SupportModal open={support} onClose={() => setSupport(false)} />
 ```
 
 _(The sign-out confirm flow, `askSignOut`, and the outside-click/Esc effects stay unchanged. "Sign out" copy in the menu becomes "Log out"; the confirm modal keeps its "Sign out of Codepet?" wording.)_
