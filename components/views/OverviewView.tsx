@@ -509,6 +509,19 @@ export default function OverviewView() {
           onDismiss={handleIntroDismiss}
         />
       )}
+      {introPhase === 'spotlight' && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            pointerEvents: 'none',
+            background:
+              'radial-gradient(closest-side at 50% 50%, rgba(4,3,10,0) 45%, rgba(4,3,10,0.5) 100%)',
+          }}
+        />
+      )}
       <StageRibbon />
 
       <div
@@ -551,6 +564,24 @@ export default function OverviewView() {
         <Legend dot="#FDB022" label="Needs approval" />
         <Legend dot="#3B82F6" label="Needs you" />
         <Legend dot="#34D399" label="Done" />
+        {introPhase === 'done' && (
+          <button
+            onClick={() => setIntroPhase('intro')}
+            style={{
+              pointerEvents: 'auto',
+              fontFamily: 'inherit',
+              fontSize: 11.5,
+              color: 'rgba(245,243,255,.55)',
+              background: 'transparent',
+              border: 'none',
+              borderLeft: '1px solid rgba(245,243,255,.15)',
+              paddingLeft: 16,
+              cursor: 'pointer',
+            }}
+          >
+            ? how to read this map
+          </button>
+        )}
       </div>
 
       <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
@@ -664,11 +695,14 @@ export default function OverviewView() {
           >
             <ByteGuide
               here={here}
+              spotlight={introPhase === 'spotlight'}
               // One shared arrival: byte opens the chat + briefs you, then the
               // portalSignal effect glides the camera to the department AFTER the
-              // chat has docked — so the fly frames the settled (narrower) layout
-              // instead of being yanked back by the resize-driven auto-fit.
-              onStart={() => portalToTask(here.dept.k, here.task.t)}
+              // chat has docked. Starting also settles any active spotlight.
+              onStart={() => {
+                setIntroPhase('done');
+                portalToTask(here.dept.k, here.task.t);
+              }}
             />
           </div>
         )}
