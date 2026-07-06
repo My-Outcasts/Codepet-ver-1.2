@@ -30,8 +30,11 @@ color that matters, right then. Rejected alternatives: a multi-step modal tour
 (still makes them read before acting) and a fully ambient non-modal nudge (loses
 the deliberate "here is the one thing" framing on first arrival).
 
-Reuse over rebuild: the handoff targets the **existing** `HereCard` beacon and
-the **existing** `flyTo()` camera glide. No second "next move" card is created.
+Reuse over rebuild: the handoff targets the **existing** on-map beacon callout
+(`ByteGuide`, tethered to the beacon node) and the **existing** `flyTo()` camera
+glide in `OverviewView`. No second "next move" card is created. Note: `flyTo`
+only *frames* the beacon — it does not start the task; Start stays a separate
+user action via `ByteGuide`'s existing `portalToTask` wiring.
 
 ## The two-frame flow
 
@@ -42,17 +45,27 @@ the **existing** `flyTo()` camera glide. No second "next move" card is created.
 - One primary CTA: **Show me my next move ▸**, plus a muted reassurance line
   *"I'll explain the map as we go."*
 - Target ~60 words (down from ~110).
+- Dropping the legend from the card is doubly safe: the Overview **already**
+  renders a permanent color legend strip at bottom-left (`Project / byte does /
+  Needs approval / Needs you / Done`), so the upfront legend in the modal was
+  redundant. The colors are always available on the map itself.
 
 **Frame 2 — Spotlight handoff (triggered by the CTA).**
-1. Camera glides to the beacon node (`flyTo`).
+1. Camera glides to the beacon node (`flyTo(beaconId)`).
 2. The rest of the map dims; the lit beacon + its trail stay bright.
-3. The existing `HereCard` ("byte · do this next") gets a one-time glow ring.
-4. A single contextual color chip is shown next to the beacon, naming **only
-   that task's state color** (e.g. *"Gold = I draft it, you approve"*).
-5. A persistent **"? how to read this map"** chip lets the user re-open the full
+3. The existing `ByteGuide` callout ("byte · do this next") gets a one-time glow
+   ring **and** one extra line teaching the color that is actually lit — the
+   beacon node is recolored **cyan** (`BEACON_HEX`) as byte's guide star, so the
+   line names that: *"The bright cyan star is always your next move."* Folded
+   into `ByteGuide` (already tethered at the node), so no second tethered element
+   is introduced. Ownership — *who* does the task — is already shown by
+   `ByteGuide` via `st.label` ("Awaiting your approval", "Your move", …), so the
+   spotlight doesn't repeat it. The full purple/gold/blue/green **node** legend
+   lives in the "?" explainer, not the spotlight.
+4. A persistent **"? how to read this map"** chip lets the user re-open the full
    intro + the complete color key at any time.
 
-From here the user hits the beacon's existing **Start** and enters the normal
+From here the user hits `ByteGuide`'s existing **Start** and enters the normal
 run loop — unchanged.
 
 ## Architecture & components
@@ -79,14 +92,19 @@ lift coordination into `OverviewView`, which already owns `flyTo`, `here`,
   localStorage key (`codepet:overview-intro-seen`) is retained so existing users
   who already dismissed the old intro don't see the new one on next visit.
 
-- **`HereCard` (extended).** Accepts a `spotlight?: boolean` prop that adds the
-  one-time glow ring (box-shadow only — no layout change). Default false keeps
-  its normal appearance for all non-first-run renders.
+- **`ByteGuide` (extended).** Accepts a `spotlight?: boolean` prop that adds the
+  one-time glow ring (box-shadow only — no layout change) **and** the single
+  cyan guide-star line. Default false keeps its normal appearance for all
+  non-first-run renders. The line is a constant (the guide color is always
+  `BEACON_HEX`); ownership stays in the existing `st.label`. One color, no full
+  legend.
 
-- **Beacon color chip.** A small new presentational element rendered by
-  `OverviewView` during `'spotlight'`, positioned near the beacon node, reading
-  the beacon's state color from the existing `taskState(...)` /
-  `STATE_HEX` the beacon already uses (`beaconHex`). One color, no full legend.
+- **`lib/overviewIntro.ts` (new, pure).** The first-run logic lives here as pure
+  functions so it is unit-testable under the repo's node-env Vitest (no React
+  Testing Library in the stack). Exposes: the phase type, `introInitialPhase`,
+  the phase transitions (`onReveal`/`onSettle`/`onReopen`), and
+  `revealAction(here)` → `'fly' | 'recenter'` (drives the no-beacon fallback).
+  `OverviewView`/`OverviewIntro`/`ByteGuide` stay thin consumers of this module.
 
 - **"? how to read this map" chip.** A persistent low-emphasis affordance on the
   Overview (visible after first run) that sets state back to `'intro'`. The
@@ -95,17 +113,19 @@ lift coordination into `OverviewView`, which already owns `flyTo`, `here`,
 
 ## Data flow
 
-`localStorage(seen)` → initial state → `OverviewView` renders `OverviewIntro`
+`localStorage(seen)` → initial phase → `OverviewView` renders `OverviewIntro`
 (intro) **or** spotlight treatment **or** nothing. Intro CTA → persist seen +
-`flyTo(beacon)` + `state='spotlight'`. Beacon color comes from the same
-`here`/`beaconHex` the pulsing beacon already computes — one source of truth, so
-the chip and the node can never disagree.
+`flyTo(beaconId)` + `phase='spotlight'`. The spotlight's guide-star line is a
+constant (cyan `BEACON_HEX`); task ownership is read straight from the existing
+`st.label`, so nothing new can drift out of sync with the map.
 
 ## Edge cases
 
-- **No lit next move** (`here == null`, rare): the intro still shows, but the CTA
-  cannot fly anywhere. It instead centers the map and opens byte's chat
-  ("Ask byte") so the promise still resolves to *something*, then goes `'done'`.
+- **No lit next move** (`here == null`, rare — a `nextAction()` golden-path
+  fallback normally keeps `here` non-null): the intro still shows, but the CTA
+  cannot fly anywhere. `revealAction` returns `'recenter'`, so the CTA closes the
+  intro and calls the existing `fitView()` to recenter the whole map — an honest
+  resolution rather than a dead fly — then goes `'done'`.
 - **Reload mid-spotlight:** seen flag is already persisted at CTA time, so a
   reload lands in `'done'` (normal Overview) — never re-traps the user.
 - **Returning user who dismissed the old intro:** shared localStorage key means
@@ -116,12 +136,12 @@ the chip and the node can never disagree.
 
 ## Testing
 
-- **Unit (state machine):** intro→spotlight persists seen + requests a fly to the
-  beacon; spotlight→done on interaction/timeout; "?" reopens to intro without
-  clearing seen; `here == null` routes CTA to chat, not a dead fly.
-- **Presentational:** `OverviewIntro` renders the slim copy and fires
-  `onReveal`; `HereCard spotlight` adds the ring without shifting layout; color
-  chip reads the beacon's own state color.
+- **Unit (`lib/overviewIntro.ts`, node-env Vitest):** `introInitialPhase(seen)`
+  maps unseen→`intro`, seen→`done`; transitions go intro→spotlight, spotlight→done,
+  and reopen→intro; `revealAction(here)` returns `'fly'` with a beacon and
+  `'recenter'` when `here == null`.
+- **Component wiring:** verified manually on the preview (below), since the stack
+  has no React Testing Library and first-run is unreadable under `next dev`.
 - **Manual (Vercel PR preview, prod build — not `next dev`):** per project
   practice, verify first-run on the preview because StrictMode double-mount +
   resetCompanyData + HMR make first-run unreadable locally. Check: fresh browser
@@ -134,7 +154,8 @@ the chip and the node can never disagree.
 - No new multi-step tour, no full guided walkthrough to first deliverable
   (that was the larger scope option, explicitly not chosen).
 - No new persistence backend — localStorage only, as today.
-- No redesign of the map, ribbon, node colors, or `HereCard` content.
+- No redesign of the map, ribbon, node colors, or `ByteGuide` content (beyond the
+  `spotlight` prop's ring + one guide-star line).
 
 ## Dependencies & sequencing
 
