@@ -75,7 +75,9 @@ shared `components/artifact/ExecLog.tsx`. `ArtifactModal` imports it instead of 
 Add `steps?: LogStep[]` to `ChatMessage` in `lib/store.tsx`. The run generates the steps once
 (via `buildLog`) and stores them on the message, so the live `ExecLog` streams them while
 running and the collapsed **"What byte did"** toggle can re-open the exact same steps any time
-(they survive a reload, since chat messages persist).
+within the session. (Inline result cards are session-only today — not persisted — so the
+record lasts the conversation, not across a reload; genuine persistence would be a later
+change to `ChatMessageDoc`.)
 
 ### 3. `ResultCard` — a run phase before the (unchanged) review
 

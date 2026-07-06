@@ -59,8 +59,10 @@ function ResultCard({ m }: { m: ChatMessage }) {
   // Dual-gate: the card leaves the run view only when the produce is done (m.running=false)
   // AND the log has played through (logDone). Reset whenever a new run/revise starts.
   const [logDone, setLogDone] = useState(false);
-  // Latches true only once this card has actually been in flight this session, so a
-  // completed/saved result loaded from persistence never re-streams its log on reload.
+  // Latches true only once this card has actually been in flight, so a card that first
+  // mounts already-done (ran=false) shows its result immediately instead of replaying the
+  // log. (Inline result cards are session-only today; this keeps the gate correct if they
+  // ever start rehydrating.)
   const [ran, setRan] = useState(false);
   // The persistent "What byte did" record is collapsed by default.
   const [showRecord, setShowRecord] = useState(false);
@@ -86,9 +88,9 @@ function ResultCard({ m }: { m: ChatMessage }) {
     setNote('');
   };
 
-  // Show the run view while producing, or — once a run has started this session — until
-  // the log finishes playing. A reloaded, already-done card (ran=false) skips straight to
-  // the result, so logs never re-stream on reload.
+  // Show the run view while producing, or — once a run has started — until the log
+  // finishes playing. A card that mounts already-done (ran=false) skips straight to the
+  // result, so a finished log never replays.
   const running = m.running || (ran && hasSteps && !logDone);
 
   return (
