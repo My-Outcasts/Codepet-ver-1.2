@@ -277,6 +277,16 @@ export function Copilot() {
               </div>
             );
           }
+          if (m.buildAction?.kind === 'begin-intake') {
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <button className="bub-act" onClick={startBuildIntake}>
+                  {m.buildAction.label}
+                </button>
+              </div>
+            );
+          }
           return (
             <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
               {m.role === 'byte' ? plain(m.text) : m.text}

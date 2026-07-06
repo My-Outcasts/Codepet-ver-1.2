@@ -19,7 +19,9 @@ You are in a chat with the founder. Be warm, plain-spoken, specific, and brief �
 
 You can DO the work here, not only talk about it. When the founder asks you to run, make, draft, write, finish, or execute a task — or says "do it" / "run that for me" about the task you're discussing — call the run_task tool with the matching entry from RUNNABLE TASKS. The deliverable is produced right here in the chat for them to approve; never tell them to go open the task somewhere else. Say one short lead-in line first (e.g. "On it — running the willingness-to-pay survey.") and then call the tool. Rules: only call run_task for a task that is actually in RUNNABLE TASKS, using its exact deptK and taskTitle; if it's unclear which task they mean, ask a one-line clarifying question instead of guessing; and for questions, advice, or status, just reply — don't call the tool.
 
-If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.`;
+If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.
+
+Codepet also has a "Let's build" flow that walks the founder through a real Claude Code coding session — think first, build live, then review. When the founder wants to build, code, create, or make a new feature, app, script, tool, or website themselves with the coding agent, call the offer_build tool to surface a one-tap "Let's build" button; say one short encouraging line first. Don't call offer_build for the runnable deliverable tasks, or for plain questions, advice, or status.`;
 
 // The tool byte calls to actually produce a deliverable inside the chat. Its input
 // must reference a real open task (validated against RUNNABLE TASKS before we act).
@@ -44,10 +46,29 @@ const RUN_TASK_TOOL = {
   },
 };
 
+// The tool byte calls to surface the "Let's build" flow when the founder wants to
+// build/code something themselves with the AI coding agent (not a marketing
+// deliverable). No input — calling it is the whole signal.
+const OFFER_BUILD_TOOL = {
+  name: 'offer_build',
+  description:
+    'Surface Codepet\'s "Let\'s build" flow — a guided session around a real Claude Code coding run — as a one-tap button in this chat. Call this when the founder expresses wanting to build, code, create, or make a new feature, app, script, tool, or website THEMSELVES with the AI coding agent. Do NOT call it for the RUNNABLE TASKS (those use run_task), and do NOT call it for general advice, questions, or company/marketing deliverables. Say one short encouraging lead-in line first, then call the tool.',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {},
+    required: [],
+  },
+};
+
 // Marker that separates byte's streamed reply text from a trailing run_task action
 // payload on the wire. Record-separator (U+001E) never appears in normal prose, so
 // the client can split the stream cleanly: text before it, JSON action after.
 const ACTION_MARK = String.fromCharCode(0x1e);
+
+// Marker (group-separator, U+001D) that signals byte offered the "Let's build" flow.
+// Distinct from ACTION_MARK; carries no payload — its presence is the whole signal.
+const BUILD_MARK = String.fromCharCode(0x1d);
 
 interface RunnableTask {
   deptK: string;
@@ -170,7 +191,7 @@ export async function POST(req: Request): Promise<Response> {
       messages: claudeMessages,
       maxTokens: 2048,
       label: 'chat',
-      tools: runnable.length ? [RUN_TASK_TOOL] : undefined,
+      tools: runnable.length ? [RUN_TASK_TOOL, OFFER_BUILD_TOOL] : [OFFER_BUILD_TOOL],
       onUsage: usageSink(uid, idToken, 'chat'),
     });
 
@@ -191,6 +212,7 @@ export async function POST(req: Request): Promise<Response> {
             (b): b is Extract<typeof b, { type: 'tool_use' }> =>
               b.type === 'tool_use' && b.name === 'run_task',
           );
+          let acted = false;
           if (toolUse) {
             const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
             const taskTitle = typeof input.taskTitle === 'string' ? input.taskTitle : '';
@@ -204,7 +226,15 @@ export async function POST(req: Request): Promise<Response> {
                   ACTION_MARK + JSON.stringify({ deptK: match.deptK, taskTitle: match.taskTitle }),
                 ),
               );
+              acted = true;
             }
+          }
+          // If byte didn't run a task, see whether it offered the "Let's build" flow.
+          if (!acted) {
+            const offered = final.content.some(
+              (b) => b.type === 'tool_use' && b.name === 'offer_build',
+            );
+            if (offered) controller.enqueue(encoder.encode(BUILD_MARK));
           }
         } catch (err) {
           console.error('[chat] stream failed', err);

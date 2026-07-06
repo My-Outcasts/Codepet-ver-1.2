@@ -51,9 +51,11 @@ routes, or building an AI-driven dynamic intake (see "Decisions" below).
    with a build-intake mode + a "ready to plan" signal — deferred, YAGNI.)
 4. **Entry points**: the empty-state button is the primary entry. To cover the case
    where the chat is not empty (a build can't otherwise be started once the tab is
-   gone), **Byte may proactively insert a "Let's build" affordance** when the
-   conversation touches building — reusing the existing in-chat `action`/`advance`
-   button mechanism.
+   gone), **Byte proactively offers a "Let's build" button** when the founder expresses
+   wanting to build/code something themselves. Implemented via a new `offer_build`
+   tool + `BUILD_MARK` streaming marker, mirroring the existing `run_task` /
+   `ACTION_MARK` mechanism — the reply attaches a transient `buildAction: 'begin-intake'`
+   button that calls the existing `startBuildIntake()`.
 5. **State architecture: option A** — lift build-flow state into the existing store
    slice (`AppProvider`), rather than a new dedicated context provider.
 

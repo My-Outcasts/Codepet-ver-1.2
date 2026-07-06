@@ -7,6 +7,7 @@ import { authHeader } from './runTask';
 import type { ChatTurn } from './chatMessages';
 
 const ACTION_MARK = String.fromCharCode(0x1e);
+const BUILD_MARK = String.fromCharCode(0x1d);
 
 /** A task byte is allowed to run from chat (sent to the server so it uses real IDs). */
 export interface RunnableTask {
@@ -17,7 +18,9 @@ export interface RunnableTask {
 }
 
 export type ChatEvent =
-  { type: 'text'; text: string } | { type: 'action'; deptK: string; taskTitle: string };
+  | { type: 'text'; text: string }
+  | { type: 'action'; deptK: string; taskTitle: string }
+  | { type: 'build-offer' };
 
 export class ChatError extends Error {
   constructor(public code: string) {
@@ -48,28 +51,38 @@ export async function* streamByteChat(
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buf = ''; // holds the action payload once the marker is seen
-  let acting = false;
+  let buf = ''; // holds the action payload once ACTION_MARK is seen
+  let acting = false; // inside the ACTION_MARK JSON payload
+  let offered = false; // BUILD_MARK seen — nothing meaningful follows
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     if (!value) continue;
     const chunk = decoder.decode(value, { stream: true });
     if (acting) {
-      // Everything after the marker is the action JSON — accumulate until the end.
-      buf += chunk;
+      buf += chunk; // everything after ACTION_MARK is the action JSON
       continue;
     }
+    if (offered) continue; // a build offer ends the meaningful stream
     const combined = buf + chunk;
-    const idx = combined.indexOf(ACTION_MARK);
-    if (idx === -1) {
-      // No marker yet. RS never appears in prose, so it's safe to emit as text.
+    const aIdx = combined.indexOf(ACTION_MARK);
+    const bIdx = combined.indexOf(BUILD_MARK);
+    // Earliest present marker wins (-1 = absent, filtered out).
+    const firstIdx = [aIdx, bIdx].filter((i) => i !== -1).sort((x, y) => x - y)[0];
+    if (firstIdx === undefined) {
+      // No marker yet. RS/GS never appear in prose, so it's safe to emit as text.
       if (combined) yield { type: 'text', text: combined };
       buf = '';
-    } else {
-      const before = combined.slice(0, idx);
+    } else if (firstIdx === bIdx) {
+      const before = combined.slice(0, bIdx);
       if (before) yield { type: 'text', text: before };
-      buf = combined.slice(idx + ACTION_MARK.length); // start of the action JSON
+      yield { type: 'build-offer' };
+      offered = true;
+      buf = '';
+    } else {
+      const before = combined.slice(0, aIdx);
+      if (before) yield { type: 'text', text: before };
+      buf = combined.slice(aIdx + ACTION_MARK.length); // start of the action JSON
       acting = true;
     }
   }

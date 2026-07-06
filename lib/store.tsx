@@ -75,7 +75,7 @@ export interface ChatMessage {
   /** A build plan Byte generated in chat — rendered as a plan card + "Start building". */
   buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
-  buildAction?: { kind: 'to-plan' | 'start-building'; label: string };
+  buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
 }
 
 const newId = (): string =>
@@ -918,10 +918,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let acc = '';
         let errCode = '';
         let pending: { deptK: string; taskTitle: string } | null = null;
+        let offerBuild = false;
         try {
           for await (const ev of streamByteChat(history, deptSummary, openTasks)) {
             if (ev.type === 'action') {
               pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
+              continue;
+            }
+            if (ev.type === 'build-offer') {
+              offerBuild = true;
               continue;
             }
             acc += ev.text;
@@ -942,7 +947,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const finalText =
           acc.trim() || (pending ? `On it — running “${pending.taskTitle}”.` : fallback);
         setChatMessages((prev) =>
-          prev.map((m) => (m.id === byteMsg.id ? { ...m, text: finalText } : m)),
+          prev.map((m) =>
+            m.id === byteMsg.id
+              ? {
+                  ...m,
+                  text: finalText,
+                  ...(offerBuild
+                    ? { buildAction: { kind: 'begin-intake' as const, label: "Let's build it →" } }
+                    : {}),
+                }
+              : m,
+          ),
         );
         setChatStreaming(false);
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
