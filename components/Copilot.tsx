@@ -309,15 +309,45 @@ export function Copilot() {
 
   const [draft, setDraft] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Whether the reader is pinned to the bottom — a ref, so scroll checks never trigger a
+  // re-render or re-run the follow effect. `showPill` surfaces the "New" jump button when
+  // fresh content arrives while they're scrolled up reading earlier history.
+  const pinnedRef = useRef(true);
+  const [showPill, setShowPill] = useState(false);
 
-  // Keep the latest message in view as the conversation grows / byte streams.
-  useEffect(() => {
+  const scrollToBottom = (smooth = false) => {
     const el = bodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  };
+
+  // Follow new content (including each streamed token) ONLY when pinned to the bottom. If
+  // the reader has scrolled up, leave their position untouched and flag that there's new
+  // content — so byte streaming no longer yanks them away from what they're reading.
+  useEffect(() => {
+    if (pinnedRef.current) scrollToBottom();
+    else setShowPill(true);
   }, [chatMessages]);
+
+  // Re-evaluate bottom-ness as they scroll; scrolling back down clears the pill.
+  const onBodyScroll = () => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    pinnedRef.current = atBottom;
+    if (atBottom) setShowPill(false);
+  };
+
+  const jumpToLatest = () => {
+    pinnedRef.current = true;
+    setShowPill(false);
+    scrollToBottom(true);
+  };
 
   const submit = () => {
     if (!draft.trim() || chatStreaming) return;
+    // Sending your own turn always re-pins — you expect to follow your message.
+    pinnedRef.current = true;
+    setShowPill(false);
     sendChat(draft);
     setDraft('');
   };
@@ -352,7 +382,7 @@ export function Copilot() {
           </svg>
         </button>
       </div>
-      <div className="cop-body" ref={bodyRef}>
+      <div className="cop-body" ref={bodyRef} onScroll={onBodyScroll}>
         <div className="bub">
           Welcome back{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> —
           where to focus, what&apos;s blocking you, or what to build next.
@@ -425,6 +455,20 @@ export function Copilot() {
           </div>
         )}
       </div>
+      {showPill && (
+        <button className="cop-new" onClick={jumpToLatest} aria-label="Jump to latest messages">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path
+              d="M4 6l4 4 4-4"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          New
+        </button>
+      )}
       <div className="cop-foot">
         <div className="composer">
           <input

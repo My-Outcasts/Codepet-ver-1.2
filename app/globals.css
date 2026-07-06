@@ -2819,11 +2819,36 @@ body {
 
 /* ===== copilot ===== */
 .copilot {
+  position: relative;
   background: var(--surface-2);
   border-left: 1px solid var(--hairline);
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+/* "New" jump pill — floats just above the composer when byte adds content while the
+   reader is scrolled up. Clicking it smooth-scrolls to the latest and re-pins. */
+.cop-new {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface);
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  z-index: 5;
+}
+.cop-new:hover {
+  background: var(--accent-tint);
 }
 .shell.cop-collapsed {
   grid-template-columns: 212px 1fr 0;
