@@ -11,8 +11,8 @@ result card (`ResultCard` in `components/Copilot.tsx`) shows only a bare `"Produ
 spinner while it works. The founder never sees byte do the work — the deliverable simply
 appears, then they Approve / Read / Revise it.
 
-This undercuts the product's core promise. The tester guide literally says *"Watch byte
-**Execute → Deliver**"*, and the deliverable **modal** (`ArtifactModal`) already has a rich,
+This undercuts the product's core promise. The tester guide literally says _"Watch byte
+**Execute → Deliver**"_, and the deliverable **modal** (`ArtifactModal`) already has a rich,
 believable execution experience — a live "execute log" with streaming steps and a "Ran N
 actions" counter. The inline chat path throws all of it away and shows only a spinner.
 
@@ -20,16 +20,16 @@ actions" counter. The inline chat path throws all of it away and shows only a sp
 
 An inline run today: produce (`"Producing…"` spinner) → the card shows a **preview** + an
 **Approve · Read · Revise** action row → the founder clicks **Approve** → `"Saved to your
-library"`. So there is already a review-and-approve gate; the only thing missing is *seeing
-byte work* before it.
+library"`. So there is already a review-and-approve gate; the only thing missing is _seeing
+byte work_ before it.
 
 ## Direction (decided)
 
-- **Goal: trust / transparency.** The founder should *see byte really do the work, step by
-  step, before they review it.*
+- **Goal: trust / transparency.** The founder should _see byte really do the work, step by
+  step, before they review it._
 - **End behavior: watch → then review (keep the existing gate).** The visible execution log
   runs first; then the deliverable appears with the **Approve / Read / Revise** row exactly as
-  today. Nothing auto-saves — the founder still approves before it's saved. This *reinforces*
+  today. Nothing auto-saves — the founder still approves before it's saved. This _reinforces_
   "you approve every move": they now both **see** the work and **approve** it.
 - **Layout: "full log, then a lasting record" (Option C).** The card streams the live log
   while running; once the log finishes, the steps fold into a re-openable **"▸ What byte did ·
@@ -100,7 +100,7 @@ the same way and stream again).
 The store action that drives the inline run:
 
 - On start: compute `steps = buildLog(task, type, dept)` and attach to the message.
-- The card leaves the **running** state only when *both* the ExecLog has finished playing *and*
+- The card leaves the **running** state only when _both_ the ExecLog has finished playing _and_
   the produce has resolved (the same dual-gate the onboarding analysis screen already uses) —
   so a fast server response still shows the full log, and a slow one doesn't cut it short.
 - On success → the message enters the **produced** state (preview + Approve/Read/Revise),

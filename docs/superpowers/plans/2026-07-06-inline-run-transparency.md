@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make every inline chat run *show byte doing the work* — a live execute log while it runs, folded afterward into a re-openable "What byte did · N steps" record — while keeping the existing Approve / Read / Revise gate untouched.
+**Goal:** Make every inline chat run _show byte doing the work_ — a live execute log while it runs, folded afterward into a re-openable "What byte did · N steps" record — while keeping the existing Approve / Read / Revise gate untouched.
 
 **Architecture:** Reuse the deliverable modal's execution machinery in the chat card. Extract the modal's `ExecLog` into a shared component; generate a run's steps once with the existing pure `buildLog`; store them on the chat message; render the streaming log in `ResultCard` while the run is in flight (dual-gated on log-done AND produce-done), then a collapsed static record above the unchanged review row.
 
@@ -25,10 +25,12 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 ## File Structure
 
 **Create:**
+
 - `components/artifact/ExecLog.tsx` — shared streaming `ExecLog` (moved from the modal) + a static `StaticLog` for the record.
 - `lib/helpers.test.ts` — unit test for the new `stepCountLabel` helper.
 
 **Modify:**
+
 - `lib/helpers.ts` — add `stepCountLabel(steps): string`.
 - `components/artifact/ArtifactModal.tsx` — delete the local `ExecLog`, import the shared one.
 - `lib/store.tsx` — `ChatMessage.steps?: LogStep[]`; attach steps in `runTaskInChat` + `reviseTaskInChat`.
@@ -40,10 +42,12 @@ _Every task's requirements implicitly include this section. Copy verbatim into e
 ### Task 1: `stepCountLabel` pure helper
 
 **Files:**
+
 - Modify: `lib/helpers.ts` (add after `buildLog`, which ends near line 300)
 - Test: `lib/helpers.test.ts` (create)
 
 **Interfaces:**
+
 - Consumes: `LogStep` (already exported from `lib/helpers.ts`).
 - Produces: `stepCountLabel(steps: LogStep[]): string` — `"0 steps"`, `"1 step"`, `"8 steps"`.
 
@@ -99,10 +103,12 @@ git commit -m "feat(helpers): stepCountLabel for the inline run record"
 ### Task 2: Shared `ExecLog` + `StaticLog` (extract from the modal)
 
 **Files:**
+
 - Create: `components/artifact/ExecLog.tsx`
 - Modify: `components/artifact/ArtifactModal.tsx` (delete local `ExecLog` at lines ~59–133; add an import)
 
 **Interfaces:**
+
 - Consumes: `LogStep` from `@/lib/helpers`.
 - Produces:
   - `ExecLog({ steps, title, onDone }: { steps: LogStep[]; title: React.ReactNode; onDone: () => void })` — streaming log; reduced-motion-aware.
@@ -288,9 +294,11 @@ git commit -m "refactor(artifact): extract shared ExecLog (+StaticLog, reduced-m
 ### Task 3: `ChatMessage.steps` + generate the run's steps in the store
 
 **Files:**
+
 - Modify: `lib/store.tsx` (import ~line 17; `ChatMessage` ~line 49–71; `runTaskInChat` card creation ~line 850–860; `reviseTaskInChat` ~line 905)
 
 **Interfaces:**
+
 - Consumes: `buildLog`, `LogStep` from `./helpers`.
 - Produces: `ChatMessage.steps?: LogStep[]` — populated for every inline run and revise.
 
@@ -352,15 +360,15 @@ to (add the `steps` line):
 In `reviseTaskInChat` (line ~905), change the "mark running" update from:
 
 ```tsx
-      setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: true } : m)));
+setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: true } : m)));
 ```
 
 to (regenerate steps so the log re-streams for the revise pass):
 
 ```tsx
-      setChatMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, running: true, steps: buildLog(t, type, d) } : m)),
-      );
+setChatMessages((prev) =>
+  prev.map((m) => (m.id === msgId ? { ...m, running: true, steps: buildLog(t, type, d) } : m)),
+);
 ```
 
 - [ ] **Step 5: Typecheck + lint**
@@ -380,10 +388,12 @@ git commit -m "feat(store): generate + carry the run's execute-log steps on the 
 ### Task 4: `ResultCard` — stream the log, dual-gate, and the "What byte did" record
 
 **Files:**
+
 - Modify: `components/Copilot.tsx` (imports ~line 1–8; `ResultCard` ~line 51–157)
 - Modify: `app/globals.css` (add near the `.cres` block, which starts at line ~2950)
 
 **Interfaces:**
+
 - Consumes: `ExecLog`, `StaticLog` from `./artifact/ExecLog`; `stepCountLabel` from `@/lib/helpers`; `ChatMessage.steps` (Task 3).
 - Produces: the three-phase inline card (running log → produced with record + review → approved with record + saved).
 

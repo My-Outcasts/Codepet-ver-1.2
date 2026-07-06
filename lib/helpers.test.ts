@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { esc, fmt, slug, artType, taskState, artMeta, stepCountLabel, type LogStep } from './helpers';
+import {
+  esc,
+  fmt,
+  slug,
+  artType,
+  taskState,
+  artMeta,
+  stepCountLabel,
+  type LogStep,
+} from './helpers';
 import type { Task } from './data';
 
 const task = (over: Partial<Task> = {}): Task => ({

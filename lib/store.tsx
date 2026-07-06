@@ -1000,7 +1000,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!kind) return;
       const trimmed = note.trim();
       setChatMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? { ...m, running: true, steps: buildLog(t, type, d) } : m)),
+        prev.map((m) =>
+          m.id === msgId ? { ...m, running: true, steps: buildLog(t, type, d) } : m,
+        ),
       );
       try {
         const res = await runByteTask({
