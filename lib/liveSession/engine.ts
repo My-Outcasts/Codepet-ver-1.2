@@ -33,10 +33,18 @@ interface ChildLike {
   on(event: string, cb: (arg?: unknown) => void): void;
   kill(): void;
 }
-export type SpawnFn = (cmd: string, args: string[], opts: { cwd: string }) => ChildLike;
+export type SpawnFn = (
+  cmd: string,
+  args: string[],
+  opts: { cwd: string; env?: NodeJS.ProcessEnv },
+) => ChildLike;
 
 const defaultSpawn: SpawnFn = (cmd, args, opts) =>
-  spawn(cmd, args, { cwd: opts.cwd, stdio: ['pipe', 'pipe', 'pipe'] }) as unknown as ChildLike;
+  spawn(cmd, args, {
+    cwd: opts.cwd,
+    env: opts.env,
+    stdio: ['pipe', 'pipe', 'pipe'],
+  }) as unknown as ChildLike;
 
 /** One user turn, encoded as a stream-json input line. */
 function userLine(text: string): string {
@@ -83,7 +91,15 @@ export function startSession(opts: {
     '--mcp-config',
     mcpConfigPath,
   ];
-  const child = spawnFn('claude', args, { cwd: opts.projectDir });
+  // Run the child as the user's own claude (their claude.ai login), the same as if
+  // they ran `claude` in a terminal. The server sets ANTHROPIC_API_KEY for the chat /
+  // build-plan APIs; if the spawned claude inherited it, claude would warn, bill the
+  // app's key, and disable the user's claude.ai connectors. Strip it (and any auth
+  // token) while keeping the rest of the environment (PATH etc. so `claude` resolves).
+  const childEnv = { ...process.env };
+  delete childEnv.ANTHROPIC_API_KEY;
+  delete childEnv.ANTHROPIC_AUTH_TOKEN;
+  const child = spawnFn('claude', args, { cwd: opts.projectDir, env: childEnv });
   const emitter = new EventEmitter();
   const session: LiveSession = {
     emitter,

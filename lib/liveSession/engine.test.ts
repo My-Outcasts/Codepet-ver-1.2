@@ -57,7 +57,7 @@ describe('startSession', () => {
         '--mcp-config',
         expect.any(String),
       ],
-      { cwd: '/proj' },
+      { cwd: '/proj', env: expect.any(Object) },
     );
     // opening prompt written as a stream-json user message, then stdin closed (P1 one-shot).
     expect(child.stdin.writes.length).toBe(1);
@@ -67,6 +67,31 @@ describe('startSession', () => {
       message: { role: 'user', content: [{ type: 'text', text: 'build X' }] },
     });
     expect(child.stdin.ended).toBe(false);
+  });
+
+  it('runs claude as the user: strips ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN from the child env', () => {
+    const prevKey = process.env.ANTHROPIC_API_KEY;
+    const prevTok = process.env.ANTHROPIC_AUTH_TOKEN;
+    process.env.ANTHROPIC_API_KEY = 'sk-should-not-leak';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'tok-should-not-leak';
+    try {
+      const child = fakeChild();
+      const spawnFn = vi.fn(() => child) as never;
+      startSession({ buildSessionId: 'benv', projectDir: '/p', openingPrompt: 'x', spawnFn });
+      const call = (spawnFn as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
+      const optsArg = call[2] as { env?: Record<string, string | undefined> };
+      expect(optsArg.env).toBeDefined();
+      // The app's server auth must NOT leak into the user's claude session…
+      expect(optsArg.env!.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(optsArg.env!.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+      // …but the rest of the environment (e.g. PATH, so `claude` resolves) is inherited.
+      expect(optsArg.env!.PATH).toBe(process.env.PATH);
+    } finally {
+      if (prevKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = prevKey;
+      if (prevTok === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN;
+      else process.env.ANTHROPIC_AUTH_TOKEN = prevTok;
+    }
   });
 
   it('parses stdout into events on the session emitter and buffers them', () => {
