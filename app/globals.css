@@ -4868,6 +4868,30 @@ body {
 .bub-act:hover {
   background: var(--accent-deep);
 }
+/* Retry — quiet, secondary affordance on a failed byte reply (not a primary accent CTA). */
+.bub-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-3);
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.bub-retry:hover:not(:disabled) {
+  color: var(--t-1);
+  border-color: var(--t-4);
+}
+.bub-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 /* "Advance to <stage>" — the stage-complete prompt's confirm button in a bubble. */
 .bub-adv {
   display: block;

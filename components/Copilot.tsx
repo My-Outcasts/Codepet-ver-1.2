@@ -297,6 +297,7 @@ export function Copilot() {
     chatMessages,
     chatStreaming,
     sendChat,
+    retryChat,
     runBriefedTask,
     runTaskInChat,
     dismissChatAction,
@@ -383,10 +384,14 @@ export function Copilot() {
         </button>
       </div>
       <div className="cop-body" ref={bodyRef} onScroll={onBodyScroll}>
-        <div className="bub">
-          Welcome back{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> —
-          where to focus, what&apos;s blocking you, or what to build next.
-        </div>
+        {/* Greeting is an empty-state opener, not a permanent fixture — once the thread has
+            messages, byte's own turns are the presence, so it's hidden. */}
+        {empty && (
+          <div className="bub">
+            Welcome{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> — where
+            to focus, what&apos;s blocking you, or what to build next.
+          </div>
+        )}
 
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
@@ -439,6 +444,24 @@ export function Copilot() {
               {m.nav && (
                 <button className="bub-act" onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}>
                   {m.nav.label}
+                </button>
+              )}
+              {m.error && (
+                <button
+                  className="bub-retry"
+                  onClick={() => retryChat(m.id)}
+                  disabled={chatStreaming}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <path
+                      d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Retry
                 </button>
               )}
             </div>

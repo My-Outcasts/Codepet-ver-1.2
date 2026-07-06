@@ -79,6 +79,9 @@ export interface ChatMessage {
   /** A "Noted" chip: a durable fact/decision byte captured from the founder's last message
    * into company memory, with an undo. `undone` strikes it once the founder undoes. */
   noted?: { topic: string; statement: string; undone?: boolean };
+  /** byte's reply failed (network / model / auth). Renders the fallback text + a Retry
+   * that re-runs the turn. Cleared when a retry succeeds. */
+  error?: boolean;
 }
 
 const newId = (): string =>
@@ -169,6 +172,9 @@ interface AppState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** Re-run a byte reply that failed — re-streams into the same bubble against the same
+   * history, so the founder doesn't have to retype. */
+  retryChat: (byteMsgId: string) => void;
   /** Produce a task's deliverable inline in chat (byte's "run it from here"). */
   runTaskInChat: (deptK: string, taskTitle: string) => void;
   /** Revise an inline chat result against byte's feedback, updating the card in place.
@@ -239,7 +245,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // singletons then, so one account's in-memory edits can never linger into the next
   // account's session on the same browser — belt-and-suspenders alongside the
   // reset-on-load in loadCompanyData.
-  useEffect(() => () => resetCompanyData(), []);
+  // Also abort any in-flight chat stream on unmount, so a sign-out mid-reply doesn't leave
+  // the request running or persist a byte message against the previous account.
+  useEffect(
+    () => () => {
+      chatAbort.current?.abort();
+      resetCompanyData();
+    },
+    [],
+  );
 
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -256,6 +270,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
+  // Aborts the in-flight chat stream — on a new send, a retry, or provider unmount
+  // (e.g. sign-out), so a stream never keeps running or writes against a stale account.
+  const chatAbort = useRef<AbortController | null>(null);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
   // never disagree. Set instantly to the authored golden path (so nothing is ever
@@ -1129,33 +1146,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
-  const sendChat = useCallback(
-    (raw: string) => {
-      const text = raw.trim();
-      if (!text || chatStreaming) return;
-
-      const now = Date.now();
-      const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
-      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
-
-      // Build the history to send BEFORE the empty byte placeholder is added.
-      const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
-      setChatMessages((prev) => [...prev, userMsg, byteMsg]);
+  // The streaming engine both sendChat and retryChat drive: run byte's reply into an
+  // existing byte bubble (`byteMsgId`) against `history`. Aborts any prior in-flight stream,
+  // handles action/nav/setup/memory events, gives distinct copy per failure, and flags the
+  // bubble for Retry when it fails. Company context is snapshotted fresh on each run.
+  const runByteStream = useCallback(
+    (byteMsgId: string, byteTs: number, history: { role: 'me' | 'byte'; text: string }[]) => {
+      chatAbort.current?.abort();
+      const ac = new AbortController();
+      chatAbort.current = ac;
       setChatStreaming(true);
-      track('chat.send', {});
 
-      if (companyId) {
-        persistChatMessage(companyId, {
-          id: userMsg.id,
-          role: 'me',
-          text,
-          createdAt: userMsg.ts,
-        }).catch((err) => console.error('[store] persist user message failed', err));
-      }
-
-      // A compact snapshot of the departments so byte talks about THIS company —
-      // plus the single next step byte already picked, so chat and the map beacon
-      // never disagree about what's next.
+      // A compact snapshot of the departments so byte talks about THIS company — plus the
+      // single next step byte already picked, so chat and the map beacon never disagree.
       const deptLines = DEPTS.map(
         (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
       ).join('\n');
@@ -1165,25 +1168,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
           : '';
       const deptSummary = deptLines + focus;
-
-      // The tasks byte may run from chat: every open task with a live deliverable type.
       const openTasks = DEPTS.flatMap((d) =>
         d.tasks
           .filter((t) => !t.done && liveKind(artType(t)) !== null)
           .map((t) => ({ deptK: d.k, deptName: d.name, taskTitle: t.t, hint: t.d ?? '' })),
       );
-
-      // The currently-off toolkit items byte may offer to turn on from this turn.
       const envSetup = collectSetupItems(ENV);
 
       (async () => {
         let acc = '';
         let errCode = '';
+        let failed = false;
         let pending: { deptK: string; taskTitle: string } | null = null;
         let navChip: NavChip | undefined;
         let setupChip: { category: string; name: string } | undefined;
         try {
-          for await (const ev of streamByteChat(history, deptSummary, openTasks, envSetup)) {
+          for await (const ev of streamByteChat(
+            history,
+            deptSummary,
+            openTasks,
+            envSetup,
+            ac.signal,
+          )) {
             if (ev.type === 'action') {
               pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
               continue;
@@ -1228,17 +1234,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
             acc += ev.text;
             setChatMessages((prev) =>
-              prev.map((m) => (m.id === byteMsg.id ? { ...m, text: acc } : m)),
+              prev.map((m) => (m.id === byteMsgId ? { ...m, text: acc } : m)),
             );
           }
         } catch (err) {
+          // A deliberate abort (new send / retry / sign-out) leaves state untouched.
+          if (ac.signal.aborted) return;
           console.error('[store] chat stream failed', err);
-          errCode = err instanceof ChatError ? err.code : '';
+          failed = true;
+          errCode = err instanceof ChatError ? err.code : 'network';
         }
         const fallback =
           errCode === 'rate_limited'
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
-            : 'I hit a snag reaching the model — give it another try.';
+            : errCode === 'unauthorized'
+              ? 'Your session looks expired — sign in again and I’ll pick right back up.'
+              : errCode === 'network'
+                ? 'I couldn’t reach the model — check your connection, then Retry.'
+                : 'I couldn’t reach the model just now.';
+        // Errored = a real failure that produced nothing usable → show the Retry affordance.
+        const errored = failed && !acc.trim() && !pending && !navChip && !setupChip;
         // If byte chose to act but said nothing, synthesize a short lead-in so the run or
         // the "take me there" chip never appears out of nowhere.
         const finalText =
@@ -1252,25 +1267,85 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 : fallback);
         setChatMessages((prev) =>
           prev.map((m) =>
-            m.id === byteMsg.id ? { ...m, text: finalText, nav: navChip, setup: setupChip } : m,
+            m.id === byteMsgId
+              ? {
+                  ...m,
+                  text: finalText,
+                  nav: navChip,
+                  setup: setupChip,
+                  error: errored || undefined,
+                }
+              : m,
           ),
         );
         setChatStreaming(false);
+        chatAbort.current = null;
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
         // fallback). The inline result card itself is transient, like the briefings.
         if (companyId && (acc.trim() || pending || navChip || setupChip)) {
           persistChatMessage(companyId, {
-            id: byteMsg.id,
+            id: byteMsgId,
             role: 'byte',
             text: finalText,
-            createdAt: byteMsg.ts,
+            createdAt: byteTs,
           }).catch((err) => console.error('[store] persist byte message failed', err));
         }
         // byte decided to run a task — produce it inline now.
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, chatMessages, chatStreaming, nextStep, runTaskInChat],
+    [companyId, nextStep, runTaskInChat],
+  );
+
+  const sendChat = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text || chatStreaming) return;
+
+      const now = Date.now();
+      const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
+
+      // Build the history to send BEFORE the empty byte placeholder is added.
+      const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
+      setChatMessages((prev) => [...prev, userMsg, byteMsg]);
+      track('chat.send', {});
+
+      if (companyId) {
+        persistChatMessage(companyId, {
+          id: userMsg.id,
+          role: 'me',
+          text,
+          createdAt: userMsg.ts,
+        }).catch((err) => console.error('[store] persist user message failed', err));
+      }
+
+      runByteStream(byteMsg.id, byteMsg.ts, history);
+    },
+    [companyId, chatMessages, chatStreaming, runByteStream],
+  );
+
+  // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
+  // that failed, reset the bubble to a fresh placeholder, and re-stream into it.
+  const retryChat = useCallback(
+    (byteMsgId: string) => {
+      if (chatStreaming) return;
+      const target = chatMessages.find((m) => m.id === byteMsgId);
+      if (!target) return;
+      const history = chatMessages
+        .filter((m) => m.id !== byteMsgId)
+        .map((m) => ({ role: m.role, text: m.text }));
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === byteMsgId
+            ? { ...m, text: '', error: undefined, nav: undefined, setup: undefined }
+            : m,
+        ),
+      );
+      track('chat.retry', {});
+      runByteStream(byteMsgId, target.ts, history);
+    },
+    [chatMessages, chatStreaming, runByteStream],
   );
 
   const value = useMemo<AppState>(
@@ -1319,6 +1394,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      retryChat,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
@@ -1376,6 +1452,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      retryChat,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
