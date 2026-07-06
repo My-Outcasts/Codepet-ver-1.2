@@ -226,6 +226,31 @@ function InterviewCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// A "Noted" chip: a durable fact/decision byte captured from the founder's last message
+// into company memory. Subtle by design (byte quietly got smarter), with an undo so the
+// founder stays in control of what byte remembers. Strikes to "Removed" once undone.
+function NotedChip({ m }: { m: ChatMessage }) {
+  const { undoNoted } = useApp();
+  const n = m.noted!;
+  if (n.undone) {
+    return <div className="cnote cnote-off">Removed from memory</div>;
+  }
+  return (
+    <div className="cnote">
+      <span className="cnote-dot" aria-hidden>
+        ◉
+      </span>
+      <span className="cnote-body">
+        <span className="cnote-k">Noted · {n.topic}</span>
+        <span className="cnote-s">{n.statement}</span>
+      </span>
+      <button className="cnote-undo" onClick={() => undoNoted(m.id, n.topic)}>
+        undo
+      </button>
+    </div>
+  );
+}
+
 export function Copilot() {
   const {
     toggleCopilot,
@@ -297,6 +322,7 @@ export function Copilot() {
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
           if (m.interview) return <InterviewCard key={m.id} m={m} />;
+          if (m.noted) return <NotedChip key={m.id} m={m} />;
           if (m.setup)
             return (
               <div key={m.id}>
