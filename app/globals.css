@@ -2331,22 +2331,16 @@ body {
   border: 1px solid var(--hairline);
   border-radius: 14px;
 }
-/* Color lives on the lanes, not the cards — each lane wears its state's hue. */
-.kb-col--draft {
+/* Color lives on the lanes that need YOU — and only when they hold something.
+   An empty action lane stays neutral, so a lit hue always means "there's
+   something here for you". Done recedes to its dot; Up next stays quiet. */
+.kb-col--awaiting.is-lit {
   background: var(--gold-tint);
   border-color: var(--gold-line);
 }
-.kb-col--you {
+.kb-col--you.is-lit {
   background: var(--blue-tint);
   border-color: var(--blue-line);
-}
-.kb-col--does {
-  background: var(--accent-tint);
-  border-color: var(--accent-line);
-}
-.kb-col--done {
-  background: #e7f6ee;
-  border-color: #c4e9d5;
 }
 .kb-colhead {
   flex: none;
