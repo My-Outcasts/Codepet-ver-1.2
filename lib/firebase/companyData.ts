@@ -27,6 +27,7 @@ import {
   type DepartmentDoc,
   type LibraryDoc,
   type EnvState,
+  type EnvUsage,
   type CompanyBrief,
   type ScannedProject,
   type ChatMessageDoc,
@@ -88,6 +89,31 @@ export function applyEnvState(env: EnvState): void {
       if (item.n in saved) item.s = saved[item.n] ? 1 : 0;
     }
   }
+}
+
+// ---- env usage <-> ENV catalog (additive; independent of the on/off env map) ----
+export function envUsageFromCatalog(): EnvUsage {
+  const usage: EnvUsage = {};
+  for (const [category, items] of Object.entries(ENV)) {
+    usage[category] = {};
+    for (const item of items) if (item.tasks?.length) usage[category][item.n] = item.tasks;
+  }
+  return usage;
+}
+
+/** Apply a persisted usage map back onto the ENV catalog singleton. Self-resetting: an
+ * item not present in `usage` is cleared, so a previously signed-in account's usage can
+ * never leak into a freshly loaded one (an empty map clears everything). */
+export function applyEnvUsage(usage: EnvUsage): void {
+  for (const [category, items] of Object.entries(ENV)) {
+    const saved = usage[category] ?? {};
+    for (const item of items) item.tasks = Array.isArray(saved[item.n]) ? saved[item.n] : undefined;
+  }
+}
+
+export async function persistEnvUsage(companyId: string, usage: EnvUsage): Promise<void> {
+  const db = getDb();
+  await updateDoc(doc(db, paths.company(companyId)), { envUsage: usage, updatedAt: Date.now() });
 }
 
 /** Merge persisted departments onto the DEPTS singleton (by department key). */
@@ -165,6 +191,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
   const company = companySnap.data();
   applyEnvState((company?.env ?? {}) as EnvState);
+  applyEnvUsage((company?.envUsage ?? {}) as EnvUsage);
 
   const library = libSnap.docs.map((d) => {
     // Strip persistence-only fields so the shape matches the in-app LibItem.

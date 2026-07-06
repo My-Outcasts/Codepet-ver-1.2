@@ -61,6 +61,9 @@ export interface CompanyBrief {
 /** Per-company toolkit state: category → item key → enabled. Mirrors ENV in data.ts. */
 export type EnvState = Record<string, Record<string, boolean>>;
 
+/** Per-item usage: category → item name → the distinct task titles it's been used on. */
+export type EnvUsage = Record<string, Record<string, string[]>>;
+
 export interface CompanyDoc {
   id: string;
   ownerId: string;
@@ -77,6 +80,7 @@ export interface CompanyDoc {
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;
+  envUsage?: EnvUsage;
   /** Shared secret the local Claude Code hook presents to POST /api/track. Minted
    *  server-side; the installer bakes it into the machine's hook config. */
   ingestToken?: string;
