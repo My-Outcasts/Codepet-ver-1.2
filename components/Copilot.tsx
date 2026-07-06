@@ -4,6 +4,7 @@ import { useApp } from '@/lib/store';
 import { track } from '@/lib/analytics';
 import { DEPTS, ENV, ENV_META } from '@/lib/data';
 import { resolveEnvIndex } from '@/lib/ai/envSetup';
+import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
 import { Byte } from './Byte';
 import type { ChatMessage } from '@/lib/store';
 
@@ -184,6 +185,47 @@ function SetupCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// A first-run enrichment question (goal / traction / problem). While unanswered it shows
+// byte's question, a why-line, and an answer input + Skip; once the founder answers or
+// skips, it collapses to a plain past question (the affordance is gone).
+function InterviewCard({ m }: { m: ChatMessage }) {
+  const { answerInterview } = useApp();
+  const [text, setText] = useState('');
+  const iv = m.interview!;
+  const q = QUESTION_FOR[iv.gap];
+  const send = () => answerInterview(m.id, iv.gap, text.trim() || null);
+  if (iv.answered) {
+    return <div className="bub">{q.ask}</div>;
+  }
+  return (
+    <div className="bub civ">
+      <div className="civ-q">{q.ask}</div>
+      <div className="civ-why">{q.why}</div>
+      <input
+        className="civ-in"
+        placeholder="Type your answer…"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            send();
+          }
+        }}
+        autoFocus
+      />
+      <div className="civ-row">
+        <button className="civ-send" onClick={send} disabled={!text.trim()}>
+          Send
+        </button>
+        <button className="civ-skip" onClick={() => answerInterview(m.id, iv.gap, null)}>
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Copilot() {
   const {
     toggleCopilot,
@@ -254,6 +296,7 @@ export function Copilot() {
 
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
+          if (m.interview) return <InterviewCard key={m.id} m={m} />;
           if (m.setup)
             return (
               <div key={m.id}>

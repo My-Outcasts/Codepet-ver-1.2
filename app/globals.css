@@ -8161,3 +8161,71 @@ body {
 .cset-done .ck {
   font-size: 12px;
 }
+
+/* First-run enrichment question card (goal / traction / problem). */
+.civ {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--accent-line);
+  background: linear-gradient(135deg, var(--accent-tint), var(--surface));
+}
+.civ-q {
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.civ-why {
+  font-size: 12px;
+  color: var(--t-3);
+  line-height: 1.4;
+  margin-top: -3px;
+}
+.civ-in {
+  width: 100%;
+  padding: 8px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.civ-in:focus {
+  border-color: var(--accent);
+}
+.civ-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.civ-send {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.civ-send:hover {
+  filter: brightness(1.05);
+}
+.civ-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.civ-skip {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--t-3);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.civ-skip:hover {
+  color: var(--t-1);
+}

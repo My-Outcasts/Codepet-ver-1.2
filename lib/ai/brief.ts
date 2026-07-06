@@ -22,6 +22,12 @@ export function briefToContext(raw: unknown): string | null {
     : [];
   const audience = str(b.audience, 160);
   const link = str(b.link, 200);
+  // byte's first-chat enrichment — the three plan-shaping signals onboarding never asks for.
+  // These are what make a plan tailored instead of generic; when present, they're the
+  // highest-value context byte has (see lib/ai/enrichInterview).
+  const goal = str(b.goal, 400);
+  const traction = str(b.traction, 400);
+  const problem = str(b.problem, 400);
   if (!name && !oneLiner && !summary && !notes) return null;
 
   const parts: string[] = [`The company is ${name || "the founder's product"}.`];
@@ -47,5 +53,9 @@ export function briefToContext(raw: unknown): string | null {
   if (who.length) parts.push(`The founder is ${who.join(', ')}.`);
   const founderName = str(b.founderName, 80);
   if (founderName) parts.push(`Their name is ${founderName}.`);
+  // The plan-shaping signals last — they're the sharpest steer for what byte should produce.
+  if (problem) parts.push(`The problem it solves: ${dot(problem)}`);
+  if (traction) parts.push(`Where they are now: ${dot(traction)}`);
+  if (goal) parts.push(`Their immediate goal: ${dot(goal)}`);
   return parts.join(' ');
 }
