@@ -26,6 +26,23 @@ function download(filename: string, text: string, type: string) {
   a.click();
 }
 
+// A quiet, honest trust line on the deliverable types that carry real liability —
+// financial projections, legal documents, and advice/decision docs. byte drafts these
+// from the founder's own context; the note says so plainly and reminds them to verify
+// before relying on it, without alarming legal-register boilerplate (one muted line, no
+// icon — matches the minimalist bar and PlanViewer's foot). Kept in one place so the
+// wording stays consistent across viewers.
+const DELIV_NOTE: Record<'sheet' | 'legal' | 'doc', string> = {
+  sheet:
+    'Projections byte drafted from your inputs — not financial advice. Verify the figures before you rely on them.',
+  legal: 'Draft, not legal advice — have a lawyer review before you publish or rely on it.',
+  doc: 'byte’s recommendation, drafted from your context — your call to verify and decide.',
+};
+
+function DelivNote({ kind }: { kind: keyof typeof DELIV_NOTE }) {
+  return <div className="deliv-note">{DELIV_NOTE[kind]}</div>;
+}
+
 /* ===== live website ===== */
 export function SiteViewer({ head, file, site }: { head: string; file: string; site: string }) {
   const { toast } = useApp();
@@ -297,6 +314,7 @@ export function SheetViewer({ head, file, sheet }: { head: string; file: string;
           </div>
         </div>
       </div>
+      <DelivNote kind="sheet" />
     </div>
   );
 }
@@ -449,6 +467,7 @@ export function LegalViewer({ legal }: { legal: any }) {
           Download .md
         </button>
       </div>
+      <DelivNote kind="legal" />
     </div>
   );
 }
@@ -536,6 +555,7 @@ export function DocViewer({ doc, fallback }: { doc?: Partial<DocDoc> | null; fal
           Download .md
         </button>
       </div>
+      <DelivNote kind="doc" />
     </div>
   );
 }

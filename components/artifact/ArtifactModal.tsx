@@ -354,13 +354,19 @@ export function ArtifactModal() {
       <>First draft ready — written from your brief, in your voice</>
     );
 
-  // The line shown when a live pass fails. A rate-limit is a friendly, specific
-  // message (the account hit today's cap); anything else falls back to the generic
-  // "showing the saved draft" note.
+  // The line shown when a live pass fails — cause-specific so it's honest, not one
+  // vague snag. A rate-limit hit today's cap; a refusal means byte reached the model
+  // but held back (rephrase/add detail); ai_unavailable is a provider/credit outage on
+  // our side; anything else is the generic "couldn't reach byte". All fall back to the
+  // saved draft so the founder still sees something.
   const liveErrorMsg =
     genError === 'rate_limited'
       ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
-      : 'Couldn’t reach byte just now — showing the saved draft.';
+      : genError === 'refused'
+        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail. Showing the saved draft.'
+        : genError === 'ai_unavailable'
+          ? 'byte is temporarily unavailable — try again shortly. Showing the saved draft.'
+          : 'Couldn’t reach byte just now — showing the saved draft.';
 
   const olLabel: React.CSSProperties = {
     fontSize: 11,

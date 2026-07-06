@@ -16,6 +16,7 @@ import { parseSetupItems, matchSetupItem, type SetupItem } from '@/lib/ai/envSet
 import { writeServerDecisions } from '@/lib/firebase/serverDecisions';
 import { mergeDecisions } from '@/lib/ai/decisions';
 import { REMEMBER_FACT_SCHEMA, coerceMemory, newOrChanged } from '@/lib/ai/chatMemory';
+import { needsFallbackReply, REFUSAL_FALLBACK } from '@/lib/ai/chatFallback';
 
 export const runtime = 'nodejs';
 
@@ -302,9 +303,11 @@ export async function POST(req: Request): Promise<Response> {
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
+        let streamedChars = 0;
         try {
           for await (const event of mstream) {
             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              streamedChars += event.delta.text.length;
               controller.enqueue(encoder.encode(event.delta.text));
             }
           }
@@ -377,6 +380,20 @@ export async function POST(req: Request): Promise<Response> {
             } catch (err) {
               console.error('[chat] memory capture failed', err);
             }
+          }
+
+          // If the model declined this turn, or returned no text AND no action to run,
+          // the bubble would otherwise be empty. Stream an honest fallback line so the
+          // user always gets a reply. A turn that ran a task / nav / setup is a real
+          // response even with no prose, so it's exempt (see needsFallbackReply).
+          if (
+            needsFallbackReply({
+              stopReason: final.stop_reason,
+              streamedChars,
+              acted: Boolean(toolUse || navUse || setupUse),
+            })
+          ) {
+            controller.enqueue(encoder.encode(REFUSAL_FALLBACK));
           }
 
           if (Object.keys(mark).length) {
