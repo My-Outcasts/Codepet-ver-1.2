@@ -3064,6 +3064,25 @@ body {
 .sug-build {
   font-weight: 600;
 }
+.cop-proj {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.cop-proj > span {
+  color: var(--muted, #6b7280);
+}
+.cop-proj select,
+.cop-proj input {
+  padding: 6px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--surface);
+  font: inherit;
+  width: 100%;
+}
 
 /* ===== onboarding overlay ===== */
 /* splash */

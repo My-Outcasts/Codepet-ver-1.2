@@ -166,6 +166,9 @@ export function Copilot() {
     generateBuildPlan,
     armBuild,
     buildArming,
+    projects,
+    buildProject,
+    setBuildProject,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -260,9 +263,33 @@ export function Copilot() {
                   </ol>
                 </div>
                 {m.buildAction?.kind === 'start-building' && (
-                  <button className="bub-act" onClick={armBuild} disabled={buildArming}>
-                    {buildArming ? 'Opening your session…' : m.buildAction.label}
-                  </button>
+                  <>
+                    <label className="cop-proj">
+                      <span>Which project?</span>
+                      {projects.length > 0 ? (
+                        <select
+                          value={buildProject}
+                          onChange={(e) => setBuildProject(e.target.value)}
+                        >
+                          <option value="">No project — just this build</option>
+                          {projects.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={buildProject}
+                          onChange={(e) => setBuildProject(e.target.value)}
+                          placeholder="Type a project folder path (or run the project scan)…"
+                        />
+                      )}
+                    </label>
+                    <button className="bub-act" onClick={armBuild} disabled={buildArming}>
+                      {buildArming ? 'Opening your session…' : m.buildAction.label}
+                    </button>
+                  </>
                 )}
               </div>
             );
