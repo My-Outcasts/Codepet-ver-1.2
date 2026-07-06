@@ -160,6 +160,12 @@ export function Copilot() {
     sendChat,
     runBriefedTask,
     advanceStage,
+    buildIntakeActive,
+    startBuildIntake,
+    addIntakeTurn,
+    generateBuildPlan,
+    armBuild,
+    buildArming,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -175,8 +181,13 @@ export function Copilot() {
   }, [chatMessages]);
 
   const submit = () => {
-    if (!draft.trim() || chatStreaming) return;
-    sendChat(draft);
+    if (!draft.trim()) return;
+    if (buildIntakeActive) {
+      addIntakeTurn(draft);
+    } else {
+      if (chatStreaming) return;
+      sendChat(draft);
+    }
     setDraft('');
   };
 
@@ -236,6 +247,36 @@ export function Copilot() {
               </div>
             );
           }
+          if (m.buildPlan) {
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <div className="cop-plan">
+                  <div className="cop-plan-h">{m.buildPlan.title}</div>
+                  <ol>
+                    {m.buildPlan.steps.map((s, i) => (
+                      <li key={i}>{s}</li>
+                    ))}
+                  </ol>
+                </div>
+                {m.buildAction?.kind === 'start-building' && (
+                  <button className="bub-act" onClick={armBuild} disabled={buildArming}>
+                    {buildArming ? 'Opening your session…' : m.buildAction.label}
+                  </button>
+                )}
+              </div>
+            );
+          }
+          if (m.buildAction?.kind === 'to-plan') {
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <button className="bub-act" onClick={generateBuildPlan}>
+                  {m.buildAction.label}
+                </button>
+              </div>
+            );
+          }
           return (
             <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
               {m.role === 'byte' ? plain(m.text) : m.text}
@@ -253,6 +294,9 @@ export function Copilot() {
 
         {empty && (
           <div className="chips">
+            <button className="sug sug-build" onClick={startBuildIntake} disabled={chatStreaming}>
+              🔨 Let&apos;s build something
+            </button>
             {CHIPS.map((t) => (
               <button key={t} className="sug" onClick={() => sendChat(t)} disabled={chatStreaming}>
                 {t}

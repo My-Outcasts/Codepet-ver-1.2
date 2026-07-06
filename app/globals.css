@@ -3046,6 +3046,24 @@ body {
   opacity: 0.5;
   cursor: default;
 }
+.cop-plan {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.cop-plan-h {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.cop-plan ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.sug-build {
+  font-weight: 600;
+}
 
 /* ===== onboarding overlay ===== */
 /* splash */
