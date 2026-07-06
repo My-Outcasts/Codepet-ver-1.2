@@ -42,6 +42,9 @@ const STATE_HEX: Record<string, string> = {
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
 const DIM_NODE = 'rgba(150,150,170,0.09)';
 const DIM_LINK = 'rgba(150,150,170,0.03)';
+// byte's "do this next" guide color — deliberately outside the state palette
+// (purple/gold/blue/green) so the beacon + its trail pop from the field.
+const BEACON_HEX = '#7DE3FF';
 
 function rgba(hex: string, a: number) {
   const h = hex.replace('#', '');
@@ -96,6 +99,8 @@ export default function OverviewView() {
   } = useApp();
   void tick;
   const wrapRef = useRef<HTMLDivElement>(null);
+  const calloutRef = useRef<HTMLDivElement>(null);
+  const hereRef = useRef<HereInfo | null>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
   const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -224,10 +229,6 @@ export default function OverviewView() {
     const idx = here.dept.tasks.indexOf(here.task);
     return idx >= 0 ? `task:${here.dept.k}:${idx}` : null;
   }, [here]);
-  const beaconHex = useMemo(
-    () => (here ? STATE_HEX[taskState(here.task, true).cls] || '#FFFFFF' : '#FFFFFF'),
-    [here],
-  );
   // When the founder opens a stage that isn't where they are now, the map has no
   // real nodes to show for it (tasks are scaffolded for the current stage only),
   // so we dim the live map to background and let the drawer carry that stage's
@@ -242,6 +243,55 @@ export default function OverviewView() {
     return () => clearInterval(id);
   }, [beaconId]);
   const pulse = 0.5 + 0.5 * Math.sin(beat * 0.16); // 0..1
+
+  hereRef.current = here;
+  // The lit trail byte draws from the center to your move: project → the active
+  // department → the next task. These two link keys get the guide color +
+  // particles that stream OUTWARD (source→target) from "Your company" to the node.
+  const pathLinkIds = useMemo(() => {
+    if (!here) return new Set<string>();
+    const dk = here.dept.k;
+    const idx = here.dept.tasks.indexOf(here.task);
+    return new Set([`project->dept:${dk}`, `dept:${dk}->task:${dk}:${idx}`]);
+  }, [here]);
+  const beaconNode = useMemo(
+    () => data.nodes.find((n) => n.id === beaconId) ?? null,
+    [data, beaconId],
+  );
+  // byte's on-map callout shows whenever there's a live next move (not while a
+  // non-current stage drawer has dimmed the map, and not when the stage is done).
+  const showCallout = !!beaconId && !mapDimmed && !stageComplete();
+
+  // Tether the callout to the beacon node: project its live 3D position to screen
+  // coords each frame and move the HTML callout there. Writes the DOM transform
+  // directly (no React re-render per frame); hides it if the node goes off-screen.
+  useEffect(() => {
+    if (!showCallout || !dims.w) return;
+    let raf = 0;
+    const draw = () => {
+      const fg = fgRef.current;
+      const el = calloutRef.current;
+      if (fg && el && beaconNode && Number.isFinite(beaconNode.x)) {
+        const sc = fg.graph2ScreenCoords(beaconNode.x, beaconNode.y, beaconNode.z);
+        if (
+          sc &&
+          Number.isFinite(sc.x) &&
+          sc.x > -240 &&
+          sc.x < dims.w + 240 &&
+          sc.y > -240 &&
+          sc.y < dims.h + 240
+        ) {
+          el.style.opacity = '1';
+          el.style.transform = `translate(${sc.x}px, ${sc.y}px)`;
+        } else {
+          el.style.opacity = '0';
+        }
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [showCallout, dims.w, dims.h, beaconNode]);
 
   // Glide the camera to frame a node — the "jump to the step" on Start, so the
   // docked work panel opens with its node in view (map stays as context behind it).
@@ -321,7 +371,7 @@ export default function OverviewView() {
     if (idleRef.current) clearTimeout(idleRef.current);
     idleRef.current = setTimeout(() => {
       const cc = (fgRef.current as any)?.controls?.();
-      if (cc) cc.autoRotate = true;
+      if (cc && !hereRef.current) cc.autoRotate = true; // stay at rest while a move is pinned
     }, 3500);
   }, []);
 
@@ -329,7 +379,9 @@ export default function OverviewView() {
     if (!dims.w) return;
     const c = (fgRef.current as any)?.controls?.();
     if (c) {
-      c.autoRotate = true;
+      // Rest the map (no auto-spin) while byte is pointing at a move, so the
+      // tethered callout holds steady; gently spin only when there's no move.
+      c.autoRotate = !here;
       c.autoRotateSpeed = 0.5;
     }
     const el = wrapRef.current;
@@ -341,7 +393,7 @@ export default function OverviewView() {
       el?.removeEventListener('pointerdown', noteInteract);
       el?.removeEventListener('wheel', noteInteract);
     };
-  }, [dims.w, noteInteract]);
+  }, [dims.w, noteInteract, here]);
 
   // The graph's world size is fixed (department orbit radius is constant), so a
   // fixed camera distance reliably frames it — scaled by viewport aspect so the
@@ -405,19 +457,7 @@ export default function OverviewView() {
         </div>
       </div>
 
-      {stageComplete() ? (
-        <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />
-      ) : (
-        here && (
-          <HereCard
-            here={here}
-            onStart={() => {
-              flyTo(`dept:${here.dept.k}`); // glide to the department…
-              briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
-            }}
-          />
-        )
-      )}
+      {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
       <div
         style={{
           position: 'absolute',
@@ -469,7 +509,7 @@ export default function OverviewView() {
               return hoverId === n.id ? n.val * 1.7 : n.val;
             }}
             nodeColor={(n) => {
-              if (n.id === beaconId) return rgba(beaconHex, 0.9 + pulse * 0.1); // always lit
+              if (n.id === beaconId) return rgba(BEACON_HEX, 0.85 + pulse * 0.15); // byte's guide star
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
             nodeOpacity={0.95}
@@ -485,24 +525,38 @@ export default function OverviewView() {
               `<div style="font:600 12px Inter,sans-serif;color:#fff;background:rgba(12,10,23,.92);border:1px solid rgba(255,255,255,.14);padding:6px 9px;border-radius:8px;max-width:240px">${n.name}${n.sub ? `<div style='font-weight:500;color:rgba(255,255,255,.6);margin-top:2px;font-size:11px'>${n.sub}</div>` : ''}</div>`
             }
             linkColor={(l) => {
-              if (!hoverId) return l.color;
-              const s = linkId(l.source),
-                t = linkId(l.target);
-              return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
+              if (hoverId) {
+                const s = linkId(l.source),
+                  t = linkId(l.target);
+                return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
+              }
+              return pathLinkIds.has(key) ? rgba(BEACON_HEX, 0.9) : l.color;
             }}
             linkWidth={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
-              const hot = hoverId && (s === hoverId || t === hoverId);
-              return hot ? 2.4 : l.kind === 'pd' ? 1.1 : 0.4;
+              if (hoverId && (s === hoverId || t === hoverId)) return 2.4;
+              if (pathLinkIds.has(key)) return 2;
+              return l.kind === 'pd' ? 1.1 : 0.4;
             }}
             linkDirectionalParticles={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
               if (hoverId && (s === hoverId || t === hoverId)) return 4;
+              if (pathLinkIds.has(key)) return 4;
               return l.active ? 3 : 0;
             }}
-            linkDirectionalParticleWidth={1.8}
+            linkDirectionalParticleColor={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
+              return pathLinkIds.has(key) ? BEACON_HEX : rgba(l.hex, 0.9);
+            }}
+            linkDirectionalParticleWidth={(l) => {
+              const key = `${linkId(l.source)}->${linkId(l.target)}`;
+              return pathLinkIds.has(key) ? 3 : 1.8;
+            }}
             linkDirectionalParticleSpeed={0.006}
             enableNodeDrag
             cooldownTime={4000}
@@ -520,6 +574,29 @@ export default function OverviewView() {
             }}
           />
         )}
+        {showCallout && here && (
+          <div
+            ref={calloutRef}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              zIndex: 5,
+              opacity: 0,
+              pointerEvents: 'none',
+              willChange: 'transform, opacity',
+              transition: 'opacity .2s',
+            }}
+          >
+            <ByteGuide
+              here={here}
+              onStart={() => {
+                flyTo(`dept:${here.dept.k}`); // glide to the department…
+                briefDepartment(here.dept, here.task); // …byte arrives + orients you in chat
+              }}
+            />
+          </div>
+        )}
       </div>
 
       <StageDrawer />
@@ -532,70 +609,85 @@ interface HereInfo {
   task: Task;
 }
 
-// The beacon — byte's single next move. One thing to read, one thing to do:
-// the task, and Start (which opens the run loop). Nothing else. Fixed overlay.
-function HereCard({ here, onStart }: { here: HereInfo; onStart: () => void }) {
+// byte's single next move, tethered to the beacon node on the map (its wrapper is
+// positioned at the node's screen coords each frame). A pointer nub aims back at
+// the node; the card sits to its right, vertically centered. One thing to read,
+// one thing to do: the task + Start (which opens the run loop).
+function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
   const st = taskState(here.task, true);
   return (
-    <div
-      style={{
-        position: 'absolute',
-        top: 126,
-        left: 26,
-        zIndex: 6,
-        width: 264,
-        padding: '15px 17px 16px',
-        background: 'rgba(16,14,28,0.74)',
-        backdropFilter: 'blur(10px)',
-        WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        borderRadius: 14,
-        boxShadow: '0 8px 30px rgba(0,0,0,0.45)',
-      }}
-    >
+    <div style={{ position: 'relative', width: 250, transform: 'translate(18px, -50%)' }}>
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: -5,
+          top: '50%',
+          width: 10,
+          height: 10,
+          marginTop: -5,
+          background: 'rgba(16,14,28,0.92)',
+          borderLeft: '1px solid rgba(125,227,255,0.5)',
+          borderBottom: '1px solid rgba(125,227,255,0.5)',
+          transform: 'rotate(45deg)',
+        }}
+      />
       <div
         style={{
-          fontSize: 10,
-          letterSpacing: '1.4px',
-          fontWeight: 700,
-          color: 'rgba(245,243,255,.45)',
-          textTransform: 'uppercase',
+          pointerEvents: 'auto',
+          padding: '13px 15px 15px',
+          background: 'rgba(16,14,28,0.92)',
+          backdropFilter: 'blur(10px)',
+          WebkitBackdropFilter: 'blur(10px)',
+          border: '1px solid rgba(125,227,255,0.35)',
+          borderRadius: 13,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
         }}
       >
-        Next step
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '1.3px',
+            fontWeight: 700,
+            color: BEACON_HEX,
+            textTransform: 'uppercase',
+          }}
+        >
+          byte · do this next
+        </div>
+        <div
+          style={{
+            fontSize: 14.5,
+            fontWeight: 650,
+            color: '#F7F5FF',
+            letterSpacing: '-.2px',
+            marginTop: 8,
+            lineHeight: 1.35,
+          }}
+        >
+          {here.task.t}
+        </div>
+        <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
+          {here.dept.name} · {st.label}
+        </div>
+        <button
+          onClick={onStart}
+          style={{
+            marginTop: 13,
+            fontFamily: 'inherit',
+            fontSize: 13,
+            fontWeight: 650,
+            color: '#0B0616',
+            background: BEACON_HEX,
+            border: 0,
+            borderRadius: 9,
+            padding: '8px 22px',
+            cursor: 'pointer',
+          }}
+        >
+          Start
+        </button>
       </div>
-      <div
-        style={{
-          fontSize: 15,
-          fontWeight: 650,
-          color: '#F7F5FF',
-          letterSpacing: '-.2px',
-          marginTop: 9,
-          lineHeight: 1.35,
-        }}
-      >
-        {here.task.t}
-      </div>
-      <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
-        {here.dept.name} · {st.label}
-      </div>
-      <button
-        onClick={onStart}
-        style={{
-          marginTop: 15,
-          fontFamily: 'inherit',
-          fontSize: 13,
-          fontWeight: 650,
-          color: '#0B0616',
-          background: '#F5F3FF',
-          border: 0,
-          borderRadius: 9,
-          padding: '9px 24px',
-          cursor: 'pointer',
-        }}
-      >
-        Start
-      </button>
     </div>
   );
 }
