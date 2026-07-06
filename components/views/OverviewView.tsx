@@ -24,6 +24,24 @@ import { stageComplete, nextStageOf } from '@/lib/stages';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
+import { INTRO_SEEN_KEY, introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
+
+// First-run "seen" flag. Reads default to seen (true) on failure so we never
+// re-trap a user behind a broken storage read.
+const readIntroSeen = () => {
+  try {
+    return !!localStorage.getItem(INTRO_SEEN_KEY);
+  } catch {
+    return true;
+  }
+};
+const markIntroSeen = () => {
+  try {
+    localStorage.setItem(INTRO_SEEN_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+};
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -99,6 +117,14 @@ export default function OverviewView() {
     drawerOpen,
   } = useApp();
   void tick;
+  // First-run spotlight handoff. OverviewView owns the phase + the localStorage
+  // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
+  // OverviewView is imported ssr:false, so reading localStorage in the lazy
+  // initializer is safe.
+  const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
+    introInitialPhase(readIntroSeen()),
+  );
+  const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => readIntroSeen());
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
   const hereRef = useRef<HereInfo | null>(null);
@@ -296,7 +322,7 @@ export default function OverviewView() {
 
   // Glide the camera to frame a node — the "jump to the step" on Start, so the
   // docked work panel opens with its node in view (map stays as context behind it).
-  const flyTo = (nodeId: string | null) => {
+  const flyTo = (nodeId: string | null, ms = 900) => {
     const fg = fgRef.current as any;
     if (!fg || !nodeId) return;
     const n = data.nodes.find((x) => x.id === nodeId);
@@ -306,7 +332,7 @@ export default function OverviewView() {
     const aspect = dims.w / Math.max(1, dims.h);
     const k = 2.7 * Math.max(1, 1.2 / aspect);
     const look = { x: n.x * 0.45, y: n.y * 0.45, z: n.z * 0.45 };
-    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
+    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, ms);
   };
 
   // A portal was requested from elsewhere (e.g. the Roadmap's Start) — glide the
@@ -437,12 +463,82 @@ export default function OverviewView() {
     return s;
   };
 
+  // Skip the camera glide (jump-cut) for users who prefer reduced motion.
+  const introReduceMotion = () =>
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  // CTA in the intro: remember it's seen, then either fly to the lit beacon or
+  // (no live move) recenter the whole map, and enter the spotlight.
+  const handleIntroReveal = () => {
+    markIntroSeen();
+    setHasSeenIntro(true);
+    // Only enter the spotlight when the beacon callout will actually render
+    // (ByteGuide is gated by showCallout) — otherwise there's nothing to
+    // illuminate, so just recenter the map and finish.
+    if (showCallout && beaconId) {
+      flyTo(beaconId, introReduceMotion() ? 0 : 900);
+      setIntroPhase('spotlight');
+    } else {
+      fitView();
+      setIntroPhase('done');
+    }
+  };
+
+  // Backdrop click: dismiss without flying, but still mark it seen.
+  const handleIntroDismiss = () => {
+    markIntroSeen();
+    setHasSeenIntro(true);
+    setIntroPhase('done');
+  };
+
+  // The spotlight is a light touch, not a second modal — auto-settle after a beat.
+  useEffect(() => {
+    if (introPhase !== 'spotlight') return;
+    const id = setTimeout(() => setIntroPhase('done'), 6000);
+    return () => clearTimeout(id);
+  }, [introPhase]);
+
+  // Settle the spotlight the moment the founder actually grabs the map
+  // (deliberate pointer-down or wheel-zoom) — not on mere mouse movement.
+  useEffect(() => {
+    if (introPhase !== 'spotlight') return;
+    const el = wrapRef.current;
+    if (!el) return;
+    const settle = () => setIntroPhase('done');
+    el.addEventListener('pointerdown', settle);
+    el.addEventListener('wheel', settle, { passive: true });
+    return () => {
+      el.removeEventListener('pointerdown', settle);
+      el.removeEventListener('wheel', settle);
+    };
+  }, [introPhase]);
+
   return (
     <section
       className="view on"
       style={{ position: 'absolute', inset: 0, background: '#000000', overflow: 'hidden' }}
     >
-      <OverviewIntro />
+      {introPhase === 'intro' && (
+        <OverviewIntro
+          showLegend={hasSeenIntro}
+          onReveal={handleIntroReveal}
+          onDismiss={handleIntroDismiss}
+        />
+      )}
+      {introPhase === 'spotlight' && (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 3,
+            pointerEvents: 'none',
+            background:
+              'radial-gradient(closest-side at 50% 50%, rgba(4,3,10,0) 45%, rgba(4,3,10,0.5) 100%)',
+          }}
+        />
+      )}
       <StageRibbon />
 
       <div
@@ -485,6 +581,25 @@ export default function OverviewView() {
         <Legend dot="#FDB022" label="Needs approval" />
         <Legend dot="#3B82F6" label="Needs you" />
         <Legend dot="#34D399" label="Done" />
+        {introPhase === 'done' && (
+          <button
+            type="button"
+            onClick={() => setIntroPhase('intro')}
+            style={{
+              pointerEvents: 'auto',
+              fontFamily: 'inherit',
+              fontSize: 11.5,
+              color: 'rgba(245,243,255,.55)',
+              background: 'transparent',
+              border: 'none',
+              borderLeft: '1px solid rgba(245,243,255,.15)',
+              paddingLeft: 16,
+              cursor: 'pointer',
+            }}
+          >
+            ? how to read this map
+          </button>
+        )}
       </div>
 
       <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
@@ -598,11 +713,14 @@ export default function OverviewView() {
           >
             <ByteGuide
               here={here}
+              spotlight={introPhase === 'spotlight'}
               // One shared arrival: byte opens the chat + briefs you, then the
               // portalSignal effect glides the camera to the department AFTER the
-              // chat has docked — so the fly frames the settled (narrower) layout
-              // instead of being yanked back by the resize-driven auto-fit.
-              onStart={() => portalToTask(here.dept.k, here.task.t)}
+              // chat has docked. Starting also settles any active spotlight.
+              onStart={() => {
+                setIntroPhase('done');
+                portalToTask(here.dept.k, here.task.t);
+              }}
             />
           </div>
         )}
@@ -622,7 +740,15 @@ interface HereInfo {
 // positioned at the node's screen coords each frame). A pointer nub aims back at
 // the node; the card sits to its right, vertically centered. One thing to read,
 // one thing to do: the task + Start (which opens the run loop).
-function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
+function ByteGuide({
+  here,
+  onStart,
+  spotlight = false,
+}: {
+  here: HereInfo;
+  onStart: () => void;
+  spotlight?: boolean;
+}) {
   const st = taskState(here.task, true);
   return (
     <div style={{ position: 'relative', width: 250, transform: 'translate(18px, -50%)' }}>
@@ -650,7 +776,9 @@ function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
           WebkitBackdropFilter: 'blur(10px)',
           border: '1px solid rgba(125,227,255,0.35)',
           borderRadius: 13,
-          boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+          boxShadow: spotlight
+            ? '0 0 0 2px rgba(125,227,255,0.55), 0 0 24px 4px rgba(125,227,255,0.35), 0 8px 30px rgba(0,0,0,0.5)'
+            : '0 8px 30px rgba(0,0,0,0.5)',
         }}
       >
         <div
@@ -679,6 +807,18 @@ function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
         <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
           {here.dept.name} · {st.label}
         </div>
+        {spotlight && (
+          <div
+            style={{
+              marginTop: 9,
+              fontSize: 11.5,
+              lineHeight: 1.45,
+              color: 'rgba(125,227,255,.9)',
+            }}
+          >
+            The bright cyan star is always your next move.
+          </div>
+        )}
         <button
           onClick={onStart}
           style={{
