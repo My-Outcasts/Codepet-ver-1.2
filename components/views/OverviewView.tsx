@@ -3,18 +3,15 @@
 // departments orbiting it, each branching into its tasks. Obsidian-graph-view
 // inspired, dark "map mode". Loaded client-only (three.js / WebGL).
 //
-// Nodes are placed at deterministic, PINNED positions (fx/fy/fz) via
-// lib/overview/layout: the project at the origin, departments on an even ring
-// (a shallow disc — depth kept for gentle parallax), and tasks in a small ring
-// around their department. There is no force sim; the cinematic feel comes from
-// the camera's gentle idle auto-rotate.
+// Nodes are seeded with deterministic 3D positions (project at origin,
+// departments on a Fibonacci sphere, tasks clustered around their department) to
+// avoid the degenerate all-at-origin case; the live simulation then relaxes it.
 //
 // Features: hover-highlight a node's neighborhood, bloom glow, responsive
 // auto-fit framing, and gentle idle auto-rotate.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph3D, { type ForceGraphMethods } from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
-import { deptRingPosition, taskRingPosition, DEPT_R } from '@/lib/overview/layout';
 import * as THREE from 'three';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - addons ship without bundled types in some setups
@@ -76,6 +73,10 @@ function rgba(hex: string, a: number) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
+const DEPT_R = 140; // department orbit radius
+const TASK_R = 46; // task cluster radius around a department
+const GOLDEN = Math.PI * (3 - Math.sqrt(5));
+
 interface GNode {
   id: string;
   name: string;
@@ -89,9 +90,6 @@ interface GNode {
   x: number;
   y: number;
   z: number;
-  fx?: number;
-  fy?: number;
-  fz?: number;
 }
 interface GLink {
   source: string;
@@ -136,8 +134,6 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
-  const [zoomedIn, setZoomedIn] = useState(false);
-  const zoomedInRef = useRef(false);
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -154,35 +150,6 @@ export default function OverviewView() {
     return () => ro.disconnect();
   }, []);
 
-  // Reveal task labels when the camera is close. Watched per-frame with
-  // hysteresis (enter < 200, exit > 260) so it doesn't flicker at the threshold;
-  // on a cross we flip state + refresh so nodeThreeObject re-runs. Task labels
-  // otherwise stay hidden (hover still shows them via nodeLabel).
-  useEffect(() => {
-    if (!dims.w) return;
-    let raf = 0;
-    // Seed from the live state (via ref) so a resize-driven effect re-run can't
-    // desync the tracker from zoomedIn and strand task labels visible.
-    let cur = zoomedInRef.current;
-    const loop = () => {
-      const fg = fgRef.current;
-      const cam = fg?.camera();
-      if (cam) {
-        const d = Math.hypot(cam.position.x, cam.position.y, cam.position.z);
-        const next = cur ? d < 260 : d < 200;
-        if (next !== cur) {
-          cur = next;
-          zoomedInRef.current = next;
-          setZoomedIn(next);
-          fg?.refresh();
-        }
-      }
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, [dims.w]);
-
   const { data, adj } = useMemo(() => {
     const nodes: GNode[] = [];
     const links: GLink[] = [];
@@ -195,9 +162,6 @@ export default function OverviewView() {
       x: 0,
       y: 0,
       z: 0,
-      fx: 0,
-      fy: 0,
-      fz: 0,
     });
     DEPTS.forEach((d, di) => {
       const dHex = HEX[DCOL[d.k]] || HEX['--accent'];
@@ -205,10 +169,12 @@ export default function OverviewView() {
       const done = d.tasks.filter((t) => t.done).length;
       const total = d.tasks.length;
       const did = `dept:${d.k}`;
-      const dp = deptRingPosition(di, DEPTS.length);
-      const dx = dp.x,
-        dy = dp.y,
-        dz = dp.z;
+      const yy = 1 - (di / (DEPTS.length - 1)) * 2;
+      const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+      const th = GOLDEN * di;
+      const dx = Math.cos(th) * rr * DEPT_R,
+        dy = yy * DEPT_R,
+        dz = Math.sin(th) * rr * DEPT_R;
       const allDone = total > 0 && done === total;
       nodes.push({
         id: did,
@@ -219,12 +185,9 @@ export default function OverviewView() {
         val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
         sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
-        x: dp.x,
-        y: dp.y,
-        z: dp.z,
-        fx: dp.fx,
-        fy: dp.fy,
-        fz: dp.fz,
+        x: dx,
+        y: dy,
+        z: dz,
       });
       links.push({
         source: 'project',
@@ -238,7 +201,9 @@ export default function OverviewView() {
         const st = taskState(t, true);
         const tHex = STATE_HEX[st.cls] || '#94A3B8';
         const tid = `task:${d.k}:${i}`;
-        const tp = taskRingPosition({ x: dx, y: dy, z: dz }, i, total);
+        const tyy = 1 - ((i + 0.5) / total) * 2;
+        const trr = Math.sqrt(Math.max(0, 1 - tyy * tyy));
+        const tth = GOLDEN * (i + 1);
         nodes.push({
           id: tid,
           name: t.t,
@@ -248,12 +213,9 @@ export default function OverviewView() {
           dept: d,
           task: t,
           sub: `${d.name} · ${st.label}`,
-          x: tp.x,
-          y: tp.y,
-          z: tp.z,
-          fx: tp.fx,
-          fy: tp.fy,
-          fz: tp.fz,
+          x: dx + Math.cos(tth) * trr * TASK_R,
+          y: dy + tyy * TASK_R,
+          z: dz + Math.sin(tth) * trr * TASK_R,
         });
         links.push({ source: did, target: tid, color: rgba(dHex, 0.16), hex: dHex, kind: 'dt' });
       });
@@ -384,6 +346,21 @@ export default function OverviewView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalSignal, dims.w]);
 
+  // gentle forces (positions are seeded)
+  useEffect(() => {
+    if (!dims.w) return;
+    const fg = fgRef.current as any;
+    if (!fg) return;
+    try {
+      fg.d3Force('charge')?.strength(-90);
+      fg.d3Force('link')
+        ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
+        .strength(0.25);
+    } catch {
+      /* forces not ready */
+    }
+  }, [dims.w, data]);
+
   // responsive framing — fit on settle + on resize
   useEffect(() => {
     if (!dims.w) return;
@@ -458,13 +435,8 @@ export default function OverviewView() {
     const fg = fgRef.current as any;
     if (!fg) return;
     const aspect = dims.w / Math.max(1, dims.h);
-    // Extra margin (1.7 vs 1.55) + a horizontal pan: shifting the camera and its
-    // target right by ~a third of the ring pushes the disc left on screen, so the
-    // ring stays framed AND the tethered beacon card on the right never covers
-    // the project center. Explicit flyTo/portal moves are unaffected (separate).
-    const dist = 360 * Math.max(1, 1.7 / aspect);
-    const bx = DEPT_R * 0.35;
-    fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
+    const dist = 360 * Math.max(1, 1.55 / aspect);
+    fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
   };
 
   const onEngineStop = () => {
@@ -472,12 +444,10 @@ export default function OverviewView() {
   };
 
   const nodeThreeObject = (n: GNode): any => {
-    // Task labels appear only when zoomed in (hover still reveals them via
-    // nodeLabel); departments/project always show.
-    if (n.kind === 'task' && !zoomedIn) return undefined;
+    if (n.kind === 'task') return undefined; // default sphere; label on hover
     const s = new SpriteText(n.name);
     s.color = '#FFFFFF';
-    s.textHeight = n.kind === 'project' ? 6 : n.kind === 'task' ? 3 : 4;
+    s.textHeight = n.kind === 'project' ? 6 : 4;
     s.fontFace = 'Inter, system-ui, sans-serif';
     s.fontWeight = n.kind === 'project' ? '700' : '600';
     // a dark pill behind the text so labels stay legible over bright / bloomed
