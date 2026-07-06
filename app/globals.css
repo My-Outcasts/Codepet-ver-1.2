@@ -2331,18 +2331,20 @@ body {
   border: 1px solid var(--hairline);
   border-radius: 14px;
 }
-/* Color lives on the lanes, not the cards — each lane wears its state's hue. */
-.kb-col--draft {
+/* Each lane wears its own hue so the board reads as four colorful swimlanes
+   rather than a wall of white. Light pastel tints keep the white cards popping
+   and the text legible. */
+.kb-col--upnext {
+  background: var(--accent-tint);
+  border-color: var(--accent-line);
+}
+.kb-col--awaiting {
   background: var(--gold-tint);
   border-color: var(--gold-line);
 }
 .kb-col--you {
   background: var(--blue-tint);
   border-color: var(--blue-line);
-}
-.kb-col--does {
-  background: var(--accent-tint);
-  border-color: var(--accent-line);
 }
 .kb-col--done {
   background: #e7f6ee;

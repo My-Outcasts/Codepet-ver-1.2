@@ -10,6 +10,8 @@ interface Row {
 
 // Kanban columns by the task's real state (via taskState). "byte's queue"
 // (draft-not-yet + does) folds into Up next; a produced draft sits in Awaiting.
+// Each lane wears its own hue (see .kb-col--* in globals.css) so the board reads
+// as four distinct, colorful swimlanes rather than a wall of white.
 const COLS: Array<{ key: string; label: string; dot: string; test: (x: Row) => boolean }> = [
   {
     key: 'upnext',
