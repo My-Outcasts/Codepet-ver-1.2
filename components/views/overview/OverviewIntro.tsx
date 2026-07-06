@@ -2,20 +2,21 @@
 // byte's first-visit welcome on the Overview — orients the founder (what this map
 // is, how to read the ribbon / the lit next-move / the colors) and sends them to
 // their next move. Shown once per browser (localStorage), then never again.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 const SEEN_KEY = 'codepet:overview-intro-seen';
 const GUIDE = '#7DE3FF';
 
 export default function OverviewIntro() {
-  const [show, setShow] = useState(false);
-  useEffect(() => {
+  // Client-only (the Overview is dynamically imported with ssr:false), so reading
+  // localStorage in the initializer is safe — and avoids set-state-in-effect.
+  const [show, setShow] = useState(() => {
     try {
-      if (!localStorage.getItem(SEEN_KEY)) setShow(true);
+      return !localStorage.getItem(SEEN_KEY);
     } catch {
-      /* storage blocked — just skip the intro */
+      return false;
     }
-  }, []);
+  });
   if (!show) return null;
   const dismiss = () => {
     try {
