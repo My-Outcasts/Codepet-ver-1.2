@@ -41,6 +41,7 @@ import {
   type TrackingSummary,
 } from '../tracking';
 import { normalizeDecisions, type DecisionEntry } from '../ai/projectModel';
+import { dayKey } from '../ai/rateLimit';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -292,6 +293,13 @@ export async function loadTrackingSummary(companyId: string): Promise<TrackingSu
   }
 }
 
+/** Today's AI-run count for the company (the daily cost-guard counter), or 0 if none yet. */
+export async function loadTodayUsage(companyId: string): Promise<number> {
+  const snap = await getDoc(doc(getDb(), `companies/${companyId}/usage/${dayKey(new Date())}`));
+  const n = snap.exists() ? (snap.data() as { n?: unknown }).n : 0;
+  return typeof n === 'number' && Number.isFinite(n) ? n : 0;
+}
+
 /** Local projects for the Build Coach's "Which project?" picker. Prefers the
  *  list synced by the scan CLI (POST /api/projects); falls back to the repos the
  *  tracker has seen. Empty on any error or when neither source has data. */
@@ -533,4 +541,15 @@ export async function persistApproval(
 export async function persistEnv(companyId: string, env: EnvState): Promise<void> {
   const db = getDb();
   await updateDoc(doc(db, paths.company(companyId)), { env, updatedAt: Date.now() });
+}
+
+/** A founder-initiated support message → the existing `feedback` collection (kind:'support'). */
+export async function sendSupportMessage(msg: string, name: string, email: string): Promise<void> {
+  await addDoc(collection(getDb(), 'feedback'), {
+    kind: 'support',
+    message: msg.trim(),
+    name,
+    email,
+    ts: Date.now(),
+  });
 }

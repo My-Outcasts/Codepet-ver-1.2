@@ -151,6 +151,7 @@ body {
   font-weight: 600;
   color: #fff;
   background: var(--t-1);
+  border: none;
   border-radius: 8px;
   padding: 6px 12px;
   cursor: pointer;
@@ -208,8 +209,6 @@ body {
 }
 .tb-menu .who {
   padding: 8px 10px 9px;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 5px;
 }
 .tb-menu .who b {
   display: block;
@@ -234,6 +233,24 @@ body {
 .tb-menu a:hover {
   background: var(--well);
   color: var(--t-1);
+}
+/* account menu — grouped rows */
+.tb-menu .tb-sep {
+  height: 1px;
+  background: var(--hairline);
+  margin: 6px 0;
+}
+.tb-menu a {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--t-1);
+  font-size: 13.5px;
+}
+.tb-menu a:hover {
+  background: var(--surface-2, #f4f1fb);
+  color: var(--accent-deep, #5b27b0);
 }
 .tb-ic {
   width: 30px;
@@ -7876,6 +7893,26 @@ body {
   cursor: default;
   transform: none;
 }
+.so-modal.sup {
+  width: 420px;
+  max-width: calc(100vw - 40px);
+}
+.sup-in {
+  width: 100%;
+  min-height: 96px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 14px;
+  resize: vertical;
+}
+.sup-err {
+  color: #c0392b;
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
 
 /* respect reduced-motion: drop drift, glow, and slide; keep content visible */
 @media (prefers-reduced-motion: reduce) {
@@ -7957,6 +7994,24 @@ body {
   line-height: 1.5;
   max-width: 52ch;
 }
+/* settings — account row */
+.acct {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.acct-av {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent, #7c3aed);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 16px;
+  flex: none;
+}
 .set-link {
   flex-shrink: 0;
   background: var(--accent-tint);
@@ -8000,6 +8055,27 @@ body {
 }
 .switch.on .knob {
   transform: translateX(20px);
+}
+
+/* billing & usage */
+.bill-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 0;
+}
+.bill-meter {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--hairline);
+  overflow: hidden;
+  margin: 0 0 18px;
+}
+.bill-meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent, #7c3aed);
+  transition: width 0.4s ease;
 }
 
 /* ===== Build Coach view ("Cùng làm") — Chapter 3, light-theme adaptation ===== */

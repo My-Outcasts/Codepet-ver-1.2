@@ -109,6 +109,7 @@ export type View =
   | 'env'
   | 'install'
   | 'settings'
+  | 'billing'
   | 'build';
 
 export type Modal =
