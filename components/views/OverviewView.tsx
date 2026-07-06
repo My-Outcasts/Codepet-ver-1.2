@@ -3,9 +3,11 @@
 // departments orbiting it, each branching into its tasks. Obsidian-graph-view
 // inspired, dark "map mode". Loaded client-only (three.js / WebGL).
 //
-// Nodes are seeded with deterministic 3D positions (project at origin,
-// departments on a Fibonacci sphere, tasks clustered around their department) to
-// avoid the degenerate all-at-origin case; the live simulation then relaxes it.
+// Nodes are placed at deterministic, PINNED positions (fx/fy/fz) via
+// lib/overview/layout: the project at the origin, departments on an even ring
+// (a shallow disc — depth kept for gentle parallax), and tasks in a small ring
+// around their department. There is no force sim; the cinematic feel comes from
+// the camera's gentle idle auto-rotate.
 //
 // Features: hover-highlight a node's neighborhood, bloom glow, responsive
 // auto-fit framing, and gentle idle auto-rotate.
@@ -135,6 +137,7 @@ export default function OverviewView() {
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [zoomedIn, setZoomedIn] = useState(false);
+  const zoomedInRef = useRef(false);
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -158,8 +161,10 @@ export default function OverviewView() {
   useEffect(() => {
     if (!dims.w) return;
     let raf = 0;
-    let cur = false;
-    const tick = () => {
+    // Seed from the live state (via ref) so a resize-driven effect re-run can't
+    // desync the tracker from zoomedIn and strand task labels visible.
+    let cur = zoomedInRef.current;
+    const loop = () => {
       const fg = fgRef.current;
       const cam = fg?.camera();
       if (cam) {
@@ -167,13 +172,14 @@ export default function OverviewView() {
         const next = cur ? d < 260 : d < 200;
         if (next !== cur) {
           cur = next;
+          zoomedInRef.current = next;
           setZoomedIn(next);
           fg?.refresh();
         }
       }
-      raf = requestAnimationFrame(tick);
+      raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(tick);
+    raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [dims.w]);
 

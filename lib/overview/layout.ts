@@ -21,15 +21,11 @@ export interface Pos {
 
 const pin = (x: number, y: number, z: number): Pos => ({ x, y, z, fx: x, fy: y, fz: z });
 
-// Department `index` of `count`, evenly spaced starting at the top, clockwise.
+// Department `index` of `count`, evenly spaced by angle (2π/count apart).
 // count >= 1 (there is always at least the calling department), so no div-by-zero.
 export function deptRingPosition(index: number, count: number): Pos {
   const a = -Math.PI / 2 + (index / count) * Math.PI * 2;
-  return pin(
-    Math.cos(a) * DEPT_R,
-    Math.sin(a) * DEPT_R,
-    Math.sin(GOLDEN * index) * DEPT_R * DEPTH,
-  );
+  return pin(Math.cos(a) * DEPT_R, Math.sin(a) * DEPT_R, Math.sin(GOLDEN * index) * DEPT_R * DEPTH);
 }
 
 // Task `index` of `total` in a small ring around its department. total >= 1.
