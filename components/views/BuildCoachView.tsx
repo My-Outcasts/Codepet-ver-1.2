@@ -32,7 +32,7 @@ const NEXT_LABEL: Record<Step, string> = {
 const DEFAULT_BUDGET_ACTIONS = 12;
 
 // Byte's coaching bubble — sprite + a line, a "lens" chip, and an expandable
-// "a little tip from Byte" panel. Reused across all three steps.
+// "a little tip from Byte" panel. Reused across both steps.
 function CoachBubble({
   say,
   lens,
