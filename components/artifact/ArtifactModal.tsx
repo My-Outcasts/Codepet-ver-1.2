@@ -5,6 +5,8 @@ import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/dat
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
 import { LIVE_TYPES, liveKind, currentDraft, applyResult } from '@/lib/ai/applyResult';
+import { toolkitUsedFor, runLogWithToolkit } from '@/lib/ai/toolkitUse';
+import { ENV } from '@/lib/data';
 import { ArtifactViewer } from './viewers';
 import { ExecLog } from './ExecLog';
 
@@ -130,6 +132,7 @@ export function ArtifactModal() {
     brief,
     toggleCopilot,
     persistTaskDraft,
+    creditToolkitUse,
   } = useApp();
   const [stage, setStage] = useState<Stage>('exec');
   // Run mode docks as a right-hand panel so the map stays visible as context;
@@ -252,6 +255,7 @@ export function ArtifactModal() {
       })
         .then((res) => {
           applyResult(t, type, res);
+          creditToolkitUse(t.t, type);
           persistTaskDraft(d.k, t.t);
           setGenStatus('done');
         })
@@ -386,7 +390,10 @@ export function ArtifactModal() {
       </>
     );
   } else if (stage === 'exec') {
-    const steps = execKind === 'revise' ? reviseSteps(rev || '') : buildLog(t, logType, d);
+    const steps =
+      execKind === 'revise'
+        ? reviseSteps(rev || '')
+        : runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, logType));
     const title =
       execKind === 'revise' ? <>byte is revising — “{rev}”</> : 'byte is doing the work…';
     bodyContent = (

@@ -35,7 +35,10 @@ import {
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
+  envUsageFromCatalog,
+  persistEnvUsage,
 } from './firebase/companyData';
+import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -166,6 +169,8 @@ interface AppState {
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
   toggleEnv: (category: string, index: number) => void;
   setupCapability: (category: string, name: string) => void;
+  /** Credit the on-items that fit a produced task's type (deduped) + persist. */
+  creditToolkitUse: (taskTitle: string, type: string) => void;
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
@@ -903,6 +908,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // Credit the on-items whose `fits` includes a produced task's type (deduped) and
+  // persist, same as toggleEnv.
+  const creditToolkitUse = useCallback(
+    (taskTitle: string, type: string) => {
+      const used = toolkitUsedFor(ENV, type);
+      if (!used.length) return;
+      for (const u of used) {
+        const item = ENV[u.category]?.find((x) => x.n === u.name);
+        if (item) item.tasks = appendTaskUse(item.tasks, taskTitle);
+      }
+      bump();
+      if (companyId) {
+        persistEnvUsage(companyId, envUsageFromCatalog()).catch((err) => {
+          console.error('[store] persistEnvUsage failed', err);
+        });
+      }
+    },
+    [bump, companyId],
+  );
+
   // byte produced a reviewable draft for this task — mark it awaiting the founder's
   // approval and persist so the state survives reload. `done` (on approve) supersedes.
   const persistTaskDraft = useCallback(
@@ -987,6 +1012,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           brief,
         });
         applyResult(t, type, res);
+        creditToolkitUse(t.t, type);
         bump();
         persistTaskDraft(d.k, t.t);
         track('chat.run_task', { dept: d.k, type });
@@ -1004,7 +1030,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [brief, bump, persistTaskDraft],
+    [brief, bump, persistTaskDraft, creditToolkitUse],
   );
 
   // Revise an inline chat result against the founder's feedback — the same revise pass
@@ -1316,6 +1342,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       approveTask,
       toggleEnv,
       setupCapability,
+      creditToolkitUse,
       chatMessages,
       chatStreaming,
       sendChat,
@@ -1373,6 +1400,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       approveTask,
       toggleEnv,
       setupCapability,
+      creditToolkitUse,
       chatMessages,
       chatStreaming,
       sendChat,
