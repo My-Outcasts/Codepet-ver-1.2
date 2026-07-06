@@ -6,6 +6,8 @@ import { DEPTS, ENV, ENV_META } from '@/lib/data';
 import { resolveEnvIndex } from '@/lib/ai/envSetup';
 import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
 import { Byte } from './Byte';
+import { ExecLog, StaticLog } from './artifact/ExecLog';
+import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
 
 // Quick-start prompts shown only before the first message — they send to byte.
@@ -53,15 +55,29 @@ function ResultCard({ m }: { m: ChatMessage }) {
   const { reviseTaskInChat, approveChatResult, openChatResult } = useApp();
   const [revising, setRevising] = useState(false);
   const [note, setNote] = useState('');
-  // Latches true once a revise pass fires, so the spinner reads "Revising…" rather
-  // than "Producing…". A card's spinner only re-shows via revise (the initial produce
-  // is a separate card), so the flag never needs resetting.
   const [reviseBusy, setReviseBusy] = useState(false);
+  // Dual-gate: the card leaves the run view only when the produce is done (m.running=false)
+  // AND the log has played through (logDone). Reset whenever a new run/revise starts.
+  const [logDone, setLogDone] = useState(false);
+  // Latches true only once this card has actually been in flight this session, so a
+  // completed/saved result loaded from persistence never re-streams its log on reload.
+  const [ran, setRan] = useState(false);
+  // The persistent "What byte did" record is collapsed by default.
+  const [showRecord, setShowRecord] = useState(false);
+  useEffect(() => {
+    if (m.running) {
+      setRan(true);
+      setLogDone(false);
+    }
+  }, [m.running]);
+
   const r = m.result!;
   const d = DEPTS.find((x) => x.k === r.deptK);
   const t = d?.tasks.find((x) => x.t === r.taskTitle);
   const noun = TYPE_NOUN[r.type] || 'Deliverable';
   const preview = (t?.out || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  const steps = m.steps;
+  const hasSteps = !!steps?.length;
 
   const revise = (text: string) => {
     reviseTaskInChat(m.id, r.deptK, r.taskTitle, text);
@@ -69,6 +85,11 @@ function ResultCard({ m }: { m: ChatMessage }) {
     setReviseBusy(true);
     setNote('');
   };
+
+  // Show the run view while producing, or — once a run has started this session — until
+  // the log finishes playing. A reloaded, already-done card (ran=false) skips straight to
+  // the result, so logs never re-stream on reload.
+  const running = m.running || (ran && hasSteps && !logDone);
 
   return (
     <div className="cres">
@@ -79,13 +100,33 @@ function ResultCard({ m }: { m: ChatMessage }) {
           {noun}
         </span>
       </div>
-      {m.running ? (
-        <div className="cres-run">
-          <span className="cres-spin" />
-          {reviseBusy ? 'Revising…' : 'Producing…'}
-        </div>
+      {running ? (
+        hasSteps ? (
+          <ExecLog
+            steps={steps!}
+            title={reviseBusy ? 'byte is revising…' : 'byte is doing the work…'}
+            onDone={() => setLogDone(true)}
+          />
+        ) : (
+          <div className="cres-run">
+            <span className="cres-spin" />
+            {reviseBusy ? 'Revising…' : 'Producing…'}
+          </div>
+        )
       ) : (
         <>
+          {hasSteps && (
+            <div className="cres-rec">
+              <button
+                className="cres-rec-t"
+                onClick={() => setShowRecord((v) => !v)}
+                aria-expanded={showRecord}
+              >
+                {showRecord ? '▾' : '▸'} What byte did · {stepCountLabel(steps!)}
+              </button>
+              {showRecord && <StaticLog steps={steps!} />}
+            </div>
+          )}
           {preview && <div className="cres-prev">{preview}</div>}
           {r.approved ? (
             <div className="cres-saved">Saved to your library</div>

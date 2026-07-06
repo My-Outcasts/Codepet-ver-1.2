@@ -3038,6 +3038,35 @@ body {
   color: var(--accent-deep);
   margin-top: 11px;
 }
+/* inline execute log — reuse the modal's .exec styling, sized for the chat card */
+.cres .exec {
+  margin-top: 12px;
+}
+.cres .exec-log {
+  font-size: 12px;
+}
+/* the persistent "What byte did" record on a produced/saved card */
+.cres-rec {
+  margin-top: 12px;
+}
+.cres-rec-t {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--t-3);
+  background: var(--surface-2, #f7f5fc);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.cres-rec-t:hover {
+  color: var(--accent-deep);
+}
+.cres-rec .exec-log.static {
+  margin-top: 9px;
+}
 /* Revise-in-place: quick chips + a note input, revealed on a produced card. */
 .cres-rev {
   margin-top: 12px;

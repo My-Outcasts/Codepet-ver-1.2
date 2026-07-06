@@ -1,4 +1,9 @@
 {
+  "components/Copilot.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "components/Onboarding.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
