@@ -23,6 +23,7 @@ import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf } from '@/lib/stages';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
+import OverviewIntro from '@/components/views/overview/OverviewIntro';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -435,6 +436,7 @@ export default function OverviewView() {
       className="view on"
       style={{ position: 'absolute', inset: 0, background: '#000000', overflow: 'hidden' }}
     >
+      <OverviewIntro />
       <StageRibbon />
 
       <div

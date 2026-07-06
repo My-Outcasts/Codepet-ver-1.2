@@ -90,13 +90,30 @@ function Segment({
         color: current ? '#F5F3FF' : done ? 'rgba(245,243,255,.72)' : 'rgba(245,243,255,.4)',
       }}
     >
+      {/* progress fill — a translucent wash up to pct%, plus a solid accent bar */}
+      <span
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: `${fill}%`,
+          background: current
+            ? 'rgba(139,92,246,0.18)'
+            : done
+              ? 'rgba(52,211,153,0.13)'
+              : 'transparent',
+          transition: 'width .3s ease',
+        }}
+      />
       <span
         aria-hidden
         style={{
           position: 'absolute',
           left: 0,
           bottom: 0,
-          height: 2,
+          height: 3,
           width: `${fill}%`,
           background: tint,
           transition: 'width .3s ease',
@@ -104,17 +121,29 @@ function Segment({
       />
       <span
         style={{
-          fontSize: 9,
-          letterSpacing: '1px',
-          fontWeight: 700,
-          textTransform: 'uppercase',
-          opacity: current ? 0.55 : 0.4,
+          position: 'relative',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          gap: 6,
         }}
       >
-        {current ? 'You are here' : done ? 'Done' : 'Ahead'}
+        <span
+          style={{
+            fontSize: 9,
+            letterSpacing: '1px',
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            opacity: current ? 0.7 : 0.4,
+          }}
+        >
+          {current ? 'You are here' : done ? 'Done' : 'Ahead'}
+        </span>
+        {current && <span style={{ fontSize: 11, fontWeight: 700, color: '#C9B8FF' }}>{pct}%</span>}
       </span>
       <span
         style={{
+          position: 'relative',
           display: 'block',
           fontSize: 12.5,
           fontWeight: 600,
