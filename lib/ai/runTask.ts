@@ -65,31 +65,6 @@ export async function runByteTask(args: RunArgs): Promise<RunResult> {
   return (await res.json()) as RunResult;
 }
 
-/** One decision/fact byte captured from a chat message, for the "Noted" chip. */
-export interface CapturedMemory {
-  topic: string;
-  statement: string;
-}
-
-/** Fire a founder chat message at the chat-memory extractor and return what byte captured
- *  (new/changed durable facts). Fail-soft: any error just yields [] — chat memory is a
- *  best-effort enhancement, never something that can break the conversation. Inert unless
- *  the server has AI_MEMORY_ENABLED. */
-export async function postChatMemory(message: string): Promise<CapturedMemory[]> {
-  try {
-    const res = await fetch('/api/remember-chat', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', ...(await authHeader()) },
-      body: JSON.stringify({ message }),
-    });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { captured?: CapturedMemory[] };
-    return Array.isArray(data.captured) ? data.captured : [];
-  } catch {
-    return [];
-  }
-}
-
 export interface EnrichAnswerResult {
   saved: boolean;
   gap: string;

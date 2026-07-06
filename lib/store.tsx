@@ -15,9 +15,8 @@ import React, {
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType } from './helpers';
-import { runByteTask, GenerateError, postEnrichAnswer, postChatMemory } from './ai/runTask';
+import { runByteTask, GenerateError, postEnrichAnswer } from './ai/runTask';
 import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
-import { worthExtracting } from './ai/chatMemory';
 import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
@@ -1147,38 +1146,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }).catch((err) => console.error('[store] persist user message failed', err));
       }
 
-      // Chat → durable memory: mine the founder's message for durable facts/decisions
-      // (best-effort, gated, inert unless AI_MEMORY_ENABLED; the server persists into the
-      // same memory composeProjectModel grounds on). On a capture, drop a "Noted" chip and
-      // fold it into local decisions so grounding reflects it immediately.
-      if (worthExtracting(text)) {
-        void postChatMemory(text).then((captured) => {
-          if (!captured.length) return;
-          setChatMessages((prev) => [
-            ...prev,
-            ...captured.map((c) => ({
-              id: newId(),
-              role: 'byte' as const,
-              text: '',
-              ts: Date.now(),
-              noted: { topic: c.topic, statement: c.statement },
-            })),
-          ]);
-          setDecisions((prev) => {
-            const byTopic = new Map(prev.map((d) => [d.topic.trim().toLowerCase(), d]));
-            for (const c of captured) {
-              byTopic.set(c.topic.trim().toLowerCase(), {
-                topic: c.topic,
-                statement: c.statement,
-                source: 'chat',
-                updatedAt: Date.now(),
-              });
-            }
-            return [...byTopic.values()];
-          });
-        });
-      }
-
       // A compact snapshot of the departments so byte talks about THIS company —
       // plus the single next step byte already picked, so chat and the map beacon
       // never disagree about what's next.
@@ -1221,6 +1188,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
             if (ev.type === 'setup') {
               setupChip = { category: ev.category, name: ev.name };
+              continue;
+            }
+            if (ev.type === 'noted') {
+              // byte recorded durable facts (in this same generation — no extra call). The
+              // server already merged them into memory; reflect them locally as a quiet
+              // "Noted" chip per fact and fold into decisions so grounding updates now.
+              const now = Date.now();
+              setChatMessages((prev) => [
+                ...prev,
+                ...ev.items.map((c) => ({
+                  id: newId(),
+                  role: 'byte' as const,
+                  text: '',
+                  ts: now,
+                  noted: { topic: c.topic, statement: c.statement },
+                })),
+              ]);
+              setDecisions((prev) => {
+                const byTopic = new Map(prev.map((d) => [d.topic.trim().toLowerCase(), d]));
+                for (const c of ev.items) {
+                  byTopic.set(c.topic.trim().toLowerCase(), {
+                    topic: c.topic,
+                    statement: c.statement,
+                    source: 'chat',
+                    updatedAt: now,
+                  });
+                }
+                return [...byTopic.values()];
+              });
               continue;
             }
             acc += ev.text;

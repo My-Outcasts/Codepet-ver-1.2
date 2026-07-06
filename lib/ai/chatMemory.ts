@@ -1,48 +1,29 @@
-// Chat → durable memory. The decisions layer (decisions.ts + /api/remember) only mines
-// APPROVED DELIVERABLES; the high-signal things a founder says in passing ("waitlist's at
-// 300", "we're dropping the free tier") never reach the memory that grounds generation, so
-// byte forgets them. This module is the pure, unit-tested half of closing that gap: a cheap
-// substance GATE (so we don't spend a model call on "thanks" / "run that"), plus the
-// extraction schema + prompt for pulling durable decisions OR material facts out of one
-// founder message. It emits ExtractedDecision[] so the SAME mergeDecisions/writeServerDecisions
-// path persists it and composeProjectModel grounds every later chat + run-task call.
-// The model call + persistence live in /api/remember-chat.
+// Chat → durable memory, the ZERO-EXTRA-COST way. Rather than a second model call per
+// message, byte captures durable facts via a `remember_fact` TOOL it can call in the SAME
+// chat generation it uses to reply (see app/api/chat/route.ts) — so there's no extra API
+// request. This module holds the pure, unit-tested parts: the tool's input schema, coercion
+// of its (untrusted) input into decision entries, and the new-or-changed diff that decides
+// which captures surface as "Noted" chips. Merge + persistence reuse the decisions layer
+// (mergeDecisions / writeServerDecisions) and composeProjectModel grounds every later call.
 import type { DecisionEntry } from './projectModel';
+import type { ExtractedDecision } from './decisions';
 
-/** Minimum length for a message to be worth an extraction call. */
-const MIN_LEN = 16;
-
-// Openers that mark a message as a task command or pure question to byte, not a statement
-// of fact about the company — cheap to reject before spending a model call. The extractor
-// would return empty for these anyway; the gate just avoids the round-trip.
-const COMMAND_OPENERS =
-  /^(run|do|make|draft|write|build|create|open|show|go|start|revise|redo|generate|give me|can you|could you|please|what|how|why|when|where|who|should i|should we|is it|are we|help)\b/i;
-
-/**
- * Cheap pre-filter: is this founder message plausibly worth mining for durable memory?
- * Rejects the obvious no-signal cases (too short, task commands, pure questions). Not
- * precise — the extractor is the real judge and returns empty when there's nothing — this
- * only spares wasteful model calls.
- */
-export function worthExtracting(text: string): boolean {
-  const t = text.trim();
-  if (t.length < MIN_LEN) return false;
-  if (COMMAND_OPENERS.test(t)) return false;
-  // A bare question (no declarative clause) rarely states a durable fact.
-  if (t.endsWith('?') && !/[.!]/.test(t)) return false;
-  return true;
+/** One captured fact, surfaced to the client as a "Noted" chip. */
+export interface CapturedMemory {
+  topic: string;
+  statement: string;
 }
 
-/** Structured-output schema for chat extraction — same shape as the deliverable extractor
- *  (so mergeDecisions consumes it), broadened from decisions to decisions + material facts. */
-export const CHAT_MEMORY_SCHEMA: Record<string, unknown> = {
-  type: 'object',
+/** Input schema for byte's `remember_fact` tool. byte fills this in-line when the founder
+ *  states something durable, alongside its normal reply — no separate extraction call. */
+export const REMEMBER_FACT_SCHEMA: Record<string, unknown> = {
+  type: 'object' as const,
   additionalProperties: false,
   properties: {
-    memory: {
+    facts: {
       type: 'array',
       description:
-        'Durable decisions OR material facts about the company that the founder stated in this message. Empty array if the message states none (a question, request, opinion, or chit-chat).',
+        'The durable decisions or material facts the founder just stated about their company. Empty if the message states none.',
       items: {
         type: 'object',
         additionalProperties: false,
@@ -50,45 +31,57 @@ export const CHAT_MEMORY_SCHEMA: Record<string, unknown> = {
           topic: {
             type: 'string',
             description:
-              'A short lowercase key for the area, e.g. traction, goal, milestone, pricing, positioning, naming, audience, tech, scope, timeline. Reuse an existing topic when this message UPDATES it (e.g. a new waitlist count updates "traction").',
+              'A short lowercase key for the area, e.g. traction, goal, milestone, pricing, positioning, naming, audience, tech, scope, timeline. Reuse an existing topic when this UPDATES it.',
           },
           statement: {
             type: 'string',
             description:
-              'One concrete sentence capturing the decision or fact, in the founder\'s terms with their real numbers exact (e.g. "~300 people on the waitlist as of now"). Never invent or embellish.',
-          },
-          source: {
-            type: 'string',
-            description: 'Where it came from — use "chat" for a message the founder typed.',
+              'One concrete sentence in the founder\'s terms with their real numbers exact (e.g. "~300 people on the waitlist"). Never invent or embellish.',
           },
         },
         required: ['topic', 'statement'],
       },
     },
   },
-  required: ['memory'],
+  required: ['facts'],
 };
 
-/** Per-message text budget sent to the extractor. */
-const MSG_CAP = 1200;
+const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
 
 /**
- * Build the chat extraction prompt. Existing memory is shown so the model reuses a topic
- * when the message UPDATES it (e.g. traction count) and doesn't re-emit unchanged facts.
+ * Coerce the (untrusted) `remember_fact` tool input into clean decision entries. Drops any
+ * item missing a topic or statement; caps lengths. `source` is stamped 'chat'.
  */
-export function buildChatExtractPrompt(message: string, existing: DecisionEntry[]): string {
-  const onRecord = existing.length
-    ? existing.map((d) => `- ${d.topic}: ${d.statement}`).join('\n')
-    : '(none yet)';
-  const msg = message.trim().replace(/\s+/g, ' ').slice(0, MSG_CAP);
-  return [
-    'Company memory already on record (reuse a topic only if this message UPDATES it; do not repeat unchanged facts):',
-    onRecord,
-    '',
-    'The founder just said this in chat:',
-    '---',
-    msg,
-    '---',
-    'Extract only NEW or CHANGED durable decisions or material facts they stated about their company (traction, goals, milestones, pricing, positioning, naming, audience, tech, scope, timeline). Ground everything ONLY in what they said — never infer or invent. Ignore questions, requests to you, opinions, and small talk. If there is nothing durable, return an empty list.',
-  ].join('\n');
+export function coerceMemory(input: unknown): ExtractedDecision[] {
+  const facts = (input as { facts?: unknown })?.facts;
+  if (!Array.isArray(facts)) return [];
+  const out: ExtractedDecision[] = [];
+  for (const f of facts) {
+    const topic = str((f as { topic?: unknown })?.topic, 40).toLowerCase();
+    const statement = str((f as { statement?: unknown })?.statement, 600);
+    if (topic && statement) out.push({ topic, statement, source: 'chat' });
+  }
+  return out;
+}
+
+const key = (t: string) => t.trim().toLowerCase();
+
+/**
+ * Which coerced facts are genuinely NEW or CHANGED vs. what's already on record — the ones
+ * worth a "Noted" chip. An unchanged repeat of an existing fact yields nothing.
+ */
+export function newOrChanged(
+  existing: DecisionEntry[],
+  facts: ExtractedDecision[],
+): CapturedMemory[] {
+  const before = new Map(existing.map((d) => [key(d.topic), d.statement.trim()]));
+  const seen = new Set<string>();
+  const out: CapturedMemory[] = [];
+  for (const f of facts) {
+    const k = key(f.topic);
+    if (seen.has(k)) continue; // de-dup within one message
+    seen.add(k);
+    if (before.get(k) !== f.statement.trim()) out.push({ topic: f.topic, statement: f.statement });
+  }
+  return out;
 }

@@ -13,6 +13,9 @@ import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
 import { NAV_DESTINATIONS } from '@/lib/ai/navChip';
 import { parseSetupItems, matchSetupItem, type SetupItem } from '@/lib/ai/envSetup';
+import { writeServerDecisions } from '@/lib/firebase/serverDecisions';
+import { mergeDecisions } from '@/lib/ai/decisions';
+import { REMEMBER_FACT_SCHEMA, coerceMemory, newOrChanged } from '@/lib/ai/chatMemory';
 
 export const runtime = 'nodejs';
 
@@ -111,6 +114,26 @@ const SETUP_TOOL = {
     required: ['category', 'name'],
   },
 };
+
+// The tool byte calls to record a durable decision/fact the founder just stated, INTO the
+// same company memory the deliverable-approval writer feeds and composeProjectModel grounds
+// on. It rides along on this chat generation (no separate model call), and only when the
+// message genuinely states something lasting — questions, requests, and small talk get no call.
+const REMEMBER_FACT_TOOL = {
+  name: 'remember_fact',
+  description:
+    'Record a durable decision or material fact the founder just stated about their company — traction (e.g. waitlist/user/revenue numbers), goals, milestones, pricing, positioning, naming, audience, tech, scope, or timeline — so it grounds your future work. Call this IN ADDITION to your normal reply, only when the message states something lasting and specific. Capture their real words/numbers exactly; never invent. For questions, requests to you, opinions, or small talk, do NOT call it.',
+  input_schema: REMEMBER_FACT_SCHEMA as {
+    type: 'object';
+    additionalProperties: false;
+    properties: Record<string, unknown>;
+    required: string[];
+  },
+};
+
+// Whether byte's chat generation may also capture durable memory. Gated by the same flag as
+// the deliverable-approval writer, so memory is a single opt-in; there is no extra model call.
+const MEMORY_ON = process.env.AI_MEMORY_ENABLED === 'true';
 
 // Marker that separates byte's streamed reply text from a trailing action payload on the
 // wire (a run_task run OR a navigate chip). Record-separator (U+001E) never appears in
@@ -249,7 +272,11 @@ export async function POST(req: Request): Promise<Response> {
         .join('\n')}`
     : '';
 
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}`;
+  // When memory is on, tell byte to record durable facts as it replies (same generation).
+  const memoryBlock = MEMORY_ON
+    ? '\n\nMEMORY: When the founder states a durable decision or material fact about their company (a real waitlist/user/revenue number, a goal, a milestone, a pricing/positioning/naming/scope/timeline choice), also call the remember_fact tool to record it — in addition to your normal reply. Capture their real words and numbers exactly; never invent. Do not call it for questions, requests to you, opinions, or small talk.'
+    : '';
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}`;
 
   try {
     const mstream = streamMessage({
@@ -264,6 +291,8 @@ export async function POST(req: Request): Promise<Response> {
         NAVIGATE_TOOL,
         ...(runnable.length ? [RUN_TASK_TOOL] : []),
         ...(setupItems.length ? [SETUP_TOOL] : []),
+        // Memory rides along on this same generation — no extra model call.
+        ...(MEMORY_ON ? [REMEMBER_FACT_TOOL] : []),
       ],
       onUsage: usageSink(uid, idToken, 'chat'),
     });
@@ -293,6 +322,15 @@ export async function POST(req: Request): Promise<Response> {
             (b): b is Extract<typeof b, { type: 'tool_use' }> =>
               b.type === 'tool_use' && b.name === 'setup_capability',
           );
+          const rememberUse = final.content.find(
+            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+              b.type === 'tool_use' && b.name === 'remember_fact',
+          );
+
+          // One trailing mark carries whatever this turn produced. The action tools stay
+          // mutually exclusive (a turn does one of run/nav/setup); memory is orthogonal —
+          // byte can record a fact alongside a plain reply or any of them.
+          const mark: Record<string, unknown> = {};
           if (toolUse) {
             const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
             const taskTitle = typeof input.taskTitle === 'string' ? input.taskTitle : '';
@@ -301,11 +339,8 @@ export async function POST(req: Request): Promise<Response> {
               runnable.find((r) => r.deptK === deptK && r.taskTitle === taskTitle) ||
               runnable.find((r) => r.taskTitle === taskTitle);
             if (match) {
-              controller.enqueue(
-                encoder.encode(
-                  ACTION_MARK + JSON.stringify({ deptK: match.deptK, taskTitle: match.taskTitle }),
-                ),
-              );
+              mark.deptK = match.deptK;
+              mark.taskTitle = match.taskTitle;
             }
           } else if (navUse) {
             // byte wants to guide them somewhere. Emit the destination only if it's a real
@@ -314,24 +349,36 @@ export async function POST(req: Request): Promise<Response> {
             const input = navUse.input as { destination?: unknown; target?: unknown };
             const dest = typeof input.destination === 'string' ? input.destination : '';
             if ((NAV_DESTINATIONS as readonly string[]).includes(dest)) {
-              const target = typeof input.target === 'string' ? input.target : undefined;
-              controller.enqueue(
-                encoder.encode(ACTION_MARK + JSON.stringify({ nav: dest, target })),
-              );
+              mark.nav = dest;
+              if (typeof input.target === 'string') mark.target = input.target;
             }
           } else if (setupUse) {
             // byte wants to turn on a toolkit item. Emit it only if it's a real off item
             // from SETUP TOOLKIT; the client renders an approval card and flips it on tap.
             const input = setupUse.input as { category?: unknown; name?: unknown };
             const match: SetupItem | null = matchSetupItem(setupItems, input.category, input.name);
-            if (match) {
-              controller.enqueue(
-                encoder.encode(
-                  ACTION_MARK +
-                    JSON.stringify({ setup: { category: match.category, name: match.name } }),
-                ),
-              );
+            if (match) mark.setup = { category: match.category, name: match.name };
+          }
+
+          // Memory: coerce byte's captured facts, merge into the SAME decisions memory, and
+          // report only the new/changed ones so the client shows "Noted" chips. Best-effort —
+          // a write failure never breaks the reply. No extra model call happened here.
+          if (MEMORY_ON && rememberUse) {
+            try {
+              const facts = coerceMemory(rememberUse.input);
+              const captured = newOrChanged(company.decisions, facts);
+              if (captured.length) {
+                const merged = mergeDecisions(company.decisions, facts, Date.now());
+                await writeServerDecisions(uid, idToken, merged);
+                mark.noted = captured;
+              }
+            } catch (err) {
+              console.error('[chat] memory capture failed', err);
             }
+          }
+
+          if (Object.keys(mark).length) {
+            controller.enqueue(encoder.encode(ACTION_MARK + JSON.stringify(mark)));
           }
         } catch (err) {
           console.error('[chat] stream failed', err);
