@@ -7957,6 +7957,24 @@ body {
   line-height: 1.5;
   max-width: 52ch;
 }
+/* settings — account row */
+.acct {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.acct-av {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--accent, #7c3aed);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 16px;
+  flex: none;
+}
 .set-link {
   flex-shrink: 0;
   background: var(--accent-tint);
