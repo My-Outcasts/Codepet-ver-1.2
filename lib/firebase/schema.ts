@@ -46,6 +46,16 @@ export interface CompanyBrief {
   categories?: string[];
   /** Who the product is for (target user / customer). */
   audience?: string;
+  /** The founder's immediate objective for the next few weeks — what byte should
+   * plan toward. Captured by byte's first-chat enrichment (lib/ai/enrichInterview). */
+  goal?: string;
+  /** Where the product actually is right now: real assets and numbers (waitlist size,
+   * launched or not, users, revenue, live links). Grounds Finance/Marketing in reality
+   * instead of invented figures. Captured by byte's first-chat enrichment. */
+  traction?: string;
+  /** The core problem the product solves and who feels it — makes positioning and copy
+   * specific. Captured by byte's first-chat enrichment. */
+  problem?: string;
 }
 
 /** Per-company toolkit state: category → item key → enabled. Mirrors ENV in data.ts. */

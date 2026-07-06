@@ -43,4 +43,25 @@ describe('briefToContext', () => {
     expect(ctx).toContain('macos app / dev tool');
     expect(ctx).toContain("It's for AI-first developers.");
   });
+
+  it('threads the plan-shaping enrichment fields (goal, traction, problem) into context', () => {
+    const ctx =
+      briefToContext({
+        projectName: 'Codepet',
+        summary: 'A recap companion.',
+        goal: 'Ship the macOS beta in 3 weeks',
+        traction: '300 on the waitlist, not launched yet',
+        problem: 'Devs lose context between coding sessions',
+      }) ?? '';
+    expect(ctx).toContain('Their immediate goal: Ship the macOS beta in 3 weeks.');
+    expect(ctx).toContain('Where they are now: 300 on the waitlist, not launched yet.');
+    expect(ctx).toContain('The problem it solves: Devs lose context between coding sessions.');
+  });
+
+  it('omits enrichment lines that are still empty', () => {
+    const ctx = briefToContext({ projectName: 'Codepet', summary: 'A recap companion.' }) ?? '';
+    expect(ctx).not.toContain('immediate goal');
+    expect(ctx).not.toContain('Where they are now');
+    expect(ctx).not.toContain('problem it solves');
+  });
 });

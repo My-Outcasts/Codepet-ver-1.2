@@ -15,7 +15,8 @@ import React, {
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType } from './helpers';
-import { runByteTask, GenerateError } from './ai/runTask';
+import { runByteTask, GenerateError, postEnrichAnswer } from './ai/runTask';
+import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
 import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
@@ -68,6 +69,10 @@ export interface ChatMessage {
   advance?: { toStage: string };
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
+  /** A first-run enrichment question (goal / traction / problem). While `answered` is
+   * falsy, the chat renders an answer input + Skip; once answered/skipped it's a plain
+   * past question. See lib/ai/enrichInterview. */
+  interview?: { gap: Gap; answered?: boolean };
 }
 
 const newId = (): string =>
@@ -170,6 +175,10 @@ interface AppState {
   openChatResult: (deptK: string, taskTitle: string) => void;
   /** Drop a chat message's one-tap action once it has been used. */
   dismissChatAction: (msgId: string) => void;
+  /** Answer (or skip, with null) a first-run enrichment question. byte distills + persists
+   * a real answer into the brief, then the interview advances to the next gap or hands off
+   * to the "best first move" greeting. */
+  answerInterview: (msgId: string, gap: Gap, answer: string | null) => void;
   /** Mark a task as awaiting the founder's approval and persist so it survives reload. */
   persistTaskDraft: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
@@ -384,56 +393,131 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // First-run only: byte opens chat and greets the founder by name with the single best
-  // first move as a one-tap INLINE action (produces the deliverable in-thread). Seeds
-  // immediately from the authored fallback, then upgrades to byte's own pick when
-  // /api/next-step resolves — the greeting message updates in place (stable id).
+  // The "best first move" hand-off: byte's landing greeting with the single best first
+  // move as a one-tap INLINE action (produces the deliverable in-thread). Seeds immediately
+  // from the authored fallback, then upgrades to byte's own pick when /api/next-step
+  // resolves — the greeting message updates in place (stable id). Runs AFTER the first-run
+  // enrichment interview, or immediately when the brief already has every plan-shaping field.
+  const seedBestFirstMove = useCallback((briefData: CompanyBrief) => {
+    const gid = newId();
+    // Fire firstrun.action_offered at most once — when an action first appears,
+    // whether it came from the synchronous authored fallback or the async byte pick.
+    let offered = false;
+    const seed = (ns: NextStep | null) => {
+      const g = buildFirstRunGreeting(briefData, ns);
+      setChatMessages((prev) => {
+        const msg: ChatMessage = {
+          id: gid,
+          role: 'byte',
+          text: g.text,
+          ts: Date.now(),
+          action: g.action,
+        };
+        const i = prev.findIndex((m) => m.id === gid);
+        return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+      });
+      if (g.action && !offered) {
+        offered = true;
+        track('firstrun.action_offered', { dept: g.action.deptK });
+      }
+    };
+    const fb = nextAction();
+    const fallback: NextStep | null = fb
+      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+      : null;
+    setNextStep(fallback);
+    seed(fallback);
+    // Always ask byte for the best first move — even when the synchronous authored
+    // fallback is momentarily null (e.g. the roadmap isn't settled the instant
+    // onboarding finishes). Recovering the action here keeps the greeting's
+    // "Do it with me" — the whole B→C bridge — from silently vanishing.
+    // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
+    fetchNextStep()
+      .then((pick) => {
+        if (pick) {
+          setNextStep(pick);
+          seed(pick);
+        }
+      })
+      .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
+  }, []);
+
+  // Progress of the first-run enrichment interview: the empty gaps to ask, which one we're
+  // on, and the brief accumulating byte's distilled answers. Null when no interview is active.
+  const interviewRef = useRef<{ gaps: Gap[]; idx: number; brief: CompanyBrief } | null>(null);
+
+  const askInterviewGap = useCallback((gap: Gap) => {
+    setChatMessages((prev) => [
+      ...prev,
+      { id: newId(), role: 'byte', text: QUESTION_FOR[gap].ask, ts: Date.now(), interview: { gap } },
+    ]);
+  }, []);
+
+  // First-run only: byte opens chat and — before offering the best first move — asks the
+  // ≤3 plan-shaping questions the onboarding brief is missing (goal / traction / problem).
+  // A full brief skips straight to the hand-off, so nothing changes for returning founders.
   const greetFirstRun = useCallback(
     (briefData: CompanyBrief) => {
       toggleCopilot(false); // open the chat panel so the greeting is seen
-      const gid = newId();
-      // Fire firstrun.action_offered at most once — when an action first appears,
-      // whether it came from the synchronous authored fallback or the async byte pick.
-      let offered = false;
-      const seed = (ns: NextStep | null) => {
-        const g = buildFirstRunGreeting(briefData, ns);
-        setChatMessages((prev) => {
-          const msg: ChatMessage = {
-            id: gid,
-            role: 'byte',
-            text: g.text,
-            ts: Date.now(),
-            action: g.action,
-          };
-          const i = prev.findIndex((m) => m.id === gid);
-          return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
-        });
-        if (g.action && !offered) {
-          offered = true;
-          track('firstrun.action_offered', { dept: g.action.deptK });
+      const gaps = detectGaps(briefData);
+      if (gaps.length === 0) {
+        seedBestFirstMove(briefData);
+        return;
+      }
+      interviewRef.current = { gaps, idx: 0, brief: briefData };
+      const who = briefData.founderName?.trim();
+      const proj = briefData.projectName?.trim() || 'your product';
+      const lead =
+        `${who ? `${who}, your` : 'Your'} company for ${proj} is ready. ` +
+        `A couple quick questions first, so I plan the right moves — not generic ones.`;
+      setChatMessages((prev) => [...prev, { id: newId(), role: 'byte', text: lead, ts: Date.now() }]);
+      track('firstrun.interview_started', { gaps: gaps.length });
+      askInterviewGap(gaps[0]);
+    },
+    [toggleCopilot, seedBestFirstMove, askInterviewGap],
+  );
+
+  const answerInterview = useCallback(
+    (msgId: string, gap: Gap, answer: string | null) => {
+      // Retire this question's input/Skip affordance immediately.
+      setChatMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, interview: { gap, answered: true } } : m)),
+      );
+      const st = interviewRef.current;
+      // Move to the next gap, or hand off to the best-first-move greeting when done.
+      const advance = (brief: CompanyBrief) => {
+        const next = (st?.idx ?? 0) + 1;
+        if (st && next < st.gaps.length) {
+          interviewRef.current = { gaps: st.gaps, idx: next, brief };
+          askInterviewGap(st.gaps[next]);
+        } else {
+          interviewRef.current = null;
+          setBrief(brief); // the enriched brief now grounds every run + chat
+          seedBestFirstMove(brief);
         }
       };
-      const fb = nextAction();
-      const fallback: NextStep | null = fb
-        ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
-        : null;
-      setNextStep(fallback);
-      seed(fallback);
-      // Always ask byte for the best first move — even when the synchronous authored
-      // fallback is momentarily null (e.g. the roadmap isn't settled the instant
-      // onboarding finishes). Recovering the action here keeps the greeting's
-      // "Do it with me" — the whole B→C bridge — from silently vanishing.
-      // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
-      fetchNextStep()
-        .then((pick) => {
-          if (pick) {
-            setNextStep(pick);
-            seed(pick);
-          }
+      const text = answer?.trim();
+      if (!text) {
+        track('firstrun.interview_skipped', { gap });
+        advance(st?.brief ?? {});
+        return;
+      }
+      // Echo the founder's answer, then let byte distill + persist it.
+      setChatMessages((prev) => [...prev, { id: newId(), role: 'me', text, ts: Date.now() }]);
+      track('firstrun.interview_answered', { gap });
+      postEnrichAnswer(gap, text)
+        .then((res) => {
+          const base = interviewRef.current?.brief ?? st?.brief ?? {};
+          const brief = res?.saved && res.value ? { ...base, [gap]: res.value } : base;
+          setChatMessages((prev) => [
+            ...prev,
+            { id: newId(), role: 'byte', text: 'Got it.', ts: Date.now() },
+          ]);
+          advance(brief);
         })
-        .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
+        .catch(() => advance(interviewRef.current?.brief ?? st?.brief ?? {}));
     },
-    [toggleCopilot],
+    [seedBestFirstMove, askInterviewGap],
   );
 
   // Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
@@ -1172,6 +1256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       approveChatResult,
       openChatResult,
       dismissChatAction,
+      answerInterview,
       persistTaskDraft,
       nextStep,
       toastMsg,
@@ -1227,6 +1312,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       approveChatResult,
       openChatResult,
       dismissChatAction,
+      answerInterview,
       persistTaskDraft,
       nextStep,
       toastMsg,
