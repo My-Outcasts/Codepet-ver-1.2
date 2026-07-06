@@ -55,27 +55,32 @@ export function useLiveSession(opts: {
     started.current = true;
     const ac = new AbortController();
     abortRef.current = ac;
-    const res = await fetch('/api/build-session/start', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(opts),
-      signal: ac.signal,
-    });
-    if (!res.ok) {
-      setState((s) =>
-        reduceTranscript(s, { kind: 'error', message: 'Could not start the session here.' }),
-      );
-      return;
-    }
-    const stream = await fetch(
-      `/api/build-session/stream?buildSessionId=${encodeURIComponent(opts.buildSessionId)}`,
-      { signal: ac.signal },
-    );
-    if (!stream.ok || !stream.body) return;
-    const reader = stream.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
+    // The whole network sequence is guarded: stop() may abort() the signal mid-flight
+    // (component unmount / React strict-mode remount) while either fetch or the stream
+    // read is pending. Those reject with AbortError — expected, nothing to surface. The
+    // guard must cover the two awaited fetches too, or the AbortError escapes start()'s
+    // fire-and-forget promise as an unhandled rejection.
     try {
+      const res = await fetch('/api/build-session/start', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(opts),
+        signal: ac.signal,
+      });
+      if (!res.ok) {
+        setState((s) =>
+          reduceTranscript(s, { kind: 'error', message: 'Could not start the session here.' }),
+        );
+        return;
+      }
+      const stream = await fetch(
+        `/api/build-session/stream?buildSessionId=${encodeURIComponent(opts.buildSessionId)}`,
+        { signal: ac.signal },
+      );
+      if (!stream.ok || !stream.body) return;
+      const reader = stream.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
       for (;;) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -88,7 +93,7 @@ export function useLiveSession(opts: {
         }
       }
     } catch {
-      /* aborted or stream closed */
+      /* aborted (stop() during startup) or stream closed — nothing to surface */
     }
   }, [opts]);
 
