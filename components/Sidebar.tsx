@@ -48,23 +48,6 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
     ),
   },
   {
-    view: 'roadmap',
-    label: 'Roadmap',
-    icon: (
-      <svg className="ic" viewBox="0 0 20 20" fill="none">
-        <path
-          d="M4 15l4-3 4 2 4-5"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="4" cy="15" r="1.4" fill="currentColor" />
-        <circle cx="16" cy="9" r="1.4" fill="currentColor" />
-      </svg>
-    ),
-  },
-  {
     view: 'tasks',
     label: 'Tasks',
     icon: (

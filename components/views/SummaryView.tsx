@@ -163,7 +163,7 @@ export function SummaryView() {
         </div>
 
         {/* You are here — momentum toward launch */}
-        <div className="sum-here" onClick={() => show('roadmap')} role="button" tabIndex={0}>
+        <div className="sum-here" onClick={() => show('overview')} role="button" tabIndex={0}>
           <div className="sum-here-label">You are here →</div>
           {here ? (
             <>

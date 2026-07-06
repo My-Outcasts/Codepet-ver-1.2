@@ -86,7 +86,6 @@ export type View =
   | 'summary'
   | 'overview'
   | 'home'
-  | 'roadmap'
   | 'dept'
   | 'tasks'
   | 'library'
@@ -331,7 +330,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const navigateTo = useCallback((dest: NavDest, target?: string) => {
     switch (dest) {
       case 'roadmap':
-        setView('roadmap');
+        setView('overview'); // Roadmap retired — the Overview carries the journey now
         break;
       case 'tasks':
         setView('tasks');

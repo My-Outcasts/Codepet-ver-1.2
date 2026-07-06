@@ -15,7 +15,6 @@ import { Byte } from './Byte';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
-import { RoadmapView } from './views/RoadmapView';
 import { DepartmentDetail } from './views/DepartmentDetail';
 import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
@@ -59,8 +58,6 @@ function Shell() {
       <OverviewView />
     ) : view === 'home' ? (
       <CompanyView />
-    ) : view === 'roadmap' ? (
-      <RoadmapView />
     ) : view === 'dept' ? (
       <DepartmentDetail />
     ) : view === 'tasks' ? (
