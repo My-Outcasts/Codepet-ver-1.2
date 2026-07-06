@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ForceGraph3D, { type ForceGraphMethods } from 'react-force-graph-3d';
 import SpriteText from 'three-spritetext';
+import { deptRingPosition, taskRingPosition } from '@/lib/overview/layout';
 import * as THREE from 'three';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore - addons ship without bundled types in some setups
@@ -73,10 +74,6 @@ function rgba(hex: string, a: number) {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-const DEPT_R = 140; // department orbit radius
-const TASK_R = 46; // task cluster radius around a department
-const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-
 interface GNode {
   id: string;
   name: string;
@@ -90,6 +87,9 @@ interface GNode {
   x: number;
   y: number;
   z: number;
+  fx?: number;
+  fy?: number;
+  fz?: number;
 }
 interface GLink {
   source: string;
@@ -162,6 +162,9 @@ export default function OverviewView() {
       x: 0,
       y: 0,
       z: 0,
+      fx: 0,
+      fy: 0,
+      fz: 0,
     });
     DEPTS.forEach((d, di) => {
       const dHex = HEX[DCOL[d.k]] || HEX['--accent'];
@@ -169,12 +172,10 @@ export default function OverviewView() {
       const done = d.tasks.filter((t) => t.done).length;
       const total = d.tasks.length;
       const did = `dept:${d.k}`;
-      const yy = 1 - (di / (DEPTS.length - 1)) * 2;
-      const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
-      const th = GOLDEN * di;
-      const dx = Math.cos(th) * rr * DEPT_R,
-        dy = yy * DEPT_R,
-        dz = Math.sin(th) * rr * DEPT_R;
+      const dp = deptRingPosition(di, DEPTS.length);
+      const dx = dp.x,
+        dy = dp.y,
+        dz = dp.z;
       const allDone = total > 0 && done === total;
       nodes.push({
         id: did,
@@ -185,9 +186,12 @@ export default function OverviewView() {
         val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
         sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
-        x: dx,
-        y: dy,
-        z: dz,
+        x: dp.x,
+        y: dp.y,
+        z: dp.z,
+        fx: dp.fx,
+        fy: dp.fy,
+        fz: dp.fz,
       });
       links.push({
         source: 'project',
@@ -201,9 +205,7 @@ export default function OverviewView() {
         const st = taskState(t, true);
         const tHex = STATE_HEX[st.cls] || '#94A3B8';
         const tid = `task:${d.k}:${i}`;
-        const tyy = 1 - ((i + 0.5) / total) * 2;
-        const trr = Math.sqrt(Math.max(0, 1 - tyy * tyy));
-        const tth = GOLDEN * (i + 1);
+        const tp = taskRingPosition({ x: dx, y: dy, z: dz }, i, total);
         nodes.push({
           id: tid,
           name: t.t,
@@ -213,9 +215,12 @@ export default function OverviewView() {
           dept: d,
           task: t,
           sub: `${d.name} · ${st.label}`,
-          x: dx + Math.cos(tth) * trr * TASK_R,
-          y: dy + tyy * TASK_R,
-          z: dz + Math.sin(tth) * trr * TASK_R,
+          x: tp.x,
+          y: tp.y,
+          z: tp.z,
+          fx: tp.fx,
+          fy: tp.fy,
+          fz: tp.fz,
         });
         links.push({ source: did, target: tid, color: rgba(dHex, 0.16), hex: dHex, kind: 'dt' });
       });
@@ -345,21 +350,6 @@ export default function OverviewView() {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalSignal, dims.w]);
-
-  // gentle forces (positions are seeded)
-  useEffect(() => {
-    if (!dims.w) return;
-    const fg = fgRef.current as any;
-    if (!fg) return;
-    try {
-      fg.d3Force('charge')?.strength(-90);
-      fg.d3Force('link')
-        ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
-        .strength(0.25);
-    } catch {
-      /* forces not ready */
-    }
-  }, [dims.w, data]);
 
   // responsive framing — fit on settle + on resize
   useEffect(() => {
