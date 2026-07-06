@@ -118,5 +118,9 @@ export function currentStageProgress(): GroupProgress {
       if (t.done) done += 1;
     }
   }
-  return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+  // Guard the 100%-iff-complete invariant: Math.round(99.5) would otherwise
+  // read 100% at >~200 tasks while a task is still open.
+  const pct =
+    total === 0 ? 0 : done === total ? 100 : Math.min(99, Math.round((done / total) * 100));
+  return { done, total, pct };
 }

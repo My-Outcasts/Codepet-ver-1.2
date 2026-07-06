@@ -103,4 +103,13 @@ describe('currentStageProgress', () => {
     });
     expect(currentStageProgress().pct).toBe(0);
   });
+
+  it('never reads 100% while a task is still open (200/201 rounds to 99, not 100)', () => {
+    DEPTS.forEach((d, i) => {
+      d.later = i > 0;
+      d.tasks = [];
+    });
+    DEPTS[0].tasks = [...Array(200)].map(() => task(true)).concat(task(false)); // 200/201
+    expect(currentStageProgress()).toMatchObject({ done: 200, total: 201, pct: 99 });
+  });
 });
