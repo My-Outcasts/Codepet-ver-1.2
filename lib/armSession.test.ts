@@ -15,6 +15,12 @@ describe('buildOpeningPrompt', () => {
     expect(p).toContain('email login for returning users');
     for (const s of plan.steps) expect(p).toContain(s);
   });
+
+  it('tells claude to work non-interactively (no questions / AskUserQuestion)', () => {
+    const p = buildOpeningPrompt(plan, 'anything');
+    expect(p).toMatch(/non-interactive/i);
+    expect(p).toContain('AskUserQuestion');
+  });
 });
 
 describe('terminalCommand', () => {

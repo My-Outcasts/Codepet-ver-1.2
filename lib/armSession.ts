@@ -13,6 +13,9 @@ export function buildOpeningPrompt(plan: BytePlan, brief: string): string {
     'Plan:',
     ...plan.steps.map((s, i) => `${i + 1}. ${s}`),
     '',
+    'This is a non-interactive session: do NOT ask the user questions and do NOT use',
+    'AskUserQuestion — Byte already agreed the plan above. Make reasonable assumptions,',
+    'proceed on your own, and note any assumptions when you summarize at the end.',
     'Keep it small and token-thrifty; double-check before calling it done.',
   ].join('\n');
 }
