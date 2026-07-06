@@ -38,9 +38,9 @@
       "count": 13
     }
   },
-  "components/views/RoadmapView.tsx": {
+  "components/views/overview/StageDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/static-components": {
       "count": 1
