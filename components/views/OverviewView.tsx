@@ -622,7 +622,15 @@ interface HereInfo {
 // positioned at the node's screen coords each frame). A pointer nub aims back at
 // the node; the card sits to its right, vertically centered. One thing to read,
 // one thing to do: the task + Start (which opens the run loop).
-function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
+function ByteGuide({
+  here,
+  onStart,
+  spotlight = false,
+}: {
+  here: HereInfo;
+  onStart: () => void;
+  spotlight?: boolean;
+}) {
   const st = taskState(here.task, true);
   return (
     <div style={{ position: 'relative', width: 250, transform: 'translate(18px, -50%)' }}>
@@ -650,7 +658,9 @@ function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
           WebkitBackdropFilter: 'blur(10px)',
           border: '1px solid rgba(125,227,255,0.35)',
           borderRadius: 13,
-          boxShadow: '0 8px 30px rgba(0,0,0,0.5)',
+          boxShadow: spotlight
+            ? '0 0 0 2px rgba(125,227,255,0.55), 0 0 24px 4px rgba(125,227,255,0.35), 0 8px 30px rgba(0,0,0,0.5)'
+            : '0 8px 30px rgba(0,0,0,0.5)',
         }}
       >
         <div
@@ -679,6 +689,18 @@ function ByteGuide({ here, onStart }: { here: HereInfo; onStart: () => void }) {
         <div style={{ fontSize: 12, marginTop: 5, color: 'rgba(245,243,255,.5)' }}>
           {here.dept.name} · {st.label}
         </div>
+        {spotlight && (
+          <div
+            style={{
+              marginTop: 9,
+              fontSize: 11.5,
+              lineHeight: 1.45,
+              color: 'rgba(125,227,255,.9)',
+            }}
+          >
+            The bright cyan star is always your next move.
+          </div>
+        )}
         <button
           onClick={onStart}
           style={{
