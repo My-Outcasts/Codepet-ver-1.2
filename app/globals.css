@@ -7803,7 +7803,21 @@ body {
   border-radius: 12px;
 }
 .lc-perm-q {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+}
+.lc-perm-sum {
+  font-weight: 600;
+  word-break: break-word;
+  margin-bottom: 8px;
+}
+.lc-perm-more {
+  margin-bottom: 8px;
+}
+.lc-perm-more > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #8a3ffc;
+  user-select: none;
 }
 .lc-perm-in {
   max-height: 120px;

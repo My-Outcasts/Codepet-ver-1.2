@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useLiveSession } from '@/lib/liveSession/useLiveSession';
+import { describePermission } from '@/lib/liveSession/permissionSummary';
 import type { BytePlan } from '@/lib/ai/plan';
 
 // Phase 2: two-way live transcript of the real `claude` session. User and assistant
@@ -81,9 +82,17 @@ export function LiveChat({
           <div className="lc-perm-q">
             Claude wants to use <b>{state.pendingPermission.tool}</b>
           </div>
-          <pre className="lc-perm-in">
-            {JSON.stringify(state.pendingPermission.input, null, 2).slice(0, 400)}
-          </pre>
+          <div className="lc-perm-sum">
+            {describePermission(state.pendingPermission.tool, state.pendingPermission.input)}
+          </div>
+          {state.pendingPermission.input != null && (
+            <details className="lc-perm-more">
+              <summary>Details</summary>
+              <pre className="lc-perm-in">
+                {JSON.stringify(state.pendingPermission.input, null, 2).slice(0, 800)}
+              </pre>
+            </details>
+          )}
           <div className="lc-perm-btns">
             <button
               className="lc-allow"
