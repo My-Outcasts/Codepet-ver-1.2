@@ -24,6 +24,29 @@ import { stageComplete, nextStageOf } from '@/lib/stages';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
+import {
+  INTRO_SEEN_KEY,
+  introInitialPhase,
+  revealAction,
+  type IntroPhase,
+} from '@/lib/overviewIntro';
+
+// First-run "seen" flag. Reads default to seen (true) on failure so we never
+// re-trap a user behind a broken storage read.
+const readIntroSeen = () => {
+  try {
+    return !!localStorage.getItem(INTRO_SEEN_KEY);
+  } catch {
+    return true;
+  }
+};
+const markIntroSeen = () => {
+  try {
+    localStorage.setItem(INTRO_SEEN_KEY, '1');
+  } catch {
+    /* ignore */
+  }
+};
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -99,6 +122,14 @@ export default function OverviewView() {
     drawerOpen,
   } = useApp();
   void tick;
+  // First-run spotlight handoff. OverviewView owns the phase + the localStorage
+  // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
+  // OverviewView is imported ssr:false, so reading localStorage in the lazy
+  // initializer is safe.
+  const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
+    introInitialPhase(readIntroSeen()),
+  );
+  const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => readIntroSeen());
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
   const hereRef = useRef<HereInfo | null>(null);
@@ -296,7 +327,7 @@ export default function OverviewView() {
 
   // Glide the camera to frame a node — the "jump to the step" on Start, so the
   // docked work panel opens with its node in view (map stays as context behind it).
-  const flyTo = (nodeId: string | null) => {
+  const flyTo = (nodeId: string | null, ms = 900) => {
     const fg = fgRef.current as any;
     if (!fg || !nodeId) return;
     const n = data.nodes.find((x) => x.id === nodeId);
@@ -306,7 +337,7 @@ export default function OverviewView() {
     const aspect = dims.w / Math.max(1, dims.h);
     const k = 2.7 * Math.max(1, 1.2 / aspect);
     const look = { x: n.x * 0.45, y: n.y * 0.45, z: n.z * 0.45 };
-    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, 900);
+    fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, ms);
   };
 
   // A portal was requested from elsewhere (e.g. the Roadmap's Start) — glide the
@@ -437,12 +468,47 @@ export default function OverviewView() {
     return s;
   };
 
+  // Skip the camera glide (jump-cut) for users who prefer reduced motion.
+  const introReduceMotion = () =>
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+  // CTA in the intro: remember it's seen, then either fly to the lit beacon or
+  // (no live move) recenter the whole map, and enter the spotlight.
+  const handleIntroReveal = () => {
+    markIntroSeen();
+    setHasSeenIntro(true);
+    if (revealAction(here) === 'fly') flyTo(beaconId, introReduceMotion() ? 0 : 900);
+    else fitView();
+    setIntroPhase('spotlight');
+  };
+
+  // Backdrop click: dismiss without flying, but still mark it seen.
+  const handleIntroDismiss = () => {
+    markIntroSeen();
+    setHasSeenIntro(true);
+    setIntroPhase('done');
+  };
+
+  // The spotlight is a light touch, not a second modal — auto-settle after a beat.
+  useEffect(() => {
+    if (introPhase !== 'spotlight') return;
+    const id = setTimeout(() => setIntroPhase('done'), 6000);
+    return () => clearTimeout(id);
+  }, [introPhase]);
+
   return (
     <section
       className="view on"
       style={{ position: 'absolute', inset: 0, background: '#000000', overflow: 'hidden' }}
     >
-      <OverviewIntro />
+      {introPhase === 'intro' && (
+        <OverviewIntro
+          showLegend={hasSeenIntro}
+          onReveal={handleIntroReveal}
+          onDismiss={handleIntroDismiss}
+        />
+      )}
       <StageRibbon />
 
       <div
