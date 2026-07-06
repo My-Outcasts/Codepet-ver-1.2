@@ -293,3 +293,9 @@ export function buildLog(t: Task, type: string, d: { k: string }): LogStep[] {
     L('Writing the deliverable ↓'),
   ];
 }
+
+/** "8 steps" / "1 step" — the count label for the inline "What byte did" record. */
+export function stepCountLabel(steps: LogStep[]): string {
+  const n = steps.length;
+  return `${n} step${n === 1 ? '' : 's'}`;
+}
