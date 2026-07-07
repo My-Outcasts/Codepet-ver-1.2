@@ -52,6 +52,7 @@ import {
 import { requestBuildPlan } from './ai/buildPlan';
 import { buildOpeningPrompt, terminalCommand } from './armSession';
 import { armBuildSession } from '@/app/actions/build';
+import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
 import { getCapability } from '@/app/actions/install';
 import type { BytePlan } from './ai/plan';
 import type { LiveState } from './liveBuild';
@@ -173,6 +174,10 @@ interface AppState {
   buildPlan: BytePlan | null;
   /** Edit the generated plan's steps in place before arming (founder can refine intent). */
   setBuildPlanSteps: (steps: string[]) => void;
+  /** A git snapshot taken before a local build; null when the project isn't a git repo. */
+  buildCheckpoint: { ref: string } | null;
+  /** Undo everything the build changed, restoring the project to the pre-build snapshot. */
+  rewindBuild: () => void;
   buildSessionId: string | null;
   buildLive: LiveState | null;
   buildLocal: boolean;
@@ -261,6 +266,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildProjectDir, setBuildProjectDir] = useState('');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // A git snapshot of the project taken right before a local build, so the founder can
+  // rewind everything the build changed. null when the project isn't a git repo.
+  const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(null);
   // Guards the one-time "session ended" nudge so the live subscription posts it once.
   const buildEndedNudged = useRef(false);
 
@@ -1095,6 +1103,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setBuildProjectDir(dir);
         const cap = await getCapability();
         if (cap.mode === 'local') {
+          // Snapshot the project BEFORE the session touches anything, so END can offer
+          // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
+          setBuildCheckpoint(await createCheckpoint(dir));
           setBuildLocal(true);
           setBuildLaunchCommand(null);
           setBuildSessionId(id);
@@ -1141,11 +1152,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
 
+  const rewindBuild = useCallback(() => {
+    const ref = buildCheckpoint?.ref;
+    if (!ref || !buildProjectDir) return;
+    (async () => {
+      const res = await rewindToCheckpoint(buildProjectDir, ref);
+      const now = Date.now();
+      const msg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: res.ok
+          ? '↩ Rewound your project to before this build — everything it changed is undone.'
+          : "I couldn't rewind the project just now. If you need to, you can undo the changes with git yourself.",
+        ts: now,
+      };
+      setChatMessages((prev) => [...prev, msg]);
+      if (res.ok) setBuildCheckpoint(null);
+      if (companyId)
+        persistChatMessage(companyId, {
+          id: msg.id,
+          role: 'byte',
+          text: msg.text,
+          createdAt: now,
+        }).catch((err) => console.error('[store] persist build message failed', err));
+      track('build.rewind', { ok: res.ok });
+    })();
+  }, [buildCheckpoint, buildProjectDir, companyId]);
+
   const resetBuildFlow = useCallback(() => {
     setBuildStep('during');
     setBuildProject('');
     setBuildBrief('');
     setBuildPlanState(null);
+    setBuildCheckpoint(null);
     setBuildSessionId(null);
     setBuildLive(null);
     setBuildLocal(false);
@@ -1219,6 +1258,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addIntakeTurn,
       generateBuildPlan,
       armBuild,
+      buildCheckpoint,
+      rewindBuild,
       resetBuildFlow,
     }),
     [
@@ -1284,6 +1325,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addIntakeTurn,
       generateBuildPlan,
       armBuild,
+      buildCheckpoint,
+      rewindBuild,
       resetBuildFlow,
     ],
   );

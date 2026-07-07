@@ -7745,6 +7745,59 @@ body {
 .bc-ctx b {
   color: var(--t-1);
 }
+/* Save-point rewind (undo the whole build) — a quiet control until it's confirmed. */
+.bc-rewind {
+  margin-top: 10px;
+}
+.bc-rewind-btn {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6a6379;
+  background: transparent;
+  border: 1px solid var(--hairline, #e8e3f0);
+  border-radius: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+.bc-rewind-btn:hover {
+  border-color: #cf3d3d;
+  color: #cf3d3d;
+}
+.bc-rewind-confirm {
+  border: 1px solid #f0b8b8;
+  background: #fdf1f1;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #7a2e2e;
+}
+.bc-rewind-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.bc-rewind-yes,
+.bc-rewind-no {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.bc-rewind-yes {
+  background: #cf3d3d;
+  color: #fff;
+}
+.bc-rewind-yes:hover {
+  background: #b83232;
+}
+.bc-rewind-no {
+  background: #fff;
+  border-color: var(--hairline, #e8e3f0);
+  color: #6a6379;
+}
 
 /* nav */
 .bc-nav {

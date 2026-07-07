@@ -168,16 +168,23 @@ function EndStep({
   plan,
   brief,
   actions,
+  checkpoint,
+  onRewind,
 }: {
   companyId: string | null;
   sessionId: string | null;
   plan: BytePlan | null;
   brief: string;
   actions: number;
+  checkpoint: { ref: string } | null;
+  onRewind: () => void;
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
   const [fetched, setFetched] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Two-step confirm — rewinding throws the build's changes away.
+  const [confirmRewind, setConfirmRewind] = useState(false);
+  const [rewound, setRewound] = useState(false);
   const noSession = !companyId || !sessionId;
   const loaded = noSession || fetched;
 
@@ -277,6 +284,37 @@ function EndStep({
           >
             {saved ? '· Saved to Byte’s notebook ✓' : '▸ Write it down in Byte’s notebook'}
           </div>
+          {checkpoint && !rewound && (
+            <div className="bc-rewind">
+              {!confirmRewind ? (
+                <button className="bc-rewind-btn" onClick={() => setConfirmRewind(true)}>
+                  ↩ Rewind to before this build
+                </button>
+              ) : (
+                <div className="bc-rewind-confirm">
+                  <span>
+                    This undoes <b>everything</b> this build changed in your project — it can’t be
+                    reversed. Rewind?
+                  </span>
+                  <div className="bc-rewind-row">
+                    <button
+                      className="bc-rewind-yes"
+                      onClick={() => {
+                        onRewind();
+                        setRewound(true);
+                      }}
+                    >
+                      Yes, rewind
+                    </button>
+                    <button className="bc-rewind-no" onClick={() => setConfirmRewind(false)}>
+                      Keep the changes
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {rewound && <div className="bc-ctx">↩ Rewound to your save point.</div>}
         </>
       )}
     </div>
@@ -294,6 +332,8 @@ export function BuildCoachView() {
     buildSessionId,
     buildProjectDir,
     buildBrief,
+    buildCheckpoint,
+    rewindBuild,
     resetBuildFlow,
   } = useApp();
 
@@ -347,6 +387,8 @@ export function BuildCoachView() {
             plan={buildPlan}
             brief={buildBrief}
             actions={actions}
+            checkpoint={buildCheckpoint}
+            onRewind={rewindBuild}
           />
         )}
 
