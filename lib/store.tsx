@@ -1431,7 +1431,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Cancel any in-flight stream first — otherwise its stream-end persistMsg (bound
     // to the OLD threadId) can land after we've switched threads.
     chatAbort.current?.abort();
-    chatAbort.current = null;
     setChatStreaming(false);
     setActiveThreadId(newId());
     pendingThreadRef.current = true; // created in Firestore on first send
@@ -1444,7 +1443,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!companyId) return;
       // Cancel any in-flight stream first — see newChat for why.
       chatAbort.current?.abort();
-      chatAbort.current = null;
       setChatStreaming(false);
       pendingThreadRef.current = false;
       setActiveThreadId(id);
@@ -1480,7 +1478,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // mid-stream lets the stream-end persistMsg re-create it via the `{updatedAt}`
       // merge in persistChatMessage, leaving a titleless zombie thread on reload.
       chatAbort.current?.abort();
-      chatAbort.current = null;
       setChatStreaming(false);
       const fallback = activeThreadId === id ? pickFallbackThreadId(threads, id) : null;
       setThreads((prev) => prev.filter((t) => t.id !== id));
