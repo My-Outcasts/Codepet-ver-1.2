@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { DEPTS, type Task } from './data';
-import { nextStageOf, stageComplete, currentStageProgress } from './stages';
+import { DEPTS, OB_STAGES, PHASES, type Task } from './data';
+import { nextPhaseName, currentPhaseName, nextStageOf, stageComplete, currentStageProgress } from './stages';
 
 describe('nextStageOf', () => {
   it('returns the next rung on the ladder', () => {
@@ -111,5 +111,26 @@ describe('currentStageProgress', () => {
     });
     DEPTS[0].tasks = [...Array(200)].map(() => task(true)).concat(task(false)); // 200/201
     expect(currentStageProgress()).toMatchObject({ done: 200, total: 201, pct: 99 });
+  });
+});
+
+describe('nextPhaseName', () => {
+  const phaseNames = PHASES.map((p) => p.name);
+
+  it('returns the phase after the current one, or null on the last, for every stage', () => {
+    for (const stage of OB_STAGES) {
+      const cur = currentPhaseName(stage);
+      const i = phaseNames.indexOf(cur);
+      const expected = i >= 0 && i < phaseNames.length - 1 ? phaseNames[i + 1] : null;
+      expect(nextPhaseName(stage)).toBe(expected);
+    }
+  });
+
+  it('the last onboarding stage is on the last phase → null (no bogus "next")', () => {
+    expect(nextPhaseName(OB_STAGES[OB_STAGES.length - 1])).toBeNull();
+  });
+
+  it('an early stage has a real next phase (not null)', () => {
+    expect(nextPhaseName(OB_STAGES[0])).not.toBeNull();
   });
 });

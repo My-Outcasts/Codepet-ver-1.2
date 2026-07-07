@@ -69,6 +69,16 @@ export function currentPhaseName(stage?: string): string {
   return phaseNameForWatermark(roadmapWatermarkFor(stage));
 }
 
+/** The roadmap phase after the founder's current one (matches the breadcrumb), or null
+ *  when they're already in the last phase. Keeps the progress hero's "next milestone"
+ *  consistent with the phase breadcrumb (unlike nextStageOf, which uses the finer
+ *  onboarding-stage list and runs out first). */
+export function nextPhaseName(stage?: string): string | null {
+  const cur = currentPhaseName(stage);
+  const i = PHASES.findIndex((p) => p.name === cur);
+  return i >= 0 && i < PHASES.length - 1 ? PHASES[i + 1].name : null;
+}
+
 // Product = what you're building; Company = everything around it. Two halves the
 // founder tracks separately in the progress overlay.
 export const PRODUCT_DEPTS = new Set(['eng', 'design']);
