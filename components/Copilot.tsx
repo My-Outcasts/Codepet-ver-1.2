@@ -409,9 +409,6 @@ export function Copilot() {
 
         {empty && (
           <div className="chips">
-            <button className="sug sug-build" onClick={startBuildIntake} disabled={chatStreaming}>
-              🔨 Let&apos;s build something
-            </button>
             {CHIPS.map((t) => (
               <button key={t} className="sug" onClick={() => sendChat(t)} disabled={chatStreaming}>
                 {t}
@@ -421,6 +418,11 @@ export function Copilot() {
         )}
       </div>
       <div className="cop-foot">
+        {!buildIntakeActive && (
+          <button className="cop-build-cta" onClick={startBuildIntake}>
+            🔨 Let&apos;s build
+          </button>
+        )}
         <div className="composer">
           <input
             placeholder="Ask byte anything about your company…"

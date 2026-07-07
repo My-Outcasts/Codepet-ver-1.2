@@ -3012,6 +3012,27 @@ body {
   padding: 12px 14px;
   border-top: 1px solid var(--hairline);
 }
+/* Always-available entry to the build flow, above the composer. */
+.cop-build-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent, #7c3aed);
+  background: var(--accent-soft, #efe7fc);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.cop-build-cta:hover {
+  border-color: var(--accent, #7c3aed);
+}
 .composer {
   display: flex;
   align-items: center;
