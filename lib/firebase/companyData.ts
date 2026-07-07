@@ -32,7 +32,13 @@ import {
   type CompanyBrief,
   type ScannedProject,
   type ChatMessageDoc,
+  type ThreadMeta,
 } from './schema';
+import {
+  deriveThreadTitle,
+  needsBackfill,
+  sortThreadsByRecent,
+} from '@/lib/chat/threads';
 import { projectNames } from '../projects';
 import {
   aggregateTracking,
@@ -161,8 +167,12 @@ export interface CompanyData {
   roadmapStage?: number;
   /** byte's one-time project analysis; undefined ⇒ not generated yet. */
   projectAnalysis?: ProjectAnalysis;
-  /** Recent byte-chat history, oldest-first. */
+  /** The active thread's messages, oldest-first. */
   chat: ChatMessageDoc[];
+  /** All conversation threads (history entries). */
+  threads: ThreadMeta[];
+  /** The thread whose messages are in `chat` (most-recent), or null if none. */
+  activeThreadId: string | null;
   /** Durable company decisions byte maintains (the memory the founder can curate). */
   decisions: DecisionEntry[];
 }
@@ -183,17 +193,11 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   // Start from a clean per-account baseline before applying this account's data.
   resetCompanyData();
   const db = getDb();
-  const [deptSnap, libSnap, companySnap, chatSnap] = await Promise.all([
+  const [deptSnap, libSnap, companySnap, threadSnap] = await Promise.all([
     getDocs(collection(db, paths.departments(companyId))),
     getDocs(query(collection(db, paths.library(companyId)), orderBy('createdAt', 'desc'))),
     getDoc(doc(db, paths.company(companyId))),
-    getDocs(
-      query(
-        collection(db, paths.chat(companyId)),
-        orderBy('createdAt', 'desc'),
-        limit(CHAT_LOAD_LIMIT),
-      ),
-    ),
+    getDocs(collection(db, paths.threads(companyId))),
   ]);
 
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
@@ -209,9 +213,14 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     return item as LibItem;
   });
 
-  // Queried newest-first (so the limit keeps the most recent); reverse to oldest-first
-  // for display.
-  const chat = chatSnap.docs.map((d) => d.data() as ChatMessageDoc).reverse();
+  // Threads + the active thread's messages. Migrate legacy flat chat on first load.
+  let threads = threadSnap.docs.map((d) => d.data() as ThreadMeta);
+  if (threads.length === 0) {
+    const migrated = await backfillLegacyThread(companyId);
+    if (migrated) threads = [migrated];
+  }
+  const activeThreadId = sortThreadsByRecent(threads)[0]?.id ?? null;
+  const chat = activeThreadId ? await loadThreadMessages(companyId, activeThreadId) : [];
 
   return {
     library,
@@ -220,6 +229,8 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     scaffoldedAt: company?.scaffoldedAt as number | undefined,
     roadmapStage: validStage(company?.roadmapStage),
     chat,
+    threads,
+    activeThreadId,
     decisions: normalizeDecisions(company?.decisions),
     projectAnalysis: company?.projectAnalysis as ProjectAnalysis | undefined,
   };
@@ -246,7 +257,89 @@ export async function persistChatMessage(
   companyId: string,
   message: ChatMessageDoc,
 ): Promise<void> {
-  await setDoc(doc(getDb(), paths.chatMessage(companyId, message.id)), message);
+  const db = getDb();
+  await setDoc(doc(db, paths.chatMessage(companyId, message.id)), message);
+  // Bump the parent thread so the history list re-sorts / shows fresh relative time.
+  await setDoc(
+    doc(db, paths.thread(companyId, message.threadId)),
+    { updatedAt: message.createdAt },
+    { merge: true },
+  );
+}
+
+export async function loadThreads(companyId: string): Promise<ThreadMeta[]> {
+  const snap = await getDocs(collection(getDb(), paths.threads(companyId)));
+  return snap.docs.map((d) => d.data() as ThreadMeta);
+}
+
+export async function loadThreadMessages(
+  companyId: string,
+  threadId: string,
+): Promise<ChatMessageDoc[]> {
+  const snap = await getDocs(
+    query(
+      collection(getDb(), paths.chat(companyId)),
+      where('threadId', '==', threadId),
+      orderBy('createdAt', 'asc'),
+      limit(CHAT_LOAD_LIMIT),
+    ),
+  );
+  return snap.docs.map((d) => d.data() as ChatMessageDoc);
+}
+
+export async function persistThread(companyId: string, thread: ThreadMeta): Promise<void> {
+  await setDoc(doc(getDb(), paths.thread(companyId, thread.id)), thread);
+}
+
+export async function updateThreadTitle(
+  companyId: string,
+  threadId: string,
+  title: string,
+): Promise<void> {
+  await setDoc(doc(getDb(), paths.thread(companyId, threadId)), { title }, { merge: true });
+}
+
+export async function deleteThreadAndMessages(
+  companyId: string,
+  threadId: string,
+): Promise<void> {
+  const db = getDb();
+  const msgs = await getDocs(
+    query(collection(db, paths.chat(companyId)), where('threadId', '==', threadId)),
+  );
+  const batch = writeBatch(db);
+  msgs.docs.forEach((d) => batch.delete(d.ref));
+  batch.delete(doc(db, paths.thread(companyId, threadId)));
+  await batch.commit();
+}
+
+/**
+ * One-time migration: fold a company's pre-threads flat `chat/*` into a single
+ * "first conversation" thread. Caller guarantees threads are empty. Returns the
+ * created thread, or null if there were no legacy messages.
+ */
+async function backfillLegacyThread(companyId: string): Promise<ThreadMeta | null> {
+  const db = getDb();
+  const legacySnap = await getDocs(
+    query(collection(db, paths.chat(companyId)), orderBy('createdAt', 'asc')),
+  );
+  const legacy = legacySnap.docs.map((d) => d.data() as ChatMessageDoc);
+  if (!needsBackfill(0, legacy.length)) return null;
+
+  const id = crypto.randomUUID();
+  const thread: ThreadMeta = {
+    id,
+    title: deriveThreadTitle(legacy[0].text),
+    createdAt: legacy[0].createdAt,
+    updatedAt: legacy[legacy.length - 1].createdAt,
+  };
+  const batch = writeBatch(db);
+  batch.set(doc(db, paths.thread(companyId, id)), thread);
+  legacy.forEach((m) =>
+    batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
+  );
+  await batch.commit();
+  return thread;
 }
 
 /** Persist the user's current roadmap position so they return to where they left off. */
