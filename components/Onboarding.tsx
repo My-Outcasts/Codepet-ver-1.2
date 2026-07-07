@@ -45,7 +45,7 @@ const STEP_ART = [
   '/onboarding/ob-isometric.webp', // 5 stage
   '/onboarding/ob-boardroom.webp', // 6 analysis
   '/onboarding/ob-team.webp', // 7 summary
-  '/onboarding/ob-team.jpg', // 8 choose companion
+  '/onboarding/ob-team.webp', // 8 choose companion
 ];
 
 // Per-step colour grade laid over the art panel (soft-light) — one hue per scene.
@@ -58,6 +58,7 @@ const STEP_GRADE = [
   'rgba(242,201,76,0.22)', // 5
   'rgba(126,168,255,0.26)', // 6
   'rgba(124,58,237,0.26)', // 7
+  'rgba(124,58,237,0.26)', // 8 choose companion
 ];
 
 const AN_LINES = [
