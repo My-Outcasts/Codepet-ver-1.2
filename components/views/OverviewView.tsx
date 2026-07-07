@@ -20,7 +20,7 @@ import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
-import { stageComplete, nextStageOf } from '@/lib/stages';
+import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
 import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
@@ -214,7 +214,7 @@ export default function OverviewView() {
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
-  const nextMilestone = nextStageOf(brief.stage);
+  const nextMilestone = nextPhaseName(brief.stage);
   // First-run spotlight handoff. OverviewView owns the phase + the localStorage
   // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
   // OverviewView is imported ssr:false, so reading localStorage in the lazy
@@ -224,6 +224,8 @@ export default function OverviewView() {
   );
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
+  const [beaconFlip, setBeaconFlip] = useState(false);
+  const beaconFlipRef = useRef(false);
   const hereRef = useRef<HereInfo | null>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
@@ -417,6 +419,14 @@ export default function OverviewView() {
         ) {
           el.style.opacity = '1';
           el.style.transform = `translate(${sc.x}px, ${sc.y}px)`;
+          // Flip to the left before the right-placed card (offset 18 + width 250) would
+          // clip the right edge — robust on narrow panels (e.g. chat open), not just a
+          // fixed fraction of the width.
+          const nextFlip = sc.x + 268 > dims.w;
+          if (nextFlip !== beaconFlipRef.current) {
+            beaconFlipRef.current = nextFlip;
+            setBeaconFlip(nextFlip);
+          }
         } else {
           el.style.opacity = '0';
         }
@@ -573,7 +583,10 @@ export default function OverviewView() {
     if (!fg) return;
     const aspect = dims.w / Math.max(1, dims.h);
     const dist = 360 * Math.max(1, 1.55 / aspect);
-    fg.cameraPosition({ x: 0, y: 0, z: dist }, { x: 0, y: 0, z: 0 }, 800);
+    // Bias the composition a touch left so the beacon card (tethered to the right of its
+    // node) has clear space and the project center never sits under it.
+    const bx = DEPT_R * 0.35;
+    fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
   };
 
   const onEngineStop = () => {
@@ -968,6 +981,7 @@ export default function OverviewView() {
             <ByteGuide
               here={here}
               spotlight={introPhase === 'spotlight'}
+              flip={beaconFlip}
               // One shared arrival: byte opens the chat + briefs you, then the
               // portalSignal effect glides the camera to the department AFTER the
               // chat has docked. Starting also settles any active spotlight.
@@ -998,26 +1012,41 @@ function ByteGuide({
   here,
   onStart,
   spotlight = false,
+  flip = false,
 }: {
   here: HereInfo;
   onStart: () => void;
   spotlight?: boolean;
+  flip?: boolean;
 }) {
   const st = taskState(here.task, true);
   return (
-    <div style={{ position: 'relative', width: 250, transform: 'translate(18px, -50%)' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: 250,
+        transform: flip ? 'translate(calc(-100% - 18px), -50%)' : 'translate(18px, -50%)',
+      }}
+    >
       <span
         aria-hidden
         style={{
           position: 'absolute',
-          left: -5,
+          ...(flip ? { right: -5 } : { left: -5 }),
           top: '50%',
           width: 10,
           height: 10,
           marginTop: -5,
           background: 'rgba(16,14,28,0.92)',
-          borderLeft: '1px solid rgba(125,227,255,0.5)',
-          borderBottom: '1px solid rgba(125,227,255,0.5)',
+          ...(flip
+            ? {
+                borderRight: '1px solid rgba(125,227,255,0.5)',
+                borderTop: '1px solid rgba(125,227,255,0.5)',
+              }
+            : {
+                borderLeft: '1px solid rgba(125,227,255,0.5)',
+                borderBottom: '1px solid rgba(125,227,255,0.5)',
+              }),
           transform: 'rotate(45deg)',
         }}
       />
