@@ -2,7 +2,7 @@
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Task, type Dept, type LibItem } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
-import { Byte } from '../Byte';
+import { Companion } from '../Companion';
 
 function Delivered({ item, onOpen }: { item: LibItem; onOpen: () => void }) {
   // Compact summary card + one light action — a site opens in a new tab, every
@@ -83,7 +83,7 @@ function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
 }
 
 export function DepartmentDetail() {
-  const { deptKey, show, tick } = useApp();
+  const { deptKey, show, tick, companionId } = useApp();
   void tick;
   const d = DEPTS.find((x) => x.k === deptKey);
   if (!d)
@@ -129,7 +129,7 @@ export function DepartmentDetail() {
         </div>
         <div className="dneed">{d.need}</div>
         <div className="byteline">
-          <Byte size="s28" />
+          <Companion id={companionId} size="s28" />
           <div className="txt">{d.byte}</div>
         </div>
         <div className="tk-h">

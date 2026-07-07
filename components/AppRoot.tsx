@@ -11,7 +11,8 @@ import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
 import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
-import { Byte } from './Byte';
+import { Companion } from './Companion';
+import { companionById } from '@/lib/companions';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
@@ -46,7 +47,15 @@ const OverviewView = dynamic(() => import('./views/OverviewView'), {
 });
 
 function Shell() {
-  const { view, show, buildSessionId, copilotCollapsed, toggleCopilot, sideCollapsed } = useApp();
+  const {
+    view,
+    show,
+    buildSessionId,
+    copilotCollapsed,
+    toggleCopilot,
+    sideCollapsed,
+    companionId,
+  } = useApp();
   // A build session is live once armed (until Start over). Keep its view mounted across
   // navigation so switching tabs doesn't tear down (and kill) the running session.
   const buildActive = buildSessionId != null;
@@ -54,6 +63,7 @@ function Shell() {
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [view]);
+  const c = companionById(companionId);
 
   const ActiveView =
     view === 'summary' ? (
@@ -95,11 +105,11 @@ function Shell() {
       </div>
       <button
         className={`cop-open${copilotCollapsed ? ' show' : ''}`}
-        aria-label="Open byte chat"
+        aria-label={`Open ${c.name} chat`}
         onClick={() => toggleCopilot(false)}
       >
-        <Byte size="s28" />
-        Ask byte
+        <Companion id={companionId} size="s28" />
+        Ask {c.name}
       </button>
       {buildActive && view !== 'build' && (
         <button className="build-return" onClick={() => show('build')}>

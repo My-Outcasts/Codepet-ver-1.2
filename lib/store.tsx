@@ -31,6 +31,7 @@ import {
   persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
+  persistCompanion,
   persistBrief,
   persistChatMessage,
   persistDecisions,
@@ -51,6 +52,7 @@ import {
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
 import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
+import { DEFAULT_COMPANION_ID } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
@@ -208,6 +210,10 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
+  /** The founder's chosen companion character id (default 'byte'). */
+  companionId: string;
+  /** Set the active companion (persists). */
+  setCompanion: (id: string) => void;
   /** The one-time "wake byte up" install popup (auto-opens once; the Topbar pill
    * and Settings reopen it). */
   installPromptOpen: boolean;
@@ -357,6 +363,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
+  // The founder's chosen companion character (hydrated from Firestore; default byte).
+  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
   // Most recent graph-growth event (branches unlocked by a re-scaffold), or null.
   const [growthSignal, setGrowthSignal] = useState<GrowthSignal | null>(null);
   // Consume-once: the Overview clears the signal after easing the camera, so a later
@@ -604,11 +612,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeThreadId: loadedActive,
           decisions: dec,
           projectAnalysis: pa,
+          companionId: cId,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
           setBrief(b);
           setDecisions(dec);
+          setCompanionId(cId ?? DEFAULT_COMPANION_ID);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
           // way, so a fresh account never inherits a previous account's in-flight/loading state.
           // Re-validate the persisted doc so a partial/corrupt one can't render blank rows.
@@ -722,6 +732,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId],
   );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
+  // Set the active companion (optimistic, persists non-blocking).
+  const setCompanion = useCallback(
+    (id: string) => {
+      setCompanionId(id);
+      track('companion.select', { id });
+      if (companyId) {
+        persistCompanion(companyId, id).catch((err) =>
+          console.error('[store] persist companion failed', err),
+        );
+      }
+    },
+    [companyId],
+  );
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
@@ -1427,6 +1450,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           deptName: d.name,
           deptKey: d.k,
           brief,
+          companionId,
         });
         applyResult(t, type, res);
         creditToolkitUse(t.t, type);
@@ -1447,7 +1471,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [brief, bump, persistTaskDraft, creditToolkitUse],
+    [brief, bump, persistTaskDraft, creditToolkitUse, companionId],
   );
 
   // Revise an inline chat result against the founder's feedback — the same revise pass
@@ -1479,6 +1503,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           brief,
           reviseNote: trimmed || undefined,
           current: trimmed ? currentDraft(t, type) : undefined,
+          companionId,
         });
         applyResult(t, type, res);
         bump();
@@ -1496,7 +1521,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       }
     },
-    [brief, bump, persistTaskDraft, toast],
+    [brief, bump, persistTaskDraft, toast, companionId],
   );
 
   // Approve an inline chat result: same as approving from the panel (Library + done),
@@ -1687,6 +1712,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             deptSummary,
             openTasks,
             envSetup,
+            companionId,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -1799,7 +1825,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat, persistMsg],
+    [companyId, nextStep, runTaskInChat, companionId, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -2104,6 +2130,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalled: setInstalledFlag,
+      companionId,
+      setCompanion,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
@@ -2207,6 +2235,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalledFlag,
+      companionId,
+      setCompanion,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,

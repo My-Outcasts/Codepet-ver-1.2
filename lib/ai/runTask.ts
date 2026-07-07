@@ -38,6 +38,8 @@ export interface RunArgs {
   current?: string;
   /** The user's business brief, so byte writes from their real company. */
   brief?: CompanyBrief;
+  /** The active companion's id, so the deliverable is written in its voice. */
+  companionId?: string;
 }
 
 export interface RunResult {

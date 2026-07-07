@@ -9655,6 +9655,70 @@ body {
   }
 }
 
+/* Companion picker (onboarding step + in-app switcher) */
+.cpick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.cpick-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.cpick-cell:hover {
+  border-color: var(--accent, #7c5cff);
+}
+.cpick-cell.sel {
+  border-color: var(--accent, #7c5cff);
+  background: color-mix(in srgb, var(--accent, #7c5cff) 10%, transparent);
+}
+.cpick-name {
+  font-weight: 600;
+}
+.cpick-tone {
+  font-size: 12px;
+  opacity: 0.7;
+  line-height: 1.3;
+}
+.petcard-wrap {
+  position: relative;
+}
+.petcard {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+.petcard-pop {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  padding: 12px;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  border-radius: 12px;
+  background: var(--surface, #fff);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+  z-index: 40;
+}
+.petcard-pop-h {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-bottom: 10px;
+}
 /* In-panel chat history — thread list toggled from the Copilot header. */
 .ccopilot-history {
   font-size: 12px;

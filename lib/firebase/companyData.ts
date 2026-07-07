@@ -155,6 +155,8 @@ export interface CompanyData {
   brief: CompanyBrief;
   /** When onboarding was completed; undefined ⇒ the user hasn't onboarded yet. */
   onboardedAt?: number;
+  /** The founder's chosen companion id; undefined ⇒ byte. */
+  companionId?: string;
   /** When byte's stage scaffold last landed; undefined ⇒ the map is still the built-in
    *  example, not a plan generated from this founder's product. Drives the "example
    *  plan" signal so a seeded map is never mistaken for a tailored one. */
@@ -222,6 +224,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     library,
     brief: (company?.brief ?? {}) as CompanyBrief,
     onboardedAt: company?.onboardedAt as number | undefined,
+    companionId: company?.companionId as string | undefined,
     scaffoldedAt: company?.scaffoldedAt as number | undefined,
     roadmapStage: validStage(company?.roadmapStage),
     chat,
@@ -360,6 +363,14 @@ async function backfillLegacyThread(companyId: string): Promise<ThreadMeta | nul
 export async function persistRoadmapStage(companyId: string, stage: number): Promise<void> {
   await updateDoc(doc(getDb(), paths.company(companyId)), {
     roadmapStage: stage,
+    updatedAt: Date.now(),
+  });
+}
+
+/** Persist the founder's chosen companion character. */
+export async function persistCompanion(companyId: string, companionId: string): Promise<void> {
+  await updateDoc(doc(getDb(), paths.company(companyId)), {
+    companionId,
     updatedAt: Date.now(),
   });
 }

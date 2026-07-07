@@ -5,7 +5,8 @@ import { track } from '@/lib/analytics';
 import { DEPTS, ENV, ENV_META } from '@/lib/data';
 import { resolveEnvIndex } from '@/lib/ai/envSetup';
 import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
-import { Byte } from './Byte';
+import { Companion } from './Companion';
+import { companionById } from '@/lib/companions';
 import { ExecLog, StaticLog } from './artifact/ExecLog';
 import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
@@ -364,12 +365,14 @@ export function Copilot() {
     buildAutonomy,
     setBuildAutonomy,
     navigateTo,
+    companionId,
     chatHistoryOpen,
     toggleChatHistory,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
   const company = brief.projectName?.trim() || 'your company';
+  const c = companionById(companionId);
 
   const [draft, setDraft] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -426,9 +429,9 @@ export function Copilot() {
   return (
     <aside className="copilot">
       <div className="cop-h">
-        <Byte size="s28" />
+        <Companion id={companionId} size="s28" />
         <div>
-          <div className="pn">byte</div>
+          <div className="pn">{c.name}</div>
           <div className="st">
             <span className="d" />
             guiding · {company}
@@ -498,7 +501,7 @@ export function Copilot() {
               if (streamingByte && !m.text) {
                 return (
                   <div key={m.id} className="bub byte-thinking">
-                    byte is thinking…
+                    {c.name} is thinking…
                   </div>
                 );
               }
