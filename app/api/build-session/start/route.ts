@@ -1,8 +1,13 @@
 // Start a live in-UI Claude Code session (local mode only). Spawns the real `claude`
 // in the chosen project with the plan's opening prompt; the browser then opens
-// /api/build-session/stream to watch it. See the in-UI Claude session design spec.
+// /api/build-session/stream to watch it. Idempotent per buildSessionId: if the
+// session is already live (registry hit) this just acks so the caller re-attaches
+// to the stream's replay buffer. `resume: true` (a reloaded page reconnecting)
+// NEVER spawns — a dead session answers `gone` instead of restarting the build.
+// See the in-UI Claude session design spec.
 import { NextResponse } from 'next/server';
 import { startSession } from '@/lib/liveSession/engine';
+import { getSession } from '@/lib/liveSession/registry';
 import { buildOpeningPrompt } from '@/lib/armSession';
 import { detectCapability } from '@/lib/installer/capability.mjs';
 import type { BytePlan } from '@/lib/ai/plan';
@@ -15,6 +20,7 @@ interface StartBody {
   plan?: BytePlan;
   brief?: string;
   mode?: string;
+  resume?: boolean;
 }
 
 const MODES = new Set(['suggest', 'copilot', 'autopilot']);
@@ -32,7 +38,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
   }
-  const { buildSessionId, projectDir, plan, brief, mode } = body as StartBody;
+  const { buildSessionId, projectDir, plan, brief, mode, resume } = body as StartBody;
   if (
     !buildSessionId ||
     !projectDir ||
@@ -43,10 +49,18 @@ export async function POST(req: Request): Promise<Response> {
   ) {
     return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
   }
+  if (getSession(buildSessionId)) {
+    return NextResponse.json({ ok: true, attached: true });
+  }
+  if (resume === true) {
+    return NextResponse.json({ ok: false, reason: 'gone' }, { status: 410 });
+  }
   startSession({
     buildSessionId,
     projectDir,
-    openingPrompt: buildOpeningPrompt(plan, brief),
+    // The in-UI session is two-way (the founder watches and can reply), so
+    // questions are allowed — unlike the terminal/copy-paste prompt.
+    openingPrompt: buildOpeningPrompt(plan, brief, { twoWay: true }),
     mode: mode && MODES.has(mode) ? (mode as 'suggest' | 'copilot' | 'autopilot') : 'suggest',
   });
   return NextResponse.json({ ok: true });

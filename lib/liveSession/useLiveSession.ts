@@ -46,6 +46,9 @@ export function useLiveSession(opts: {
   plan: BytePlan;
   brief: string;
   mode?: 'suggest' | 'copilot' | 'autopilot';
+  /** True when re-attaching after a reload — never spawns a new claude; a dead
+   *  session just reads as ended instead of restarting the build. */
+  resume?: boolean;
 }) {
   const [state, setState] = useState<TranscriptState>(initialTranscript);
   const started = useRef(false);
@@ -69,6 +72,12 @@ export function useLiveSession(opts: {
         signal: ac.signal,
       });
       if (!res.ok) {
+        // A resumed session that's no longer alive isn't a snag — it simply ended
+        // while we were away. Flip to ended so the founder can wrap up to the recap.
+        if (res.status === 410) {
+          setState((s) => reduceTranscript(s, { kind: 'exit', code: 0 }));
+          return;
+        }
         setState((s) =>
           reduceTranscript(s, { kind: 'error', message: 'Could not start the session here.' }),
         );

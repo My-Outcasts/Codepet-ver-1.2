@@ -85,17 +85,8 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
 ];
 
 export function Sidebar() {
-  const {
-    view,
-    show,
-    library,
-    tick,
-    installed,
-    sideCollapsed,
-    toggleSide,
-    companionId,
-    setCompanion,
-  } = useApp();
+  const { view, show, library, tick, sideCollapsed, toggleSide, companionId, setCompanion } =
+    useApp();
   void tick; // re-read mutable DEPTS/ENV on each store change
   const c = companionById(companionId);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -145,22 +136,6 @@ export function Sidebar() {
         return item(n.view, n.label, n.icon, c || undefined);
       })}
       <div className="grp">Your setup</div>
-      <div
-        className={`nav${view === 'install' ? ' on' : ''}`}
-        title="First install"
-        onClick={() => show('install')}
-      >
-        <svg className="ic" viewBox="0 0 20 20" fill="none">
-          <path
-            d="M11 2L4 11h5l-1 7 7-9h-5l1-7z"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <span>First install</span>
-        {installed ? <span className="nav-ck">✓</span> : <span className="nav-dot" />}
-      </div>
       {item(
         'env',
         'Environment',

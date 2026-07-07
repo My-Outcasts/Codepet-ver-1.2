@@ -71,6 +71,9 @@ function DuringStep({
   projectDir,
   brief,
   mode,
+  resume,
+  onLive,
+  onStatus,
 }: {
   plan: BytePlan | null;
   live: LiveState | null;
@@ -81,6 +84,9 @@ function DuringStep({
   projectDir: string;
   brief: string;
   mode: 'suggest' | 'copilot' | 'autopilot';
+  resume: boolean;
+  onLive: (s: LiveState) => void;
+  onStatus: (status: string) => void;
 }) {
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const actions = live?.actionCount ?? 0;
@@ -88,6 +94,7 @@ function DuringStep({
   const bs = budgetState(pct);
   const recent = live?.recentTools ?? [];
   const line = byteDuringLine(live, bs.warn);
+  const [copied, setCopied] = useState(false);
 
   return (
     <div>
@@ -99,6 +106,9 @@ function DuringStep({
           plan={plan}
           brief={brief}
           mode={mode}
+          resume={resume}
+          onLive={onLive}
+          onStatus={onStatus}
         />
       )}
       <CoachBubble
@@ -123,9 +133,27 @@ function DuringStep({
 
       {launchCommand && (
         <div className="bc-plan-err">
-          Byte couldn&rsquo;t open a Terminal here (needs the local app). Run this yourself, then
-          Byte will follow along:
+          Byte couldn&rsquo;t open a Terminal here (needs the local app). Two quick steps and Byte
+          will follow along:
+          <ol className="bc-cmd-steps">
+            <li>Open the Terminal app on your computer.</li>
+            <li>Paste this command and press Enter:</li>
+          </ol>
           <pre className="bc-cmd">{launchCommand}</pre>
+          <button
+            className="bc-copy"
+            onClick={() => {
+              navigator.clipboard?.writeText(launchCommand).then(
+                () => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                },
+                () => {},
+              );
+            }}
+          >
+            {copied ? 'Copied ✓' : 'Copy the command'}
+          </button>
         </div>
       )}
 
@@ -193,6 +221,8 @@ function EndStep({
   const [saved, setSaved] = useState(false);
   // Two-step confirm — rewinding throws the build's changes away.
   const [confirmRewind, setConfirmRewind] = useState(false);
+  // Which recap checklist items the founder has personally ticked off.
+  const [checked, setChecked] = useState<Set<number>>(new Set());
   const [rewound, setRewound] = useState(false);
   // Plain "here's what Byte changed" — the files touched since the pre-build snapshot.
   const [changes, setChanges] = useState<{ files: string[]; count: number } | null>(null);
@@ -211,16 +241,28 @@ function EndStep({
   const noSession = !companyId || !sessionId;
   const loaded = noSession || fetched;
 
+  // The SessionEnd rollup often lands a few seconds after the session closes, so a
+  // one-shot fetch would show commits "—" forever. Poll briefly until it appears;
+  // the UI unblocks after the first attempt either way.
   useEffect(() => {
     if (noSession) return;
     let cancelled = false;
-    loadTrackEventForSession(companyId, sessionId).then((e) => {
-      if (cancelled) return;
-      setEv(e);
-      setFetched(true);
-    });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const attempt = (remaining: number) => {
+      loadTrackEventForSession(companyId, sessionId).then((e) => {
+        if (cancelled) return;
+        setFetched(true);
+        if (e) {
+          setEv(e);
+        } else if (remaining > 0) {
+          timer = setTimeout(() => attempt(remaining - 1), 2500);
+        }
+      });
+    };
+    attempt(5);
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
   }, [companyId, sessionId, noSession]);
 
@@ -276,15 +318,29 @@ function EndStep({
               </div>
             </div>
           </div>
+          {/* The founder ticks each item — Byte never claims a step is verified for
+              them. That IS the "Double-check" habit this screen teaches. */}
+          <div className="bc-check-hint">Look at the result, then tick what checks out:</div>
           <ul className="bc-checklist">
-            {(plan?.steps ?? []).map((step, i) => (
+            {[...(plan?.steps ?? []), `Matches what you asked for: ${brief}`].map((label, i) => (
               <li key={i}>
-                <span className="c">✓</span> {step}
+                <button
+                  className={`c${checked.has(i) ? ' on' : ''}`}
+                  aria-pressed={checked.has(i)}
+                  onClick={() =>
+                    setChecked((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(i)) next.delete(i);
+                      else next.add(i);
+                      return next;
+                    })
+                  }
+                >
+                  {checked.has(i) ? '✓' : ''}
+                </button>{' '}
+                {label}
               </li>
             ))}
-            <li>
-              <span className="c">✓</span> Matches what you asked for: {brief}
-            </li>
           </ul>
           <div className={`bc-unlock${earned ? ' live' : ''}`}>
             <div className="bc-unlock-top">
@@ -294,7 +350,7 @@ function EndStep({
             <p>
               {earned
                 ? 'You finished under budget with something committed — Byte earned the Double-check habit for you!'
-                : 'Next time, wrap up under budget with at least one commit and Byte will earn this habit.'}
+                : 'Your build still counts! This badge just tracks how it went: wrap up under budget with at least one commit and Byte earns it next time.'}
             </p>
           </div>
           {ev?.wins && ev.wins.length > 0 && (
@@ -376,6 +432,8 @@ export function BuildCoachView() {
     rewindBuild,
     endBuild,
     buildAutonomy,
+    buildResumed,
+    applyLocalLive,
     resetBuildFlow,
   } = useApp();
 
@@ -384,6 +442,12 @@ export function BuildCoachView() {
   const sessionId = buildLive?.sessionId ?? null;
   const target = buildPlan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const unlocked = budgetState(Math.min(100, Math.round((actions / target) * 100))).unlock;
+
+  // Live session status (reported by LiveChat) + a two-step confirm for "Wrap up":
+  // wrapping up tears the session down, so a mid-work click needs a second look.
+  const [liveStatus, setLiveStatus] = useState<string>('');
+  const [confirmWrap, setConfirmWrap] = useState(false);
+  const busy = liveStatus === 'running' || liveStatus === 'awaiting-permission';
 
   const idx = step === 'during' ? 0 : 1;
 
@@ -421,6 +485,9 @@ export function BuildCoachView() {
             projectDir={buildProjectDir}
             brief={buildBrief}
             mode={buildAutonomy}
+            resume={buildResumed}
+            onLive={applyLocalLive}
+            onStatus={setLiveStatus}
           />
         )}
         {step === 'end' && (
@@ -437,13 +504,44 @@ export function BuildCoachView() {
         )}
 
         <div className="bc-nav">
-          {step === 'during' && (
-            <button className="bc-next" onClick={endBuild}>
-              {NEXT_LABEL.during}
-            </button>
-          )}
+          {step === 'during' &&
+            (confirmWrap ? (
+              <div className="bc-wrap-confirm">
+                <span>
+                  Byte is still working — wrapping up <b>stops the session</b> mid-task. Wrap up
+                  anyway?
+                </span>
+                <div className="bc-wrap-row">
+                  <button className="bc-wrap-yes" onClick={endBuild}>
+                    Yes, wrap up
+                  </button>
+                  <button className="bc-wrap-no" onClick={() => setConfirmWrap(false)}>
+                    Keep building
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="bc-next"
+                onClick={() => {
+                  // A busy local session deserves a second look; an idle (or remote)
+                  // one wraps up immediately.
+                  if (buildLocal && busy) setConfirmWrap(true);
+                  else endBuild();
+                }}
+              >
+                {NEXT_LABEL.during}
+              </button>
+            ))}
           {step === 'end' && (
-            <button className="bc-next" onClick={resetBuildFlow}>
+            <button
+              className="bc-next"
+              onClick={() => {
+                setConfirmWrap(false);
+                setLiveStatus('');
+                resetBuildFlow();
+              }}
+            >
               {NEXT_LABEL.end}
             </button>
           )}

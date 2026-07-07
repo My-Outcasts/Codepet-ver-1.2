@@ -156,6 +156,29 @@ body {
   padding: 6px 12px;
   cursor: pointer;
 }
+/* Install-later pill — visible until byte's toolkit is installed. */
+.tb-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent, #7c3aed);
+  background: var(--accent-soft, #efe7fc);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.tb-install:hover {
+  border-color: var(--accent, #7c3aed);
+}
+.tb-install-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #e0653d;
+}
 /* header user profile + controls (from the strategy-dashboard template) */
 .tb-prof {
   position: relative;
@@ -3611,6 +3634,35 @@ body {
 }
 .cop-build-cta:hover {
   border-color: var(--accent, #7c3aed);
+}
+/* While intake is on, the CTA row flips into "you're describing a build" + an exit. */
+.cop-intake-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 6px 4px 6px 10px;
+}
+.cop-intake-hint {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent, #7c3aed);
+}
+.cop-intake-cancel {
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-3);
+  background: transparent;
+  border: 1px solid var(--hairline, #e8e3f0);
+  border-radius: 9px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+.cop-intake-cancel:hover {
+  color: var(--t-1);
+  border-color: var(--t-4);
 }
 .composer {
   display: flex;
@@ -8060,6 +8112,20 @@ body {
   color: var(--t-1);
   letter-spacing: -0.2px;
 }
+/* The one-time "wake byte up" install popup — a roomier so-modal that hosts the
+   ins-* rows; the toolkit list scrolls instead of growing past the viewport. */
+.so-modal.ins-modal {
+  width: 560px;
+  max-height: 86vh;
+  overflow-y: auto;
+}
+.ins-modal .ins-hero {
+  margin-bottom: 14px;
+}
+.ins-modal-list {
+  max-height: 280px;
+  overflow-y: auto;
+}
 .so-modal p {
   margin-top: 8px;
   font-size: 13.5px;
@@ -8778,6 +8844,27 @@ body {
   white-space: pre-wrap;
   word-break: break-all;
 }
+.bc-cmd-steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.bc-copy {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--hairline, #e8e3f0);
+  background: var(--surface, #fff);
+  color: var(--t-2);
+  cursor: pointer;
+}
+.bc-copy:hover {
+  border-color: var(--violet-line);
+  color: var(--violet);
+}
 
 /* DURING — unlock card */
 .bc-unlock {
@@ -8874,9 +8961,38 @@ body {
 .bc-checklist li:last-child {
   border-bottom: none;
 }
+/* The founder ticks these personally — an empty box invites the double-check. */
+.bc-check-hint {
+  font-size: 12.5px;
+  color: var(--t-3);
+  margin: 2px 2px -2px;
+}
 .bc-checklist .c {
-  color: var(--teal);
-  font-size: 15px;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border: 1.5px solid var(--t-4);
+  border-radius: 7px;
+  color: transparent;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    color 0.15s ease;
+}
+.bc-checklist .c:hover {
+  border-color: var(--teal);
+}
+.bc-checklist .c.on {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
 }
 .bc-ctx {
   padding: 12px 14px;
@@ -8973,6 +9089,45 @@ body {
   background: #b83232;
 }
 .bc-rewind-no {
+  background: #fff;
+  border-color: var(--hairline, #e8e3f0);
+  color: #6a6379;
+}
+
+/* Wrap-up confirm — shown when the live session is still mid-task, since wrapping
+   up stops it. Amber (cautionary), unlike the destructive red of rewind. */
+.bc-wrap-confirm {
+  flex: 1;
+  border: 1px solid #ecd9a8;
+  background: #fdf8ec;
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6e5a1e;
+}
+.bc-wrap-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.bc-wrap-yes,
+.bc-wrap-no {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.bc-wrap-yes {
+  background: #b98a1d;
+  color: #fff;
+}
+.bc-wrap-yes:hover {
+  background: #a2781a;
+}
+.bc-wrap-no {
   background: #fff;
   border-color: var(--hairline, #e8e3f0);
   color: #6a6379;
@@ -9563,4 +9718,91 @@ body {
   font-weight: 600;
   opacity: 0.7;
   margin-bottom: 10px;
+}
+/* In-panel chat history — thread list toggled from the Copilot header. */
+.ccopilot-history {
+  font-size: 12px;
+  background: transparent;
+  border: 1px solid var(--hairline, rgba(255, 255, 255, 0.14));
+  color: inherit;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.cthreads {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow-y: auto;
+}
+.cthreads-new {
+  align-self: stretch;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px dashed var(--hairline, rgba(255, 255, 255, 0.2));
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-weight: 500;
+}
+.cthreads-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cthreads-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  padding: 2px;
+}
+.cthreads-row.is-active {
+  background: var(--well, rgba(255, 255, 255, 0.06));
+}
+.cthreads-open {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 8px 10px;
+  text-align: left;
+}
+.cthreads-title {
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.cthreads-time {
+  font-size: 11px;
+  opacity: 0.6;
+}
+.cthreads-rename,
+.cthreads-del {
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  opacity: 0.55;
+  cursor: pointer;
+}
+.cthreads-rename:hover,
+.cthreads-del:hover {
+  opacity: 1;
+}
+.cthreads-empty {
+  font-size: 12.5px;
+  opacity: 0.6;
+  padding: 10px;
 }

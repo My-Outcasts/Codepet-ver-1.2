@@ -93,6 +93,21 @@ async function main() {
   if (cfg.enabled === false) return; // tracking paused from Settings (fail-safe: only explicit false)
 
   const cwd = input.cwd || process.cwd();
+
+  // The build this session belonged to is over — retire the arm-file so later,
+  // unrelated claude sessions stop reporting live events into a stale build.
+  // Only when the ending session's cwd matches the armed project (another
+  // project's session must not tear down a build still running elsewhere).
+  try {
+    const armPath = path.join(claudeDir, 'codepet', 'current-build.json');
+    const arm = JSON.parse(fs.readFileSync(armPath, 'utf8'));
+    if (arm?.projectDir && path.resolve(arm.projectDir) === path.resolve(cwd)) {
+      fs.rmSync(armPath, { force: true });
+    }
+  } catch {
+    // no arm-file or unreadable — nothing to retire
+  }
+
   const roll = gitRollup(cwd);
   const event = {
     sessionId: input.session_id || `sess-${Date.now()}`,
