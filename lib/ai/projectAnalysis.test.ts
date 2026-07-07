@@ -8,6 +8,7 @@ import {
 } from './projectAnalysis';
 
 const full: ProjectAnalysis = {
+  overall: 'Proven product, clear edge, one step from launch — activation is the gap.',
   building: 'An AI coding companion for solo founders.',
   stage: 'Launch stage, pre-revenue.',
   edge: 'The guided one-move-at-a-time map.',
@@ -16,10 +17,10 @@ const full: ProjectAnalysis = {
 };
 
 describe('isUsableAnalysis', () => {
-  it('accepts a full five-field object', () => {
+  it('accepts a full six-field object', () => {
     expect(isUsableAnalysis(full)).toBe(true);
   });
-  it('rejects when any field is missing', () => {
+  it('rejects when any field is missing (including overall)', () => {
     for (const k of Object.keys(full) as (keyof ProjectAnalysis)[]) {
       const partial = { ...full };
       delete partial[k];
@@ -28,7 +29,7 @@ describe('isUsableAnalysis', () => {
   });
   it('rejects empty or whitespace-only fields', () => {
     expect(isUsableAnalysis({ ...full, edge: '' })).toBe(false);
-    expect(isUsableAnalysis({ ...full, edge: '   ' })).toBe(false);
+    expect(isUsableAnalysis({ ...full, overall: '   ' })).toBe(false);
   });
   it('rejects non-string fields and non-objects', () => {
     expect(isUsableAnalysis({ ...full, stage: 3 })).toBe(false);
@@ -38,7 +39,7 @@ describe('isUsableAnalysis', () => {
 });
 
 describe('analysisRows', () => {
-  it('returns the five rows in fixed order with the right labels', () => {
+  it('returns the five labeled rows (overall excluded — it is the lead paragraph)', () => {
     const rows = analysisRows(full);
     expect(rows.map((r) => r.label)).toEqual([
       "You're building",
@@ -54,6 +55,7 @@ describe('analysisRows', () => {
       full.watchOut,
       full.focusNow,
     ]);
+    expect(rows.map((r) => r.value)).not.toContain(full.overall);
   });
 });
 
@@ -61,9 +63,13 @@ describe('analysisPrompt / schema', () => {
   it('embeds the context', () => {
     expect(analysisPrompt('CONTEXT_SENTINEL')).toContain('CONTEXT_SENTINEL');
   });
-  it('schema requires all five fields and forbids extras', () => {
+  it('asks for the synthesized overall read', () => {
+    expect(analysisPrompt('x')).toContain('overall');
+  });
+  it('schema requires all six fields (overall first) and forbids extras', () => {
     expect(PROJECT_ANALYSIS_SCHEMA.additionalProperties).toBe(false);
     expect(PROJECT_ANALYSIS_SCHEMA.required).toEqual([
+      'overall',
       'building',
       'stage',
       'edge',

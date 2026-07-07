@@ -88,32 +88,66 @@ export default function OverviewIntro({
           </div>
         )}
         {analysis && (
-          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {analysisRows(analysis).map((r) => (
-              <div key={r.label}>
-                <div
-                  style={{
-                    fontSize: 10,
-                    letterSpacing: '.6px',
-                    textTransform: 'uppercase',
-                    color: `${GUIDE_HEX}bf`,
-                  }}
-                >
-                  {r.label}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    lineHeight: 1.45,
-                    color: 'rgba(245,243,255,.82)',
-                    marginTop: 2,
-                  }}
-                >
-                  {r.value}
-                </div>
+          <>
+            {/* Synthesized overall verdict — the lead, not a labeled row. */}
+            <div
+              style={{
+                marginTop: 14,
+                padding: '13px 14px',
+                background: `${GUIDE_HEX}12`,
+                border: `1px solid ${GUIDE_HEX}2e`,
+                borderRadius: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 10,
+                  letterSpacing: '.7px',
+                  textTransform: 'uppercase',
+                  fontWeight: 700,
+                  color: GUIDE_HEX,
+                }}
+              >
+                Overall
               </div>
-            ))}
-          </div>
+              <div
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                  color: 'rgba(245,243,255,.9)',
+                  marginTop: 5,
+                }}
+              >
+                {analysis.overall}
+              </div>
+            </div>
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+              {analysisRows(analysis).map((r) => (
+                <div key={r.label}>
+                  <div
+                    style={{
+                      fontSize: 10,
+                      letterSpacing: '.6px',
+                      textTransform: 'uppercase',
+                      color: `${GUIDE_HEX}bf`,
+                    }}
+                  >
+                    {r.label}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 12.5,
+                      lineHeight: 1.5,
+                      color: 'rgba(245,243,255,.82)',
+                      marginTop: 3,
+                    }}
+                  >
+                    {r.value}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         )}
         {!analysis && !analysisLoading && (
           <div

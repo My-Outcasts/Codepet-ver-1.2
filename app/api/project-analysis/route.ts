@@ -63,7 +63,7 @@ export async function POST(req: Request): Promise<Response> {
       client,
       system: ANALYSIS_SYSTEM,
       prompt: analysisPrompt(context),
-      maxTokens: 2048,
+      maxTokens: 4096,
       label: 'project-analysis',
       schema: PROJECT_ANALYSIS_SCHEMA,
       onUsage: usageSink(uid, idToken, 'project-analysis'),
