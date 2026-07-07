@@ -419,7 +419,10 @@ export default function OverviewView() {
         ) {
           el.style.opacity = '1';
           el.style.transform = `translate(${sc.x}px, ${sc.y}px)`;
-          const nextFlip = sc.x > dims.w * 0.62;
+          // Flip to the left before the right-placed card (offset 18 + width 250) would
+          // clip the right edge — robust on narrow panels (e.g. chat open), not just a
+          // fixed fraction of the width.
+          const nextFlip = sc.x + 268 > dims.w;
           if (nextFlip !== beaconFlipRef.current) {
             beaconFlipRef.current = nextFlip;
             setBeaconFlip(nextFlip);
