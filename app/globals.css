@@ -9297,6 +9297,7 @@ body {
 .lc-deny {
   background: #e74c3c;
   color: #fff;
+}
 /* byte's in-chat "turn this on" toolkit card (SetupCard) */
 .cset {
   border: 1px solid var(--hairline);

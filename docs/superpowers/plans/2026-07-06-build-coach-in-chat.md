@@ -34,10 +34,12 @@
 ## Task 1: Pure build-flow module (`lib/buildFlow.ts`)
 
 **Files:**
+
 - Create: `lib/buildFlow.ts`
 - Test: `lib/buildFlow.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LiveState` from `./liveBuild`.
 - Produces:
   - `type BuildStep = 'during' | 'end'`
@@ -144,9 +146,11 @@ git commit -m "feat(build-coach): pure build-flow helpers for the in-chat flow"
 ## Task 2: Store build-flow slice (`lib/store.tsx`)
 
 **Files:**
+
 - Modify: `lib/store.tsx` — `ChatMessage` (near line 44), `View` handling, `AppState` interface (near line 84), `AppProvider` state/effects/actions (near line 161+), and the `value`/deps memo (near line 881+).
 
 **Interfaces:**
+
 - Consumes: `appendBrief`, `stepForLive`, `INTAKE_OPENING`, `INTAKE_FOLLOWUP`, `type BuildStep` from `./buildFlow`; `requestBuildPlan` from `./ai/buildPlan`; `buildOpeningPrompt`, `terminalCommand` from `./armSession`; `armBuildSession` from `@/app/actions/build`; `getCapability` from `@/app/actions/install`; `subscribeLiveBuild`, `ensureIngestToken`, `loadProjectDirs` from `./firebase/companyData`; `type BytePlan` from `./ai/plan`; `type LiveState` from `./liveBuild`.
 - Produces (new `AppState` members consumed by Task 3 & Task 4):
   - `buildStep: BuildStep`
@@ -211,21 +215,21 @@ In the `AppState` interface (near line 84), add the members listed in this task'
 In `AppProvider` (after the chat state near line 208), add:
 
 ```ts
-  // "Let's build" flow (was BuildCoachView local state; lifted here so the chat
-  // panel drives START and the main view renders DURING/END from one source).
-  const [buildStep, setBuildStep] = useState<BuildStep>('during');
-  const [buildProject, setBuildProject] = useState('');
-  const [buildBrief, setBuildBrief] = useState('');
-  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(null);
-  const [buildSessionId, setBuildSessionId] = useState<string | null>(null);
-  const [buildLive, setBuildLive] = useState<LiveState | null>(null);
-  const [buildLocal, setBuildLocal] = useState(false);
-  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(null);
-  const [buildProjectDir, setBuildProjectDir] = useState('');
-  const [buildArming, setBuildArming] = useState(false);
-  const [buildIntakeActive, setBuildIntakeActive] = useState(false);
-  // Guards the one-time "session ended" nudge so the live subscription posts it once.
-  const buildEndedNudged = useRef(false);
+// "Let's build" flow (was BuildCoachView local state; lifted here so the chat
+// panel drives START and the main view renders DURING/END from one source).
+const [buildStep, setBuildStep] = useState<BuildStep>('during');
+const [buildProject, setBuildProject] = useState('');
+const [buildBrief, setBuildBrief] = useState('');
+const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(null);
+const [buildSessionId, setBuildSessionId] = useState<string | null>(null);
+const [buildLive, setBuildLive] = useState<LiveState | null>(null);
+const [buildLocal, setBuildLocal] = useState(false);
+const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(null);
+const [buildProjectDir, setBuildProjectDir] = useState('');
+const [buildArming, setBuildArming] = useState(false);
+const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+// Guards the one-time "session ended" nudge so the live subscription posts it once.
+const buildEndedNudged = useRef(false);
 ```
 
 (Confirm `useRef` is imported from `react` at the top; add it if missing.)
@@ -235,28 +239,28 @@ In `AppProvider` (after the chat state near line 208), add:
 Add this effect in `AppProvider` (after the state above):
 
 ```ts
-  // Subscribe to the live build doc once a session is armed. Updating state from the
-  // subscription is intended; when the rollup marks the doc ended we flip to END and
-  // post one closing nudge in chat.
-  useEffect(() => {
-    if (!companyId || !buildSessionId) return;
-    return subscribeLiveBuild(companyId, buildSessionId, (s) => {
-      setBuildLive(s);
-      setBuildStep(stepForLive(s));
-      if (s?.ended && !buildEndedNudged.current) {
-        buildEndedNudged.current = true;
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: newId(),
-            role: 'byte',
-            text: "Nice — your session wrapped up! Pop over to the recap and let's write down what we learned. 📒",
-            ts: Date.now(),
-          },
-        ]);
-      }
-    });
-  }, [companyId, buildSessionId]);
+// Subscribe to the live build doc once a session is armed. Updating state from the
+// subscription is intended; when the rollup marks the doc ended we flip to END and
+// post one closing nudge in chat.
+useEffect(() => {
+  if (!companyId || !buildSessionId) return;
+  return subscribeLiveBuild(companyId, buildSessionId, (s) => {
+    setBuildLive(s);
+    setBuildStep(stepForLive(s));
+    if (s?.ended && !buildEndedNudged.current) {
+      buildEndedNudged.current = true;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          text: "Nice — your session wrapped up! Pop over to the recap and let's write down what we learned. 📒",
+          ts: Date.now(),
+        },
+      ]);
+    }
+  });
+}, [companyId, buildSessionId]);
 ```
 
 - [ ] **Step 6: Add the five build-flow actions**
@@ -264,143 +268,142 @@ Add this effect in `AppProvider` (after the state above):
 Add these `useCallback`s in `AppProvider` (place them near `sendChat`, before the `value` memo):
 
 ```ts
-  const startBuildIntake = useCallback(() => {
-    setBuildIntakeActive(true);
-    setBuildBrief('');
-    setBuildPlanState(null);
+const startBuildIntake = useCallback(() => {
+  setBuildIntakeActive(true);
+  setBuildBrief('');
+  setBuildPlanState(null);
+  setChatMessages((prev) => [
+    ...prev,
+    { id: newId(), role: 'byte', text: INTAKE_OPENING, ts: Date.now() },
+  ]);
+  track('build.intake.start', {});
+}, []);
+
+const addIntakeTurn = useCallback(
+  (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
+    const first = buildBrief.trim().length === 0;
+    setBuildBrief((b) => appendBrief(b, text));
+    const now = Date.now();
     setChatMessages((prev) => [
       ...prev,
-      { id: newId(), role: 'byte', text: INTAKE_OPENING, ts: Date.now() },
+      { id: newId(), role: 'me', text, ts: now },
+      // After the first answer, Byte nudges once and surfaces the "to plan" button.
+      {
+        id: newId(),
+        role: 'byte',
+        text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
+        ts: now + 1,
+        buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
+      },
     ]);
-    track('build.intake.start', {});
-  }, []);
+  },
+  [buildBrief],
+);
 
-  const addIntakeTurn = useCallback(
-    (raw: string) => {
-      const text = raw.trim();
-      if (!text) return;
-      const first = buildBrief.trim().length === 0;
-      setBuildBrief((b) => appendBrief(b, text));
-      const now = Date.now();
+const generateBuildPlan = useCallback(() => {
+  const brief = buildBrief.trim();
+  if (!brief) return;
+  const thinkingId = newId();
+  setChatMessages((prev) => [
+    ...prev,
+    { id: thinkingId, role: 'byte', text: 'Byte is turning this into a plan…', ts: Date.now() },
+  ]);
+  (async () => {
+    try {
+      const plan = await requestBuildPlan({ brief, project: buildProject || undefined });
+      setBuildPlanState(plan);
+      setBuildIntakeActive(false);
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === thinkingId
+            ? {
+                ...m,
+                text: `Here's the plan — aim for ~${plan.budgetActions} actions.`,
+                buildPlan: plan,
+                buildAction: { kind: 'start-building', label: 'Start building' },
+              }
+            : m,
+        ),
+      );
+    } catch {
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === thinkingId
+            ? { ...m, text: "Byte couldn't put the plan together just now. Give it another go?" }
+            : m,
+        ),
+      );
+    }
+  })();
+}, [buildBrief, buildProject]);
+
+const armBuild = useCallback(() => {
+  if (!buildPlan || !companyId || buildArming) return;
+  setBuildArming(true);
+  buildEndedNudged.current = false;
+  (async () => {
+    try {
+      const id = crypto.randomUUID();
+      const dirs = await loadProjectDirs(companyId);
+      const dir = dirs.find((p) => p.name === buildProject)?.path ?? (buildProject.trim() || '.');
+      setBuildProjectDir(dir);
+      const cap = await getCapability();
+      if (cap.mode === 'local') {
+        setBuildLocal(true);
+        setBuildLaunchCommand(null);
+        setBuildSessionId(id);
+        setBuildLive(null);
+        setBuildStep('during');
+      } else {
+        setBuildLocal(false);
+        const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
+        const token = await ensureIngestToken(companyId);
+        const res = await armBuildSession({
+          buildSessionId: id,
+          projectDir: dir,
+          plan: buildPlan,
+          brief: buildBrief,
+          companyId,
+          token,
+          apiUrl: window.location.origin,
+        });
+        setBuildLaunchCommand(res.ok && res.launched ? null : command);
+        setBuildSessionId(id);
+        setBuildLive(null);
+        setBuildStep('during');
+      }
+      setView('build');
       setChatMessages((prev) => [
         ...prev,
-        { id: newId(), role: 'me', text, ts: now },
-        // After the first answer, Byte nudges once and surfaces the "to plan" button.
         {
           id: newId(),
           role: 'byte',
-          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
-          ts: now + 1,
-          buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
+          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+          ts: Date.now(),
         },
       ]);
-    },
-    [buildBrief],
-  );
+      track('build.arm', {});
+    } finally {
+      setBuildArming(false);
+    }
+  })();
+}, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
 
-  const generateBuildPlan = useCallback(() => {
-    const brief = buildBrief.trim();
-    if (!brief) return;
-    const thinkingId = newId();
-    setChatMessages((prev) => [
-      ...prev,
-      { id: thinkingId, role: 'byte', text: 'Byte is turning this into a plan…', ts: Date.now() },
-    ]);
-    (async () => {
-      try {
-        const plan = await requestBuildPlan({ brief, project: buildProject || undefined });
-        setBuildPlanState(plan);
-        setBuildIntakeActive(false);
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === thinkingId
-              ? {
-                  ...m,
-                  text: `Here's the plan — aim for ~${plan.budgetActions} actions.`,
-                  buildPlan: plan,
-                  buildAction: { kind: 'start-building', label: 'Start building' },
-                }
-              : m,
-          ),
-        );
-      } catch {
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === thinkingId
-              ? { ...m, text: "Byte couldn't put the plan together just now. Give it another go?" }
-              : m,
-          ),
-        );
-      }
-    })();
-  }, [buildBrief, buildProject]);
-
-  const armBuild = useCallback(() => {
-    if (!buildPlan || !companyId || buildArming) return;
-    setBuildArming(true);
-    buildEndedNudged.current = false;
-    (async () => {
-      try {
-        const id = crypto.randomUUID();
-        const dirs = await loadProjectDirs(companyId);
-        const dir =
-          dirs.find((p) => p.name === buildProject)?.path ?? (buildProject.trim() || '.');
-        setBuildProjectDir(dir);
-        const cap = await getCapability();
-        if (cap.mode === 'local') {
-          setBuildLocal(true);
-          setBuildLaunchCommand(null);
-          setBuildSessionId(id);
-          setBuildLive(null);
-          setBuildStep('during');
-        } else {
-          setBuildLocal(false);
-          const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
-          const token = await ensureIngestToken(companyId);
-          const res = await armBuildSession({
-            buildSessionId: id,
-            projectDir: dir,
-            plan: buildPlan,
-            brief: buildBrief,
-            companyId,
-            token,
-            apiUrl: window.location.origin,
-          });
-          setBuildLaunchCommand(res.ok && res.launched ? null : command);
-          setBuildSessionId(id);
-          setBuildLive(null);
-          setBuildStep('during');
-        }
-        setView('build');
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: newId(),
-            role: 'byte',
-            text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
-            ts: Date.now(),
-          },
-        ]);
-        track('build.arm', {});
-      } finally {
-        setBuildArming(false);
-      }
-    })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
-
-  const resetBuildFlow = useCallback(() => {
-    setBuildStep('during');
-    setBuildProject('');
-    setBuildBrief('');
-    setBuildPlanState(null);
-    setBuildSessionId(null);
-    setBuildLive(null);
-    setBuildLocal(false);
-    setBuildLaunchCommand(null);
-    setBuildProjectDir('');
-    setBuildIntakeActive(false);
-    buildEndedNudged.current = false;
-  }, []);
+const resetBuildFlow = useCallback(() => {
+  setBuildStep('during');
+  setBuildProject('');
+  setBuildBrief('');
+  setBuildPlanState(null);
+  setBuildSessionId(null);
+  setBuildLive(null);
+  setBuildLocal(false);
+  setBuildLaunchCommand(null);
+  setBuildProjectDir('');
+  setBuildIntakeActive(false);
+  buildEndedNudged.current = false;
+}, []);
 ```
 
 (If `track(...)` is not the helper name used elsewhere in the file, match the existing telemetry call — e.g. the `track('chat.send', {})` on line 802. Reuse that exact import/name.)
@@ -455,9 +458,11 @@ git commit -m "feat(build-coach): lift build-flow state + actions into the store
 ## Task 3: Chat drives START + plan card (`components/Copilot.tsx`)
 
 **Files:**
+
 - Modify: `components/Copilot.tsx` — `useApp()` destructure, composer `submit`, message rendering (near line 219), empty-state block (line 254).
 
 **Interfaces:**
+
 - Consumes from the store (Task 2): `buildIntakeActive`, `startBuildIntake`, `addIntakeTurn`, `generateBuildPlan`, `armBuild`, `buildArming`, and the `ChatMessage` fields `buildPlan` / `buildAction`.
 - Produces: no new exports; UI wiring only.
 
@@ -466,15 +471,15 @@ git commit -m "feat(build-coach): lift build-flow state + actions into the store
 In `Copilot()`'s `useApp()` destructure, add:
 
 ```ts
-  const {
-    // ...existing...
-    buildIntakeActive,
-    startBuildIntake,
-    addIntakeTurn,
-    generateBuildPlan,
-    armBuild,
-    buildArming,
-  } = useApp();
+const {
+  // ...existing...
+  buildIntakeActive,
+  startBuildIntake,
+  addIntakeTurn,
+  generateBuildPlan,
+  armBuild,
+  buildArming,
+} = useApp();
 ```
 
 - [ ] **Step 2: Route the composer to intake while active**
@@ -482,16 +487,16 @@ In `Copilot()`'s `useApp()` destructure, add:
 Find the composer `submit` handler (the one that calls `sendChat`) and branch on `buildIntakeActive`:
 
 ```ts
-  const submit = () => {
-    const text = draft.trim();
-    if (!text) return;
-    if (buildIntakeActive) {
-      addIntakeTurn(text);
-    } else {
-      sendChat(text);
-    }
-    setDraft('');
-  };
+const submit = () => {
+  const text = draft.trim();
+  if (!text) return;
+  if (buildIntakeActive) {
+    addIntakeTurn(text);
+  } else {
+    sendChat(text);
+  }
+  setDraft('');
+};
 ```
 
 (Match the existing `submit` body; only add the `buildIntakeActive` branch. Keep the existing `chatStreaming`/guard behavior for the `sendChat` path.)
@@ -501,36 +506,36 @@ Find the composer `submit` handler (the one that calls `sendChat`) and branch on
 In the `chatMessages.map(...)` render (near line 219), add handling BEFORE the generic bubble return. Add a `buildPlan`/`buildAction` branch:
 
 ```tsx
-          if (m.buildPlan) {
-            return (
-              <div key={m.id} className="bub">
-                {plain(m.text)}
-                <div className="cop-plan">
-                  <div className="cop-plan-h">{m.buildPlan.title}</div>
-                  <ol>
-                    {m.buildPlan.steps.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ol>
-                </div>
-                {m.buildAction?.kind === 'start-building' && (
-                  <button className="bub-act" onClick={armBuild} disabled={buildArming}>
-                    {buildArming ? 'Opening your session…' : m.buildAction.label}
-                  </button>
-                )}
-              </div>
-            );
-          }
-          if (m.buildAction?.kind === 'to-plan') {
-            return (
-              <div key={m.id} className="bub">
-                {plain(m.text)}
-                <button className="bub-act" onClick={generateBuildPlan}>
-                  {m.buildAction.label}
-                </button>
-              </div>
-            );
-          }
+if (m.buildPlan) {
+  return (
+    <div key={m.id} className="bub">
+      {plain(m.text)}
+      <div className="cop-plan">
+        <div className="cop-plan-h">{m.buildPlan.title}</div>
+        <ol>
+          {m.buildPlan.steps.map((s, i) => (
+            <li key={i}>{s}</li>
+          ))}
+        </ol>
+      </div>
+      {m.buildAction?.kind === 'start-building' && (
+        <button className="bub-act" onClick={armBuild} disabled={buildArming}>
+          {buildArming ? 'Opening your session…' : m.buildAction.label}
+        </button>
+      )}
+    </div>
+  );
+}
+if (m.buildAction?.kind === 'to-plan') {
+  return (
+    <div key={m.id} className="bub">
+      {plain(m.text)}
+      <button className="bub-act" onClick={generateBuildPlan}>
+        {m.buildAction.label}
+      </button>
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 4: Add the "Let's build" button to the empty state**
@@ -538,22 +543,20 @@ In the `chatMessages.map(...)` render (near line 219), add handling BEFORE the g
 In the `{empty && (...)}` block (line 254), add a primary build button above the CHIPS:
 
 ```tsx
-        {empty && (
-          <div className="chips">
-            <button
-              className="sug sug-build"
-              onClick={startBuildIntake}
-              disabled={chatStreaming}
-            >
-              🔨 Let&apos;s build something
-            </button>
-            {CHIPS.map((t) => (
-              <button key={t} className="sug" onClick={() => sendChat(t)} disabled={chatStreaming}>
-                {t}
-              </button>
-            ))}
-          </div>
-        )}
+{
+  empty && (
+    <div className="chips">
+      <button className="sug sug-build" onClick={startBuildIntake} disabled={chatStreaming}>
+        🔨 Let&apos;s build something
+      </button>
+      {CHIPS.map((t) => (
+        <button key={t} className="sug" onClick={() => sendChat(t)} disabled={chatStreaming}>
+          {t}
+        </button>
+      ))}
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 5: Minimal styles for the plan card + build chip**
@@ -600,9 +603,11 @@ git commit -m "feat(build-coach): start builds from the chat empty-state + plan 
 ## Task 4: Shrink `BuildCoachView` to DURING/END from the store
 
 **Files:**
+
 - Modify: `components/views/BuildCoachView.tsx` — remove `StartStep`, remove local `useState`, read the store, render DURING/END only.
 
 **Interfaces:**
+
 - Consumes from the store (Task 2): `buildStep`, `buildPlan`, `buildLive`, `buildLaunchCommand`, `buildLocal`, `buildSessionId`, `buildProjectDir`, `buildBrief`, `resetBuildFlow`, and `companyId` from `useAuth()`.
 - Produces: `BuildCoachView` (unchanged export) now rendering only DURING/END.
 
@@ -656,7 +661,8 @@ export function BuildCoachView() {
       <div className="vhead">
         <h1>Let&rsquo;s build</h1>
         <div className="sub">
-          Byte watches your real Claude Code session, then helps you check &amp; remember what you built.
+          Byte watches your real Claude Code session, then helps you check &amp; remember what you
+          built.
         </div>
       </div>
 
@@ -731,9 +737,11 @@ git commit -m "refactor(build-coach): view renders DURING/END from the store (ST
 ## Task 5: Remove the sidebar tab + full verification
 
 **Files:**
+
 - Modify: `components/Sidebar.tsx` — remove the build nav entry (lines ~89–110).
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces: the sidebar no longer lists "Let's build".
 
@@ -748,11 +756,13 @@ npm run typecheck
 npm run lint
 npm test
 ```
+
 Expected: all PASS. (`'build'` stays valid in the `View` union and `AppRoot` switch; it is now unreachable from the sidebar but reachable via `armBuild()`.)
 
 - [ ] **Step 3: Manual end-to-end check**
 
 Run: `npm run dev`, sign in, then:
+
 1. Open the byte chat; with an empty thread, confirm the **"🔨 Let's build something"** button shows.
 2. Tap it → Byte asks the opening question. Type an answer → Byte posts the follow-up + a **"Turn this into a plan →"** button. Type more (optional).
 3. Tap **Turn this into a plan** → a plan card appears with **Start building**.

@@ -66,8 +66,7 @@ function Shell() {
       <DepartmentDetail />
     ) : view === 'tasks' ? (
       <TasksView />
-    ) : view === 'build' ? // Rendered by the persistent keep-alive slot below, not here.
-    null : view === 'library' ? (
+    ) : view === 'build' ? null : view === 'library' ? ( // Rendered by the persistent keep-alive slot below, not here.
       <LibraryView />
     ) : view === 'install' ? (
       <InstallView />
