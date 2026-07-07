@@ -364,19 +364,21 @@ export function ArtifactModal() {
       <>First draft ready — written from your brief, in your voice</>
     );
 
-  // The line shown when a live pass fails — cause-specific so it's honest, not one
-  // vague snag. A rate-limit hit today's cap; a refusal means byte reached the model
-  // but held back (rephrase/add detail); ai_unavailable is a provider/credit outage on
-  // our side; anything else is the generic "couldn't reach byte". All fall back to the
-  // saved draft so the founder still sees something.
-  const liveErrorMsg =
+  // The cause of a failed live pass — cause-specific so it's honest, not one vague snag.
+  // A rate-limit hit today's cap; a refusal means byte reached the model but held back
+  // (rephrase/add detail); ai_unavailable is a provider/credit outage on our side;
+  // anything else is the generic "couldn't reach byte". `liveErrorReason` is the bare
+  // cause (used by the no-draft failure state); `liveErrorMsg` appends the
+  // fall-back-to-draft note (used only when a saved draft actually exists).
+  const liveErrorReason =
     genError === 'rate_limited'
-      ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
+      ? 'You’ve reached today’s generation limit — it resets tomorrow.'
       : genError === 'refused'
-        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail. Showing the saved draft.'
+        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail.'
         : genError === 'ai_unavailable'
-          ? 'byte is temporarily unavailable — try again shortly. Showing the saved draft.'
-          : 'Couldn’t reach byte just now — showing the saved draft.';
+          ? 'byte is temporarily unavailable — try again shortly.'
+          : 'Couldn’t reach byte just now.';
+  const liveErrorMsg = `${liveErrorReason} Showing the saved draft.`;
 
   const olLabel: React.CSSProperties = {
     fontSize: 11,
@@ -397,7 +399,7 @@ export function ArtifactModal() {
           byte couldn’t generate this right now
         </div>
         <div style={{ fontSize: 13, color: 'var(--t-3)', marginTop: 6, lineHeight: 1.5 }}>
-          {liveErrorMsg}
+          {liveErrorReason}
         </div>
         <button className="btn" style={{ marginTop: 14 }} onClick={startRun}>
           Retry
