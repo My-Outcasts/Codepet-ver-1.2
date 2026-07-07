@@ -1,8 +1,51 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useLiveSession } from '@/lib/liveSession/useLiveSession';
-import { describePermission } from '@/lib/liveSession/permissionSummary';
+import { describePermission, riskLevel } from '@/lib/liveSession/permissionSummary';
 import type { BytePlan } from '@/lib/ai/plan';
+
+// The Allow/Deny card. Leads with a plain-language risk level + what Byte wants to do
+// (the preview IS the confirmation); raw args stay tucked behind Details.
+const RISK_LABEL: Record<string, { label: string; hint: string }> = {
+  safe: { label: 'Safe', hint: 'just looking — nothing changes' },
+  careful: { label: 'Careful', hint: 'this changes a file' },
+  risky: { label: 'Risky', hint: 'could remove or overwrite things' },
+};
+
+function PermissionCard({
+  p,
+  onDecide,
+}: {
+  p: { requestId: string; tool: string; input: unknown };
+  onDecide: (requestId: string, decision: 'allow' | 'deny') => void;
+}) {
+  const risk = riskLevel(p.tool, p.input);
+  const r = RISK_LABEL[risk];
+  return (
+    <div className={`lc-perm risk-${risk}`}>
+      <div className="lc-perm-top">
+        <span className={`lc-risk ${risk}`}>{r.label}</span>
+        <span className="lc-perm-hint">{r.hint}</span>
+      </div>
+      <div className="lc-perm-q">Byte wants to</div>
+      <div className="lc-perm-sum">{describePermission(p.tool, p.input)}</div>
+      {p.input != null && (
+        <details className="lc-perm-more">
+          <summary>Details ({p.tool})</summary>
+          <pre className="lc-perm-in">{JSON.stringify(p.input, null, 2).slice(0, 800)}</pre>
+        </details>
+      )}
+      <div className="lc-perm-btns">
+        <button className="lc-allow" onClick={() => onDecide(p.requestId, 'allow')}>
+          Allow
+        </button>
+        <button className="lc-deny" onClick={() => onDecide(p.requestId, 'deny')}>
+          Deny
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // Phase 2: two-way live transcript of the real `claude` session. User and assistant
 // turns render as chat bubbles; tool activity is listed below; a composer sends
@@ -77,38 +120,7 @@ export function LiveChat({
         )}
         {state.status === 'ended' && <div className="lc-done">Session finished.</div>}
       </div>
-      {state.pendingPermission && (
-        <div className="lc-perm">
-          <div className="lc-perm-q">
-            Claude wants to use <b>{state.pendingPermission.tool}</b>
-          </div>
-          <div className="lc-perm-sum">
-            {describePermission(state.pendingPermission.tool, state.pendingPermission.input)}
-          </div>
-          {state.pendingPermission.input != null && (
-            <details className="lc-perm-more">
-              <summary>Details</summary>
-              <pre className="lc-perm-in">
-                {JSON.stringify(state.pendingPermission.input, null, 2).slice(0, 800)}
-              </pre>
-            </details>
-          )}
-          <div className="lc-perm-btns">
-            <button
-              className="lc-allow"
-              onClick={() => decide(state.pendingPermission!.requestId, 'allow')}
-            >
-              Allow
-            </button>
-            <button
-              className="lc-deny"
-              onClick={() => decide(state.pendingPermission!.requestId, 'deny')}
-            >
-              Deny
-            </button>
-          </div>
-        </div>
-      )}
+      {state.pendingPermission && <PermissionCard p={state.pendingPermission} onDecide={decide} />}
       <div className="lc-composer">
         <textarea
           value={draft}

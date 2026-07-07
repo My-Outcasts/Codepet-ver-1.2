@@ -7797,13 +7797,56 @@ body {
 }
 .lc-perm {
   margin-top: 8px;
-  padding: 10px 12px;
-  border: 1px solid #e0b3ff;
+  padding: 12px 14px;
+  border: 1.5px solid #e0b3ff;
   background: #faf0ff;
   border-radius: 12px;
 }
+/* Card color follows the risk of the action (safe = calm, risky = stop-and-look). */
+.lc-perm.risk-safe {
+  border-color: #bfe3c9;
+  background: #f2faf4;
+}
+.lc-perm.risk-careful {
+  border-color: #f2d9a8;
+  background: #fdf7ec;
+}
+.lc-perm.risk-risky {
+  border-color: #f0b8b8;
+  background: #fdf1f1;
+}
+.lc-perm-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.lc-risk {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #fff;
+}
+.lc-risk.safe {
+  background: #2f9e57;
+}
+.lc-risk.careful {
+  background: #c2740a;
+}
+.lc-risk.risky {
+  background: #cf3d3d;
+}
+.lc-perm-hint {
+  font-size: 12.5px;
+  color: #6a6379;
+}
 .lc-perm-q {
-  margin-bottom: 4px;
+  font-size: 12px;
+  color: #6a6379;
+  margin-bottom: 2px;
 }
 .lc-perm-sum {
   font-weight: 600;

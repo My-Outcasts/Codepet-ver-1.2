@@ -6,6 +6,41 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v : '';
 }
 
+/** How much a tool call should worry a non-technical founder — drives the card's
+ *  color + badge. safe = read-only / harmless, careful = changes files, risky =
+ *  destructive or system-level shell. Conservative: unknown → careful. */
+export type RiskLevel = 'safe' | 'careful' | 'risky';
+
+const READONLY_TOOLS = new Set([
+  'Read',
+  'Glob',
+  'Grep',
+  'AskUserQuestion',
+  'WebFetch',
+  'WebSearch',
+]);
+const EDIT_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+// Destructive / irreversible / system-level shell — anything here is "risky".
+const RISKY_BASH =
+  /(^|\s|&|\||;)(rm\s|rmdir\s|sudo\b|dd\s|mkfs|shutdown\b|reboot\b|kill\b|chmod\s+-?R?\s*777|chown\b|:\(\)\s*\{)|(-rf\b|--force\b|-f\b)|>\s*\/dev\/|\bgit\s+push\b|\bnpm\s+publish\b|\byarn\s+publish\b|\bcurl\b[^\n|]*\|\s*(sh|bash)|\bwget\b[^\n|]*\|\s*(sh|bash)/i;
+// Clearly read-only shell — safe to run without worry.
+const SAFE_BASH =
+  /^\s*(ls|cat|echo|pwd|grep|rg|find|head|tail|wc|which|whoami|date|env|printenv|node\s+-v|npm\s+-v|git\s+(status|log|diff|branch|show)\b)/i;
+
+/** Risk rating for a tool call (see RiskLevel). */
+export function riskLevel(tool: string, input: unknown): RiskLevel {
+  const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  if (READONLY_TOOLS.has(tool)) return 'safe';
+  if (EDIT_TOOLS.has(tool)) return 'careful';
+  if (tool === 'Bash') {
+    const cmd = str(o.command);
+    if (RISKY_BASH.test(cmd)) return 'risky';
+    if (SAFE_BASH.test(cmd)) return 'safe';
+    return 'careful';
+  }
+  return 'careful';
+}
+
 /** One-line description of a tool call for the permission card. */
 export function describePermission(tool: string, input: unknown): string {
   const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
