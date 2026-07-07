@@ -78,6 +78,9 @@ export interface CompanyDoc {
   onboardedAt?: Millis;
   /** When byte's one-time seed personalization ran. Absent ⇒ never personalized. */
   personalizedAt?: Millis;
+  /** The founder's chosen companion character (see COMPANIONS in lib/companions.ts).
+   *  Absent ⇒ byte. */
+  companionId?: string;
   /** byte's one-time project analysis (shown on the Overview first run). */
   projectAnalysis?: ProjectAnalysis;
   /** When the one-time project analysis ran. Absent ⇒ never analyzed. */

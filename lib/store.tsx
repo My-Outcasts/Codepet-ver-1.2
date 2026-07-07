@@ -31,6 +31,7 @@ import {
   persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
+  persistCompanion,
   persistBrief,
   persistChatMessage,
   persistDecisions,
@@ -45,6 +46,7 @@ import {
   persistEnvUsage,
 } from './firebase/companyData';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
+import { DEFAULT_COMPANION_ID } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
@@ -186,6 +188,10 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
+  /** The founder's chosen companion character id (default 'byte'). */
+  companionId: string;
+  /** Set the active companion (persists). */
+  setCompanion: (id: string) => void;
   library: LibItem[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
@@ -305,6 +311,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
+  // The founder's chosen companion character (hydrated from Firestore; default byte).
+  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
 
   useEffect(() => {
     try {
@@ -458,11 +466,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           chat,
           decisions: dec,
           projectAnalysis: pa,
+          companionId: cId,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
           setBrief(b);
           setDecisions(dec);
+          setCompanionId(cId ?? DEFAULT_COMPANION_ID);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
           // way, so a fresh account never inherits a previous account's in-flight/loading state.
           // Re-validate the persisted doc so a partial/corrupt one can't render blank rows.
@@ -562,6 +572,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId],
   );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
+  // Set the active companion (optimistic, persists non-blocking).
+  const setCompanion = useCallback(
+    (id: string) => {
+      setCompanionId(id);
+      track('companion.select', { id });
+      if (companyId) {
+        persistCompanion(companyId, id).catch((err) =>
+          console.error('[store] persist companion failed', err),
+        );
+      }
+    },
+    [companyId],
+  );
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
@@ -1817,6 +1840,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalled: setInstalledFlag,
+      companionId,
+      setCompanion,
       library,
       tracking,
       projects,
@@ -1904,6 +1929,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalledFlag,
+      companionId,
+      setCompanion,
       library,
       tracking,
       projects,
