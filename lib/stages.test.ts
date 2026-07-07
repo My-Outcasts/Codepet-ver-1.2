@@ -1,6 +1,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { DEPTS, OB_STAGES, PHASES, type Task } from './data';
-import { nextPhaseName, currentPhaseName, nextStageOf, stageComplete, currentStageProgress } from './stages';
+import {
+  nextPhaseName,
+  currentPhaseName,
+  nextStageOf,
+  stageComplete,
+  currentStageProgress,
+} from './stages';
 
 describe('nextStageOf', () => {
   it('returns the next rung on the ladder', () => {
