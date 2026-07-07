@@ -34,7 +34,7 @@ import {
   type ChatMessageDoc,
   type ThreadMeta,
 } from './schema';
-import { deriveThreadTitle, needsBackfill, sortThreadsByRecent } from '@/lib/chat/threads';
+import { deriveThreadTitle, needsBackfill, sortThreadsByRecent } from '../chat/threads';
 import { projectNames } from '../projects';
 import {
   aggregateTracking,
