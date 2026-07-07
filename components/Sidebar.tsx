@@ -1,7 +1,8 @@
 'use client';
 import { useApp, type View } from '@/lib/store';
 import { DEPTS, ENV } from '@/lib/data';
-import { Byte } from './Byte';
+import { Companion } from './Companion';
+import { companionById } from '@/lib/companions';
 
 const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () => number }> = [
   {
@@ -82,8 +83,9 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
 ];
 
 export function Sidebar() {
-  const { view, show, library, tick, installed, sideCollapsed, toggleSide } = useApp();
+  const { view, show, library, tick, installed, sideCollapsed, toggleSide, companionId } = useApp();
   void tick; // re-read mutable DEPTS/ENV on each store change
+  const c = companionById(companionId);
   const envPending = ['skills', 'connectors', 'agents'].reduce(
     (a, k) => a + ENV[k].filter((x) => !x.s).length,
     0,
@@ -185,9 +187,9 @@ export function Sidebar() {
           </svg>,
         )}
       <div className="petcard">
-        <Byte size="s28" />
+        <Companion id={companionId} size="s28" />
         <div className="meta" style={{ flex: 1 }}>
-          <div className="pn">byte</div>
+          <div className="pn">{c.name}</div>
           <div className="lvl">Companion · Lv.3</div>
           <div className="petbar">
             <i />
