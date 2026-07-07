@@ -9,7 +9,7 @@ import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
-import { getClient, streamMessage, aiErrorResponse } from '@/lib/ai/client';
+import { getClient, streamMessage, aiErrorResponse, errorCodeOf } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
 import { NAV_DESTINATIONS } from '@/lib/ai/navChip';
 import { parseSetupItems, matchSetupItem, type SetupItem } from '@/lib/ai/envSetup';
@@ -162,6 +162,11 @@ const ACTION_MARK = String.fromCharCode(0x1e);
 // Marker (group-separator, U+001D) that signals byte offered the "Let's build" flow.
 // Distinct from ACTION_MARK; carries no payload — its presence is the whole signal.
 const BUILD_MARK = String.fromCharCode(0x1d);
+
+// Marker (file-separator, U+001C) that signals a mid-stream failure. Carries a trailing
+// JSON error code payload, so a credit outage or upstream error mid-reply is classified
+// honestly on the client instead of surfacing as a generic network error.
+const ERROR_MARK = String.fromCharCode(0x1c);
 
 interface RunnableTask {
   deptK: string;
@@ -434,7 +439,13 @@ export async function POST(req: Request): Promise<Response> {
           }
         } catch (err) {
           console.error('[chat] stream failed', err);
-          controller.error(err);
+          const code = errorCodeOf(err, 'ai_unavailable');
+          try {
+            controller.enqueue(encoder.encode(ERROR_MARK + JSON.stringify({ code })));
+            controller.close();
+          } catch {
+            controller.error(err); // stream already torn down — nothing else to do
+          }
           return;
         }
         controller.close();

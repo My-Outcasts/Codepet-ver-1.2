@@ -312,3 +312,27 @@ export function aiErrorResponse(err: unknown, fallbackCode: string): Response {
   }
   return Response.json({ error: fallbackCode }, { status: 502 });
 }
+
+// The error *code* a caught error maps to — mirrors aiErrorResponse's body codes, for
+// callers that need the code without an HTTP Response (e.g. classifying a mid-stream chat
+// failure so the client shows the honest message instead of "check your connection").
+export function errorCodeOf(err: unknown, fallbackCode: string): string {
+  if (err instanceof GenerationError) {
+    switch (err.failure.kind) {
+      case 'not_configured':
+        return 'not_configured';
+      case 'refused':
+        return 'refused';
+      case 'empty':
+        return 'empty';
+      case 'parse_failed':
+        return 'parse_failed';
+      case 'billing':
+        return 'ai_unavailable';
+      case 'upstream':
+        return fallbackCode;
+    }
+  }
+  const { status, message } = errorInfo(err);
+  return classifyFailureKind(status, message) === 'billing' ? 'ai_unavailable' : fallbackCode;
+}

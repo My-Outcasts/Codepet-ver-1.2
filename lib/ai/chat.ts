@@ -9,6 +9,11 @@ import type { SetupItem } from './envSetup';
 
 const ACTION_MARK = String.fromCharCode(0x1e);
 const BUILD_MARK = String.fromCharCode(0x1d);
+// Marker (file-separator, U+001C) that signals a mid-stream failure. Carries a trailing
+// JSON `{ code }` payload — mirrors ACTION_MARK's wire shape so a credit outage or
+// upstream error mid-reply throws an honest ChatError instead of surfacing as the
+// generic network-failure message.
+const ERROR_MARK = String.fromCharCode(0x1c);
 
 /** A task byte is allowed to run from chat (sent to the server so it uses real IDs). */
 export interface RunnableTask {
@@ -59,8 +64,9 @@ export async function* streamByteChat(
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
-  let buf = ''; // holds the action payload once ACTION_MARK is seen
+  let buf = ''; // holds the action/error payload once ACTION_MARK/ERROR_MARK is seen
   let acting = false; // inside the ACTION_MARK JSON payload
+  let erroring = false; // inside the ERROR_MARK JSON payload
   let offered = false; // BUILD_MARK seen — nothing meaningful follows
   while (true) {
     const { done, value } = await reader.read();
@@ -71,14 +77,19 @@ export async function* streamByteChat(
       buf += chunk; // everything after ACTION_MARK is the action JSON
       continue;
     }
+    if (erroring) {
+      buf += chunk; // everything after ERROR_MARK is the error JSON
+      continue;
+    }
     if (offered) continue; // a build offer ends the meaningful stream
     const combined = buf + chunk;
     const aIdx = combined.indexOf(ACTION_MARK);
     const bIdx = combined.indexOf(BUILD_MARK);
+    const eIdx = combined.indexOf(ERROR_MARK);
     // Earliest present marker wins (-1 = absent, filtered out).
-    const firstIdx = [aIdx, bIdx].filter((i) => i !== -1).sort((x, y) => x - y)[0];
+    const firstIdx = [aIdx, bIdx, eIdx].filter((i) => i !== -1).sort((x, y) => x - y)[0];
     if (firstIdx === undefined) {
-      // No marker yet. RS/GS never appear in prose, so it's safe to emit as text.
+      // No marker yet. RS/GS/FS never appear in prose, so it's safe to emit as text.
       if (combined) yield { type: 'text', text: combined };
       buf = '';
     } else if (firstIdx === bIdx) {
@@ -87,12 +98,27 @@ export async function* streamByteChat(
       yield { type: 'build-offer' };
       offered = true;
       buf = '';
+    } else if (firstIdx === eIdx) {
+      const before = combined.slice(0, eIdx);
+      if (before) yield { type: 'text', text: before };
+      buf = combined.slice(eIdx + ERROR_MARK.length); // start of the error JSON
+      erroring = true;
     } else {
       const before = combined.slice(0, aIdx);
       if (before) yield { type: 'text', text: before };
       buf = combined.slice(aIdx + ACTION_MARK.length); // start of the action JSON
       acting = true;
     }
+  }
+  if (erroring) {
+    let code = 'ai_unavailable';
+    try {
+      const e = JSON.parse(buf) as { code?: unknown };
+      if (typeof e.code === 'string' && e.code) code = e.code;
+    } catch {
+      /* keep the default */
+    }
+    throw new ChatError(code);
   }
   if (acting && buf) {
     try {
