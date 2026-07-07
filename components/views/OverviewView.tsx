@@ -23,6 +23,8 @@ import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf } from '@/lib/stages';
 import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
+import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
+import { overviewProgress } from '@/lib/overview/progress';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
 import { INTRO_SEEN_KEY, introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
@@ -124,7 +126,9 @@ export default function OverviewView() {
     regenerateCompany,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
-  void tick;
+  void tick; // (already present) keeps the reads below live
+  const progress = overviewProgress(DEPTS);
+  const nextMilestone = nextStageOf(brief.stage);
   // First-run spotlight handoff. OverviewView owns the phase + the localStorage
   // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
   // OverviewView is imported ssr:false, so reading localStorage in the lazy
@@ -554,6 +558,7 @@ export default function OverviewView() {
         />
       )}
       <StageRibbon />
+      <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
 
       <div
         style={{
