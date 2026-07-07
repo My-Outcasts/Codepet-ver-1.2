@@ -152,6 +152,10 @@ export interface CompanyData {
   brief: CompanyBrief;
   /** When onboarding was completed; undefined ⇒ the user hasn't onboarded yet. */
   onboardedAt?: number;
+  /** When byte's stage scaffold last landed; undefined ⇒ the map is still the built-in
+   *  example, not a plan generated from this founder's product. Drives the "example
+   *  plan" signal so a seeded map is never mistaken for a tailored one. */
+  scaffoldedAt?: number;
   /** Last-selected roadmap stage; undefined ⇒ none saved (use the UI default). */
   roadmapStage?: number;
   /** Recent byte-chat history, oldest-first. */
@@ -210,6 +214,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     library,
     brief: (company?.brief ?? {}) as CompanyBrief,
     onboardedAt: company?.onboardedAt as number | undefined,
+    scaffoldedAt: company?.scaffoldedAt as number | undefined,
     roadmapStage: validStage(company?.roadmapStage),
     chat,
     decisions: normalizeDecisions(company?.decisions),

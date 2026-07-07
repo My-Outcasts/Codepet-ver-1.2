@@ -21,6 +21,7 @@ import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf } from '@/lib/stages';
+import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
@@ -115,7 +116,11 @@ export default function OverviewView() {
     advanceStage,
     selStage,
     drawerOpen,
+    planTailored,
+    scaffoldFailed,
+    regenerateCompany,
   } = useApp();
+  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
   void tick;
   // First-run spotlight handoff. OverviewView owns the phase + the localStorage
   // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
@@ -559,6 +564,43 @@ export default function OverviewView() {
           Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
           a node to open it.
         </div>
+        {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
+            never let a seeded map pass for a plan tailored to the founder's product. */}
+        {examplePlan && (
+          <div
+            style={{
+              pointerEvents: 'auto',
+              marginTop: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '7px 12px',
+              borderRadius: 8,
+              background: 'rgba(253,176,34,.12)',
+              border: '1px solid rgba(253,176,34,.28)',
+              fontSize: 12.5,
+              color: 'rgba(245,243,255,.82)',
+            }}
+          >
+            <span>{examplePlan.text}</span>
+            <button
+              type="button"
+              onClick={regenerateCompany}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: '#FDB022',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {examplePlan.cta}
+            </button>
+          </div>
+        )}
       </div>
 
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
