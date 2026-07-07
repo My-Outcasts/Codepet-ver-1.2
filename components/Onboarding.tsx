@@ -7,6 +7,7 @@ import type { CompanyBrief } from '@/lib/firebase/schema';
 import { track } from '@/lib/analytics';
 import { useParallax } from '@/lib/ui/useParallax';
 import { Starfield } from '@/components/ui/Starfield';
+import { CompanionPicker } from './CompanionPicker';
 
 interface ObData {
   name: string;
@@ -44,6 +45,7 @@ const STEP_ART = [
   '/onboarding/ob-isometric.webp', // 5 stage
   '/onboarding/ob-boardroom.webp', // 6 analysis
   '/onboarding/ob-team.webp', // 7 summary
+  '/onboarding/ob-team.jpg', // 8 choose companion
 ];
 
 // Per-step colour grade laid over the art panel (soft-light) — one hue per scene.
@@ -146,7 +148,8 @@ function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) =>
 }
 
 export function Onboarding() {
-  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding } = useApp();
+  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding, companionId, setCompanion } =
+    useApp();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<ObData>({
     name: '',
@@ -165,6 +168,7 @@ export function Onboarding() {
   const [anDone, setAnDone] = useState(false);
   const [reveal, setReveal] = useState<RevealSummary | null>(null);
   const [slow, setSlow] = useState(false);
+  const [pick, setPick] = useState(companionId);
   const nameRef = useRef<HTMLInputElement>(null);
   const coldRef = useRef<HTMLDivElement>(null);
   useParallax(coldRef);
@@ -508,7 +512,7 @@ export function Onboarding() {
           <span className="rstep">Still building your company…</span>
         </div>
       ) : null;
-  } else {
+  } else if (step === 7) {
     const rl = (data.roleLabel || 'founder').toLowerCase();
     const r = reveal;
     body = (
@@ -556,7 +560,27 @@ export function Onboarding() {
         </div>
       </>
     );
-    foot = <Foot label="See my company" onClick={finish} />;
+    foot = <Foot label="Choose your companion" onClick={() => setStep(8)} />;
+  } else {
+    // step 8 — choose the companion that rides along for the project.
+    body = (
+      <>
+        <h2>Choose your companion.</h2>
+        <p>
+          Pick who&apos;ll accompany you as you build. You can change this anytime in the sidebar.
+        </p>
+        <CompanionPicker selected={pick} onSelect={setPick} />
+      </>
+    );
+    foot = (
+      <Foot
+        label="Start building"
+        onClick={() => {
+          setCompanion(pick);
+          finish();
+        }}
+      />
+    );
   }
 
   return (

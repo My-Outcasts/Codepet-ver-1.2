@@ -1031,7 +1031,7 @@ export const OB_CATEGORIES: string[] = [
   'Game',
   'Other',
 ];
-export const OB_TOTAL = 8;
+export const OB_TOTAL = 9;
 
 /* ===== department colors ===== */
 export const DCOL: Record<string, string> = {
