@@ -66,6 +66,37 @@ export function currentDraft(t: Task, type: string): string {
   return typeof t.out === 'string' ? t.out : '';
 }
 
+// True when the task actually carries its type's rendered payload — so the modal knows
+// whether there's anything for the viewer to show. A scaffold-only task (just `kind`) or a
+// never-generated one returns false, so a failed first run shows a failure state instead of
+// crashing a viewer on an undefined payload.
+export function hasDeliverablePayload(t: Task, type: string): boolean {
+  switch (type) {
+    case 'post':
+      return !!t.post;
+    case 'email':
+      return !!t.email;
+    case 'legal':
+      return !!t.legal;
+    case 'screens':
+      return Array.isArray(t.screens) && t.screens.length > 0;
+    case 'sheet':
+      return !!t.sheet;
+    case 'dms':
+      return Array.isArray(t.dms) && t.dms.length > 0;
+    case 'calendar':
+      return !!t.calendar;
+    case 'checklist':
+      return Array.isArray(t.checklist) && t.checklist.length > 0;
+    case 'site':
+      return typeof t.site === 'string' && t.site.length > 0;
+    case 'plan':
+      return !!t.plan;
+    default: // doc / prep / build — plain-text out
+      return typeof t.out === 'string' && t.out.trim().length > 0;
+  }
+}
+
 // Apply byte's result onto the task, merging structured payloads with the
 // presentational defaults the viewers expect (author/stats/from/updated).
 export function applyResult(t: Task, type: string, res: RunResult): void {

@@ -4,11 +4,18 @@ import { useApp } from '@/lib/store';
 import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
-import { LIVE_TYPES, liveKind, currentDraft, applyResult } from '@/lib/ai/applyResult';
+import {
+  LIVE_TYPES,
+  liveKind,
+  currentDraft,
+  applyResult,
+  hasDeliverablePayload,
+} from '@/lib/ai/applyResult';
 import { toolkitUsedFor, runLogWithToolkit } from '@/lib/ai/toolkitUse';
 import { ENV } from '@/lib/data';
 import { ArtifactViewer } from './viewers';
 import { ExecLog } from './ExecLog';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Scrollable modal body with a soft bottom fade that shows only while there's more
 // content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
@@ -357,19 +364,21 @@ export function ArtifactModal() {
       <>First draft ready — written from your brief, in your voice</>
     );
 
-  // The line shown when a live pass fails — cause-specific so it's honest, not one
-  // vague snag. A rate-limit hit today's cap; a refusal means byte reached the model
-  // but held back (rephrase/add detail); ai_unavailable is a provider/credit outage on
-  // our side; anything else is the generic "couldn't reach byte". All fall back to the
-  // saved draft so the founder still sees something.
-  const liveErrorMsg =
+  // The cause of a failed live pass — cause-specific so it's honest, not one vague snag.
+  // A rate-limit hit today's cap; a refusal means byte reached the model but held back
+  // (rephrase/add detail); ai_unavailable is a provider/credit outage on our side;
+  // anything else is the generic "couldn't reach byte". `liveErrorReason` is the bare
+  // cause (used by the no-draft failure state); `liveErrorMsg` appends the
+  // fall-back-to-draft note (used only when a saved draft actually exists).
+  const liveErrorReason =
     genError === 'rate_limited'
-      ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
+      ? 'You’ve reached today’s generation limit — it resets tomorrow.'
       : genError === 'refused'
-        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail. Showing the saved draft.'
+        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail.'
         : genError === 'ai_unavailable'
-          ? 'byte is temporarily unavailable — try again shortly. Showing the saved draft.'
-          : 'Couldn’t reach byte just now — showing the saved draft.';
+          ? 'byte is temporarily unavailable — try again shortly.'
+          : 'Couldn’t reach byte just now.';
+  const liveErrorMsg = `${liveErrorReason} Showing the saved draft.`;
 
   const olLabel: React.CSSProperties = {
     fontSize: 11,
@@ -378,6 +387,26 @@ export function ArtifactModal() {
     color: 'var(--t-3)',
     marginBottom: 7,
   };
+
+  // Whether the task actually carries type's rendered payload — a failed first-run
+  // (no saved draft to fall back to) shows a retry state instead of a blank/crashing
+  // viewer.
+  const hasPayload = hasDeliverablePayload(t, type);
+  const failureState = (
+    <div className="artifact">
+      <div className="art-body" style={{ padding: '18px 4px' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 650, color: 'var(--t-1)' }}>
+          byte couldn’t generate this right now
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--t-3)', marginTop: 6, lineHeight: 1.5 }}>
+          {liveErrorReason}
+        </div>
+        <button className="btn" style={{ marginTop: 14 }} onClick={startRun}>
+          Retry
+        </button>
+      </div>
+    </div>
+  );
 
   let bodyContent: React.ReactNode;
   if (stage === 'outline') {
@@ -467,12 +496,16 @@ export function ArtifactModal() {
                       ✦ Written live by byte · Claude
                     </div>
                   )}
-                  {LIVE_TYPES.has(type) && genStatus === 'error' && (
+                  {LIVE_TYPES.has(type) && genStatus === 'error' && hasPayload && (
                     <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
                       {liveErrorMsg}
                     </div>
                   )}
-                  <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
+                  {LIVE_TYPES.has(type) && genStatus === 'error' && !hasPayload ? (
+                    failureState
+                  ) : (
+                    <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
+                  )}
                 </>
               )}
             </div>
@@ -486,6 +519,8 @@ export function ArtifactModal() {
               </span>
             </div>
           </div>
+        ) : LIVE_TYPES.has(type) && genStatus === 'error' && !hasPayload ? (
+          failureState
         ) : (
           <>
             {LIVE_TYPES.has(type) && genStatus === 'done' && (
@@ -493,12 +528,14 @@ export function ArtifactModal() {
                 ✦ Written live by byte · Claude
               </div>
             )}
-            {LIVE_TYPES.has(type) && genStatus === 'error' && (
+            {LIVE_TYPES.has(type) && genStatus === 'error' && hasPayload && (
               <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
                 Couldn’t reach byte just now — showing the saved draft.
               </div>
             )}
-            <ViewerOnce item={item} onReady={() => setDeliverReady(true)} />
+            <ErrorBoundary fallback={failureState} resetKey={`${type}:${genStatus}:${hasPayload}`}>
+              <ViewerOnce item={item} onReady={() => setDeliverReady(true)} />
+            </ErrorBoundary>
           </>
         )}
       </>

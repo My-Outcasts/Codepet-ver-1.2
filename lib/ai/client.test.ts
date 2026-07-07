@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFailureKind, errorInfo } from './client';
+import { classifyFailureKind, errorInfo, errorCodeOf, GenerationError } from './client';
 
 describe('errorInfo', () => {
   it('reads status + message off any error shape (duck-typed, not instanceof)', () => {
@@ -44,5 +44,24 @@ describe('classifyFailureKind', () => {
 
   it('is case-insensitive on the message', () => {
     expect(classifyFailureKind(400, 'CREDIT BALANCE too low')).toBe('billing');
+  });
+});
+
+describe('errorCodeOf', () => {
+  it('maps GenerationError kinds', () => {
+    expect(errorCodeOf(new GenerationError({ kind: 'billing' }), 'x')).toBe('ai_unavailable');
+    expect(errorCodeOf(new GenerationError({ kind: 'refused' }), 'x')).toBe('refused');
+    expect(errorCodeOf(new GenerationError({ kind: 'not_configured' }), 'x')).toBe(
+      'not_configured',
+    );
+    expect(errorCodeOf(new GenerationError({ kind: 'upstream', status: 500 }), 'fb')).toBe('fb');
+  });
+  it('classifies a raw credit/billing error to ai_unavailable', () => {
+    expect(errorCodeOf({ status: 400, message: 'credit balance is too low' }, 'fb')).toBe(
+      'ai_unavailable',
+    );
+  });
+  it('unknown error → fallback', () => {
+    expect(errorCodeOf(new Error('boom'), 'fb')).toBe('fb');
   });
 });

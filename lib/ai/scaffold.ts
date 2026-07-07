@@ -10,31 +10,38 @@ import { applyScaffold, persistScaffold, type ScaffoldDept } from '../firebase/c
 
 /**
  * Generate + apply the stage-appropriate company. Returns the number of departments
- * changed (0 on any failure, so the caller keeps the current set).
+ * changed (0 on any failure, so the caller keeps the current set) plus the failure
+ * cause (null on success) so the caller can be honest about *why* it didn't happen.
  */
-export async function scaffoldCompany(companyId: string, brief?: CompanyBrief): Promise<number> {
+export async function scaffoldCompany(
+  companyId: string,
+  brief?: CompanyBrief,
+): Promise<{ changed: number; failure: string | null }> {
   try {
     const res = await fetch('/api/scaffold', {
       method: 'POST',
       headers: { 'content-type': 'application/json', ...(await authHeader()) },
       body: JSON.stringify({ brief }),
     });
-    if (!res.ok) return 0;
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      return { changed: 0, failure: data.error || 'generation_failed' };
+    }
     const data = (await res.json()) as { scaffold?: { departments?: ScaffoldDept[] } };
     const generated = data.scaffold?.departments ?? [];
-    if (!generated.length) return 0;
+    if (!generated.length) return { changed: 0, failure: 'empty' };
 
     const changed = applyScaffold(generated);
-    if (!changed.length) return 0;
+    if (!changed.length) return { changed: 0, failure: 'empty' };
 
     await persistScaffold(companyId, changed).catch((err) => {
       // In-memory apply already happened, so the founder sees the scaffold this
       // session even if the write fails; it just won't persist.
       console.error('[scaffold] persist failed', err);
     });
-    return changed.length;
+    return { changed: changed.length, failure: null };
   } catch (err) {
     console.error('[scaffold] failed', err);
-    return 0;
+    return { changed: 0, failure: 'network' };
   }
 }

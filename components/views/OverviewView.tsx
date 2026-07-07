@@ -206,12 +206,13 @@ export default function OverviewView() {
     analysisLoading,
     ensureProjectAnalysis,
     planTailored,
-    scaffoldFailed,
+    scaffoldFailure,
     regenerateCompany,
+    regenerating,
     growthSignal,
     clearGrowthSignal,
   } = useApp();
-  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
+  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
@@ -811,6 +812,7 @@ export default function OverviewView() {
             <button
               type="button"
               onClick={regenerateCompany}
+              disabled={regenerating}
               style={{
                 fontFamily: 'inherit',
                 fontSize: 12.5,
@@ -818,11 +820,12 @@ export default function OverviewView() {
                 color: '#FDB022',
                 background: 'transparent',
                 border: 'none',
-                cursor: 'pointer',
+                cursor: regenerating ? 'default' : 'pointer',
                 whiteSpace: 'nowrap',
+                opacity: regenerating ? 0.6 : 1,
               }}
             >
-              {examplePlan.cta}
+              {regenerating ? 'Re-planning…' : examplePlan.cta}
             </button>
           </div>
         )}
