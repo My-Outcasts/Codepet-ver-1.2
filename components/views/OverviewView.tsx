@@ -21,7 +21,10 @@ import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf } from '@/lib/stages';
+import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
+import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
+import { overviewProgress, deptProgress } from '@/lib/overview/progress';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
 import { INTRO_SEEN_KEY, introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
@@ -87,6 +90,9 @@ interface GNode {
   dept?: Dept;
   task?: Task;
   sub?: string;
+  done?: number;
+  total?: number;
+  pct?: number;
   x: number;
   y: number;
   z: number;
@@ -103,6 +109,45 @@ interface GLink {
 const linkId = (x: unknown): string =>
   typeof x === 'object' && x ? (x as GNode).id : (x as string);
 
+// A billboarded ring sprite: a faint full track + an arc filled clockwise from the top to
+// `pct`. Drawn on a canvas → CanvasTexture → Sprite, so it always faces the camera (reads
+// as a clean circle at any orbit angle) with no per-frame screen projection.
+function makeRingSprite(pct: number, colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const cx = S / 2;
+  const cy = S / 2;
+  const r = S * 0.4;
+  const lw = S * 0.08;
+  ctx.lineCap = 'round';
+  // track
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth = lw;
+  ctx.stroke();
+  // filled arc
+  if (pct > 0) {
+    const start = -Math.PI / 2;
+    const end = start + (Math.min(100, pct) / 100) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, start, end);
+    ctx.strokeStyle = colorHex;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 export default function OverviewView() {
   const {
     openDept,
@@ -115,8 +160,17 @@ export default function OverviewView() {
     advanceStage,
     selStage,
     drawerOpen,
+    projectAnalysis,
+    analysisLoading,
+    ensureProjectAnalysis,
+    planTailored,
+    scaffoldFailed,
+    regenerateCompany,
   } = useApp();
-  void tick;
+  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
+  void tick; // (already present) keeps the reads below live
+  const progress = overviewProgress(DEPTS);
+  const nextMilestone = nextStageOf(brief.stage);
   // First-run spotlight handoff. OverviewView owns the phase + the localStorage
   // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
   // OverviewView is imported ssr:false, so reading localStorage in the lazy
@@ -124,7 +178,6 @@ export default function OverviewView() {
   const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
     introInitialPhase(readIntroSeen()),
   );
-  const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => readIntroSeen());
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
   const hereRef = useRef<HereInfo | null>(null);
@@ -166,8 +219,9 @@ export default function OverviewView() {
     DEPTS.forEach((d, di) => {
       const dHex = HEX[DCOL[d.k]] || HEX['--accent'];
       const alpha = STATUS_ALPHA[d.status] ?? 0.8;
-      const done = d.tasks.filter((t) => t.done).length;
-      const total = d.tasks.length;
+      const dp = deptProgress(d);
+      const done = dp.done;
+      const total = dp.total;
       const did = `dept:${d.k}`;
       const yy = 1 - (di / (DEPTS.length - 1)) * 2;
       const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
@@ -185,6 +239,9 @@ export default function OverviewView() {
         val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
         sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
+        done,
+        total,
+        pct: dp.pct,
         x: dx,
         y: dy,
         z: dz,
@@ -445,7 +502,17 @@ export default function OverviewView() {
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
-    const s = new SpriteText(n.name);
+
+    // Label — for departments, append the progress count.
+    const total = n.total ?? 0;
+    const done = n.done ?? 0;
+    const labelText =
+      n.kind === 'dept' && total > 0
+        ? done === total
+          ? `${n.name} ✓`
+          : `${n.name}  ${done}/${total}`
+        : n.name;
+    const s = new SpriteText(labelText);
     s.color = '#FFFFFF';
     s.textHeight = n.kind === 'project' ? 6 : 4;
     s.fontFace = 'Inter, system-ui, sans-serif';
@@ -460,7 +527,17 @@ export default function OverviewView() {
     const radius = Math.cbrt(n.val) * 2.2;
     // lift the label clear of the node (and its bloom), more so for the project
     (s as any).position.set(0, radius + (n.kind === 'project' ? 10 : 5), 0);
-    return s;
+
+    // Project node: label only (overall progress lives in the hero HUD).
+    if (n.kind !== 'dept') return s;
+
+    // Department node: label + progress ring around the node.
+    const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#8B5CF6');
+    const ring = makeRingSprite(n.pct ?? 0, ringColor, radius * 3.4); // tune multiplier on preview
+    const group = new THREE.Group();
+    group.add(ring);
+    group.add(s);
+    return group;
   };
 
   // Skip the camera glide (jump-cut) for users who prefer reduced motion.
@@ -472,7 +549,6 @@ export default function OverviewView() {
   // (no live move) recenter the whole map, and enter the spotlight.
   const handleIntroReveal = () => {
     markIntroSeen();
-    setHasSeenIntro(true);
     // Only enter the spotlight when the beacon callout will actually render
     // (ByteGuide is gated by showCallout) — otherwise there's nothing to
     // illuminate, so just recenter the map and finish.
@@ -488,7 +564,6 @@ export default function OverviewView() {
   // Backdrop click: dismiss without flying, but still mark it seen.
   const handleIntroDismiss = () => {
     markIntroSeen();
-    setHasSeenIntro(true);
     setIntroPhase('done');
   };
 
@@ -498,6 +573,14 @@ export default function OverviewView() {
     const id = setTimeout(() => setIntroPhase('done'), 6000);
     return () => clearTimeout(id);
   }, [introPhase]);
+
+  // Kick off byte's one-time project analysis as soon as the intro is showing
+  // (or about to show), so the briefing card has something to render instead of
+  // sitting in the loading state longer than necessary. ensureProjectAnalysis is
+  // idempotent — a persisted or in-flight analysis short-circuits this.
+  useEffect(() => {
+    if (introPhase === 'intro') ensureProjectAnalysis();
+  }, [introPhase, ensureProjectAnalysis]);
 
   // Settle the spotlight the moment the founder actually grabs the map
   // (deliberate pointer-down or wheel-zoom) — not on mere mouse movement.
@@ -521,7 +604,8 @@ export default function OverviewView() {
     >
       {introPhase === 'intro' && (
         <OverviewIntro
-          showLegend={hasSeenIntro}
+          analysis={projectAnalysis}
+          analysisLoading={analysisLoading}
           onReveal={handleIntroReveal}
           onDismiss={handleIntroDismiss}
         />
@@ -540,6 +624,7 @@ export default function OverviewView() {
         />
       )}
       <StageRibbon />
+      <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
 
       <div
         style={{
@@ -559,6 +644,43 @@ export default function OverviewView() {
           Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
           a node to open it.
         </div>
+        {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
+            never let a seeded map pass for a plan tailored to the founder's product. */}
+        {examplePlan && (
+          <div
+            style={{
+              pointerEvents: 'auto',
+              marginTop: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '7px 12px',
+              borderRadius: 8,
+              background: 'rgba(253,176,34,.12)',
+              border: '1px solid rgba(253,176,34,.28)',
+              fontSize: 12.5,
+              color: 'rgba(245,243,255,.82)',
+            }}
+          >
+            <span>{examplePlan.text}</span>
+            <button
+              type="button"
+              onClick={regenerateCompany}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: '#FDB022',
+                background: 'transparent',
+                border: 'none',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {examplePlan.cta}
+            </button>
+          </div>
+        )}
       </div>
 
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}

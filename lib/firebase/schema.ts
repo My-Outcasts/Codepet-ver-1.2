@@ -10,6 +10,7 @@
 //   companies/{companyId}/departments/{k}    → DepartmentDoc (one per department key)
 //   companies/{companyId}/library/{itemId}   → LibraryDoc (approved deliverables)
 import type { Dept, Task, LibItem, EnvItem } from '../data';
+import type { ProjectAnalysis } from '../ai/projectAnalysis';
 
 // Firestore server timestamps arrive as Timestamp objects; we store millis on
 // write for portability and treat them as numbers everywhere in app code.
@@ -77,6 +78,10 @@ export interface CompanyDoc {
   onboardedAt?: Millis;
   /** When byte's one-time seed personalization ran. Absent ⇒ never personalized. */
   personalizedAt?: Millis;
+  /** byte's one-time project analysis (shown on the Overview first run). */
+  projectAnalysis?: ProjectAnalysis;
+  /** When the one-time project analysis ran. Absent ⇒ never analyzed. */
+  analyzedAt?: Millis;
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;
@@ -124,6 +129,18 @@ export interface ChatMessageDoc {
   role: 'me' | 'byte';
   text: string;
   createdAt: Millis;
+  /** Which conversation thread this message belongs to. */
+  threadId: string;
+}
+
+/** One conversation thread (a "history entry") for a company's byte chat. */
+export interface ThreadMeta {
+  id: string;
+  /** Derived from the first founder message; user-renameable. */
+  title: string;
+  createdAt: Millis;
+  /** Bumped on each new message; drives list sort + relative time. */
+  updatedAt: Millis;
 }
 
 // ---- Collection / document path helpers (single source of truth) ----
@@ -145,6 +162,8 @@ export const paths = {
   notebook: (companyId: string) => `companies/${companyId}/notebook`,
   chat: (companyId: string) => `companies/${companyId}/chat`,
   chatMessage: (companyId: string, msgId: string) => `companies/${companyId}/chat/${msgId}`,
+  threads: (companyId: string) => `companies/${companyId}/threads`,
+  thread: (companyId: string, threadId: string) => `companies/${companyId}/threads/${threadId}`,
 };
 
 // Re-export the shared shapes so persistence consumers import everything from one place.

@@ -21,6 +21,8 @@ import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
+import { fetchProjectAnalysis } from './ai/analyzeProject';
+import { isUsableAnalysis, type ProjectAnalysis } from './ai/projectAnalysis';
 import {
   loadCompanyData,
   loadTrackingSummary,
@@ -32,6 +34,7 @@ import {
   persistBrief,
   persistChatMessage,
   persistDecisions,
+  persistProjectAnalysis,
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
@@ -40,7 +43,13 @@ import {
   loadProjectDirs,
   envUsageFromCatalog,
   persistEnvUsage,
+  loadThreadMessages,
+  persistThread,
+  updateThreadTitle,
+  deleteThreadAndMessages,
 } from './firebase/companyData';
+import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
+import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
@@ -170,9 +179,21 @@ interface AppState {
   scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
+  /** True once the map reflects a plan byte generated from this founder's product; false
+   *  while it's still the built-in example seed. */
+  planTailored: boolean;
+  /** True when a scaffold attempt this session couldn't complete (e.g. model unreachable),
+   *  so the example-plan banner can say so rather than just "not generated yet". */
+  scaffoldFailed: boolean;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
+  /** byte's one-time project analysis; null until generated. */
+  projectAnalysis: ProjectAnalysis | null;
+  /** True while the one-time analysis call is in flight (drives the intro placeholder). */
+  analysisLoading: boolean;
+  /** Idempotent: generate + persist the analysis once if missing. No-op otherwise. */
+  ensureProjectAnalysis: () => void;
   /** Durable decisions byte maintains about the company — the founder-curatable memory. */
   decisions: DecisionEntry[];
   /** Edit a decision in place (e.g. correct a wrong extraction). */
@@ -214,6 +235,23 @@ interface AppState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** All conversation threads (history entries) for the "chat history" panel. */
+  threads: ThreadMeta[];
+  /** The thread whose messages are currently in `chatMessages`, or null before one exists. */
+  activeThreadId: string | null;
+  /** Whether the chat-history list is open. */
+  chatHistoryOpen: boolean;
+  /** Start a fresh thread — clears the active chat; the thread itself is created in
+   * Firestore lazily, on the first message sent into it. */
+  newChat: () => void;
+  /** Switch the active thread and hydrate its messages. */
+  openThread: (id: string) => void;
+  /** Rename a thread (optimistic + persisted). */
+  renameThread: (id: string, title: string) => void;
+  /** Delete a thread and its messages; falls back to another thread or a new chat. */
+  deleteThread: (id: string) => void;
+  /** Open/close the chat-history list. */
+  toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
    * history, so the founder doesn't have to retype. */
   retryChat: (byteMsgId: string) => void;
@@ -347,6 +385,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
+  // byte's one-time project analysis (hydrated from Firestore; null until generated).
+  const [projectAnalysis, setProjectAnalysis] = useState<ProjectAnalysis | null>(null);
+  // True while the one-time analysis call is in flight (drives the intro placeholder).
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  // Guards ensureProjectAnalysis against duplicate concurrent calls (not itself reactive state).
+  const analysisInFlight = useRef(false);
   // Durable decisions byte maintains (hydrated from Firestore; founder-curatable).
   const [decisions, setDecisions] = useState<DecisionEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -354,6 +398,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
+  // Threads (history entries), the active one, and the history panel's open state.
+  const [threads, setThreads] = useState<ThreadMeta[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const pendingThreadRef = useRef(false); // true ⇒ active thread not yet written to Firestore
+
+  // Every persisted chat message carries the active thread id. Route all persistence
+  // through here so no call site forgets it.
+  const persistMsg = useCallback(
+    (msg: { id: string; role: 'me' | 'byte'; text: string; ts: number }) => {
+      if (!companyId || !activeThreadId) return;
+      persistChatMessage(companyId, {
+        id: msg.id,
+        role: msg.role,
+        text: msg.text,
+        createdAt: msg.ts,
+        threadId: activeThreadId,
+      }).catch((err) => console.error('[store] persist message failed', err));
+      // Keep the in-memory thread list fresh so History re-sorts / shows fresh
+      // relative time without a reload. Harmless no-op for a brand-new thread not
+      // yet in `threads` — the map simply matches nothing until sendChat adds it.
+      setThreads((prev) =>
+        prev.map((t) => (t.id === activeThreadId ? { ...t, updatedAt: msg.ts } : t)),
+      );
+    },
+    [companyId, activeThreadId],
+  );
   // Aborts the in-flight chat stream — on a new send, a retry, or provider unmount
   // (e.g. sign-out), so a stream never keeps running or writes against a stale account.
   const chatAbort = useRef<AbortController | null>(null);
@@ -419,17 +490,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ts: Date.now(),
         };
         setChatMessages((prev) => [...prev, nudge]);
-        if (companyId) {
-          persistChatMessage(companyId, {
-            id: nudge.id,
-            role: 'byte',
-            text: nudge.text,
-            createdAt: nudge.ts,
-          }).catch((err) => console.error('[store] persist build message failed', err));
-        }
+        persistMsg({ id: nudge.id, role: 'byte', text: nudge.text, ts: nudge.ts });
       }
     });
-  }, [companyId, buildSessionId, buildLocal]);
+  }, [companyId, buildSessionId, buildLocal, persistMsg]);
 
   // Mirror the active build to localStorage on every change (and clear it when the
   // flow resets), so the restore above always sees the latest step/checkpoint/meter.
@@ -480,6 +544,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
   // on hydrate and after every approval. On failure the authored fallback stands.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  // Whether the map reflects a plan byte generated from THIS founder's product, vs. the
+  // built-in example seed. Set from the persisted `scaffoldedAt` on hydrate, flipped true
+  // the moment a scaffold succeeds. `scaffoldFailed` distinguishes "generation was tried
+  // and couldn't complete" (e.g. the model was unreachable) from "not generated yet", so
+  // the example-plan banner can be honest about which it is.
+  const [planTailored, setPlanTailored] = useState(false);
+  const [scaffoldFailed, setScaffoldFailed] = useState(false);
   const computeNextStep = useCallback(() => {
     const fb = nextAction();
     const fallback: NextStep | null = fb
@@ -510,27 +581,63 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat, decisions: dec }) => {
-        if (cancelled) return;
-        setLibrary(lib);
-        setBrief(b);
-        setDecisions(dec);
-        setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
-        setChatMessages(
-          chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
-        );
-        // Restore the last-viewed roadmap stage (drawer stays closed — we restore
-        // position, not an open panel). Absent ⇒ keep the UI default.
-        if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
-        // Show onboarding only to users who haven't done it. A non-empty brief
-        // also counts as onboarded, so legacy users (saved a brief before the
-        // `onboardedAt` stamp existed) aren't asked again.
-        const onboarded = Boolean(onboardedAt) || Object.keys(b).length > 0;
-        setOnboarding(!onboarded);
-        bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
-        setHydrated(true);
-        computeNextStep(); // DEPTS is hydrated now — pick the next step
-      })
+      .then(
+        ({
+          library: lib,
+          brief: b,
+          onboardedAt,
+          scaffoldedAt,
+          roadmapStage,
+          chat,
+          threads: loadedThreads,
+          activeThreadId: loadedActive,
+          decisions: dec,
+          projectAnalysis: pa,
+        }) => {
+          if (cancelled) return;
+          setLibrary(lib);
+          setBrief(b);
+          setDecisions(dec);
+          // Reset (or hydrate) the one-time analysis for this account — an overwrite either
+          // way, so a fresh account never inherits a previous account's in-flight/loading state.
+          // Re-validate the persisted doc so a partial/corrupt one can't render blank rows.
+          setProjectAnalysis(isUsableAnalysis(pa) ? pa : null);
+          setAnalysisLoading(false);
+          analysisInFlight.current = false;
+          // A stamped scaffold ⇒ the map is this founder's generated plan; absent ⇒ it's
+          // still the example seed (banner shows).
+          setPlanTailored(Boolean(scaffoldedAt));
+          setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
+          setChatMessages(
+            chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
+          );
+          setThreads(loadedThreads);
+          if (loadedActive) {
+            setActiveThreadId(loadedActive);
+            // Defensive: a stale `true` (e.g. if hydration ever re-runs) must never
+            // clobber this real, already-persisted thread.
+            pendingThreadRef.current = false;
+          } else {
+            // Fresh company with no threads yet: start a PENDING thread so the
+            // founder's first message creates + persists it (mirrors newChat,
+            // without a UI click). Without this, the first conversation is never
+            // written to Firestore.
+            setActiveThreadId(newId());
+            pendingThreadRef.current = true;
+          }
+          // Restore the last-viewed roadmap stage (drawer stays closed — we restore
+          // position, not an open panel). Absent ⇒ keep the UI default.
+          if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
+          // Show onboarding only to users who haven't done it. A non-empty brief
+          // also counts as onboarded, so legacy users (saved a brief before the
+          // `onboardedAt` stamp existed) aren't asked again.
+          const onboarded = Boolean(onboardedAt) || Object.keys(b).length > 0;
+          setOnboarding(!onboarded);
+          bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
+          setHydrated(true);
+          computeNextStep(); // DEPTS is hydrated now — pick the next step
+        },
+      )
       .catch((err) => {
         console.error('[store] hydrate failed', err);
         if (!cancelled) setHydrated(true); // fail open to the seed rather than hang
@@ -763,7 +870,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
       if (!companyId) return buildRevealSummary(DEPTS, false);
       const changed = await scaffoldCompany(companyId, briefData);
-      if (changed > 0) bump();
+      if (changed > 0) {
+        bump();
+        setPlanTailored(true); // the map now reflects the founder's generated plan
+      } else {
+        setScaffoldFailed(true); // attempted here but produced nothing → example stands
+      }
       return buildRevealSummary(DEPTS, changed > 0);
     },
     [companyId, bump],
@@ -785,7 +897,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
             if (!briefData || scaffoldedInWizard.current) return;
             return scaffoldCompany(companyId, briefData).then((changed) => {
-              if (changed) bump();
+              if (changed) {
+                bump();
+                setPlanTailored(true);
+              } else {
+                setScaffoldFailed(true);
+              }
             });
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
@@ -804,12 +921,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (changed) {
         bump();
         computeNextStep();
+        setPlanTailored(true); // real plan landed — the example banner clears
+        setScaffoldFailed(false);
         toast('Company re-planned for your stage');
       } else {
+        setScaffoldFailed(true); // couldn't generate → the example still stands, say so
         toast('Couldn’t re-plan just now — try again');
       }
     });
   }, [companyId, brief, bump, toast, computeNextStep]);
+
+  // byte's one-time, brief-grounded read of the project (the Overview intro). Idempotent:
+  // skips if already generated, a call is already in flight, or there's no company/brief
+  // to analyze yet. Best-effort — a failure just leaves it null (the fallback intro).
+  const ensureProjectAnalysis = useCallback(() => {
+    if (projectAnalysis || analysisInFlight.current || !companyId) return;
+    const hasBrief = brief && Object.keys(brief).length > 0;
+    if (!hasBrief) return;
+    analysisInFlight.current = true;
+    setAnalysisLoading(true);
+    fetchProjectAnalysis(brief)
+      .then((a) => {
+        if (a) {
+          setProjectAnalysis(a);
+          persistProjectAnalysis(companyId, a).catch((err) =>
+            console.error('[project-analysis] persist failed', err),
+          );
+        }
+      })
+      .finally(() => {
+        analysisInFlight.current = false;
+        setAnalysisLoading(false);
+      });
+  }, [projectAnalysis, companyId, brief]);
 
   // Founder-curated memory: edit or remove a decision byte is holding. Optimistic —
   // the panel reflects the change at once; the Firestore write is best-effort (a failed
@@ -1409,6 +1553,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [openDeliverable, viewItem],
   );
 
+  // Chat-history actions: switch/rename/delete threads, open/close the history list,
+  // and start a fresh one. The new thread's Firestore doc is written lazily on the
+  // first message (see sendChat) so a never-sent "New chat" never litters the list.
+  const toggleChatHistory = useCallback((open?: boolean) => {
+    setChatHistoryOpen((c) => (open === undefined ? !c : open));
+  }, []);
+
+  const newChat = useCallback(() => {
+    // Cancel any in-flight stream first — otherwise its stream-end persistMsg (bound
+    // to the OLD threadId) can land after we've switched threads.
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    setActiveThreadId(newId());
+    pendingThreadRef.current = true; // created in Firestore on first send
+    setChatMessages([]);
+    setChatHistoryOpen(false);
+  }, []);
+
+  const openThread = useCallback(
+    (id: string) => {
+      if (!companyId) return;
+      // Cancel any in-flight stream first — see newChat for why.
+      chatAbort.current?.abort();
+      setChatStreaming(false);
+      pendingThreadRef.current = false;
+      setActiveThreadId(id);
+      setChatHistoryOpen(false);
+      loadThreadMessages(companyId, id)
+        .then((msgs) =>
+          setChatMessages(
+            msgs.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
+          ),
+        )
+        .catch((err) => console.error('[store] loadThreadMessages failed', err));
+    },
+    [companyId],
+  );
+
+  const renameThread = useCallback(
+    (id: string, title: string) => {
+      const clean = title.trim();
+      if (!clean) return;
+      setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title: clean } : t)));
+      if (companyId)
+        updateThreadTitle(companyId, id, clean).catch((err) =>
+          console.error('[store] updateThreadTitle failed', err),
+        );
+    },
+    [companyId],
+  );
+
+  const deleteThread = useCallback(
+    (id: string) => {
+      if (!companyId) return;
+      // Cancel any in-flight stream first — otherwise deleting the active thread
+      // mid-stream lets the stream-end persistMsg re-create it via the `{updatedAt}`
+      // merge in persistChatMessage, leaving a titleless zombie thread on reload.
+      chatAbort.current?.abort();
+      setChatStreaming(false);
+      const fallback = activeThreadId === id ? pickFallbackThreadId(threads, id) : null;
+      setThreads((prev) => prev.filter((t) => t.id !== id));
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      );
+      if (activeThreadId === id) {
+        if (fallback) openThread(fallback);
+        else newChat();
+      }
+    },
+    [companyId, activeThreadId, threads, openThread, newChat],
+  );
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -1560,18 +1776,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
         // fallback). The inline result card itself is transient, like the briefings.
         if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
-          persistChatMessage(companyId, {
-            id: byteMsgId,
-            role: 'byte',
-            text: finalText,
-            createdAt: byteTs,
-          }).catch((err) => console.error('[store] persist byte message failed', err));
+          persistMsg({ id: byteMsgId, role: 'byte', text: finalText, ts: byteTs });
         }
         // byte decided to run a task — produce it inline now.
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat],
+    [companyId, nextStep, runTaskInChat, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -1589,17 +1800,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       track('chat.send', {});
 
       if (companyId) {
-        persistChatMessage(companyId, {
-          id: userMsg.id,
-          role: 'me',
-          text,
-          createdAt: userMsg.ts,
-        }).catch((err) => console.error('[store] persist user message failed', err));
+        if (pendingThreadRef.current && activeThreadId) {
+          const thread: ThreadMeta = {
+            id: activeThreadId,
+            title: deriveThreadTitle(text),
+            createdAt: now,
+            updatedAt: now,
+          };
+          pendingThreadRef.current = false;
+          setThreads((prev) => [thread, ...prev]);
+          persistThread(companyId, thread).catch((err) =>
+            console.error('[store] persist thread failed', err),
+          );
+        }
+        persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
       }
 
       runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, runByteStream],
+    [companyId, chatMessages, chatStreaming, runByteStream, persistMsg, activeThreadId],
   );
 
   // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
@@ -1636,16 +1855,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ts: Date.now(),
     };
     setChatMessages((prev) => [...prev, opening]);
-    if (companyId) {
-      persistChatMessage(companyId, {
-        id: opening.id,
-        role: 'byte',
-        text: opening.text,
-        createdAt: opening.ts,
-      }).catch((err) => console.error('[store] persist build message failed', err));
-    }
+    persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
-  }, [companyId]);
+  }, [companyId, persistMsg]);
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
@@ -1657,16 +1869,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ts: Date.now(),
     };
     setChatMessages((prev) => [...stripBuildButtons(prev), msg]);
-    if (companyId) {
-      persistChatMessage(companyId, {
-        id: msg.id,
-        role: 'byte',
-        text: msg.text,
-        createdAt: msg.ts,
-      }).catch((err) => console.error('[store] persist build message failed', err));
-    }
+    persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
     track('build.intake.cancel', {});
-  }, [companyId]);
+  }, [persistMsg]);
 
   const addIntakeTurn = useCallback(
     (raw: string) => {
@@ -1690,16 +1895,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ]);
       // Persist the founder's real answer; the byte follow-up carries an in-memory-only
       // buildAction button (dead after reload) so it stays transient, like result cards.
-      if (companyId) {
-        persistChatMessage(companyId, {
-          id: userMsg.id,
-          role: 'me',
-          text,
-          createdAt: userMsg.ts,
-        }).catch((err) => console.error('[store] persist build message failed', err));
-      }
+      persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
     },
-    [buildBrief, companyId],
+    [buildBrief, companyId, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
@@ -1800,20 +1998,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ts: Date.now(),
         };
         setChatMessages((prev) => [...prev, live]);
-        if (companyId) {
-          persistChatMessage(companyId, {
-            id: live.id,
-            role: 'byte',
-            text: live.text,
-            createdAt: live.ts,
-          }).catch((err) => console.error('[store] persist build message failed', err));
-        }
+        persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
         track('build.arm', {});
       } finally {
         setBuildArming(false);
       }
     })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
+  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, persistMsg]);
 
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
@@ -1839,16 +2030,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       setChatMessages((prev) => [...prev, msg]);
       if (res.ok) setBuildCheckpoint(null);
-      if (companyId)
-        persistChatMessage(companyId, {
-          id: msg.id,
-          role: 'byte',
-          text: msg.text,
-          createdAt: now,
-        }).catch((err) => console.error('[store] persist build message failed', err));
+      persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: now });
       track('build.rewind', { ok: res.ok });
     })();
-  }, [buildCheckpoint, buildProjectDir, companyId]);
+  }, [buildCheckpoint, buildProjectDir, companyId, persistMsg]);
 
   const resetBuildFlow = useCallback(() => {
     setBuildStep('during');
@@ -1888,8 +2073,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
+      planTailored,
+      scaffoldFailed,
       advanceStage,
       brief,
+      projectAnalysis,
+      analysisLoading,
+      ensureProjectAnalysis,
       decisions,
       updateDecision,
       deleteDecision,
@@ -1917,6 +2107,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      threads,
+      activeThreadId,
+      chatHistoryOpen,
+      newChat,
+      openThread,
+      renameThread,
+      deleteThread,
+      toggleChatHistory,
       retryChat,
       runTaskInChat,
       reviseTaskInChat,
@@ -1976,8 +2174,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
+      planTailored,
+      scaffoldFailed,
       advanceStage,
       brief,
+      projectAnalysis,
+      analysisLoading,
+      ensureProjectAnalysis,
       decisions,
       updateDecision,
       deleteDecision,
@@ -2005,6 +2208,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      threads,
+      activeThreadId,
+      chatHistoryOpen,
+      newChat,
+      openThread,
+      renameThread,
+      deleteThread,
+      toggleChatHistory,
       retryChat,
       runTaskInChat,
       reviseTaskInChat,
