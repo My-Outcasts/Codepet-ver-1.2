@@ -14,32 +14,24 @@ import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { composeProjectModel } from '@/lib/ai/projectModel';
-import { departmentBrief } from '@/lib/ai/departments';
 import {
   STRUCTURED_SCHEMAS,
   DELIVERABLE_INSTRUCTIONS,
   type StructuredKind,
 } from '@/lib/ai/deliverableSchemas';
+import {
+  CODEPET_CONTEXT,
+  composeRunSystem,
+  buildTaskPrompt,
+  type TaskFields,
+} from '@/lib/ai/runTaskPrompt';
 
 export const runtime = 'nodejs';
 
-// byte's voice + output contract. The grounding clause is shared across EVERY
-// deliverable type (it lives here, not in the per-type instructions) so structural
-// types like email/post/legal/screens get the same "use the real company, no
-// generic filler" discipline as doc/plan — the fix for "too general, not detailed
-// enough" output.
-const BYTE_SYSTEM = `You are byte, the AI building companion inside Codepet. You produce real, ready-to-use deliverables for a founder building their company with AI — not descriptions of deliverables.
-
-Ground everything in the company context you're given: use the founder's real product, names, numbers, audience, locked-in decisions, and already-shipped work. Never invent facts — no made-up metrics, customers, integrations, or features that aren't in the context. When the context is thin, write tightly to what's actually there and make reasonable, clearly-general choices rather than padding with generic filler; specificity to THIS company is what makes the deliverable usable. Prefer depth over length.
-
-Voice: warm, plain-language, confident, specific. No hype, no emoji, no clichés. Write the thing the founder will actually use.`;
-
-// Baseline company context. Phase 4 will swap this for the user's real business
-// brief once onboarding persists it; until then byte writes from the product.
-const CODEPET_CONTEXT = `Codepet is a macOS companion that builds your whole company with you, department by department. It reads your project, writes the business brief and roadmap, then does real work across Engineering, Marketing, Design, Finance, Operations, Legal, Sales, and Support — producing real deliverables you approve. The promise is comprehension plus control: a real company, and one you actually understand.`;
-
 // Structured-output schemas + prompt instructions live in a pure, unit-tested
 // module (lib/ai/deliverableSchemas.ts). `text` has no schema (plain text).
+// Prompt construction (byte's system contract + the cache-safe system/user split)
+// lives in lib/ai/runTaskPrompt.ts.
 type Kind = 'text' | StructuredKind;
 
 const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction: string }> = {
@@ -72,48 +64,6 @@ interface RunTaskBody {
   reviseNote?: unknown;
   current?: unknown;
   brief?: unknown;
-}
-
-function buildPrompt(
-  kind: Kind,
-  context: string,
-  priorWork: string,
-  fields: {
-    taskTitle: string;
-    taskHint?: string;
-    deptName?: string;
-    deptKey?: string;
-    reviseNote?: string;
-    current?: string;
-  },
-): string {
-  const { taskTitle, taskHint, deptName, deptKey, reviseNote, current } = fields;
-  const lines = [
-    `Company context: ${context}`,
-    ...(priorWork ? ['', priorWork] : []),
-    '',
-    deptName ? `Department: ${deptName}` : null,
-    deptKey && departmentBrief(deptKey) ? departmentBrief(deptKey) : null,
-    `Task: ${taskTitle}`,
-    taskHint ? `Intended deliverable: ${taskHint}` : null,
-    '',
-    KINDS[kind].instruction,
-  ];
-
-  if (reviseNote && current) {
-    lines.push(
-      '',
-      'You previously produced this draft:',
-      '---',
-      current,
-      '---',
-      `Revise it to address this feedback: ${reviseNote}`,
-      'Return the full revised deliverable (not a diff).',
-    );
-  } else {
-    lines.push('', 'Produce the deliverable now.');
-  }
-  return lines.filter((l) => l !== null).join('\n');
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -155,7 +105,7 @@ export async function POST(req: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  const fields = {
+  const fields: TaskFields = {
     taskTitle,
     taskHint: typeof body.taskHint === 'string' ? body.taskHint.slice(0, 400) : undefined,
     deptName: typeof body.deptName === 'string' ? body.deptName : undefined,
@@ -203,15 +153,18 @@ export async function POST(req: Request): Promise<Response> {
       query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
     }),
   );
-  const { schema } = KINDS[kind];
-  const prompt = buildPrompt(kind, context, priorWork, fields);
+  const { schema, instruction } = KINDS[kind];
+  // Cache-safe split: the stable company context goes in the system (cached across the
+  // session's generations); only the per-task prompt varies call to call.
+  const system = composeRunSystem(context);
+  const prompt = buildTaskPrompt({ instruction, priorWork, fields });
   const onUsage = usageSink(uid, idToken, 'runTask');
 
   try {
     if (schema) {
       const payload = await generateJson({
         client,
-        system: BYTE_SYSTEM,
+        system,
         prompt,
         maxTokens: 4096,
         label: `run-task:${kind}`,
@@ -222,7 +175,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     const text = await generateText({
       client,
-      system: BYTE_SYSTEM,
+      system,
       prompt,
       maxTokens: 4096,
       label: `run-task:${kind}`,
