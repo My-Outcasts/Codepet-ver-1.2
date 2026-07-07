@@ -260,6 +260,7 @@ export function Copilot() {
             const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
             const plan = editable ? buildPlan! : m.buildPlan;
             const steps = plan.steps;
+            const unsure = new Set<number>(plan.uncertain ?? []);
             return (
               <div key={m.id} className="bub">
                 {plain(m.text)}
@@ -268,7 +269,15 @@ export function Copilot() {
                   {editable ? (
                     <div className="cop-steps">
                       {steps.map((s, i) => (
-                        <div className="cop-step" key={i}>
+                        <div
+                          className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
+                          key={i}
+                          title={
+                            unsure.has(i)
+                              ? "Byte isn't fully sure here — tweak it if needed"
+                              : undefined
+                          }
+                        >
                           <span className="cop-step-n">{i + 1}</span>
                           <textarea
                             className="cop-step-in"
@@ -298,7 +307,10 @@ export function Copilot() {
                   ) : (
                     <ol>
                       {steps.map((s, i) => (
-                        <li key={i}>{s}</li>
+                        <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
+                          {s}
+                          {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
+                        </li>
                       ))}
                     </ol>
                   )}

@@ -3127,6 +3127,20 @@ body {
 .cop-step-add:hover {
   border-color: var(--accent, #7c3aed);
 }
+/* Steps Byte flagged as a guess — nudges the founder to confirm them. */
+.cop-step.unsure .cop-step-in {
+  border-color: #e0b055;
+  background: #fdf7ec;
+}
+.cop-step.unsure .cop-step-n {
+  color: #b07d17;
+}
+.cop-unsure {
+  font-size: 11px;
+  font-weight: 600;
+  color: #b07d17;
+  white-space: nowrap;
+}
 .sug-build {
   font-weight: 600;
 }
