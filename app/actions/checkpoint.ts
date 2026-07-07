@@ -76,17 +76,31 @@ export async function buildChangeSummary(
   if (detectCapability(process.env).mode !== 'local') return null;
   if (!projectDir || !isObjectId(ref)) return null;
   try {
-    const split = (s: string) =>
-      s
+    // Snapshot the CURRENT full state into a throwaway index (same trick as the
+    // checkpoint), then diff the two trees. This shows only files that actually changed
+    // since the build — pre-existing untracked files (e.g. yarn.lock) are in BOTH trees
+    // and are correctly excluded, unlike a raw `ls-files --others`.
+    const idx = path.join(
+      os.tmpdir(),
+      `codepet-diffidx-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    const env = { ...process.env, GIT_INDEX_FILE: idx };
+    try {
+      await git(projectDir, ['add', '-A'], env);
+      const curTree = (await git(projectDir, ['write-tree'], env)).stdout.trim();
+      const files = (await git(projectDir, ['diff-tree', '-r', '--name-only', ref, curTree])).stdout
         .split('\n')
         .map((x) => x.trim())
-        .filter(Boolean);
-    const changed = split((await git(projectDir, ['diff', '--name-only', ref])).stdout);
-    const untracked = split(
-      (await git(projectDir, ['ls-files', '--others', '--exclude-standard'])).stdout,
-    );
-    const files = Array.from(new Set([...changed, ...untracked])).sort();
-    return { files: files.slice(0, 60), count: files.length };
+        .filter(Boolean)
+        .sort();
+      return { files: files.slice(0, 60), count: files.length };
+    } finally {
+      try {
+        fs.rmSync(idx, { force: true });
+      } catch {
+        /* best-effort temp cleanup */
+      }
+    }
   } catch {
     return null;
   }
