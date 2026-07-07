@@ -1,7 +1,9 @@
 'use client';
-// The Overview's overall progress hero — a small persistent HUD at the map's top-left
-// (under the breadcrumb): how far along the whole active plan is, plus the next
-// milestone. Presentational; OverviewView computes the numbers and keeps it live.
+// The Overview's overall progress hero — a small persistent HUD at the map's
+// bottom-left (just above the color legend): how far along the whole active plan is,
+// plus the next milestone. Bottom-left keeps it clear of the top-left title/subtitle/
+// example-plan/advance cluster. Presentational; OverviewView computes the numbers and
+// keeps it live.
 import type { OverviewProgress } from '@/lib/overview/progress';
 
 const CYAN = '#7DE3FF';
@@ -18,8 +20,8 @@ export default function OverviewProgressHud({
     <div
       style={{
         position: 'absolute',
-        top: 52,
-        left: 16,
+        bottom: 52,
+        left: 26,
         zIndex: 5,
         width: 210,
         padding: '10px 12px',
