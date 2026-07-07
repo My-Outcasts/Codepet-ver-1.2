@@ -166,6 +166,9 @@ interface AppState {
   regenerateCompany: () => void;
   /** The most recent graph-growth event (branches that unlocked on a re-scaffold), or null. */
   growthSignal: GrowthSignal | null;
+  /** Consume the current growth signal (clears it) so the unlock reveal can't replay
+   * on a later Overview remount. */
+  clearGrowthSignal: () => void;
   /** True once the map reflects a plan byte generated from this founder's product; false
    *  while it's still the built-in example seed. */
   planTailored: boolean;
@@ -310,6 +313,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [installed, setInstalled] = useState(false);
   // Most recent graph-growth event (branches unlocked by a re-scaffold), or null.
   const [growthSignal, setGrowthSignal] = useState<GrowthSignal | null>(null);
+  // Consume-once: the Overview clears the signal after easing the camera, so a later
+  // remount (growthSignal already null) can never replay the unlock reveal.
+  const clearGrowthSignal = useCallback(() => setGrowthSignal(null), []);
 
   useEffect(() => {
     try {
@@ -1820,6 +1826,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldFailed,
       advanceStage,
       growthSignal,
+      clearGrowthSignal,
       brief,
       projectAnalysis,
       analysisLoading,
@@ -1908,6 +1915,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldFailed,
       advanceStage,
       growthSignal,
+      clearGrowthSignal,
       brief,
       projectAnalysis,
       analysisLoading,

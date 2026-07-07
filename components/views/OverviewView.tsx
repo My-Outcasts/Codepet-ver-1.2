@@ -209,6 +209,7 @@ export default function OverviewView() {
     scaffoldFailed,
     regenerateCompany,
     growthSignal,
+    clearGrowthSignal,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
   void tick; // (already present) keeps the reads below live
@@ -232,7 +233,6 @@ export default function OverviewView() {
   const [hoverId, setHoverId] = useState<string | null>(null);
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
-  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -284,7 +284,9 @@ export default function OverviewView() {
         color: rgba(dHex, allDone ? 0.32 : alpha),
         val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
-        sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
+        sub: d.later
+          ? 'for later'
+          : `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
         done,
         total,
         pct: dp.pct,
@@ -469,13 +471,17 @@ export default function OverviewView() {
     if (!growthSignal || growthSignal.unlockedKeys.length === 0) return;
     // Gentle camera ease toward the first newly-grown branch (skip under reduced motion).
     if (!introReduceMotion()) flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
-    if (revealTimer.current) clearTimeout(revealTimer.current);
-    revealTimer.current = setTimeout(() => setRevealKeys(new Set()), 3000);
-    return () => {
-      if (revealTimer.current) clearTimeout(revealTimer.current);
-    };
+    clearGrowthSignal(); // consume once — prevents replay on remount
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [growthSignal]);
+  }, [growthSignal, clearGrowthSignal]);
+  // Auto-clear the reveal glow/tag ~3s after it's adopted. Decoupled from growthSignal
+  // (which is cleared the instant the signal is consumed, above) so consuming it can't
+  // cancel this timer early.
+  useEffect(() => {
+    if (revealKeys.size === 0) return;
+    const t = setTimeout(() => setRevealKeys(new Set()), 3000);
+    return () => clearTimeout(t);
+  }, [revealKeys]);
 
   // gentle forces (positions are seeded)
   useEffect(() => {
