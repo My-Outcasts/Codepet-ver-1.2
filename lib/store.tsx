@@ -178,6 +178,8 @@ interface AppState {
   buildCheckpoint: { ref: string } | null;
   /** Undo everything the build changed, restoring the project to the pre-build snapshot. */
   rewindBuild: () => void;
+  /** Advance a local in-UI build to the recap (there's no live-doc feed to flip it). */
+  endBuild: () => void;
   /** How hands-on the founder wants to be during the build. */
   buildAutonomy: 'suggest' | 'copilot' | 'autopilot';
   setBuildAutonomy: (m: 'suggest' | 'copilot' | 'autopilot') => void;
@@ -1160,6 +1162,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
 
+  // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
+  // subscription; local mode has no such feed, so this is the explicit "wrap up".)
+  const endBuild = useCallback(() => setBuildStep('end'), []);
+
   const rewindBuild = useCallback(() => {
     const ref = buildCheckpoint?.ref;
     if (!ref || !buildProjectDir) return;
@@ -1269,6 +1275,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       armBuild,
       buildCheckpoint,
       rewindBuild,
+      endBuild,
       buildAutonomy,
       setBuildAutonomy,
       resetBuildFlow,
@@ -1338,6 +1345,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       armBuild,
       buildCheckpoint,
       rewindBuild,
+      endBuild,
       buildAutonomy,
       setBuildAutonomy,
       resetBuildFlow,

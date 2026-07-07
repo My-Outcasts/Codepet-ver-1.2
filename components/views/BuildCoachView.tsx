@@ -374,6 +374,7 @@ export function BuildCoachView() {
     buildBrief,
     buildCheckpoint,
     rewindBuild,
+    endBuild,
     buildAutonomy,
     resetBuildFlow,
   } = useApp();
@@ -436,6 +437,11 @@ export function BuildCoachView() {
         )}
 
         <div className="bc-nav">
+          {step === 'during' && (
+            <button className="bc-next" onClick={endBuild}>
+              {NEXT_LABEL.during}
+            </button>
+          )}
           {step === 'end' && (
             <button className="bc-next" onClick={resetBuildFlow}>
               {NEXT_LABEL.end}

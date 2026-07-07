@@ -100,6 +100,9 @@ export function useLiveSession(opts: {
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
+    // Aborting the stream means we won't receive the child's exit event, so flip the
+    // transcript to ended ourselves — otherwise the UI looks frozen after Stop.
+    setState((s) => reduceTranscript(s, { kind: 'exit', code: 0 }));
     // Tell the server to kill the persistent claude child. keepalive lets this
     // POST survive component unmount / tab close. Best-effort — ignore failures.
     try {
