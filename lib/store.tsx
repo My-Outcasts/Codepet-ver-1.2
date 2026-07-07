@@ -171,6 +171,8 @@ interface AppState {
   setBuildProject: (v: string) => void;
   buildBrief: string;
   buildPlan: BytePlan | null;
+  /** Edit the generated plan's steps in place before arming (founder can refine intent). */
+  setBuildPlanSteps: (steps: string[]) => void;
   buildSessionId: string | null;
   buildLive: LiveState | null;
   buildLocal: boolean;
@@ -1077,6 +1079,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, [buildBrief, buildProject]);
 
+  const setBuildPlanSteps = useCallback((steps: string[]) => {
+    setBuildPlanState((p) => (p ? { ...p, steps } : p));
+  }, []);
+
   const armBuild = useCallback(() => {
     if (!buildPlan || !companyId || buildArming) return;
     setBuildArming(true);
@@ -1201,6 +1207,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBuildProject,
       buildBrief,
       buildPlan,
+      setBuildPlanSteps,
       buildSessionId,
       buildLive,
       buildLocal,
@@ -1265,6 +1272,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setBuildProject,
       buildBrief,
       buildPlan,
+      setBuildPlanSteps,
       buildSessionId,
       buildLive,
       buildLocal,

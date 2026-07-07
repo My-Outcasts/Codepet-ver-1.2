@@ -169,6 +169,8 @@ export function Copilot() {
     projects,
     buildProject,
     setBuildProject,
+    buildPlan,
+    setBuildPlanSteps,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -251,16 +253,53 @@ export function Copilot() {
             );
           }
           if (m.buildPlan) {
+            // While this is the live plan card (before arming), edit the store's plan so
+            // the founder can refine the steps; older/armed cards read as static history.
+            const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
+            const plan = editable ? buildPlan! : m.buildPlan;
+            const steps = plan.steps;
             return (
               <div key={m.id} className="bub">
                 {plain(m.text)}
                 <div className="cop-plan">
-                  <div className="cop-plan-h">{m.buildPlan.title}</div>
-                  <ol>
-                    {m.buildPlan.steps.map((s, i) => (
-                      <li key={i}>{s}</li>
-                    ))}
-                  </ol>
+                  <div className="cop-plan-h">{plan.title}</div>
+                  {editable ? (
+                    <div className="cop-steps">
+                      {steps.map((s, i) => (
+                        <div className="cop-step" key={i}>
+                          <span className="cop-step-n">{i + 1}</span>
+                          <textarea
+                            className="cop-step-in"
+                            rows={1}
+                            value={s}
+                            onChange={(e) =>
+                              setBuildPlanSteps(steps.map((x, j) => (j === i ? e.target.value : x)))
+                            }
+                          />
+                          <button
+                            className="cop-step-x"
+                            title="Remove this step"
+                            aria-label="Remove this step"
+                            onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        className="cop-step-add"
+                        onClick={() => setBuildPlanSteps([...steps, ''])}
+                      >
+                        + Add a step
+                      </button>
+                    </div>
+                  ) : (
+                    <ol>
+                      {steps.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ol>
+                  )}
                 </div>
                 {m.buildAction?.kind === 'start-building' && (
                   <>
@@ -286,7 +325,11 @@ export function Copilot() {
                         />
                       )}
                     </label>
-                    <button className="bub-act" onClick={armBuild} disabled={buildArming}>
+                    <button
+                      className="bub-act"
+                      onClick={armBuild}
+                      disabled={buildArming || steps.every((s) => !s.trim())}
+                    >
                       {buildArming ? 'Opening your session…' : m.buildAction.label}
                     </button>
                   </>
