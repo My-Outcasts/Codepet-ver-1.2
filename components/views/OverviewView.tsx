@@ -224,6 +224,8 @@ export default function OverviewView() {
   );
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
+  const [beaconFlip, setBeaconFlip] = useState(false);
+  const beaconFlipRef = useRef(false);
   const hereRef = useRef<HereInfo | null>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
@@ -417,6 +419,11 @@ export default function OverviewView() {
         ) {
           el.style.opacity = '1';
           el.style.transform = `translate(${sc.x}px, ${sc.y}px)`;
+          const nextFlip = sc.x > dims.w * 0.62;
+          if (nextFlip !== beaconFlipRef.current) {
+            beaconFlipRef.current = nextFlip;
+            setBeaconFlip(nextFlip);
+          }
         } else {
           el.style.opacity = '0';
         }
@@ -971,6 +978,7 @@ export default function OverviewView() {
             <ByteGuide
               here={here}
               spotlight={introPhase === 'spotlight'}
+              flip={beaconFlip}
               // One shared arrival: byte opens the chat + briefs you, then the
               // portalSignal effect glides the camera to the department AFTER the
               // chat has docked. Starting also settles any active spotlight.
@@ -1001,26 +1009,41 @@ function ByteGuide({
   here,
   onStart,
   spotlight = false,
+  flip = false,
 }: {
   here: HereInfo;
   onStart: () => void;
   spotlight?: boolean;
+  flip?: boolean;
 }) {
   const st = taskState(here.task, true);
   return (
-    <div style={{ position: 'relative', width: 250, transform: 'translate(18px, -50%)' }}>
+    <div
+      style={{
+        position: 'relative',
+        width: 250,
+        transform: flip ? 'translate(calc(-100% - 18px), -50%)' : 'translate(18px, -50%)',
+      }}
+    >
       <span
         aria-hidden
         style={{
           position: 'absolute',
-          left: -5,
+          ...(flip ? { right: -5 } : { left: -5 }),
           top: '50%',
           width: 10,
           height: 10,
           marginTop: -5,
           background: 'rgba(16,14,28,0.92)',
-          borderLeft: '1px solid rgba(125,227,255,0.5)',
-          borderBottom: '1px solid rgba(125,227,255,0.5)',
+          ...(flip
+            ? {
+                borderRight: '1px solid rgba(125,227,255,0.5)',
+                borderTop: '1px solid rgba(125,227,255,0.5)',
+              }
+            : {
+                borderLeft: '1px solid rgba(125,227,255,0.5)',
+                borderBottom: '1px solid rgba(125,227,255,0.5)',
+              }),
           transform: 'rotate(45deg)',
         }}
       />
