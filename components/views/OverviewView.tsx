@@ -93,6 +93,8 @@ interface GNode {
   done?: number;
   total?: number;
   pct?: number;
+  later?: boolean;
+  reveal?: boolean;
   x: number;
   y: number;
   z: number;
@@ -112,7 +114,7 @@ const linkId = (x: unknown): string =>
 // A billboarded ring sprite: a faint full track + an arc filled clockwise from the top to
 // `pct`. Drawn on a canvas → CanvasTexture → Sprite, so it always faces the camera (reads
 // as a clean circle at any orbit angle) with no per-frame screen projection.
-function makeRingSprite(pct: number, colorHex: string, size: number): THREE.Sprite {
+function makeRingSprite(pct: number, colorHex: string, size: number, parked = false): THREE.Sprite {
   const S = 128;
   const canvas = document.createElement('canvas');
   canvas.width = S;
@@ -123,26 +125,66 @@ function makeRingSprite(pct: number, colorHex: string, size: number): THREE.Spri
   const r = S * 0.4;
   const lw = S * 0.08;
   ctx.lineCap = 'round';
-  // track
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = lw;
-  ctx.stroke();
-  // filled arc
-  if (pct > 0) {
-    const start = -Math.PI / 2;
-    const end = start + (Math.min(100, pct) / 100) * Math.PI * 2;
+  if (parked) {
+    // Dormant "for later": a single dashed hollow outline, muted — no track, no fill.
+    ctx.setLineDash([S * 0.06, S * 0.06]);
     ctx.beginPath();
-    ctx.arc(cx, cy, r, start, end);
-    ctx.strokeStyle = colorHex;
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200,190,230,0.42)';
+    ctx.lineWidth = lw * 0.7;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    // track
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = lw;
     ctx.stroke();
+    // filled arc
+    if (pct > 0) {
+      const start = -Math.PI / 2;
+      const end = start + (Math.min(100, pct) / 100) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, start, end);
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.anisotropy = 4;
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
+// A soft radial glow the UnrealBloomPass amplifies — used to flash a just-unlocked branch.
+function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, colorHex);
+  g.addColorStop(0.4, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
   );
   sprite.scale.set(size, size, 1);
   return sprite;
@@ -166,6 +208,8 @@ export default function OverviewView() {
     planTailored,
     scaffoldFailed,
     regenerateCompany,
+    growthSignal,
+    clearGrowthSignal,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
   void tick; // (already present) keeps the reads below live
@@ -187,6 +231,8 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
+  const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -238,10 +284,14 @@ export default function OverviewView() {
         color: rgba(dHex, allDone ? 0.32 : alpha),
         val: allDone ? 4 : d.status === 'attention' ? 7 : 5,
         dept: d,
-        sub: `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
+        sub: d.later
+          ? 'for later'
+          : `${done}/${total} done · ${d.status === 'attention' ? 'needs you' : d.status}`,
         done,
         total,
         pct: dp.pct,
+        later: !!d.later,
+        reveal: revealKeys.has(d.k),
         x: dx,
         y: dy,
         z: dz,
@@ -249,7 +299,7 @@ export default function OverviewView() {
       links.push({
         source: 'project',
         target: did,
-        color: rgba(dHex, 0.4),
+        color: rgba(dHex, d.later ? 0.12 : 0.4),
         hex: dHex,
         kind: 'pd',
         active: d.status === 'attention',
@@ -285,7 +335,7 @@ export default function OverviewView() {
       adj.get(l.target)!.add(l.source);
     });
     return { data: { nodes, links }, adj };
-  }, [tick, brief.projectName]);
+  }, [tick, brief.projectName, revealKeys]);
 
   const inFocus = useCallback(
     (id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id),
@@ -402,6 +452,36 @@ export default function OverviewView() {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalSignal, dims.w]);
+
+  // A re-scaffold just unlocked one or more parked branches — flash the reveal
+  // (glow halo on the affected dept nodes), gently ease the camera toward the
+  // first one, and hold a transient "N areas unlocked" tag for a few seconds.
+  //
+  // Adopt a newly-published growthSignal into revealKeys at render time (a ref
+  // diff against the last-seen signal, not a synchronous setState-in-effect) —
+  // same "don't setState synchronously inside an effect" convention as the rest
+  // of this codebase. The imperative side effects (camera ease + the auto-clear
+  // timer) still live in the effect below, gated on the same signal.
+  const lastGrowthSignalRef = useRef<typeof growthSignal>(null);
+  if (growthSignal && growthSignal !== lastGrowthSignalRef.current) {
+    lastGrowthSignalRef.current = growthSignal;
+    if (growthSignal.unlockedKeys.length > 0) setRevealKeys(new Set(growthSignal.unlockedKeys));
+  }
+  useEffect(() => {
+    if (!growthSignal || growthSignal.unlockedKeys.length === 0) return;
+    // Gentle camera ease toward the first newly-grown branch (skip under reduced motion).
+    if (!introReduceMotion()) flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
+    clearGrowthSignal(); // consume once — prevents replay on remount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [growthSignal, clearGrowthSignal]);
+  // Auto-clear the reveal glow/tag ~3s after it's adopted. Decoupled from growthSignal
+  // (which is cleared the instant the signal is consumed, above) so consuming it can't
+  // cancel this timer early.
+  useEffect(() => {
+    if (revealKeys.size === 0) return;
+    const t = setTimeout(() => setRevealKeys(new Set()), 3000);
+    return () => clearTimeout(t);
+  }, [revealKeys]);
 
   // gentle forces (positions are seeded)
   useEffect(() => {
@@ -531,12 +611,41 @@ export default function OverviewView() {
     // Project node: label only (overall progress lives in the hero HUD).
     if (n.kind !== 'dept') return s;
 
+    // Department node.
+    if (n.later) {
+      // Parked "for later": hollow dashed outline + muted two-line label, no count/ring.
+      const label = new SpriteText(n.name);
+      label.color = 'rgba(220,214,245,0.6)';
+      label.textHeight = 4;
+      label.fontFace = 'Inter, system-ui, sans-serif';
+      label.fontWeight = '600';
+      (label as any).backgroundColor = 'rgba(7,5,16,0.6)';
+      (label as any).padding = 2;
+      (label as any).borderRadius = 3;
+      (label as any).position.set(0, radius + 5, 0);
+      const sub = new SpriteText('for later');
+      sub.color = 'rgba(200,190,230,0.4)';
+      sub.textHeight = 2.6;
+      sub.fontFace = 'Inter, system-ui, sans-serif';
+      (sub as any).position.set(0, radius + 1.5, 0);
+      const parkedRing = makeRingSprite(0, n.deptColor ?? '#8B5CF6', radius * 3.4, true);
+      const group = new THREE.Group();
+      group.add(parkedRing);
+      group.add(label);
+      group.add(sub);
+      return group;
+    }
+
     // Department node: label + progress ring around the node.
     const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#8B5CF6');
     const ring = makeRingSprite(n.pct ?? 0, ringColor, radius * 3.4); // tune multiplier on preview
     const group = new THREE.Group();
     group.add(ring);
     group.add(s);
+    if (n.reveal) {
+      const halo = makeGlowSprite(n.deptColor ?? '#7DE3FF', radius * 5.5);
+      group.add(halo);
+    }
     return group;
   };
 
@@ -624,6 +733,29 @@ export default function OverviewView() {
         />
       )}
       <StageRibbon />
+      {revealKeys.size > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 52,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 7,
+            pointerEvents: 'none',
+            padding: '6px 14px',
+            borderRadius: 999,
+            background: 'rgba(16,14,28,0.92)',
+            border: '1px solid rgba(125,227,255,0.4)',
+            color: '#7DE3FF',
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            boxShadow: '0 0 20px rgba(125,227,255,0.25)',
+          }}
+        >
+          ✦ {revealKeys.size} {revealKeys.size === 1 ? 'area' : 'areas'} unlocked
+        </div>
+      )}
       <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
 
       <div
