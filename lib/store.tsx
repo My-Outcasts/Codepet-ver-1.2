@@ -32,6 +32,7 @@ import {
   persistEnv,
   persistRoadmapStage,
   persistCompanion,
+  persistIntroSeen,
   persistBrief,
   persistChatMessage,
   persistDecisions,
@@ -218,6 +219,10 @@ interface AppState {
   companionId: string;
   /** Set the active companion (persists). */
   setCompanion: (id: string) => void;
+  /** Whether this account has seen the Overview first-run intro. */
+  introSeen: boolean;
+  /** Mark the first-run intro seen for this account (idempotent; persists). */
+  markIntroSeen: () => void;
   /** The one-time "wake byte up" install popup (auto-opens once; the Topbar pill
    * and Settings reopen it). */
   installPromptOpen: boolean;
@@ -369,6 +374,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [installed, setInstalled] = useState(false);
   // The founder's chosen companion character (hydrated from Firestore; default byte).
   const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
+  // Whether THIS account has seen the Overview first-run intro (hydrated from
+  // Firestore; drives introInitialPhase). Default false ⇒ a fresh account sees it.
+  const [introSeen, setIntroSeen] = useState(false);
+  // Mirror of introSeen for a stale-closure-free idempotency check in markIntroSeen.
+  const introSeenRef = useRef(false);
   // Most recent graph-growth event (branches unlocked by a re-scaffold), or null.
   const [growthSignal, setGrowthSignal] = useState<GrowthSignal | null>(null);
   // Consume-once: the Overview clears the signal after easing the camera, so a later
@@ -621,12 +631,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           decisions: dec,
           projectAnalysis: pa,
           companionId: cId,
+          introSeenAt,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
           setBrief(b);
           setDecisions(dec);
           setCompanionId(cId ?? DEFAULT_COMPANION_ID);
+          setIntroSeen(Boolean(introSeenAt));
+          introSeenRef.current = Boolean(introSeenAt);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
           // way, so a fresh account never inherits a previous account's in-flight/loading state.
           // Re-validate the persisted doc so a partial/corrupt one can't render blank rows.
@@ -753,6 +766,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [companyId],
   );
+  const markIntroSeen = useCallback(() => {
+    if (introSeenRef.current) return; // already seen — no state churn, no write
+    introSeenRef.current = true;
+    setIntroSeen(true);
+    if (companyId) {
+      persistIntroSeen(companyId).catch((err) =>
+        console.error('[store] persistIntroSeen failed', err),
+      );
+    }
+  }, [companyId]);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
@@ -2148,6 +2171,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setInstalled: setInstalledFlag,
       companionId,
       setCompanion,
+      introSeen,
+      markIntroSeen,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
@@ -2254,6 +2279,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setInstalledFlag,
       companionId,
       setCompanion,
+      introSeen,
+      markIntroSeen,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
