@@ -182,6 +182,9 @@ interface AppState {
   scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
+  /** True while a manual re-plan is in flight — guards the "Re-plan" button against
+   *  being mashed (e.g. during an outage) so it can't fire overlapping scaffolds. */
+  regenerating: boolean;
   /** The most recent graph-growth event (branches that unlocked on a re-scaffold), or null. */
   growthSignal: GrowthSignal | null;
   /** Consume the current growth signal (clears it) so the unlock reveal can't replay
@@ -571,6 +574,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // "not generated yet", so the example-plan banner can be honest about which it is.
   const [planTailored, setPlanTailored] = useState(false);
   const [scaffoldFailure, setScaffoldFailure] = useState<string | null>(null);
+  // Guards regenerateCompany against being mashed — the button disables while true.
+  // Cleared on both success and failure (.finally), never left stuck on.
+  const [regenerating, setRegenerating] = useState(false);
+  const regenInFlightRef = useRef(false);
   const computeNextStep = useCallback(() => {
     const fb = nextAction();
     const fallback: NextStep | null = fb
@@ -950,23 +957,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Manual re-plan: regenerate the stage-aware company for the current account
   // (existing companies aren't scaffolded automatically). Used to test/refresh.
   const regenerateCompany = useCallback(() => {
-    if (!companyId) return;
+    if (regenInFlightRef.current || !companyId) return;
+    regenInFlightRef.current = true;
+    setRegenerating(true);
     toast('Re-planning your company for your stage…');
     const beforeLater = new Set(DEPTS.filter((d) => d.later).map((d) => d.k));
-    scaffoldCompany(companyId, brief).then(({ changed, failure }) => {
-      if (changed) {
-        bump();
-        computeNextStep();
-        setPlanTailored(true); // real plan landed — the example banner clears
-        setScaffoldFailure(null);
-        toast('Company re-planned for your stage');
-        const unlocked = unlockedKeys(beforeLater, DEPTS);
-        if (unlocked.length) setGrowthSignal({ unlockedKeys: unlocked, ts: Date.now() });
-      } else {
-        setScaffoldFailure(failure); // couldn't generate → the example still stands, say why
-        toast('Couldn’t re-plan just now — try again');
-      }
-    });
+    scaffoldCompany(companyId, brief)
+      .then(({ changed, failure }) => {
+        if (changed) {
+          bump();
+          computeNextStep();
+          setPlanTailored(true); // real plan landed — the example banner clears
+          setScaffoldFailure(null);
+          toast('Company re-planned for your stage');
+          const unlocked = unlockedKeys(beforeLater, DEPTS);
+          if (unlocked.length) setGrowthSignal({ unlockedKeys: unlocked, ts: Date.now() });
+        } else {
+          setScaffoldFailure(failure); // couldn't generate → the example still stands, say why
+          toast('Couldn’t re-plan just now — try again');
+        }
+      })
+      .finally(() => {
+        regenInFlightRef.current = false;
+        setRegenerating(false);
+      });
   }, [companyId, brief, bump, toast, computeNextStep]);
 
   // byte's one-time, brief-grounded read of the project (the Overview intro). Idempotent:
@@ -2117,6 +2131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
+      regenerating,
       planTailored,
       scaffoldFailure,
       advanceStage,
@@ -2222,6 +2237,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
+      regenerating,
       planTailored,
       scaffoldFailure,
       advanceStage,

@@ -12,7 +12,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 // name + status + current task + to-do count. The whole company, readable at a
 // glance; click a row to enter.
 export function CompanyView() {
-  const { openDept, regenerateCompany, tick } = useApp();
+  const { openDept, regenerateCompany, regenerating, tick } = useApp();
   void tick;
   const need = DEPTS.filter((d) => d.status === 'attention').length;
 
@@ -23,8 +23,13 @@ export function CompanyView() {
           <h1>Your company</h1>
           <div className="sub">Eight departments · {need} need you today</div>
         </div>
-        <button className="replan" onClick={regenerateCompany} title="Regenerate for your stage">
-          Re-plan for my stage
+        <button
+          className="replan"
+          onClick={regenerateCompany}
+          disabled={regenerating}
+          title="Regenerate for your stage"
+        >
+          {regenerating ? 'Re-planning…' : 'Re-plan for my stage'}
         </button>
       </div>
       <div className="deptlist">
