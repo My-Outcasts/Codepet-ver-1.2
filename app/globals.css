@@ -8888,3 +8888,25 @@ body {
   font-style: italic;
   text-decoration: line-through;
 }
+
+/* Overview stage ribbon — text-forward breadcrumb. Full row by default;
+   below 640px it collapses done/ahead phases to counts (see StageRibbon). */
+.stage-ribbon-full {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+}
+.stage-ribbon-compact {
+  display: none;
+  align-items: center;
+  gap: 9px;
+}
+@media (max-width: 640px) {
+  .stage-ribbon-full {
+    display: none;
+  }
+  .stage-ribbon-compact {
+    display: flex;
+  }
+}
