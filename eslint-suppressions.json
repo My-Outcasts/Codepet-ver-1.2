@@ -45,7 +45,7 @@
   },
   "components/views/OverviewView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 13
+      "count": 18
     }
   },
   "components/views/overview/StageDrawer.tsx": {

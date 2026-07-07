@@ -53,6 +53,7 @@ import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
+import { unlockedKeys, type GrowthSignal } from './overview/growth';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
 import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
@@ -179,6 +180,11 @@ interface AppState {
   scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
+  /** The most recent graph-growth event (branches that unlocked on a re-scaffold), or null. */
+  growthSignal: GrowthSignal | null;
+  /** Consume the current growth signal (clears it) so the unlock reveal can't replay
+   * on a later Overview remount. */
+  clearGrowthSignal: () => void;
   /** True once the map reflects a plan byte generated from this founder's product; false
    *  while it's still the built-in example seed. */
   planTailored: boolean;
@@ -351,6 +357,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
+  // Most recent graph-growth event (branches unlocked by a re-scaffold), or null.
+  const [growthSignal, setGrowthSignal] = useState<GrowthSignal | null>(null);
+  // Consume-once: the Overview clears the signal after easing the camera, so a later
+  // remount (growthSignal already null) can never replay the unlock reveal.
+  const clearGrowthSignal = useCallback(() => setGrowthSignal(null), []);
   // The one-time "wake byte up" popup — auto-opened by the effect next to
   // setInstalledFlag below; reopened any time via the Topbar pill or Settings.
   const [installPromptOpen, setInstallPromptOpen] = useState(false);
@@ -917,6 +928,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const regenerateCompany = useCallback(() => {
     if (!companyId) return;
     toast('Re-planning your company for your stage…');
+    const beforeLater = new Set(DEPTS.filter((d) => d.later).map((d) => d.k));
     scaffoldCompany(companyId, brief).then((changed) => {
       if (changed) {
         bump();
@@ -924,6 +936,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setPlanTailored(true); // real plan landed — the example banner clears
         setScaffoldFailed(false);
         toast('Company re-planned for your stage');
+        const unlocked = unlockedKeys(beforeLater, DEPTS);
+        if (unlocked.length) setGrowthSignal({ unlockedKeys: unlocked, ts: Date.now() });
       } else {
         setScaffoldFailed(true); // couldn't generate → the example still stands, say so
         toast('Couldn’t re-plan just now — try again');
@@ -1033,6 +1047,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       },
     ]);
     if (!companyId) return;
+    const beforeLater = new Set(DEPTS.filter((d) => d.later).map((d) => d.k));
     scaffoldCompany(companyId, updated).then((changed) => {
       if (changed) {
         // Re-plan took — now it's safe to persist the new stage.
@@ -1051,6 +1066,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               : m,
           ),
         );
+        const unlocked = unlockedKeys(beforeLater, DEPTS);
+        if (unlocked.length) setGrowthSignal({ unlockedKeys: unlocked, ts: Date.now() });
       } else {
         // Re-plan failed and nothing was persisted — roll the stage back so the founder
         // stays consistent (current stage + current tasks), and offer a retry.
@@ -2076,6 +2093,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       planTailored,
       scaffoldFailed,
       advanceStage,
+      growthSignal,
+      clearGrowthSignal,
       brief,
       projectAnalysis,
       analysisLoading,
@@ -2177,6 +2196,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       planTailored,
       scaffoldFailed,
       advanceStage,
+      growthSignal,
+      clearGrowthSignal,
       brief,
       projectAnalysis,
       analysisLoading,
