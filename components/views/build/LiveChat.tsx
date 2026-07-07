@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLiveSession } from '@/lib/liveSession/useLiveSession';
 import { describePermission, riskLevel, friendlyTool } from '@/lib/liveSession/permissionSummary';
+import { liveFromTranscript } from '@/lib/liveSession/liveFromTranscript';
+import type { LiveState } from '@/lib/liveBuild';
 import type { BytePlan } from '@/lib/ai/plan';
 
 // Session state as a color-coded chip at the top of the live view, so a founder
@@ -66,12 +68,21 @@ export function LiveChat({
   plan,
   brief,
   mode,
+  resume,
+  onLive,
+  onStatus,
 }: {
   buildSessionId: string;
   projectDir: string;
   plan: BytePlan;
   brief: string;
   mode: 'suggest' | 'copilot' | 'autopilot';
+  /** Re-attach to an already-running session (after a reload) — never respawns. */
+  resume?: boolean;
+  /** Reports each transcript reading as LiveState, feeding the DURING meter/recap. */
+  onLive?: (s: LiveState) => void;
+  /** Reports session-status changes, so the parent can guard "Wrap up". */
+  onStatus?: (status: string) => void;
 }) {
   const { state, start, stop, send, decide } = useLiveSession({
     buildSessionId,
@@ -79,11 +90,24 @@ export function LiveChat({
     plan,
     brief,
     mode,
+    resume,
   });
   const [draft, setDraft] = useState('');
   const [queue, setQueue] = useState<string[]>([]);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushing = useRef(false);
+  // Session start time for the meter's timestamps — stamped on the first reading.
+  const startedAt = useRef(0);
+
+  // Mirror the transcript out to the store's buildLive on every change, so the
+  // piggy-bank meter and END recap track this in-UI session in real time (local
+  // builds have no hook→Firestore feed). Callers pass stable callbacks (store
+  // useCallback / setState), so they're safe in the dep array.
+  useEffect(() => {
+    if (!startedAt.current) startedAt.current = Date.now();
+    onLive?.(liveFromTranscript(state, startedAt.current, Date.now()));
+    onStatus?.(state.status);
+  }, [state, onLive, onStatus]);
 
   useEffect(() => {
     // A pending teardown means this is React strict-mode's immediate remount after a

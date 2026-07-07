@@ -19,7 +19,7 @@ import { DepartmentDetail } from './views/DepartmentDetail';
 import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
 import { EnvironmentView } from './views/EnvironmentView';
-import { InstallView } from './views/InstallView';
+import { InstallModal } from './InstallModal';
 import { SettingsView } from './views/SettingsView';
 import { BillingView } from './views/BillingView';
 import { BuildCoachView } from './views/BuildCoachView';
@@ -68,8 +68,6 @@ function Shell() {
       <TasksView />
     ) : view === 'build' ? null : view === 'library' ? ( // Rendered by the persistent keep-alive slot below, not here.
       <LibraryView />
-    ) : view === 'install' ? (
-      <InstallView />
     ) : view === 'settings' ? (
       <SettingsView />
     ) : view === 'billing' ? (
@@ -111,6 +109,7 @@ function Shell() {
       <Onboarding />
       <Toast />
       <ArtifactModal />
+      <InstallModal />
     </div>
   );
 }

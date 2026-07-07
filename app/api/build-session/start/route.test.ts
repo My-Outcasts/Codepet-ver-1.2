@@ -14,11 +14,17 @@ vi.mock('@/lib/armSession', () => ({
   buildOpeningPrompt: vi.fn((plan, brief) => `Prompt for ${brief}`),
 }));
 
+vi.mock('@/lib/liveSession/registry', () => ({
+  getSession: vi.fn(),
+}));
+
 import { POST } from './route';
 import { startSession } from '@/lib/liveSession/engine';
+import { getSession } from '@/lib/liveSession/registry';
 import { detectCapability } from '@/lib/installer/capability.mjs';
 
 const mockStartSession = startSession as MockedFunction<typeof startSession>;
+const mockGetSession = getSession as MockedFunction<typeof getSession>;
 const mockDetectCapability = detectCapability as MockedFunction<typeof detectCapability>;
 
 const plan = { title: 'T', steps: ['a'], budgetActions: 8 };
@@ -31,6 +37,8 @@ const body = (b: unknown) =>
 beforeEach(() => {
   mockStartSession.mockClear();
   mockDetectCapability.mockReset();
+  mockGetSession.mockReset();
+  mockGetSession.mockReturnValue(undefined);
 });
 
 describe('POST /api/build-session/start', () => {
@@ -77,6 +85,35 @@ describe('POST /api/build-session/start', () => {
       new Request('http://localhost/api/build-session/start', { method: 'POST', body: 'null' }),
     );
     expect(res.status).toBe(400);
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent: an already-live session just acks (attach) without respawning', async () => {
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
+    mockGetSession.mockReturnValue({} as ReturnType<typeof getSession>);
+    const res = await POST(body({ buildSessionId: 'b1', projectDir: '/p', plan, brief: 'x' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, attached: true });
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  it('resume of a dead session answers gone instead of restarting the build', async () => {
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
+    const res = await POST(
+      body({ buildSessionId: 'b1', projectDir: '/p', plan, brief: 'x', resume: true }),
+    );
+    expect(res.status).toBe(410);
+    expect(await res.json()).toEqual({ ok: false, reason: 'gone' });
+    expect(mockStartSession).not.toHaveBeenCalled();
+  });
+
+  it('resume of a live session attaches', async () => {
+    mockDetectCapability.mockReturnValue({ mode: 'local', reason: 'test' });
+    mockGetSession.mockReturnValue({} as ReturnType<typeof getSession>);
+    const res = await POST(
+      body({ buildSessionId: 'b1', projectDir: '/p', plan, brief: 'x', resume: true }),
+    );
+    expect(res.status).toBe(200);
     expect(mockStartSession).not.toHaveBeenCalled();
   });
 });

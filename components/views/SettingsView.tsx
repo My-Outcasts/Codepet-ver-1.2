@@ -7,7 +7,7 @@ import { getTrackingState, setTracking } from '@/app/actions/install';
 type State = { installed: boolean; enabled: boolean };
 
 export function SettingsView() {
-  const { show } = useApp();
+  const { openInstallPrompt } = useApp();
   const { user } = useAuth();
   const name = user?.displayName || user?.email?.split('@')[0] || 'You';
   const email = user?.email ?? '';
@@ -82,7 +82,7 @@ export function SettingsView() {
                   <span className="knob" />
                 </button>
               ) : (
-                <button className="set-link" onClick={() => show('install')}>
+                <button className="set-link" onClick={openInstallPrompt}>
                   Install the tracker →
                 </button>
               )}

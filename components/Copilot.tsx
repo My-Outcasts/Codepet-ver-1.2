@@ -304,6 +304,7 @@ export function Copilot() {
     advanceStage,
     buildIntakeActive,
     startBuildIntake,
+    cancelBuildIntake,
     addIntakeTurn,
     generateBuildPlan,
     armBuild,
@@ -510,7 +511,11 @@ export function Copilot() {
                           value={buildProject}
                           onChange={(e) => setBuildProject(e.target.value)}
                         >
-                          <option value="">No project — just this build</option>
+                          {/* A project is required — building "nowhere" would land in
+                              the app server's own folder. */}
+                          <option value="" disabled>
+                            Choose a project…
+                          </option>
                           {projects.map((name) => (
                             <option key={name} value={name}>
                               {name}
@@ -549,9 +554,16 @@ export function Copilot() {
                     <button
                       className="bub-act"
                       onClick={armBuild}
-                      disabled={buildArming || steps.every((s) => !s.trim())}
+                      disabled={
+                        buildArming || steps.every((s) => !s.trim()) || !buildProject.trim()
+                      }
+                      title={!buildProject.trim() ? 'Pick a project first' : undefined}
                     >
-                      {buildArming ? 'Opening your session…' : m.buildAction.label}
+                      {buildArming
+                        ? 'Opening your session…'
+                        : !buildProject.trim()
+                          ? 'Pick a project to start'
+                          : m.buildAction.label}
                     </button>
                   </>
                 )}
@@ -649,14 +661,25 @@ export function Copilot() {
         </button>
       )}
       <div className="cop-foot">
-        {!buildIntakeActive && (
+        {!buildIntakeActive ? (
           <button className="cop-build-cta" onClick={startBuildIntake}>
             🔨 Let&apos;s build
           </button>
+        ) : (
+          <div className="cop-intake-bar">
+            <span className="cop-intake-hint">Describing your build…</span>
+            <button className="cop-intake-cancel" onClick={cancelBuildIntake}>
+              ✕ Never mind
+            </button>
+          </div>
         )}
         <div className="composer">
           <input
-            placeholder="Ask byte anything about your company…"
+            placeholder={
+              buildIntakeActive
+                ? 'Tell Byte what to build — every message adds to the brief…'
+                : 'Ask byte anything about your company…'
+            }
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
