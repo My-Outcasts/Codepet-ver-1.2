@@ -1,8 +1,18 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useLiveSession } from '@/lib/liveSession/useLiveSession';
-import { describePermission, riskLevel } from '@/lib/liveSession/permissionSummary';
+import { describePermission, riskLevel, friendlyTool } from '@/lib/liveSession/permissionSummary';
 import type { BytePlan } from '@/lib/ai/plan';
+
+// Session state as a color-coded chip at the top of the live view, so a founder
+// glancing over instantly knows whether the build is busy or waiting on them.
+const STATE_CHIP: Record<string, { label: string; cls: string }> = {
+  running: { label: 'Building…', cls: 'working' },
+  'awaiting-input': { label: 'Needs your reply', cls: 'needs' },
+  'awaiting-permission': { label: 'Waiting for your OK', cls: 'perm' },
+  ended: { label: 'Done', cls: 'done' },
+  error: { label: 'Hit a snag', cls: 'snag' },
+};
 
 // The Allow/Deny card. Leads with a plain-language risk level + what Byte wants to do
 // (the preview IS the confirmation); raw args stay tucked behind Details.
@@ -97,28 +107,41 @@ export function LiveChat({
     setDraft('');
   };
 
+  const chip = STATE_CHIP[state.status];
+  const active = state.status !== 'ended' && state.status !== 'error';
+
   return (
     <div className="lc-wrap">
+      <div className="lc-head">
+        {chip && <span className={`lc-chip ${chip.cls}`}>{chip.label}</span>}
+        {active && (
+          <button className="lc-stop" onClick={stop} title="Stop the session">
+            ⏹ Stop
+          </button>
+        )}
+      </div>
       <div className="lc-feed">
         {state.messages.map((m, i) => (
           <div key={`m${i}`} className={`lc-msg ${m.role}`}>
             {m.text}
           </div>
         ))}
-        {state.tools.map((t) => (
-          <div key={t.id} className={`lc-tool${t.ok === false ? ' err' : ''}`}>
-            <b>{t.name}</b>
-            {t.summary ? <span className="lc-tool-sum"> — {t.summary.slice(0, 120)}</span> : null}
-          </div>
-        ))}
+        {state.tools.map((t) => {
+          const f = friendlyTool(t.name);
+          return (
+            <div key={t.id} className={`lc-tool${t.ok === false ? ' err' : ''}`}>
+              <span className="lc-tool-ico" aria-hidden="true">
+                {f.icon}
+              </span>
+              <b>{f.verb}</b>
+              {t.summary ? <span className="lc-tool-sum"> — {t.summary.slice(0, 120)}</span> : null}
+            </div>
+          );
+        })}
         {state.status === 'running' && <div className="lc-status">Claude is working…</div>}
-        {state.status === 'awaiting-permission' && (
-          <div className="lc-status">Waiting for your Allow / Deny…</div>
-        )}
         {state.status === 'error' && (
           <div className="lc-err">{state.error ?? 'Something went wrong.'}</div>
         )}
-        {state.status === 'ended' && <div className="lc-done">Session finished.</div>}
       </div>
       {state.pendingPermission && <PermissionCard p={state.pendingPermission} onDecide={decide} />}
       <div className="lc-composer">

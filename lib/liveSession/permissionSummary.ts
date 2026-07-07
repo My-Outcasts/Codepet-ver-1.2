@@ -41,6 +41,28 @@ export function riskLevel(tool: string, input: unknown): RiskLevel {
   return 'careful';
 }
 
+// Plain-language face for each tool, so the live transcript reads like a story a
+// non-coder can follow ("📖 Reading", "✏️ Editing") instead of tool names.
+const TOOL_FACE: Record<string, { icon: string; verb: string }> = {
+  Read: { icon: '📖', verb: 'Reading' },
+  Glob: { icon: '🔎', verb: 'Looking through files' },
+  Grep: { icon: '🔎', verb: 'Searching the code' },
+  Write: { icon: '✏️', verb: 'Writing a file' },
+  Edit: { icon: '✏️', verb: 'Editing' },
+  MultiEdit: { icon: '✏️', verb: 'Editing' },
+  NotebookEdit: { icon: '✏️', verb: 'Editing' },
+  Bash: { icon: '▶️', verb: 'Running a command' },
+  WebFetch: { icon: '🌐', verb: 'Fetching a page' },
+  WebSearch: { icon: '🌐', verb: 'Searching the web' },
+  TodoWrite: { icon: '🗒️', verb: 'Updating the plan' },
+  Task: { icon: '🤖', verb: 'Working on a sub-task' },
+};
+
+/** An icon + plain verb for a tool call; falls back to a wrench + the raw name. */
+export function friendlyTool(name: string): { icon: string; verb: string } {
+  return TOOL_FACE[name] || { icon: '🔧', verb: name };
+}
+
 /** One-line description of a tool call for the permission card. */
 export function describePermission(tool: string, input: unknown): string {
   const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;

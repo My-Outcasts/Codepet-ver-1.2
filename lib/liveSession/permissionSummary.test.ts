@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { describePermission, riskLevel } from './permissionSummary';
+import { describePermission, riskLevel, friendlyTool } from './permissionSummary';
 
 describe('describePermission', () => {
   it('shows the shell command for Bash', () => {
@@ -58,5 +58,17 @@ describe('riskLevel', () => {
 
   it('defaults unknown tools to careful', () => {
     expect(riskLevel('SomeNewTool', {})).toBe('careful');
+  });
+});
+
+describe('friendlyTool', () => {
+  it('maps known tools to an icon + plain verb', () => {
+    expect(friendlyTool('Read')).toEqual({ icon: '📖', verb: 'Reading' });
+    expect(friendlyTool('Edit').verb).toBe('Editing');
+    expect(friendlyTool('Bash').verb).toMatch(/command/i);
+    expect(friendlyTool('Grep').verb).toMatch(/search/i);
+  });
+  it('falls back to a wrench + the raw name for unknown tools', () => {
+    expect(friendlyTool('Zibble')).toEqual({ icon: '🔧', verb: 'Zibble' });
   });
 });
