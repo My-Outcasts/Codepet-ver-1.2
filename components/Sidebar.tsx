@@ -1,7 +1,9 @@
 'use client';
+import { useState } from 'react';
 import { useApp, type View } from '@/lib/store';
 import { DEPTS, ENV } from '@/lib/data';
 import { Companion } from './Companion';
+import { CompanionPicker } from './CompanionPicker';
 import { companionById } from '@/lib/companions';
 
 const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () => number }> = [
@@ -83,9 +85,20 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
 ];
 
 export function Sidebar() {
-  const { view, show, library, tick, installed, sideCollapsed, toggleSide, companionId } = useApp();
+  const {
+    view,
+    show,
+    library,
+    tick,
+    installed,
+    sideCollapsed,
+    toggleSide,
+    companionId,
+    setCompanion,
+  } = useApp();
   void tick; // re-read mutable DEPTS/ENV on each store change
   const c = companionById(companionId);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const envPending = ['skills', 'connectors', 'agents'].reduce(
     (a, k) => a + ENV[k].filter((x) => !x.s).length,
     0,
@@ -186,15 +199,34 @@ export function Sidebar() {
             />
           </svg>,
         )}
-      <div className="petcard">
-        <Companion id={companionId} size="s28" />
-        <div className="meta" style={{ flex: 1 }}>
-          <div className="pn">{c.name}</div>
-          <div className="lvl">Companion · Lv.3</div>
-          <div className="petbar">
-            <i />
+      <div className="petcard-wrap">
+        <button
+          type="button"
+          className="petcard"
+          aria-expanded={pickerOpen}
+          onClick={() => setPickerOpen((o) => !o)}
+        >
+          <Companion id={companionId} size="s28" />
+          <div className="meta" style={{ flex: 1 }}>
+            <div className="pn">{c.name}</div>
+            <div className="lvl">Companion · Lv.3</div>
+            <div className="petbar">
+              <i />
+            </div>
           </div>
-        </div>
+        </button>
+        {pickerOpen && (
+          <div className="petcard-pop">
+            <div className="petcard-pop-h">Choose your companion</div>
+            <CompanionPicker
+              selected={companionId}
+              onSelect={(id) => {
+                setCompanion(id);
+                setPickerOpen(false);
+              }}
+            />
+          </div>
+        )}
       </div>
     </aside>
   );
