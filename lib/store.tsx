@@ -22,7 +22,7 @@ import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
 import { fetchProjectAnalysis } from './ai/analyzeProject';
-import type { ProjectAnalysis } from './ai/projectAnalysis';
+import { isUsableAnalysis, type ProjectAnalysis } from './ai/projectAnalysis';
 import {
   loadCompanyData,
   loadTrackingSummary,
@@ -347,7 +347,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setDecisions(dec);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
           // way, so a fresh account never inherits a previous account's in-flight/loading state.
-          setProjectAnalysis(pa ?? null);
+          // Re-validate the persisted doc so a partial/corrupt one can't render blank rows.
+          setProjectAnalysis(isUsableAnalysis(pa) ? pa : null);
           setAnalysisLoading(false);
           analysisInFlight.current = false;
           setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
