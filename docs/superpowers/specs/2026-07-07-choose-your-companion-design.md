@@ -19,7 +19,7 @@ them throughout the project. Decisions locked during brainstorming:
 
 - **Role:** a chosen companion, not department specialists. No tie to the 8 departments.
 - **Depth:** identity + voice only. Same AI engine, tools, and pipeline. The
-  companion changes who is on screen and how they talk — never *what* they can do.
+  companion changes who is on screen and how they talk — never _what_ they can do.
 - **Choice:** picked at onboarding, switchable anytime from Settings. Default `byte`.
 - **Replacement:** the chosen companion replaces byte at every chrome point — card,
   chat avatar + attribution, department header. byte is simply the default of seven.
@@ -30,15 +30,15 @@ them throughout the project. Decisions locked during brainstorming:
 
 One `COMPANIONS` registry is the single source of truth. Seven entries:
 
-| id       | name  | sprite                    | tone (persona line, editable)                |
-|----------|-------|---------------------------|----------------------------------------------|
-| `byte`   | byte  | `/companions/byte.png`    | the reliable companion — warm, clear, encouraging |
-| `nova`   | Nova  | `/companions/nova.svg`    | upbeat and energetic; optimistic launch energy |
-| `crash`  | Crash | `/companions/crash.svg`   | blunt, fast, ship-it; no-nonsense builder    |
-| `sage`   | Sage  | `/companions/sage.svg`    | calm, wise, reflective strategist            |
-| `glitch` | Glitch| `/companions/glitch.svg`  | playful, quirky, experimental tinkerer       |
-| `luna`   | Luna  | `/companions/luna.svg`    | gentle, steady, reassuring                   |
-| `null`   | Null  | `/companions/null.svg`    | sharp, dry, precise analyst                  |
+| id       | name   | sprite                   | tone (persona line, editable)                     |
+| -------- | ------ | ------------------------ | ------------------------------------------------- |
+| `byte`   | byte   | `/companions/byte.png`   | the reliable companion — warm, clear, encouraging |
+| `nova`   | Nova   | `/companions/nova.svg`   | upbeat and energetic; optimistic launch energy    |
+| `crash`  | Crash  | `/companions/crash.svg`  | blunt, fast, ship-it; no-nonsense builder         |
+| `sage`   | Sage   | `/companions/sage.svg`   | calm, wise, reflective strategist                 |
+| `glitch` | Glitch | `/companions/glitch.svg` | playful, quirky, experimental tinkerer            |
+| `luna`   | Luna   | `/companions/luna.svg`   | gentle, steady, reassuring                        |
+| `null`   | Null   | `/companions/null.svg`   | sharp, dry, precise analyst                       |
 
 Each entry: `{ id, name, sprite, tone }`. No `level`, `unlockAt`, or department key.
 
@@ -123,7 +123,7 @@ and the persona `tone` line.
 - **Per-companion memory, toolkit, or skills.** The engine and capabilities are identical
   across companions.
 - **Departments.** No character↔department mapping.
-- **Deep prose de-byte-ing.** The UI *chrome* (card, chat, dept header) uses the chosen
+- **Deep prose de-byte-ing.** The UI _chrome_ (card, chat, dept header) uses the chosen
   name/sprite from day one. Baked-in literal `"byte"` mentions inside narrative copy
   strings (onboarding prose, `lib/data.ts` blurbs) are **left as-is** this cycle and
   flagged as a light follow-up copy pass.

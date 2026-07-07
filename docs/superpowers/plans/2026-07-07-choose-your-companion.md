@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Identity + voice only.** Never change what the companion can *do* — same model, tools, pipeline. Only the on-screen character, name, and tone change.
+- **Identity + voice only.** Never change what the companion can _do_ — same model, tools, pipeline. Only the on-screen character, name, and tone change.
 - **Default is `byte`.** Any unknown/missing `companionId` resolves to `byte`. `COMPANIONS[0]` MUST be byte.
 - **Out of scope (do NOT build):** leveling/XP (the `Companion · Lv.N` card label stays exactly as-is), per-companion memory/toolkit/skills, departments, and de-byte-ing narrative prose in `lib/data.ts`/onboarding copy.
 - **Vitest has NO `@/` alias.** Test files under `lib/` MUST import with relative paths (`./companions`, not `@/lib/companions`). App/component code keeps using `@/…`.
@@ -43,11 +43,13 @@
 ### Task 1: Companion registry + art intake
 
 **Files:**
+
 - Create: `public/companions/{nova,crash,sage,glitch,luna,null}.svg`
 - Create: `lib/companions.ts`
 - Test: `lib/companions.test.ts`
 
 **Interfaces:**
+
 - Produces: `interface Companion { id: string; name: string; sprite: string; tone: string }`,
   `COMPANIONS: Companion[]` (byte first), `DEFAULT_COMPANION_ID = 'byte'`,
   `companionById(id: string | null | undefined): Companion`,
@@ -85,7 +87,13 @@ describe('companions registry', () => {
 
   it('has all seven characters', () => {
     expect(COMPANIONS.map((c) => c.id)).toEqual([
-      'byte', 'nova', 'crash', 'sage', 'glitch', 'luna', 'null',
+      'byte',
+      'nova',
+      'crash',
+      'sage',
+      'glitch',
+      'luna',
+      'null',
     ]);
   });
 
@@ -133,13 +141,48 @@ export interface Companion {
 export const DEFAULT_COMPANION_ID = 'byte';
 
 export const COMPANIONS: Companion[] = [
-  { id: 'byte',   name: 'byte',   sprite: '/byte.png',            tone: 'the reliable companion — warm, clear, and encouraging.' },
-  { id: 'nova',   name: 'Nova',   sprite: '/companions/nova.svg', tone: 'upbeat and energetic — an optimist who brings launch energy.' },
-  { id: 'crash',  name: 'Crash',  sprite: '/companions/crash.svg',tone: 'blunt, fast, and ship-it — a no-nonsense builder.' },
-  { id: 'sage',   name: 'Sage',   sprite: '/companions/sage.svg', tone: 'calm, wise, and reflective — a patient strategist.' },
-  { id: 'glitch', name: 'Glitch', sprite: '/companions/glitch.svg',tone: 'playful, quirky, and experimental — a curious tinkerer.' },
-  { id: 'luna',   name: 'Luna',   sprite: '/companions/luna.svg', tone: 'gentle, steady, and reassuring — a calm presence for the long haul.' },
-  { id: 'null',   name: 'Null',   sprite: '/companions/null.svg', tone: 'sharp, dry, and precise — a rigorous analyst.' },
+  {
+    id: 'byte',
+    name: 'byte',
+    sprite: '/byte.png',
+    tone: 'the reliable companion — warm, clear, and encouraging.',
+  },
+  {
+    id: 'nova',
+    name: 'Nova',
+    sprite: '/companions/nova.svg',
+    tone: 'upbeat and energetic — an optimist who brings launch energy.',
+  },
+  {
+    id: 'crash',
+    name: 'Crash',
+    sprite: '/companions/crash.svg',
+    tone: 'blunt, fast, and ship-it — a no-nonsense builder.',
+  },
+  {
+    id: 'sage',
+    name: 'Sage',
+    sprite: '/companions/sage.svg',
+    tone: 'calm, wise, and reflective — a patient strategist.',
+  },
+  {
+    id: 'glitch',
+    name: 'Glitch',
+    sprite: '/companions/glitch.svg',
+    tone: 'playful, quirky, and experimental — a curious tinkerer.',
+  },
+  {
+    id: 'luna',
+    name: 'Luna',
+    sprite: '/companions/luna.svg',
+    tone: 'gentle, steady, and reassuring — a calm presence for the long haul.',
+  },
+  {
+    id: 'null',
+    name: 'Null',
+    sprite: '/companions/null.svg',
+    tone: 'sharp, dry, and precise — a rigorous analyst.',
+  },
 ];
 
 export function companionById(id: string | null | undefined): Companion {
@@ -175,10 +218,12 @@ git commit -m "feat(companions): roster registry + specialist sprites"
 ### Task 2: `<Companion>` component (+ `<Byte>` alias)
 
 **Files:**
+
 - Create: `components/Companion.tsx`
 - Modify: `components/Byte.tsx`
 
 **Interfaces:**
+
 - Consumes: `companionById` (Task 1).
 - Produces: `<Companion id={string} size?={string} className?={string} />`. `<Byte>` keeps its existing `{ size?, className? }` signature.
 
@@ -236,11 +281,13 @@ git commit -m "feat(companions): generic <Companion> component, <Byte> becomes a
 ### Task 3: `companionId` state, persistence, hydration
 
 **Files:**
+
 - Modify: `lib/firebase/schema.ts:54-80` (CompanyDoc)
 - Modify: `lib/firebase/companyData.ts` (CompanyData type ~123, loadCompanyData return ~181, new `persistCompanion`)
 - Modify: `lib/store.tsx` (AppState ~101, provider state ~199, hydrate effect, context value ~1167)
 
 **Interfaces:**
+
 - Consumes: `companionById`, `DEFAULT_COMPANION_ID` (Task 1).
 - Produces: store exposes `companionId: string` and `setCompanion(id: string): void`;
   `persistCompanion(companyId: string, companionId: string): Promise<void>`;
@@ -287,6 +334,7 @@ Import the persister (extend the existing `companyData` import list) and the def
 // add to the existing '@/lib/firebase/companyData' import (it's './firebase/companyData' here)
   persistCompanion,
 ```
+
 ```ts
 import { DEFAULT_COMPANION_ID } from './companions';
 ```
@@ -294,30 +342,30 @@ import { DEFAULT_COMPANION_ID } from './companions';
 Add state beside the other provider state (near `const [installed, setInstalled] = useState(false);`):
 
 ```ts
-  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
+const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
 ```
 
 Add the action (near the other `useCallback` actions):
 
 ```ts
-  const setCompanion = useCallback(
-    (id: string) => {
-      setCompanionId(id);
-      track('companion.select', { id });
-      if (companyId) {
-        persistCompanion(companyId, id).catch((err) =>
-          console.error('[store] persist companion failed', err),
-        );
-      }
-    },
-    [companyId],
-  );
+const setCompanion = useCallback(
+  (id: string) => {
+    setCompanionId(id);
+    track('companion.select', { id });
+    if (companyId) {
+      persistCompanion(companyId, id).catch((err) =>
+        console.error('[store] persist companion failed', err),
+      );
+    }
+  },
+  [companyId],
+);
 ```
 
 Hydrate it in the existing load effect — wherever `loadCompanyData` results are applied (the same place `setBrief`/onboardedAt are consumed), add:
 
 ```ts
-      setCompanionId(data.companionId ?? DEFAULT_COMPANION_ID);
+setCompanionId(data.companionId ?? DEFAULT_COMPANION_ID);
 ```
 
 Add to the `AppState` interface (near `installed`):
@@ -353,11 +401,13 @@ git commit -m "feat(companions): companionId store state, persistence, hydration
 ### Task 4: Swap the three chrome points
 
 **Files:**
+
 - Modify: `components/Sidebar.tsx:226-234` (companion card)
 - Modify: `components/Copilot.tsx:224-231` + `:278` (chat header + thinking line)
 - Modify: `components/views/DepartmentDetail.tsx:127` (department header)
 
 **Interfaces:**
+
 - Consumes: `useApp().companionId` (Task 3), `companionById` (Task 1), `<Companion>` (Task 2).
 
 - [ ] **Step 1: Sidebar companion card.** In `components/Sidebar.tsx`, add imports:
@@ -370,16 +420,16 @@ import { companionById } from '@/lib/companions';
 Ensure `companionId` is destructured from `useApp()` in the component, then compute `const c = companionById(companionId);`. Replace the card body:
 
 ```tsx
-      <div className="petcard">
-        <Companion id={companionId} size="s28" />
-        <div className="meta" style={{ flex: 1 }}>
-          <div className="pn">{c.name}</div>
-          <div className="lvl">Companion · Lv.3</div>
-          <div className="petbar">
-            <i />
-          </div>
-        </div>
-      </div>
+<div className="petcard">
+  <Companion id={companionId} size="s28" />
+  <div className="meta" style={{ flex: 1 }}>
+    <div className="pn">{c.name}</div>
+    <div className="lvl">Companion · Lv.3</div>
+    <div className="petbar">
+      <i />
+    </div>
+  </div>
+</div>
 ```
 
 (The `Companion · Lv.3` label is intentionally unchanged — leveling is out of scope.)
@@ -401,7 +451,7 @@ Replace the thinking bubble text (`:278`):
 - [ ] **Step 3: Department header.** In `components/views/DepartmentDetail.tsx`, add the two imports, destructure `companionId` from `useApp()`, and replace the avatar (`:127`):
 
 ```tsx
-          <Companion id={companionId} size="s28" />
+<Companion id={companionId} size="s28" />
 ```
 
 (The `{d.byte}` intro string stays as-is; it now reads as the active companion speaking.)
@@ -423,12 +473,14 @@ git commit -m "feat(companions): active companion is the face in card, chat, and
 ### Task 5: Shared `<CompanionPicker>` + onboarding step
 
 **Files:**
+
 - Create: `components/CompanionPicker.tsx`
 - Modify: `app/globals.css` (append picker styles)
 - Modify: `components/Onboarding.tsx` (`STEP_ART` ~36, `OB_TOTAL` usage, reveal button ~541, new step branch)
 - Modify: `lib/data.ts:1028` (`OB_TOTAL` 8 → 9)
 
 **Interfaces:**
+
 - Consumes: `COMPANIONS` (Task 1), `<Companion>` (Task 2), `useApp().setCompanion` (Task 3).
 - Produces: `<CompanionPicker selected={string} onSelect={(id: string) => void} />`.
 
@@ -487,15 +539,25 @@ export function CompanionPicker({
   background: transparent;
   cursor: pointer;
   text-align: center;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
-.cpick-cell:hover { border-color: var(--accent, #7c5cff); }
+.cpick-cell:hover {
+  border-color: var(--accent, #7c5cff);
+}
 .cpick-cell.sel {
   border-color: var(--accent, #7c5cff);
   background: color-mix(in srgb, var(--accent, #7c5cff) 10%, transparent);
 }
-.cpick-name { font-weight: 600; }
-.cpick-tone { font-size: 12px; opacity: 0.7; line-height: 1.3; }
+.cpick-name {
+  font-weight: 600;
+}
+.cpick-tone {
+  font-size: 12px;
+  opacity: 0.7;
+  line-height: 1.3;
+}
 ```
 
 - [ ] **Step 3: Bump the step count.** In `lib/data.ts:1028`:
@@ -513,7 +575,7 @@ export const OB_TOTAL = 9;
 - [ ] **Step 5: Wire the store hooks in Onboarding.** Extend the `useApp()` destructure (currently `{ onboarding, finishOnboarding, toast, scaffoldFromOnboarding }`) with `companionId, setCompanion`, add the import `import { CompanionPicker } from './CompanionPicker';`, and add local pick state near the other `useState`s:
 
 ```ts
-  const [pick, setPick] = useState(companionId);
+const [pick, setPick] = useState(companionId);
 ```
 
 - [ ] **Step 6: Make the reveal advance to the picker instead of finishing.** The reveal is the final `else` branch. Change its structure so the reveal is explicit and the picker is the new final branch. Change `} else {` (the reveal branch opener, ~line 493) to:
@@ -525,7 +587,7 @@ export const OB_TOTAL = 9;
 and change the reveal's foot (`:541`) from `onClick={finish}` to advance:
 
 ```tsx
-    foot = <Foot label="Choose your companion" onClick={() => setStep(8)} />;
+foot = <Foot label="Choose your companion" onClick={() => setStep(8)} />;
 ```
 
 - [ ] **Step 7: Add the picker step branch.** Immediately after the reveal branch (before the closing of the `if/else` chain, i.e. after the `step === 7` block), add:
@@ -571,50 +633,52 @@ git commit -m "feat(companions): choose-your-companion onboarding step + shared 
 **Rationale:** The spec named "Settings," but on this branch `SettingsView` is a dev-only screen (gated on `NODE_ENV==='development'`) and unreachable in prod. The sidebar companion card is always visible and the most discoverable surface, so the switcher opens from there. This keeps the choice reversible without depending on the in-flight account-menu work.
 
 **Files:**
+
 - Modify: `components/Sidebar.tsx` (make the card a button that toggles a picker popover)
 - Modify: `app/globals.css` (popover styles)
 
 **Interfaces:**
+
 - Consumes: `useApp().companionId` + `setCompanion` (Task 3), `<CompanionPicker>` (Task 5).
 
 - [ ] **Step 1: Add popover state to `Sidebar.tsx`.** Import the picker (`import { CompanionPicker } from './CompanionPicker';`), destructure `setCompanion` from `useApp()`, and add local state:
 
 ```ts
-  const [pickerOpen, setPickerOpen] = useState(false);
+const [pickerOpen, setPickerOpen] = useState(false);
 ```
 
 - [ ] **Step 2: Make the card open the picker.** Wrap the `.petcard` so it toggles the popover and renders the picker when open:
 
 ```tsx
-      <div className="petcard-wrap">
-        <button
-          type="button"
-          className="petcard"
-          aria-expanded={pickerOpen}
-          onClick={() => setPickerOpen((o) => !o)}
-        >
-          <Companion id={companionId} size="s28" />
-          <div className="meta" style={{ flex: 1 }}>
-            <div className="pn">{c.name}</div>
-            <div className="lvl">Companion · Lv.3</div>
-            <div className="petbar">
-              <i />
-            </div>
-          </div>
-        </button>
-        {pickerOpen && (
-          <div className="petcard-pop">
-            <div className="petcard-pop-h">Choose your companion</div>
-            <CompanionPicker
-              selected={companionId}
-              onSelect={(id) => {
-                setCompanion(id);
-                setPickerOpen(false);
-              }}
-            />
-          </div>
-        )}
+<div className="petcard-wrap">
+  <button
+    type="button"
+    className="petcard"
+    aria-expanded={pickerOpen}
+    onClick={() => setPickerOpen((o) => !o)}
+  >
+    <Companion id={companionId} size="s28" />
+    <div className="meta" style={{ flex: 1 }}>
+      <div className="pn">{c.name}</div>
+      <div className="lvl">Companion · Lv.3</div>
+      <div className="petbar">
+        <i />
       </div>
+    </div>
+  </button>
+  {pickerOpen && (
+    <div className="petcard-pop">
+      <div className="petcard-pop-h">Choose your companion</div>
+      <CompanionPicker
+        selected={companionId}
+        onSelect={(id) => {
+          setCompanion(id);
+          setPickerOpen(false);
+        }}
+      />
+    </div>
+  )}
+</div>
 ```
 
 (Replace the previous `<div className="petcard">…</div>` block from Task 4 with this wrapped version. Keep the `Companion`/`companionById` imports and the `c` computation.)
@@ -622,8 +686,16 @@ git commit -m "feat(companions): choose-your-companion onboarding step + shared 
 - [ ] **Step 3: Style the popover.** Append to `app/globals.css`:
 
 ```css
-.petcard-wrap { position: relative; }
-.petcard { width: 100%; border: none; background: transparent; cursor: pointer; text-align: left; }
+.petcard-wrap {
+  position: relative;
+}
+.petcard {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
 .petcard-pop {
   position: absolute;
   bottom: calc(100% + 8px);
@@ -636,7 +708,12 @@ git commit -m "feat(companions): choose-your-companion onboarding step + shared 
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
   z-index: 40;
 }
-.petcard-pop-h { font-size: 12px; font-weight: 600; opacity: 0.7; margin-bottom: 10px; }
+.petcard-pop-h {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.7;
+  margin-bottom: 10px;
+}
 ```
 
 - [ ] **Step 4: Format, typecheck, lint.**
@@ -656,6 +733,7 @@ git commit -m "feat(companions): in-app switcher from the sidebar companion card
 ### Task 7: Companion voice (chat + deliverables)
 
 **Files:**
+
 - Modify: `lib/ai/chat.ts:39-49` (add `companionId` param + body field)
 - Modify: `lib/store.tsx` (`sendChat` passes `companionId`, add to `useCallback` deps)
 - Modify: `app/api/chat/route.ts:252` (append `personaOverride`)
@@ -663,6 +741,7 @@ git commit -m "feat(companions): in-app switcher from the sidebar companion card
 - Modify: `lib/store.tsx` run-task call sites (`:862`, `:906`) + `components/artifact/ArtifactModal.tsx` (pass `companionId`)
 
 **Interfaces:**
+
 - Consumes: `personaOverride` (Task 1), `useApp().companionId` (Task 3).
 
 - [ ] **Step 1: Thread `companionId` through the chat client.** In `lib/ai/chat.ts`, add a parameter and body field:
@@ -693,7 +772,7 @@ Add `companionId` to the `sendChat` `useCallback` dependency array.
 - [ ] **Step 3: Apply the persona in the chat route.** In `app/api/chat/route.ts`, import the helper (`import { personaOverride } from '@/lib/companions';`) and change the system assembly (`:252`):
 
 ```ts
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}${personaOverride(body.companionId as string | undefined)}`;
+const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}${personaOverride(body.companionId as string | undefined)}`;
 ```
 
 (Confirm the route reads its JSON body into `body`; if it destructures fields instead, read `companionId` the same way the others are read.)
@@ -728,7 +807,7 @@ git commit -m "feat(companions): active companion speaks in its own voice in cha
 
 Local `next dev` is unreliable in the symlinked worktree and first-run is unreadable there, so verify on the preview build:
 
-- [ ] Onboard a fresh company → the new **Choose your companion** step appears as the last step; picking **Luna** and pressing *Start building* lands in the app with Luna in the sidebar card, the chat header, and a department header.
+- [ ] Onboard a fresh company → the new **Choose your companion** step appears as the last step; picking **Luna** and pressing _Start building_ lands in the app with Luna in the sidebar card, the chat header, and a department header.
 - [ ] Open the chat and send a message → the reply reads in Luna's first-person voice (not "byte"); the thinking line says "Luna is thinking…".
 - [ ] Click the sidebar companion card → the switcher opens; pick **Null** → all three chrome points update immediately.
 - [ ] Reload → the choice persists (hydrated from Firestore).
