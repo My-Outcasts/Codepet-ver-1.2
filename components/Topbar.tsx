@@ -6,7 +6,7 @@ import { SupportModal } from './SupportModal';
 
 export function Topbar() {
   const { user, signOutUser } = useAuth();
-  const { show } = useApp();
+  const { show, installed, openInstallPrompt } = useApp();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -113,6 +113,19 @@ export function Topbar() {
           </div>
         </button>
         <span className="right">
+          {/* Install-later path for the one-time popup: stays until the toolkit
+              is actually installed, then disappears. */}
+          {!installed && (
+            <button
+              className="tb-install"
+              onClick={() => {
+                setOpen(false);
+                openInstallPrompt();
+              }}
+            >
+              <span className="tb-install-dot" />⚡ Wake byte up
+            </button>
+          )}
           <button
             className="upg"
             onClick={() => {

@@ -71,7 +71,9 @@ import { requestBuildPlan } from './ai/buildPlan';
 import { buildOpeningPrompt, terminalCommand } from './armSession';
 import { armBuildSession } from '@/app/actions/build';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
-import { getCapability } from '@/app/actions/install';
+import { getCapability, getStatus } from '@/app/actions/install';
+import { shouldPromptInstall, INSTALL_PROMPTED_KEY } from './installPrompt';
+import { ACTIVE_BUILD_KEY, serializeActiveBuild, parseActiveBuild } from './buildPersist';
 import type { BytePlan } from './ai/plan';
 import type { LiveState } from './liveBuild';
 
@@ -121,6 +123,15 @@ const newId = (): string =>
   typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Strip the tap-to-continue "Turn this into a plan" buttons from past messages, so
+// the thread never accumulates a trail of live buttons — only the newest carries one.
+const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] =>
+  msgs.map((m) => {
+    if (!m.buildAction || m.buildAction.kind !== 'to-plan') return m;
+    const { buildAction: _drop, ...rest } = m;
+    return rest;
+  });
 import type { CompanyBrief } from './firebase/schema';
 import {
   buildRevealSummary,
@@ -137,7 +148,6 @@ export type View =
   | 'tasks'
   | 'library'
   | 'env'
-  | 'install'
   | 'settings'
   | 'billing'
   | 'build';
@@ -192,6 +202,11 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
+  /** The one-time "wake byte up" install popup (auto-opens once; the Topbar pill
+   * and Settings reopen it). */
+  installPromptOpen: boolean;
+  openInstallPrompt: () => void;
+  closeInstallPrompt: () => void;
   library: LibItem[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
@@ -288,7 +303,15 @@ interface AppState {
   buildProjectDir: string;
   buildArming: boolean;
   buildIntakeActive: boolean;
+  /** True when this build was restored after a reload — the live view re-attaches
+   *  to the running session instead of spawning a new one. */
+  buildResumed: boolean;
+  /** Local in-UI builds fold their own transcript into the meter (there's no
+   *  hook→Firestore feed for them); the live view reports each reading here. */
+  applyLocalLive: (s: LiveState) => void;
   startBuildIntake: () => void;
+  /** Leave intake without building — the composer goes back to normal chat. */
+  cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
   generateBuildPlan: () => void;
   armBuild: () => void;
@@ -328,6 +351,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
+  // The one-time "wake byte up" popup — auto-opened by the effect next to
+  // setInstalledFlag below; reopened any time via the Topbar pill or Settings.
+  const [installPromptOpen, setInstallPromptOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -405,33 +431,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // "Let's build" flow (was BuildCoachView local state; lifted here so the chat
   // panel drives START and the main view renders DURING/END from one source).
-  const [buildStep, setBuildStep] = useState<BuildStep>('during');
-  const [buildProject, setBuildProject] = useState('');
-  const [buildBrief, setBuildBrief] = useState('');
-  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(null);
-  const [buildSessionId, setBuildSessionId] = useState<string | null>(null);
-  const [buildLive, setBuildLive] = useState<LiveState | null>(null);
-  const [buildLocal, setBuildLocal] = useState(false);
-  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(null);
-  const [buildProjectDir, setBuildProjectDir] = useState('');
+  // An active build survives a page reload: its snapshot is read back synchronously
+  // here (same company only — AppProvider mounts post-auth, so companyId is known)
+  // and seeds the state below; the live view then re-attaches via `resume`. The
+  // mirror effect further down keeps the snapshot current.
+  const [restoredBuild] = useState(() => {
+    try {
+      return companyId ? parseActiveBuild(localStorage.getItem(ACTIVE_BUILD_KEY), companyId) : null;
+    } catch {
+      return null; // SSR / storage unavailable — start fresh
+    }
+  });
+  const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
+  const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
+  const [buildBrief, setBuildBrief] = useState(restoredBuild?.brief ?? '');
+  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(restoredBuild?.plan ?? null);
+  const [buildSessionId, setBuildSessionId] = useState<string | null>(
+    restoredBuild?.buildSessionId ?? null,
+  );
+  const [buildLive, setBuildLive] = useState<LiveState | null>(restoredBuild?.live ?? null);
+  const [buildLocal, setBuildLocal] = useState(restoredBuild?.local ?? false);
+  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(
+    restoredBuild?.launchCommand ?? null,
+  );
+  const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  const [buildResumed, setBuildResumed] = useState(!!restoredBuild);
   // A git snapshot of the project taken right before a local build, so the founder can
   // rewind everything the build changed. null when the project isn't a git repo.
-  const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(null);
+  const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(
+    restoredBuild?.checkpoint ?? null,
+  );
   // How hands-on the founder wants to be — passed to the live session (permission mode
   // + the bridge's auto-approval). Defaults to the most conservative.
   const [buildAutonomy, setBuildAutonomy] = useState<'suggest' | 'copilot' | 'autopilot'>(
-    'suggest',
+    restoredBuild?.autonomy ?? 'suggest',
   );
   // Guards the one-time "session ended" nudge so the live subscription posts it once.
   const buildEndedNudged = useRef(false);
 
-  // Subscribe to the live build doc once a session is armed. Updating state from the
-  // subscription is intended; when the rollup marks the doc ended we flip to END and
-  // post one closing nudge in chat.
+  // Subscribe to the live build doc once a session is armed — remote/terminal builds
+  // only. Local in-UI builds fold their own transcript into buildLive (applyLocalLive);
+  // subscribing there would clobber it with the doc's null snapshot. Updating state
+  // from the subscription is intended; when the rollup marks the doc ended we flip to
+  // END and post one closing nudge in chat.
   useEffect(() => {
-    if (!companyId || !buildSessionId) return;
+    if (!companyId || !buildSessionId || buildLocal) return;
     return subscribeLiveBuild(companyId, buildSessionId, (s) => {
       setBuildLive(s);
       setBuildStep(stepForLive(s));
@@ -447,7 +493,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         persistMsg({ id: nudge.id, role: 'byte', text: nudge.text, ts: nudge.ts });
       }
     });
-  }, [companyId, buildSessionId, persistMsg]);
+  }, [companyId, buildSessionId, buildLocal, persistMsg]);
+
+  // Mirror the active build to localStorage on every change (and clear it when the
+  // flow resets), so the restore above always sees the latest step/checkpoint/meter.
+  useEffect(() => {
+    if (!companyId) return;
+    try {
+      if (!buildSessionId || !buildPlan) {
+        localStorage.removeItem(ACTIVE_BUILD_KEY);
+        return;
+      }
+      localStorage.setItem(
+        ACTIVE_BUILD_KEY,
+        serializeActiveBuild({
+          companyId,
+          buildSessionId,
+          step: buildStep,
+          project: buildProject,
+          projectDir: buildProjectDir,
+          brief: buildBrief,
+          plan: buildPlan,
+          autonomy: buildAutonomy,
+          local: buildLocal,
+          launchCommand: buildLaunchCommand,
+          checkpoint: buildCheckpoint,
+          live: buildLive,
+        }),
+      );
+    } catch {
+      /* storage full/unavailable — the build just won't survive a reload */
+    }
+  }, [
+    companyId,
+    buildSessionId,
+    buildStep,
+    buildProject,
+    buildProjectDir,
+    buildBrief,
+    buildPlan,
+    buildAutonomy,
+    buildLocal,
+    buildLaunchCommand,
+    buildCheckpoint,
+    buildLive,
+  ]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
   // never disagree. Set instantly to the authored golden path (so nothing is ever
@@ -988,6 +1078,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       else localStorage.removeItem('codepet:installed');
     } catch {}
   }, []);
+
+  const openInstallPrompt = useCallback(() => setInstallPromptOpen(true), []);
+  // Closing the popup — any way — counts as "prompted": it never auto-shows again.
+  const closeInstallPrompt = useCallback(() => {
+    setInstallPromptOpen(false);
+    try {
+      localStorage.setItem(INSTALL_PROMPTED_KEY, '1');
+    } catch {}
+  }, []);
+
+  // Auto-show the install popup ONCE, the first time the app is ready (hydrated,
+  // onboarding done) without the toolkit. Before popping, sync against the real
+  // machine state: a fresh browser on an already-installed machine just records
+  // the fact instead of nagging. A failed status check still offers the popup.
+  const installPromptChecked = useRef(false);
+  useEffect(() => {
+    if (installPromptChecked.current) return;
+    let prompted = false;
+    try {
+      prompted = localStorage.getItem(INSTALL_PROMPTED_KEY) === '1';
+    } catch {}
+    if (!shouldPromptInstall({ hydrated, onboarding, installed, prompted })) return;
+    installPromptChecked.current = true;
+    let cancelled = false;
+    getStatus()
+      .then((s) => {
+        if (cancelled) return;
+        if (s.some((x) => x.installed)) {
+          setInstalledFlag(true);
+          try {
+            localStorage.setItem(INSTALL_PROMPTED_KEY, '1');
+          } catch {}
+        } else {
+          setInstallPromptOpen(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInstallPromptOpen(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, onboarding, installed, setInstalledFlag]);
 
   const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => {
     track('task.run', { dept: dept.k });
@@ -1726,6 +1859,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     track('build.intake.start', {});
   }, [companyId, persistMsg]);
 
+  const cancelBuildIntake = useCallback(() => {
+    setBuildIntakeActive(false);
+    setBuildBrief('');
+    const msg: ChatMessage = {
+      id: newId(),
+      role: 'byte',
+      text: 'No worries — we can build whenever you like. What else can I help with?',
+      ts: Date.now(),
+    };
+    setChatMessages((prev) => [...stripBuildButtons(prev), msg]);
+    persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+    track('build.intake.cancel', {});
+  }, [persistMsg]);
+
   const addIntakeTurn = useCallback(
     (raw: string) => {
       const text = raw.trim();
@@ -1735,7 +1882,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
       setChatMessages((prev) => [
-        ...prev,
+        ...stripBuildButtons(prev),
         userMsg,
         // After the first answer, Byte nudges once and surfaces the "to plan" button.
         {
@@ -1760,7 +1907,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // buildAction (dead after reload), so it stays transient like the result cards.
     const thinkingId = newId();
     setChatMessages((prev) => [
-      ...prev,
+      ...stripBuildButtons(prev),
       { id: thinkingId, role: 'byte', text: 'Byte is turning this into a plan…', ts: Date.now() },
     ]);
     (async () => {
@@ -1781,10 +1928,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ),
         );
       } catch {
+        // The failure message carries its own retry button — no scrolling back to
+        // hunt for the previous "turn this into a plan" one (those were stripped).
         setChatMessages((prev) =>
           prev.map((m) =>
             m.id === thinkingId
-              ? { ...m, text: "Byte couldn't put the plan together just now. Give it another go?" }
+              ? {
+                  ...m,
+                  text: "Byte couldn't put the plan together just now. Give it another go?",
+                  buildAction: { kind: 'to-plan', label: 'Try again' },
+                }
               : m,
           ),
         );
@@ -1797,14 +1950,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const armBuild = useCallback(() => {
-    if (!buildPlan || !companyId || buildArming) return;
+    // A project is required — never fall back to '.' (the app server's own cwd),
+    // which would let Byte build inside whatever directory the server runs from.
+    if (!buildPlan || !companyId || buildArming || !buildProject.trim()) return;
     setBuildArming(true);
     buildEndedNudged.current = false;
+    setBuildResumed(false);
     (async () => {
       try {
         const id = crypto.randomUUID();
         const dirs = await loadProjectDirs(companyId);
-        const dir = dirs.find((p) => p.name === buildProject)?.path ?? (buildProject.trim() || '.');
+        const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
         setBuildProjectDir(dir);
         const cap = await getCapability();
         if (cap.mode === 'local') {
@@ -1854,6 +2010,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
   const endBuild = useCallback(() => setBuildStep('end'), []);
 
+  // Local in-UI builds report each transcript reading here — DURING meter + END
+  // recap read buildLive either way, so both modes share one render path.
+  const applyLocalLive = useCallback((s: LiveState) => setBuildLive(s), []);
+
   const rewindBuild = useCallback(() => {
     const ref = buildCheckpoint?.ref;
     if (!ref || !buildProjectDir) return;
@@ -1888,6 +2048,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildLaunchCommand(null);
     setBuildProjectDir('');
     setBuildIntakeActive(false);
+    setBuildResumed(false);
     buildEndedNudged.current = false;
   }, []);
 
@@ -1924,6 +2085,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalled: setInstalledFlag,
+      installPromptOpen,
+      openInstallPrompt,
+      closeInstallPrompt,
       library,
       tracking,
       projects,
@@ -1976,7 +2140,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildProjectDir,
       buildArming,
       buildIntakeActive,
+      buildResumed,
+      applyLocalLive,
       startBuildIntake,
+      cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
       armBuild,
@@ -2019,6 +2186,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalledFlag,
+      installPromptOpen,
+      openInstallPrompt,
+      closeInstallPrompt,
       library,
       tracking,
       projects,
@@ -2071,7 +2241,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildProjectDir,
       buildArming,
       buildIntakeActive,
+      buildResumed,
+      applyLocalLive,
       startBuildIntake,
+      cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
       armBuild,
