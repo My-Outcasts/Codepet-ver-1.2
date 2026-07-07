@@ -390,6 +390,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         createdAt: msg.ts,
         threadId: activeThreadId,
       }).catch((err) => console.error('[store] persist message failed', err));
+      // Keep the in-memory thread list fresh so History re-sorts / shows fresh
+      // relative time without a reload. Harmless no-op for a brand-new thread not
+      // yet in `threads` — the map simply matches nothing until sendChat adds it.
+      setThreads((prev) =>
+        prev.map((t) => (t.id === activeThreadId ? { ...t, updatedAt: msg.ts } : t)),
+      );
     },
     [companyId, activeThreadId],
   );
@@ -518,6 +524,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setThreads(loadedThreads);
           if (loadedActive) {
             setActiveThreadId(loadedActive);
+            // Defensive: a stale `true` (e.g. if hydration ever re-runs) must never
+            // clobber this real, already-persisted thread.
+            pendingThreadRef.current = false;
           } else {
             // Fresh company with no threads yet: start a PENDING thread so the
             // founder's first message creates + persists it (mirrors newChat,
@@ -1419,6 +1428,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const newChat = useCallback(() => {
+    // Cancel any in-flight stream first — otherwise its stream-end persistMsg (bound
+    // to the OLD threadId) can land after we've switched threads.
+    chatAbort.current?.abort();
+    chatAbort.current = null;
+    setChatStreaming(false);
     setActiveThreadId(newId());
     pendingThreadRef.current = true; // created in Firestore on first send
     setChatMessages([]);
@@ -1428,6 +1442,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const openThread = useCallback(
     (id: string) => {
       if (!companyId) return;
+      // Cancel any in-flight stream first — see newChat for why.
+      chatAbort.current?.abort();
+      chatAbort.current = null;
+      setChatStreaming(false);
       pendingThreadRef.current = false;
       setActiveThreadId(id);
       setChatHistoryOpen(false);
@@ -1458,6 +1476,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const deleteThread = useCallback(
     (id: string) => {
       if (!companyId) return;
+      // Cancel any in-flight stream first — otherwise deleting the active thread
+      // mid-stream lets the stream-end persistMsg re-create it via the `{updatedAt}`
+      // merge in persistChatMessage, leaving a titleless zombie thread on reload.
+      chatAbort.current?.abort();
+      chatAbort.current = null;
+      setChatStreaming(false);
       const fallback = activeThreadId === id ? pickFallbackThreadId(threads, id) : null;
       setThreads((prev) => prev.filter((t) => t.id !== id));
       deleteThreadAndMessages(companyId, id).catch((err) =>

@@ -34,11 +34,7 @@ import {
   type ChatMessageDoc,
   type ThreadMeta,
 } from './schema';
-import {
-  deriveThreadTitle,
-  needsBackfill,
-  sortThreadsByRecent,
-} from '@/lib/chat/threads';
+import { deriveThreadTitle, needsBackfill, sortThreadsByRecent } from '@/lib/chat/threads';
 import { projectNames } from '../projects';
 import {
   aggregateTracking,
@@ -280,11 +276,13 @@ export async function loadThreadMessages(
     query(
       collection(getDb(), paths.chat(companyId)),
       where('threadId', '==', threadId),
-      orderBy('createdAt', 'asc'),
+      orderBy('createdAt', 'desc'),
       limit(CHAT_LOAD_LIMIT),
     ),
   );
-  return snap.docs.map((d) => d.data() as ChatMessageDoc);
+  // Query returns newest-first (to cap at the most recent N); flip back to
+  // oldest-first for rendering/history order.
+  return snap.docs.map((d) => d.data() as ChatMessageDoc).reverse();
 }
 
 export async function persistThread(companyId: string, thread: ThreadMeta): Promise<void> {
@@ -299,18 +297,25 @@ export async function updateThreadTitle(
   await setDoc(doc(getDb(), paths.thread(companyId, threadId)), { title }, { merge: true });
 }
 
-export async function deleteThreadAndMessages(
-  companyId: string,
-  threadId: string,
-): Promise<void> {
+/** Firestore hard-caps a writeBatch at 500 ops; chunk under that so a thread with
+ *  hundreds of messages can't blow the limit and throw on commit(). */
+const BATCH_CHUNK = 450;
+
+export async function deleteThreadAndMessages(companyId: string, threadId: string): Promise<void> {
   const db = getDb();
   const msgs = await getDocs(
     query(collection(db, paths.chat(companyId)), where('threadId', '==', threadId)),
   );
-  const batch = writeBatch(db);
-  msgs.docs.forEach((d) => batch.delete(d.ref));
-  batch.delete(doc(db, paths.thread(companyId, threadId)));
-  await batch.commit();
+  // Delete messages in chunked batches, then remove the thread doc last in its own batch.
+  const refs = msgs.docs.map((d) => d.ref);
+  for (let i = 0; i < refs.length; i += BATCH_CHUNK) {
+    const batch = writeBatch(db);
+    for (const ref of refs.slice(i, i + BATCH_CHUNK)) batch.delete(ref);
+    await batch.commit();
+  }
+  const finalBatch = writeBatch(db);
+  finalBatch.delete(doc(db, paths.thread(companyId, threadId)));
+  await finalBatch.commit();
 }
 
 /**
@@ -333,12 +338,29 @@ async function backfillLegacyThread(companyId: string): Promise<ThreadMeta | nul
     createdAt: legacy[0].createdAt,
     updatedAt: legacy[legacy.length - 1].createdAt,
   };
-  const batch = writeBatch(db);
-  batch.set(doc(db, paths.thread(companyId, id)), thread);
-  legacy.forEach((m) =>
-    batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
-  );
-  await batch.commit();
+  // Chunk into batches of at most BATCH_CHUNK ops (Firestore's hard cap is 500 per
+  // batch): the thread doc set (once, in the first batch) + one `{threadId}` merge
+  // per legacy message.
+  let i = 0;
+  {
+    const batch = writeBatch(db);
+    batch.set(doc(db, paths.thread(companyId, id)), thread);
+    const slice = legacy.slice(0, BATCH_CHUNK - 1);
+    slice.forEach((m) =>
+      batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
+    );
+    await batch.commit();
+    i = slice.length;
+  }
+  while (i < legacy.length) {
+    const batch = writeBatch(db);
+    const slice = legacy.slice(i, i + BATCH_CHUNK);
+    slice.forEach((m) =>
+      batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
+    );
+    await batch.commit();
+    i += slice.length;
+  }
   return thread;
 }
 
