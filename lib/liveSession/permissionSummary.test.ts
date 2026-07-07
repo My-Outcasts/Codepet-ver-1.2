@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { describePermission, riskLevel, friendlyTool } from './permissionSummary';
+import {
+  describePermission,
+  riskLevel,
+  friendlyTool,
+  permissionModeFor,
+  autoAllows,
+} from './permissionSummary';
 
 describe('describePermission', () => {
   it('shows the shell command for Bash', () => {
@@ -70,5 +76,28 @@ describe('friendlyTool', () => {
   });
   it('falls back to a wrench + the raw name for unknown tools', () => {
     expect(friendlyTool('Zibble')).toEqual({ icon: '🔧', verb: 'Zibble' });
+  });
+});
+
+describe('permissionModeFor', () => {
+  it('only autopilot bypasses; suggest & copilot stay in default', () => {
+    expect(permissionModeFor('suggest')).toBe('default');
+    expect(permissionModeFor('copilot')).toBe('default');
+    expect(permissionModeFor('autopilot')).toBe('bypassPermissions');
+  });
+});
+
+describe('autoAllows', () => {
+  it('copilot auto-approves everything but risky', () => {
+    expect(autoAllows('copilot', 'safe')).toBe(true);
+    expect(autoAllows('copilot', 'careful')).toBe(true);
+    expect(autoAllows('copilot', 'risky')).toBe(false);
+  });
+  it('suggest gates everything (nothing auto-approved)', () => {
+    expect(autoAllows('suggest', 'safe')).toBe(false);
+    expect(autoAllows('suggest', 'risky')).toBe(false);
+  });
+  it('autopilot does not auto-approve via the bridge (it never reaches it)', () => {
+    expect(autoAllows('autopilot', 'safe')).toBe(false);
   });
 });

@@ -65,17 +65,20 @@ export function LiveChat({
   projectDir,
   plan,
   brief,
+  mode,
 }: {
   buildSessionId: string;
   projectDir: string;
   plan: BytePlan;
   brief: string;
+  mode: 'suggest' | 'copilot' | 'autopilot';
 }) {
   const { state, start, stop, send, decide } = useLiveSession({
     buildSessionId,
     projectDir,
     plan,
     brief,
+    mode,
   });
   const [draft, setDraft] = useState('');
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);

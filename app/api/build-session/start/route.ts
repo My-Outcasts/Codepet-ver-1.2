@@ -14,7 +14,10 @@ interface StartBody {
   projectDir?: string;
   plan?: BytePlan;
   brief?: string;
+  mode?: string;
 }
+
+const MODES = new Set(['suggest', 'copilot', 'autopilot']);
 
 export async function POST(req: Request): Promise<Response> {
   if (detectCapability(process.env).mode !== 'local') {
@@ -29,7 +32,7 @@ export async function POST(req: Request): Promise<Response> {
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ ok: false, reason: 'bad_request' }, { status: 400 });
   }
-  const { buildSessionId, projectDir, plan, brief } = body as StartBody;
+  const { buildSessionId, projectDir, plan, brief, mode } = body as StartBody;
   if (
     !buildSessionId ||
     !projectDir ||
@@ -44,6 +47,7 @@ export async function POST(req: Request): Promise<Response> {
     buildSessionId,
     projectDir,
     openingPrompt: buildOpeningPrompt(plan, brief),
+    mode: mode && MODES.has(mode) ? (mode as 'suggest' | 'copilot' | 'autopilot') : 'suggest',
   });
   return NextResponse.json({ ok: true });
 }

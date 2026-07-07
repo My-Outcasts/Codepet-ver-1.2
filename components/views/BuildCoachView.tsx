@@ -70,6 +70,7 @@ function DuringStep({
   buildSessionId,
   projectDir,
   brief,
+  mode,
 }: {
   plan: BytePlan | null;
   live: LiveState | null;
@@ -79,6 +80,7 @@ function DuringStep({
   buildSessionId: string | null;
   projectDir: string;
   brief: string;
+  mode: 'suggest' | 'copilot' | 'autopilot';
 }) {
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const actions = live?.actionCount ?? 0;
@@ -96,6 +98,7 @@ function DuringStep({
           projectDir={projectDir}
           plan={plan}
           brief={brief}
+          mode={mode}
         />
       )}
       <CoachBubble
@@ -368,6 +371,7 @@ export function BuildCoachView() {
     buildBrief,
     buildCheckpoint,
     rewindBuild,
+    buildAutonomy,
     resetBuildFlow,
   } = useApp();
 
@@ -412,6 +416,7 @@ export function BuildCoachView() {
             buildSessionId={buildSessionId}
             projectDir={buildProjectDir}
             brief={buildBrief}
+            mode={buildAutonomy}
           />
         )}
         {step === 'end' && (

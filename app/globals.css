@@ -3149,6 +3149,41 @@ body {
   font: inherit;
   width: 100%;
 }
+/* Autonomy dial on the plan card — how hands-on the founder wants to be. */
+.cop-auto {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 8px 0;
+  font-size: 12px;
+}
+.cop-auto > span {
+  color: var(--muted, #6b7280);
+}
+.cop-auto-opts {
+  display: flex;
+  gap: 4px;
+  background: var(--surface-2, #f3eefb);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 3px;
+}
+.cop-auto-opt {
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+}
+.cop-auto-opt.on {
+  background: var(--accent, #7c3aed);
+  color: #fff;
+}
 
 /* ===== onboarding overlay ===== */
 /* splash */

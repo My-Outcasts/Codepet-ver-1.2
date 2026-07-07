@@ -45,6 +45,7 @@ export function useLiveSession(opts: {
   projectDir: string;
   plan: BytePlan;
   brief: string;
+  mode?: 'suggest' | 'copilot' | 'autopilot';
 }) {
   const [state, setState] = useState<TranscriptState>(initialTranscript);
   const started = useRef(false);

@@ -52,6 +52,8 @@ describe('startSession', () => {
       'claude',
       [
         ...CLAUDE_ARGS,
+        '--permission-mode',
+        'default',
         '--permission-prompt-tool',
         'mcp__codepet_permit__codepet_permit',
         '--mcp-config',
@@ -280,6 +282,45 @@ describe('permission bridge', () => {
     // not the bare tool name, or it errors "MCP tool codepet_permit ... not found".
     expect(args).toContain('mcp__codepet_permit__codepet_permit');
     expect(args).toContain('--mcp-config');
+  });
+
+  it('co-pilot auto-allows non-risky tools but still gates risky ones', async () => {
+    const child = fakeChild();
+    startSession({
+      buildSessionId: 'cop1',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      mode: 'copilot',
+      spawnFn: (() => child) as never,
+    });
+    // safe/careful → auto-allowed, no card
+    await expect(
+      enqueuePermission('cop1', { requestId: 'r1', tool: 'Read', input: { file_path: '/a' } }),
+    ).resolves.toEqual({ decision: 'allow' });
+    // risky → still parked for the user
+    const p = enqueuePermission('cop1', {
+      requestId: 'r2',
+      tool: 'Bash',
+      input: { command: 'rm -rf x' },
+    });
+    expect(resolvePermission('cop1', 'r2', { decision: 'deny' })).toBe(true);
+    await expect(p).resolves.toEqual({ decision: 'deny' });
+  });
+
+  it('autopilot spawns claude with bypassPermissions', () => {
+    const child = fakeChild();
+    const spawnFn = vi.fn(() => child) as never;
+    startSession({
+      buildSessionId: 'auto1',
+      projectDir: '/p',
+      openingPrompt: 'x',
+      mode: 'autopilot',
+      spawnFn,
+    });
+    const args = (spawnFn as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0][1] as string[];
+    const i = args.indexOf('--permission-mode');
+    expect(args[i + 1]).toBe('bypassPermissions');
   });
 });
 

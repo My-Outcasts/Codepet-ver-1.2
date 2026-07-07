@@ -171,6 +171,8 @@ export function Copilot() {
     setBuildProject,
     buildPlan,
     setBuildPlanSteps,
+    buildAutonomy,
+    setBuildAutonomy,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -325,6 +327,27 @@ export function Copilot() {
                         />
                       )}
                     </label>
+                    <div className="cop-auto">
+                      <span>How hands-on?</span>
+                      <div className="cop-auto-opts">
+                        {(
+                          [
+                            ['suggest', 'Ask me', 'Approve each risky step'],
+                            ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+                            ['autopilot', 'Autopilot', 'Run everything without asking'],
+                          ] as const
+                        ).map(([mode, label, hint]) => (
+                          <button
+                            key={mode}
+                            className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+                            onClick={() => setBuildAutonomy(mode)}
+                            title={hint}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <button
                       className="bub-act"
                       onClick={armBuild}

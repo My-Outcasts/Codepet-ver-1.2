@@ -178,6 +178,9 @@ interface AppState {
   buildCheckpoint: { ref: string } | null;
   /** Undo everything the build changed, restoring the project to the pre-build snapshot. */
   rewindBuild: () => void;
+  /** How hands-on the founder wants to be during the build. */
+  buildAutonomy: 'suggest' | 'copilot' | 'autopilot';
+  setBuildAutonomy: (m: 'suggest' | 'copilot' | 'autopilot') => void;
   buildSessionId: string | null;
   buildLive: LiveState | null;
   buildLocal: boolean;
@@ -269,6 +272,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // A git snapshot of the project taken right before a local build, so the founder can
   // rewind everything the build changed. null when the project isn't a git repo.
   const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(null);
+  // How hands-on the founder wants to be — passed to the live session (permission mode
+  // + the bridge's auto-approval). Defaults to the most conservative.
+  const [buildAutonomy, setBuildAutonomy] = useState<'suggest' | 'copilot' | 'autopilot'>(
+    'suggest',
+  );
   // Guards the one-time "session ended" nudge so the live subscription posts it once.
   const buildEndedNudged = useRef(false);
 
@@ -1185,6 +1193,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildBrief('');
     setBuildPlanState(null);
     setBuildCheckpoint(null);
+    setBuildAutonomy('suggest');
     setBuildSessionId(null);
     setBuildLive(null);
     setBuildLocal(false);
@@ -1260,6 +1269,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       armBuild,
       buildCheckpoint,
       rewindBuild,
+      buildAutonomy,
+      setBuildAutonomy,
       resetBuildFlow,
     }),
     [
@@ -1327,6 +1338,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       armBuild,
       buildCheckpoint,
       rewindBuild,
+      buildAutonomy,
+      setBuildAutonomy,
       resetBuildFlow,
     ],
   );

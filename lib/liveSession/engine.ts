@@ -11,6 +11,7 @@ import path from 'node:path';
 import { StreamParser, type SessionEvent } from './parseEvents';
 import { getSession, setSession, deleteSession, type LiveSession } from './registry';
 import type { PermissionDecision } from './registry';
+import { permissionModeFor, autoAllows, riskLevel, type Autonomy } from './permissionSummary';
 
 export const PERMISSION_TIMEOUT_MS = 120_000;
 
@@ -33,11 +34,9 @@ export const CLAUDE_ARGS = [
   '--output-format',
   'stream-json',
   '--verbose',
-  // `default` (not the headless bypassPermissions default) so state-changing tool
-  // calls route through the permission-prompt-tool → the Allow/Deny card. Safe reads
-  // still run without prompting; writes/edits/risky commands wait for the user.
-  '--permission-mode',
-  'default',
+  // `--permission-mode` is appended per session in startSession, from the autonomy
+  // level (default for suggest/copilot so tool calls route through the card; bypass
+  // for autopilot).
 ];
 
 interface ChildLike {
@@ -94,12 +93,16 @@ export function startSession(opts: {
   buildSessionId: string;
   projectDir: string;
   openingPrompt: string;
+  mode?: Autonomy;
   spawnFn?: SpawnFn;
 }): void {
   const spawnFn = opts.spawnFn ?? defaultSpawn;
+  const mode: Autonomy = opts.mode ?? 'suggest';
   const mcpConfigPath = writeMcpConfig(opts.buildSessionId);
   const args = [
     ...CLAUDE_ARGS,
+    '--permission-mode',
+    permissionModeFor(mode),
     '--permission-prompt-tool',
     PERMIT_TOOL,
     '--mcp-config',
@@ -121,6 +124,7 @@ export function startSession(opts: {
     status: 'running',
     buffer: [],
     pending: new Map(),
+    mode,
   };
   setSession(opts.buildSessionId, session);
 
@@ -171,6 +175,11 @@ export function enqueuePermission(
 ): Promise<PermissionDecision> {
   const s = getSession(buildSessionId);
   if (!s) return Promise.resolve({ decision: 'deny', reason: 'no such session' });
+  // Co-pilot: auto-approve anything that isn't risky, so only destructive actions
+  // interrupt the founder. Doesn't reach the UI (no card) — just proceeds.
+  if (autoAllows(s.mode, riskLevel(req.tool, req.input))) {
+    return Promise.resolve({ decision: 'allow' });
+  }
   return new Promise<PermissionDecision>((resolve) => {
     let done = false;
     const finish = (d: PermissionDecision) => {

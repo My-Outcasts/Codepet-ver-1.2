@@ -63,6 +63,26 @@ export function friendlyTool(name: string): { icon: string; verb: string } {
   return TOOL_FACE[name] || { icon: '🔧', verb: name };
 }
 
+/** How hands-on the founder wants to be during the build.
+ *  suggest  = approve each risky step (default, most conservative)
+ *  copilot  = auto-approve safe/careful work, only ask on risky
+ *  autopilot = run everything without asking */
+export type Autonomy = 'suggest' | 'copilot' | 'autopilot';
+
+/** Claude Code's --permission-mode for an autonomy level. Only autopilot bypasses;
+ *  suggest & copilot both run in `default` so tool calls route through the card
+ *  (copilot's auto-approval happens in the bridge, keeping risky calls gated). */
+export function permissionModeFor(mode: Autonomy): 'default' | 'bypassPermissions' {
+  return mode === 'autopilot' ? 'bypassPermissions' : 'default';
+}
+
+/** In co-pilot mode the bridge auto-approves anything that isn't risky, so only
+ *  destructive actions interrupt the founder. Suggest gates everything; autopilot
+ *  never reaches the bridge. */
+export function autoAllows(mode: Autonomy, risk: RiskLevel): boolean {
+  return mode === 'copilot' && risk !== 'risky';
+}
+
 /** One-line description of a tool call for the permission card. */
 export function describePermission(tool: string, input: unknown): string {
   const o = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;

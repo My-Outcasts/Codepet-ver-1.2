@@ -4,6 +4,7 @@
 // local scope — intentionally in-memory and not persisted.
 import type { EventEmitter } from 'node:events';
 import type { SessionEvent } from './parseEvents';
+import type { Autonomy } from './permissionSummary';
 
 export type PermissionDecision = { decision: 'allow' | 'deny'; reason?: string };
 
@@ -13,6 +14,8 @@ export interface LiveSession {
   status: 'running' | 'ended' | 'error';
   buffer: SessionEvent[];
   pending: Map<string, (d: PermissionDecision) => void>;
+  /** Autonomy level for this session — drives the bridge's auto-approval. */
+  mode: Autonomy;
 }
 
 const sessions = new Map<string, LiveSession>();
