@@ -20,6 +20,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { LiveState } from '../liveBuild';
+import type { ProjectAnalysis } from '../ai/projectAnalysis';
 import { getDb } from './client';
 import { DEPTS, ENV, DEPTS_SEED, ENV_SEED, byN, type Dept, type Task, type LibItem } from '../data';
 import {
@@ -158,6 +159,8 @@ export interface CompanyData {
   scaffoldedAt?: number;
   /** Last-selected roadmap stage; undefined ⇒ none saved (use the UI default). */
   roadmapStage?: number;
+  /** byte's one-time project analysis; undefined ⇒ not generated yet. */
+  projectAnalysis?: ProjectAnalysis;
   /** Recent byte-chat history, oldest-first. */
   chat: ChatMessageDoc[];
   /** Durable company decisions byte maintains (the memory the founder can curate). */
@@ -218,6 +221,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     roadmapStage: validStage(company?.roadmapStage),
     chat,
     decisions: normalizeDecisions(company?.decisions),
+    projectAnalysis: company?.projectAnalysis as ProjectAnalysis | undefined,
   };
 }
 
@@ -514,6 +518,22 @@ export async function persistPersonalization(companyId: string, depts: Dept[]): 
   }
   batch.update(doc(db, paths.company(companyId)), { personalizedAt: now, updatedAt: now });
   await batch.commit();
+}
+
+/**
+ * Persist byte's one-time project analysis and stamp `analyzedAt` so it never
+ * regenerates (returning users hydrate it via loadCompanyData).
+ */
+export async function persistProjectAnalysis(
+  companyId: string,
+  analysis: ProjectAnalysis,
+): Promise<void> {
+  const now = Date.now();
+  await updateDoc(doc(getDb(), paths.company(companyId)), {
+    projectAnalysis: analysis,
+    analyzedAt: now,
+    updatedAt: now,
+  });
 }
 
 // ---- write-through ----

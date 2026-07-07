@@ -116,6 +116,9 @@ export default function OverviewView() {
     advanceStage,
     selStage,
     drawerOpen,
+    projectAnalysis,
+    analysisLoading,
+    ensureProjectAnalysis,
     planTailored,
     scaffoldFailed,
     regenerateCompany,
@@ -129,7 +132,6 @@ export default function OverviewView() {
   const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
     introInitialPhase(readIntroSeen()),
   );
-  const [hasSeenIntro, setHasSeenIntro] = useState<boolean>(() => readIntroSeen());
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
   const hereRef = useRef<HereInfo | null>(null);
@@ -477,7 +479,6 @@ export default function OverviewView() {
   // (no live move) recenter the whole map, and enter the spotlight.
   const handleIntroReveal = () => {
     markIntroSeen();
-    setHasSeenIntro(true);
     // Only enter the spotlight when the beacon callout will actually render
     // (ByteGuide is gated by showCallout) — otherwise there's nothing to
     // illuminate, so just recenter the map and finish.
@@ -493,7 +494,6 @@ export default function OverviewView() {
   // Backdrop click: dismiss without flying, but still mark it seen.
   const handleIntroDismiss = () => {
     markIntroSeen();
-    setHasSeenIntro(true);
     setIntroPhase('done');
   };
 
@@ -503,6 +503,14 @@ export default function OverviewView() {
     const id = setTimeout(() => setIntroPhase('done'), 6000);
     return () => clearTimeout(id);
   }, [introPhase]);
+
+  // Kick off byte's one-time project analysis as soon as the intro is showing
+  // (or about to show), so the briefing card has something to render instead of
+  // sitting in the loading state longer than necessary. ensureProjectAnalysis is
+  // idempotent — a persisted or in-flight analysis short-circuits this.
+  useEffect(() => {
+    if (introPhase === 'intro') ensureProjectAnalysis();
+  }, [introPhase, ensureProjectAnalysis]);
 
   // Settle the spotlight the moment the founder actually grabs the map
   // (deliberate pointer-down or wheel-zoom) — not on mere mouse movement.
@@ -526,7 +534,8 @@ export default function OverviewView() {
     >
       {introPhase === 'intro' && (
         <OverviewIntro
-          showLegend={hasSeenIntro}
+          analysis={projectAnalysis}
+          analysisLoading={analysisLoading}
           onReveal={handleIntroReveal}
           onDismiss={handleIntroDismiss}
         />

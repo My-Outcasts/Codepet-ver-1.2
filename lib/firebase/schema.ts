@@ -10,6 +10,7 @@
 //   companies/{companyId}/departments/{k}    → DepartmentDoc (one per department key)
 //   companies/{companyId}/library/{itemId}   → LibraryDoc (approved deliverables)
 import type { Dept, Task, LibItem, EnvItem } from '../data';
+import type { ProjectAnalysis } from '../ai/projectAnalysis';
 
 // Firestore server timestamps arrive as Timestamp objects; we store millis on
 // write for portability and treat them as numbers everywhere in app code.
@@ -77,6 +78,10 @@ export interface CompanyDoc {
   onboardedAt?: Millis;
   /** When byte's one-time seed personalization ran. Absent ⇒ never personalized. */
   personalizedAt?: Millis;
+  /** byte's one-time project analysis (shown on the Overview first run). */
+  projectAnalysis?: ProjectAnalysis;
+  /** When the one-time project analysis ran. Absent ⇒ never analyzed. */
+  analyzedAt?: Millis;
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;

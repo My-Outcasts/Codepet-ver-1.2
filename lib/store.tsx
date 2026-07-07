@@ -21,6 +21,8 @@ import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
+import { fetchProjectAnalysis } from './ai/analyzeProject';
+import { isUsableAnalysis, type ProjectAnalysis } from './ai/projectAnalysis';
 import {
   loadCompanyData,
   loadTrackingSummary,
@@ -32,6 +34,7 @@ import {
   persistBrief,
   persistChatMessage,
   persistDecisions,
+  persistProjectAnalysis,
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
@@ -148,6 +151,12 @@ interface AppState {
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
+  /** byte's one-time project analysis; null until generated. */
+  projectAnalysis: ProjectAnalysis | null;
+  /** True while the one-time analysis call is in flight (drives the intro placeholder). */
+  analysisLoading: boolean;
+  /** Idempotent: generate + persist the analysis once if missing. No-op otherwise. */
+  ensureProjectAnalysis: () => void;
   /** Durable decisions byte maintains about the company — the founder-curatable memory. */
   decisions: DecisionEntry[];
   /** Edit a decision in place (e.g. correct a wrong extraction). */
@@ -276,6 +285,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
+  // byte's one-time project analysis (hydrated from Firestore; null until generated).
+  const [projectAnalysis, setProjectAnalysis] = useState<ProjectAnalysis | null>(null);
+  // True while the one-time analysis call is in flight (drives the intro placeholder).
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  // Guards ensureProjectAnalysis against duplicate concurrent calls (not itself reactive state).
+  const analysisInFlight = useRef(false);
   // Durable decisions byte maintains (hydrated from Firestore; founder-curatable).
   const [decisions, setDecisions] = useState<DecisionEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
@@ -338,11 +353,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           roadmapStage,
           chat,
           decisions: dec,
+          projectAnalysis: pa,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
           setBrief(b);
           setDecisions(dec);
+          // Reset (or hydrate) the one-time analysis for this account — an overwrite either
+          // way, so a fresh account never inherits a previous account's in-flight/loading state.
+          // Re-validate the persisted doc so a partial/corrupt one can't render blank rows.
+          setProjectAnalysis(isUsableAnalysis(pa) ? pa : null);
+          setAnalysisLoading(false);
+          analysisInFlight.current = false;
           // A stamped scaffold ⇒ the map is this founder's generated plan; absent ⇒ it's
           // still the example seed (banner shows).
           setPlanTailored(Boolean(scaffoldedAt));
@@ -655,6 +677,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
   }, [companyId, brief, bump, toast, computeNextStep]);
+
+  // byte's one-time, brief-grounded read of the project (the Overview intro). Idempotent:
+  // skips if already generated, a call is already in flight, or there's no company/brief
+  // to analyze yet. Best-effort — a failure just leaves it null (the fallback intro).
+  const ensureProjectAnalysis = useCallback(() => {
+    if (projectAnalysis || analysisInFlight.current || !companyId) return;
+    const hasBrief = brief && Object.keys(brief).length > 0;
+    if (!hasBrief) return;
+    analysisInFlight.current = true;
+    setAnalysisLoading(true);
+    fetchProjectAnalysis(brief)
+      .then((a) => {
+        if (a) {
+          setProjectAnalysis(a);
+          persistProjectAnalysis(companyId, a).catch((err) =>
+            console.error('[project-analysis] persist failed', err),
+          );
+        }
+      })
+      .finally(() => {
+        analysisInFlight.current = false;
+        setAnalysisLoading(false);
+      });
+  }, [projectAnalysis, companyId, brief]);
 
   // Founder-curated memory: edit or remove a decision byte is holding. Optimistic —
   // the panel reflects the change at once; the Firestore write is best-effort (a failed
@@ -1442,6 +1488,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldFailed,
       advanceStage,
       brief,
+      projectAnalysis,
+      analysisLoading,
+      ensureProjectAnalysis,
       decisions,
       updateDecision,
       deleteDecision,
@@ -1503,6 +1552,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldFailed,
       advanceStage,
       brief,
+      projectAnalysis,
+      analysisLoading,
+      ensureProjectAnalysis,
       decisions,
       updateDecision,
       deleteDecision,
