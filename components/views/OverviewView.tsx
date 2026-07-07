@@ -94,6 +94,7 @@ interface GNode {
   total?: number;
   pct?: number;
   later?: boolean;
+  reveal?: boolean;
   x: number;
   y: number;
   z: number;
@@ -160,6 +161,35 @@ function makeRingSprite(pct: number, colorHex: string, size: number, parked = fa
   return sprite;
 }
 
+// A soft radial glow the UnrealBloomPass amplifies — used to flash a just-unlocked branch.
+function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, colorHex);
+  g.addColorStop(0.4, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.globalAlpha = 0.5;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 export default function OverviewView() {
   const {
     openDept,
@@ -178,6 +208,7 @@ export default function OverviewView() {
     planTailored,
     scaffoldFailed,
     regenerateCompany,
+    growthSignal,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
   void tick; // (already present) keeps the reads below live
@@ -199,6 +230,9 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
+  const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
+  const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
@@ -255,6 +289,7 @@ export default function OverviewView() {
         total,
         pct: dp.pct,
         later: !!d.later,
+        reveal: revealKeys.has(d.k),
         x: dx,
         y: dy,
         z: dz,
@@ -298,7 +333,7 @@ export default function OverviewView() {
       adj.get(l.target)!.add(l.source);
     });
     return { data: { nodes, links }, adj };
-  }, [tick, brief.projectName]);
+  }, [tick, brief.projectName, revealKeys]);
 
   const inFocus = useCallback(
     (id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id),
@@ -415,6 +450,32 @@ export default function OverviewView() {
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalSignal, dims.w]);
+
+  // A re-scaffold just unlocked one or more parked branches — flash the reveal
+  // (glow halo on the affected dept nodes), gently ease the camera toward the
+  // first one, and hold a transient "N areas unlocked" tag for a few seconds.
+  //
+  // Adopt a newly-published growthSignal into revealKeys at render time (a ref
+  // diff against the last-seen signal, not a synchronous setState-in-effect) —
+  // same "don't setState synchronously inside an effect" convention as the rest
+  // of this codebase. The imperative side effects (camera ease + the auto-clear
+  // timer) still live in the effect below, gated on the same signal.
+  const lastGrowthSignalRef = useRef<typeof growthSignal>(null);
+  if (growthSignal && growthSignal !== lastGrowthSignalRef.current) {
+    lastGrowthSignalRef.current = growthSignal;
+    if (growthSignal.unlockedKeys.length > 0) setRevealKeys(new Set(growthSignal.unlockedKeys));
+  }
+  useEffect(() => {
+    if (!growthSignal || growthSignal.unlockedKeys.length === 0) return;
+    // Gentle camera ease toward the first newly-grown branch (skip under reduced motion).
+    if (!introReduceMotion()) flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
+    if (revealTimer.current) clearTimeout(revealTimer.current);
+    revealTimer.current = setTimeout(() => setRevealKeys(new Set()), 3000);
+    return () => {
+      if (revealTimer.current) clearTimeout(revealTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [growthSignal]);
 
   // gentle forces (positions are seeded)
   useEffect(() => {
@@ -575,6 +636,10 @@ export default function OverviewView() {
     const group = new THREE.Group();
     group.add(ring);
     group.add(s);
+    if (n.reveal) {
+      const halo = makeGlowSprite(n.deptColor ?? '#7DE3FF', radius * 5.5);
+      group.add(halo);
+    }
     return group;
   };
 
@@ -662,6 +727,29 @@ export default function OverviewView() {
         />
       )}
       <StageRibbon />
+      {revealKeys.size > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 52,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 7,
+            pointerEvents: 'none',
+            padding: '6px 14px',
+            borderRadius: 999,
+            background: 'rgba(16,14,28,0.92)',
+            border: '1px solid rgba(125,227,255,0.4)',
+            color: '#7DE3FF',
+            fontSize: 12,
+            fontWeight: 700,
+            fontFamily: 'inherit',
+            boxShadow: '0 0 20px rgba(125,227,255,0.25)',
+          }}
+        >
+          ✦ {revealKeys.size} {revealKeys.size === 1 ? 'area' : 'areas'} unlocked
+        </div>
+      )}
       <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
 
       <div
