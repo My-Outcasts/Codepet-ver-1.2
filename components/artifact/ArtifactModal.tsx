@@ -4,11 +4,18 @@ import { useApp } from '@/lib/store';
 import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
-import { LIVE_TYPES, liveKind, currentDraft, applyResult } from '@/lib/ai/applyResult';
+import {
+  LIVE_TYPES,
+  liveKind,
+  currentDraft,
+  applyResult,
+  hasDeliverablePayload,
+} from '@/lib/ai/applyResult';
 import { toolkitUsedFor, runLogWithToolkit } from '@/lib/ai/toolkitUse';
 import { ENV } from '@/lib/data';
 import { ArtifactViewer } from './viewers';
 import { ExecLog } from './ExecLog';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 // Scrollable modal body with a soft bottom fade that shows only while there's more
 // content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
@@ -379,6 +386,26 @@ export function ArtifactModal() {
     marginBottom: 7,
   };
 
+  // Whether the task actually carries type's rendered payload — a failed first-run
+  // (no saved draft to fall back to) shows a retry state instead of a blank/crashing
+  // viewer.
+  const hasPayload = hasDeliverablePayload(t, type);
+  const failureState = (
+    <div className="artifact">
+      <div className="art-body" style={{ padding: '18px 4px' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 650, color: 'var(--t-1)' }}>
+          byte couldn’t generate this right now
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--t-3)', marginTop: 6, lineHeight: 1.5 }}>
+          {liveErrorMsg}
+        </div>
+        <button className="btn" style={{ marginTop: 14 }} onClick={startRun}>
+          Retry
+        </button>
+      </div>
+    </div>
+  );
+
   let bodyContent: React.ReactNode;
   if (stage === 'outline') {
     bodyContent = (
@@ -467,12 +494,16 @@ export function ArtifactModal() {
                       ✦ Written live by byte · Claude
                     </div>
                   )}
-                  {LIVE_TYPES.has(type) && genStatus === 'error' && (
+                  {LIVE_TYPES.has(type) && genStatus === 'error' && hasPayload && (
                     <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
                       {liveErrorMsg}
                     </div>
                   )}
-                  <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
+                  {LIVE_TYPES.has(type) && genStatus === 'error' && !hasPayload ? (
+                    failureState
+                  ) : (
+                    <TypeOut text={t.out} onDone={() => setDeliverReady(true)} />
+                  )}
                 </>
               )}
             </div>
@@ -486,6 +517,8 @@ export function ArtifactModal() {
               </span>
             </div>
           </div>
+        ) : LIVE_TYPES.has(type) && genStatus === 'error' && !hasPayload ? (
+          failureState
         ) : (
           <>
             {LIVE_TYPES.has(type) && genStatus === 'done' && (
@@ -493,12 +526,14 @@ export function ArtifactModal() {
                 ✦ Written live by byte · Claude
               </div>
             )}
-            {LIVE_TYPES.has(type) && genStatus === 'error' && (
+            {LIVE_TYPES.has(type) && genStatus === 'error' && hasPayload && (
               <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
                 Couldn’t reach byte just now — showing the saved draft.
               </div>
             )}
-            <ViewerOnce item={item} onReady={() => setDeliverReady(true)} />
+            <ErrorBoundary fallback={failureState} resetKey={`${type}:${genStatus}:${hasPayload}`}>
+              <ViewerOnce item={item} onReady={() => setDeliverReady(true)} />
+            </ErrorBoundary>
           </>
         )}
       </>
