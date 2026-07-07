@@ -20,48 +20,51 @@ thread resumes it (continue chatting), matching Codex/ChatGPT.
 
 ## Decisions (locked during brainstorming)
 
-| Decision | Choice |
-|---|---|
-| Thread model | Manual **"New chat"** — user explicitly creates threads |
-| History UI | **In-panel flip** — a header button flips the docked panel between the active thread and a thread-list view (mobile-ChatGPT style); chat stays docked |
-| Thread titles | **Auto from the first message** (~40 chars), with optional manual rename. No model call. |
-| Storage | **Approach A** — a `threadId` field on the existing `chat` messages + a new `threads` metadata collection |
-| Migration | **Lazy backfill on load**, idempotent |
-| Reopen behavior | **Resume** (continue the conversation) |
+| Decision        | Choice                                                                                                                                                |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Thread model    | Manual **"New chat"** — user explicitly creates threads                                                                                               |
+| History UI      | **In-panel flip** — a header button flips the docked panel between the active thread and a thread-list view (mobile-ChatGPT style); chat stays docked |
+| Thread titles   | **Auto from the first message** (~40 chars), with optional manual rename. No model call.                                                              |
+| Storage         | **Approach A** — a `threadId` field on the existing `chat` messages + a new `threads` metadata collection                                             |
+| Migration       | **Lazy backfill on load**, idempotent                                                                                                                 |
+| Reopen behavior | **Resume** (continue the conversation)                                                                                                                |
 
 ## Data model (Approach A)
 
 ### New collection
+
 `companies/{companyId}/threads/{threadId}` → `ThreadMeta`:
 
 ```ts
 interface ThreadMeta {
-  id: string          // thread id
-  title: string       // derived from first message; user-renameable
-  createdAt: number    // ms epoch
-  updatedAt: number    // ms epoch — bumped on each new message; drives list sort + "2h ago"
+  id: string; // thread id
+  title: string; // derived from first message; user-renameable
+  createdAt: number; // ms epoch
+  updatedAt: number; // ms epoch — bumped on each new message; drives list sort + "2h ago"
 }
 ```
 
 New path helpers in `lib/firebase/schema.ts`:
 
 ```ts
-threads:  (companyId) => `companies/${companyId}/threads`
-thread:   (companyId, threadId) => `companies/${companyId}/threads/${threadId}`
+threads: (companyId) => `companies/${companyId}/threads`;
+thread: (companyId, threadId) => `companies/${companyId}/threads/${threadId}`;
 ```
 
 ### Existing message docs
+
 Messages stay at `companies/{companyId}/chat/{msgId}` (unchanged path). Each
 message doc gains a field:
 
 ```ts
-threadId: string   // which thread this message belongs to
+threadId: string; // which thread this message belongs to
 ```
 
 `ChatMessage` (in `lib/store.tsx`) and the message doc type (`lib/firebase/schema.ts`)
 both gain `threadId`.
 
 ### Firestore index
+
 One composite index on the `chat` collection, added to `firestore.indexes.json`:
 `threadId ASC, createdAt ASC` — lets us load a single thread's messages in order.
 
@@ -96,7 +99,7 @@ chatHistoryOpen: boolean         // panel showing the thread list (true) vs the 
 
 New actions:
 
-- `newChat()` — sets a *pending* new thread: `activeThreadId` = a fresh id,
+- `newChat()` — sets a _pending_ new thread: `activeThreadId` = a fresh id,
   `chatMessages` = `[]`, flips back to the thread view. **No Firestore write yet.**
 - `openThread(id)` — set active, load that thread's messages into `chatMessages`,
   flip back to thread view.
@@ -119,7 +122,7 @@ Every persisted message bumps its thread's `updatedAt`.
   messages (batched)
 - `persistChatMessage(companyId, message)` — unchanged write to `chat/{id}`, now
   also bumps the parent thread's `updatedAt`
-- `loadCompanyData` — no longer loads *all* chat. Returns the threads list + the
+- `loadCompanyData` — no longer loads _all_ chat. Returns the threads list + the
   most-recently-updated thread's messages (the active thread on hydrate).
 
 ## UX flow (in-panel flip)
@@ -131,6 +134,7 @@ Every persisted message bumps its thread's `updatedAt`.
 the list.
 
 **Thread list view:**
+
 - `[+ New chat]` pinned at top.
 - Rows sorted by `updatedAt` desc: **title** + **relative time** ("2h ago").
 - Each row has a `⋯` menu: **Rename**, **Delete**.
@@ -181,6 +185,7 @@ rename overrides it permanently.
 ## Testing
 
 Unit (pure logic):
+
 - `deriveThreadTitle` — truncation, whitespace, empty → "New chat".
 - Thread list sort by `updatedAt` desc.
 - Backfill-needed decision (threads empty + messages present).

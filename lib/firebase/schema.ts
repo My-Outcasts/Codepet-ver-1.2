@@ -163,8 +163,7 @@ export const paths = {
   chat: (companyId: string) => `companies/${companyId}/chat`,
   chatMessage: (companyId: string, msgId: string) => `companies/${companyId}/chat/${msgId}`,
   threads: (companyId: string) => `companies/${companyId}/threads`,
-  thread: (companyId: string, threadId: string) =>
-    `companies/${companyId}/threads/${threadId}`,
+  thread: (companyId: string, threadId: string) => `companies/${companyId}/threads/${threadId}`,
 };
 
 // Re-export the shared shapes so persistence consumers import everything from one place.

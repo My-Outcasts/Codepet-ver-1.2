@@ -35,10 +35,12 @@
 ## Task 1: Schema types, paths, and Firestore index
 
 **Files:**
+
 - Modify: `lib/firebase/schema.ts` (add `ThreadMeta`, `threadId` on `ChatMessageDoc`, two path helpers)
 - Modify: `firestore.indexes.json`
 
 **Interfaces:**
+
 - Produces: `interface ThreadMeta { id: string; title: string; createdAt: Millis; updatedAt: Millis }`; `ChatMessageDoc` now includes `threadId: string`; `paths.threads(companyId)`, `paths.thread(companyId, threadId)`.
 
 - [ ] **Step 1: Add `ThreadMeta` and `threadId`** in `lib/firebase/schema.ts`. Replace the existing `ChatMessageDoc` block:
@@ -105,10 +107,12 @@ git commit -m "feat(chat): add ThreadMeta type, threadId field, thread paths + i
 ## Task 2: Pure thread logic (`lib/chat/threads.ts`)
 
 **Files:**
+
 - Create: `lib/chat/threads.ts`
 - Test: `lib/chat/threads.test.ts`
 
 **Interfaces:**
+
 - Consumes: `ThreadMeta` from `@/lib/firebase/schema`.
 - Produces:
   - `deriveThreadTitle(text: string): string`
@@ -252,9 +256,11 @@ git commit -m "feat(chat): pure thread logic (title, sort, backfill, fallback, r
 ## Task 3: Firestore thread layer + migration (`lib/firebase/companyData.ts`)
 
 **Files:**
+
 - Modify: `lib/firebase/companyData.ts`
 
 **Interfaces:**
+
 - Consumes: `deriveThreadTitle`, `needsBackfill`, `sortThreadsByRecent` from `@/lib/chat/threads`; `ThreadMeta`, `ChatMessageDoc`, `paths` from `./schema`.
 - Produces:
   - `loadThreads(companyId: string): Promise<ThreadMeta[]>`
@@ -268,11 +274,7 @@ git commit -m "feat(chat): pure thread logic (title, sort, backfill, fallback, r
 - [ ] **Step 1: Add imports.** At the top of `lib/firebase/companyData.ts`, add `type ThreadMeta` to the schema import group, and add:
 
 ```ts
-import {
-  deriveThreadTitle,
-  needsBackfill,
-  sortThreadsByRecent,
-} from '@/lib/chat/threads';
+import { deriveThreadTitle, needsBackfill, sortThreadsByRecent } from '@/lib/chat/threads';
 ```
 
 - [ ] **Step 2: Update `persistChatMessage`** (currently ~line 245) to touch the thread:
@@ -328,10 +330,7 @@ export async function updateThreadTitle(
   await setDoc(doc(getDb(), paths.thread(companyId, threadId)), { title }, { merge: true });
 }
 
-export async function deleteThreadAndMessages(
-  companyId: string,
-  threadId: string,
-): Promise<void> {
+export async function deleteThreadAndMessages(companyId: string, threadId: string): Promise<void> {
   const db = getDb();
   const msgs = await getDocs(
     query(collection(db, paths.chat(companyId)), where('threadId', '==', threadId)),
@@ -396,26 +395,26 @@ and rename the destructured `chatSnap` to `threadSnap`.
 Then, after the `library` mapping and before `return {`, replace the old `const chat = ...` line with:
 
 ```ts
-  // Threads + the active thread's messages. Migrate legacy flat chat on first load.
-  let threads = threadSnap.docs.map((d) => d.data() as ThreadMeta);
-  if (threads.length === 0) {
-    const migrated = await backfillLegacyThread(companyId);
-    if (migrated) threads = [migrated];
-  }
-  const activeThreadId = sortThreadsByRecent(threads)[0]?.id ?? null;
-  const chat = activeThreadId ? await loadThreadMessages(companyId, activeThreadId) : [];
+// Threads + the active thread's messages. Migrate legacy flat chat on first load.
+let threads = threadSnap.docs.map((d) => d.data() as ThreadMeta);
+if (threads.length === 0) {
+  const migrated = await backfillLegacyThread(companyId);
+  if (migrated) threads = [migrated];
+}
+const activeThreadId = sortThreadsByRecent(threads)[0]?.id ?? null;
+const chat = activeThreadId ? await loadThreadMessages(companyId, activeThreadId) : [];
 ```
 
 Finally, add `threads` and `activeThreadId` to the returned object:
 
 ```ts
-  return {
-    // ...existing fields...
-    chat,
-    threads,
-    activeThreadId,
-    decisions,
-  };
+return {
+  // ...existing fields...
+  chat,
+  threads,
+  activeThreadId,
+  decisions,
+};
 ```
 
 - [ ] **Step 6: Typecheck + build.**
@@ -435,9 +434,11 @@ git commit -m "feat(chat): firestore thread layer + lazy legacy backfill"
 ## Task 4: Store state, actions, and message routing (`lib/store.tsx`)
 
 **Files:**
+
 - Modify: `lib/store.tsx`
 
 **Interfaces:**
+
 - Consumes: everything from Task 3 (`loadThreads` unused here, `loadThreadMessages`, `persistThread`, `updateThreadTitle`, `deleteThreadAndMessages`); `deriveThreadTitle`, `pickFallbackThreadId` from `@/lib/chat/threads`; `ThreadMeta` from schema.
 - Produces (added to the context interface + provider value):
   - state: `threads: ThreadMeta[]`, `activeThreadId: string | null`, `chatHistoryOpen: boolean`
@@ -453,37 +454,40 @@ import type { ThreadMeta } from './firebase/schema';
 - [ ] **Step 2: Add state** near `const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);` (line ~241):
 
 ```ts
-  const [threads, setThreads] = useState<ThreadMeta[]>([]);
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
-  const pendingThreadRef = useRef(false); // true ⇒ active thread not yet written to Firestore
+const [threads, setThreads] = useState<ThreadMeta[]>([]);
+const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+const pendingThreadRef = useRef(false); // true ⇒ active thread not yet written to Firestore
 ```
 
 - [ ] **Step 3: Add the `persistMsg` wrapper** (place after the state, before the actions that use it). This is the single injection point for `threadId`:
 
 ```ts
-  // Every persisted chat message carries the active thread id. Route all persistence
-  // through here so no call site forgets it.
-  const persistMsg = useCallback(
-    (msg: { id: string; role: 'me' | 'byte'; text: string; ts: number }) => {
-      if (!companyId || !activeThreadId) return;
-      persistChatMessage(companyId, {
-        id: msg.id,
-        role: msg.role,
-        text: msg.text,
-        createdAt: msg.ts,
-        threadId: activeThreadId,
-      }).catch((err) => console.error('[store] persist message failed', err));
-    },
-    [companyId, activeThreadId],
-  );
+// Every persisted chat message carries the active thread id. Route all persistence
+// through here so no call site forgets it.
+const persistMsg = useCallback(
+  (msg: { id: string; role: 'me' | 'byte'; text: string; ts: number }) => {
+    if (!companyId || !activeThreadId) return;
+    persistChatMessage(companyId, {
+      id: msg.id,
+      role: msg.role,
+      text: msg.text,
+      createdAt: msg.ts,
+      threadId: activeThreadId,
+    }).catch((err) => console.error('[store] persist message failed', err));
+  },
+  [companyId, activeThreadId],
+);
 ```
 
 - [ ] **Step 4: Replace every direct `persistChatMessage(companyId, {...})` call** in `lib/store.tsx` (call sites at approx lines 398, 1515, 1544, 1592, 1625, 1726, 1761) with a `persistMsg({...})` call. Each currently looks like:
 
 ```ts
 persistChatMessage(companyId, {
-  id: X.id, role: 'byte', text: X.text, createdAt: X.ts,
+  id: X.id,
+  role: 'byte',
+  text: X.text,
+  createdAt: X.ts,
 }).catch(/* ... */);
 ```
 
@@ -498,22 +502,22 @@ persistMsg({ id: X.id, role: X.role, text: X.text, ts: X.ts });
 - [ ] **Step 5: Create the thread on the first send in `sendChat`** (line ~1529). Immediately after `if (companyId) {` and before the user-message persist, insert thread creation, then swap the persist call:
 
 ```ts
-      if (companyId) {
-        if (pendingThreadRef.current && activeThreadId) {
-          const thread: ThreadMeta = {
-            id: activeThreadId,
-            title: deriveThreadTitle(text),
-            createdAt: now,
-            updatedAt: now,
-          };
-          pendingThreadRef.current = false;
-          setThreads((prev) => [thread, ...prev]);
-          persistThread(companyId, thread).catch((err) =>
-            console.error('[store] persist thread failed', err),
-          );
-        }
-        persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
-      }
+if (companyId) {
+  if (pendingThreadRef.current && activeThreadId) {
+    const thread: ThreadMeta = {
+      id: activeThreadId,
+      title: deriveThreadTitle(text),
+      createdAt: now,
+      updatedAt: now,
+    };
+    pendingThreadRef.current = false;
+    setThreads((prev) => [thread, ...prev]);
+    persistThread(companyId, thread).catch((err) =>
+      console.error('[store] persist thread failed', err),
+    );
+  }
+  persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
+}
 ```
 
 Also add `persistMsg` and `activeThreadId` to `sendChat`'s dependency array.
@@ -521,69 +525,69 @@ Also add `persistMsg` and `activeThreadId` to `sendChat`'s dependency array.
 - [ ] **Step 6: Add the thread actions** (place near the other `useCallback` actions):
 
 ```ts
-  const toggleChatHistory = useCallback((open?: boolean) => {
-    setChatHistoryOpen((c) => (open === undefined ? !c : open));
-  }, []);
+const toggleChatHistory = useCallback((open?: boolean) => {
+  setChatHistoryOpen((c) => (open === undefined ? !c : open));
+}, []);
 
-  const newChat = useCallback(() => {
-    setActiveThreadId(newId());
-    pendingThreadRef.current = true; // created in Firestore on first send
-    setChatMessages([]);
+const newChat = useCallback(() => {
+  setActiveThreadId(newId());
+  pendingThreadRef.current = true; // created in Firestore on first send
+  setChatMessages([]);
+  setChatHistoryOpen(false);
+}, []);
+
+const openThread = useCallback(
+  (id: string) => {
+    if (!companyId) return;
+    pendingThreadRef.current = false;
+    setActiveThreadId(id);
     setChatHistoryOpen(false);
-  }, []);
+    loadThreadMessages(companyId, id)
+      .then((msgs) =>
+        setChatMessages(
+          msgs.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
+        ),
+      )
+      .catch((err) => console.error('[store] loadThreadMessages failed', err));
+  },
+  [companyId],
+);
 
-  const openThread = useCallback(
-    (id: string) => {
-      if (!companyId) return;
-      pendingThreadRef.current = false;
-      setActiveThreadId(id);
-      setChatHistoryOpen(false);
-      loadThreadMessages(companyId, id)
-        .then((msgs) =>
-          setChatMessages(
-            msgs.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
-          ),
-        )
-        .catch((err) => console.error('[store] loadThreadMessages failed', err));
-    },
-    [companyId],
-  );
-
-  const renameThread = useCallback(
-    (id: string, title: string) => {
-      const clean = title.trim();
-      if (!clean) return;
-      setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title: clean } : t)));
-      if (companyId)
-        updateThreadTitle(companyId, id, clean).catch((err) =>
-          console.error('[store] updateThreadTitle failed', err),
-        );
-    },
-    [companyId],
-  );
-
-  const deleteThread = useCallback(
-    (id: string) => {
-      if (!companyId) return;
-      const fallback = activeThreadId === id ? pickFallbackThreadId(threads, id) : null;
-      setThreads((prev) => prev.filter((t) => t.id !== id));
-      deleteThreadAndMessages(companyId, id).catch((err) =>
-        console.error('[store] deleteThreadAndMessages failed', err),
+const renameThread = useCallback(
+  (id: string, title: string) => {
+    const clean = title.trim();
+    if (!clean) return;
+    setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title: clean } : t)));
+    if (companyId)
+      updateThreadTitle(companyId, id, clean).catch((err) =>
+        console.error('[store] updateThreadTitle failed', err),
       );
-      if (activeThreadId === id) {
-        if (fallback) openThread(fallback);
-        else newChat();
-      }
-    },
-    [companyId, activeThreadId, threads, openThread, newChat],
-  );
+  },
+  [companyId],
+);
+
+const deleteThread = useCallback(
+  (id: string) => {
+    if (!companyId) return;
+    const fallback = activeThreadId === id ? pickFallbackThreadId(threads, id) : null;
+    setThreads((prev) => prev.filter((t) => t.id !== id));
+    deleteThreadAndMessages(companyId, id).catch((err) =>
+      console.error('[store] deleteThreadAndMessages failed', err),
+    );
+    if (activeThreadId === id) {
+      if (fallback) openThread(fallback);
+      else newChat();
+    }
+  },
+  [companyId, activeThreadId, threads, openThread, newChat],
+);
 ```
 
 - [ ] **Step 7: Wire hydration.** In the `loadCompanyData(...).then(...)` block (destructure near line 279), add `threads: loadedThreads, activeThreadId: loadedActive` to the destructured object, and after `setChatMessages(chat.map(...))` (line ~285) add:
 
 ```ts
-        setThreads(loadedThreads);
-        setActiveThreadId(loadedActive);
+setThreads(loadedThreads);
+setActiveThreadId(loadedActive);
 ```
 
 - [ ] **Step 8: Expose in the context interface and provider value.** In the `interface` that declares `chatMessages` / `sendChat` (around line 159–216), add:
@@ -618,10 +622,12 @@ git commit -m "feat(chat): store thread state, actions, and threadId message rou
 ## Task 5: Copilot history UI + styles (`components/Copilot.tsx`, `app/globals.css`)
 
 **Files:**
+
 - Modify: `components/Copilot.tsx`
 - Modify: `app/globals.css`
 
 **Interfaces:**
+
 - Consumes: `threads`, `activeThreadId`, `chatHistoryOpen`, `newChat`, `openThread`, `renameThread`, `deleteThread`, `toggleChatHistory` from `useApp()`; `sortThreadsByRecent`, `relativeTime` from `@/lib/chat/threads`.
 
 - [ ] **Step 1: Import thread helpers** at the top of `components/Copilot.tsx`:
@@ -644,10 +650,7 @@ function ThreadList() {
       </button>
       <ul className="cthreads-list">
         {rows.map((t) => (
-          <li
-            key={t.id}
-            className={`cthreads-row${t.id === activeThreadId ? ' is-active' : ''}`}
-          >
+          <li key={t.id} className={`cthreads-row${t.id === activeThreadId ? ' is-active' : ''}`}>
             <button className="cthreads-open" onClick={() => openThread(t.id)}>
               <span className="cthreads-title">{t.title}</span>
               <span className="cthreads-time">{relativeTime(t.updatedAt, now)}</span>
@@ -683,14 +686,14 @@ function ThreadList() {
 - [ ] **Step 3: Add the History toggle to the panel header.** In `Copilot`, destructure `chatHistoryOpen` and `toggleChatHistory` from `useApp()` (alongside the existing `chatMessages`, `sendChat`, etc. near line 191). Then, in the header block (near the "Collapse chat" button, ~line 234), add a History button:
 
 ```tsx
-        <button
-          className="ccopilot-history"
-          title={chatHistoryOpen ? 'Back to chat' : 'Chat history'}
-          aria-label={chatHistoryOpen ? 'Back to chat' : 'Chat history'}
-          onClick={() => toggleChatHistory()}
-        >
-          {chatHistoryOpen ? '‹ Back' : '☰ History'}
-        </button>
+<button
+  className="ccopilot-history"
+  title={chatHistoryOpen ? 'Back to chat' : 'Chat history'}
+  aria-label={chatHistoryOpen ? 'Back to chat' : 'Chat history'}
+  onClick={() => toggleChatHistory()}
+>
+  {chatHistoryOpen ? '‹ Back' : '☰ History'}
+</button>
 ```
 
 - [ ] **Step 4: Render the list when open.** Wrap the existing messages+composer body so that when `chatHistoryOpen` is true, `ThreadList` renders instead. Find the messages container (the `chatMessages.map(...)` region, ~line 255) and the composer; wrap both in `{chatHistoryOpen ? <ThreadList /> : (<>...existing body...</>)}`.
@@ -707,7 +710,13 @@ function ThreadList() {
   padding: 4px 8px;
   cursor: pointer;
 }
-.cthreads { display: flex; flex-direction: column; gap: 8px; padding: 12px; overflow-y: auto; }
+.cthreads {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow-y: auto;
+}
 .cthreads-new {
   align-self: stretch;
   padding: 10px;
@@ -718,7 +727,14 @@ function ThreadList() {
   cursor: pointer;
   font-weight: 500;
 }
-.cthreads-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.cthreads-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 .cthreads-row {
   display: flex;
   align-items: center;
@@ -726,7 +742,9 @@ function ThreadList() {
   border-radius: 10px;
   padding: 2px;
 }
-.cthreads-row.is-active { background: var(--glass-hi, rgba(255, 255, 255, 0.06)); }
+.cthreads-row.is-active {
+  background: var(--glass-hi, rgba(255, 255, 255, 0.06));
+}
 .cthreads-open {
   flex: 1;
   display: flex;
@@ -740,8 +758,17 @@ function ThreadList() {
   padding: 8px 10px;
   text-align: left;
 }
-.cthreads-title { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.cthreads-time { font-size: 11px; opacity: 0.6; }
+.cthreads-title {
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.cthreads-time {
+  font-size: 11px;
+  opacity: 0.6;
+}
 .cthreads-rename,
 .cthreads-del {
   font-size: 11px;
@@ -752,8 +779,14 @@ function ThreadList() {
   cursor: pointer;
 }
 .cthreads-rename:hover,
-.cthreads-del:hover { opacity: 1; }
-.cthreads-empty { font-size: 12.5px; opacity: 0.6; padding: 10px; }
+.cthreads-del:hover {
+  opacity: 1;
+}
+.cthreads-empty {
+  font-size: 12.5px;
+  opacity: 0.6;
+  padding: 10px;
+}
 ```
 
 - [ ] **Step 6: Typecheck + build.**
