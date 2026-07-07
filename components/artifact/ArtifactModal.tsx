@@ -133,6 +133,7 @@ export function ArtifactModal() {
     toggleCopilot,
     persistTaskDraft,
     creditToolkitUse,
+    companionId,
   } = useApp();
   const [stage, setStage] = useState<Stage>('exec');
   // Run mode docks as a right-hand panel so the map stays visible as context;
@@ -252,6 +253,7 @@ export function ArtifactModal() {
         deptName: d.name,
         deptKey: d.k,
         brief,
+        companionId,
       })
         .then((res) => {
           applyResult(t, type, res);
@@ -287,6 +289,7 @@ export function ArtifactModal() {
         reviseNote: note,
         current: currentDraft(t, type),
         brief,
+        companionId,
       })
         .then((res) => {
           applyResult(t, type, res);

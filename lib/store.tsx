@@ -1241,6 +1241,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           deptName: d.name,
           deptKey: d.k,
           brief,
+          companionId,
         });
         applyResult(t, type, res);
         creditToolkitUse(t.t, type);
@@ -1261,7 +1262,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [brief, bump, persistTaskDraft, creditToolkitUse],
+    [brief, bump, persistTaskDraft, creditToolkitUse, companionId],
   );
 
   // Revise an inline chat result against the founder's feedback — the same revise pass
@@ -1293,6 +1294,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           brief,
           reviseNote: trimmed || undefined,
           current: trimmed ? currentDraft(t, type) : undefined,
+          companionId,
         });
         applyResult(t, type, res);
         bump();
@@ -1310,7 +1312,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       }
     },
-    [brief, bump, persistTaskDraft, toast],
+    [brief, bump, persistTaskDraft, toast, companionId],
   );
 
   // Approve an inline chat result: same as approving from the panel (Library + done),
@@ -1429,6 +1431,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             deptSummary,
             openTasks,
             envSetup,
+            companionId,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -1546,7 +1549,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat],
+    [companyId, nextStep, runTaskInChat, companionId],
   );
 
   const sendChat = useCallback(

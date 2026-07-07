@@ -44,12 +44,13 @@ export async function* streamByteChat(
   deptSummary?: string,
   openTasks?: RunnableTask[],
   envSetup?: SetupItem[],
+  companionId?: string,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ messages: history, deptSummary, openTasks, envSetup }),
+    body: JSON.stringify({ messages: history, deptSummary, openTasks, envSetup, companionId }),
     signal,
   });
   if (!res.ok || !res.body) {
