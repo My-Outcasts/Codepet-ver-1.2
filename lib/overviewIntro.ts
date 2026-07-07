@@ -3,10 +3,6 @@
 // Library). The React components — OverviewView / OverviewIntro / ByteGuide —
 // are thin consumers of these functions.
 
-// localStorage key — retained from the original OverviewIntro so users who
-// already dismissed the old intro are not shown the new one.
-export const INTRO_SEEN_KEY = 'codepet:overview-intro-seen';
-
 // The cyan guide-star color the beacon node is painted with on the map, and the
 // one contextual color the spotlight teaches. Mirrors BEACON_HEX in OverviewView.
 export const GUIDE_HEX = '#7DE3FF';

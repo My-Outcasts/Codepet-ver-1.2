@@ -1,18 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import {
-  INTRO_SEEN_KEY,
-  introInitialPhase,
-  onReveal,
-  onSettle,
-  onReopen,
-  revealAction,
-} from './overviewIntro';
+import { introInitialPhase, onReveal, onSettle, onReopen, revealAction } from './overviewIntro';
 
 describe('overview first-run phase machine', () => {
-  it('keeps the historical localStorage key', () => {
-    expect(INTRO_SEEN_KEY).toBe('codepet:overview-intro-seen');
-  });
-
   it('starts at intro only when the user has not seen it', () => {
     expect(introInitialPhase(false)).toBe('intro');
     expect(introInitialPhase(true)).toBe('done');

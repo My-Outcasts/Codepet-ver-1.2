@@ -81,6 +81,9 @@ export interface CompanyDoc {
   /** The founder's chosen companion character (see COMPANIONS in lib/companions.ts).
    *  Absent ⇒ byte. */
   companionId?: string;
+  /** When this account first saw & dismissed the Overview first-run intro.
+   *  Absent ⇒ never seen. */
+  introSeenAt?: Millis;
   /** byte's one-time project analysis (shown on the Overview first run). */
   projectAnalysis?: ProjectAnalysis;
   /** When the one-time project analysis ran. Absent ⇒ never analyzed. */

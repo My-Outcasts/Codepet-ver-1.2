@@ -27,24 +27,7 @@ import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud
 import { overviewProgress, deptProgress } from '@/lib/overview/progress';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
-import { INTRO_SEEN_KEY, introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
-
-// First-run "seen" flag. Reads default to seen (true) on failure so we never
-// re-trap a user behind a broken storage read.
-const readIntroSeen = () => {
-  try {
-    return !!localStorage.getItem(INTRO_SEEN_KEY);
-  } catch {
-    return true;
-  }
-};
-const markIntroSeen = () => {
-  try {
-    localStorage.setItem(INTRO_SEEN_KEY, '1');
-  } catch {
-    /* ignore */
-  }
-};
+import { introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -211,18 +194,17 @@ export default function OverviewView() {
     regenerating,
     growthSignal,
     clearGrowthSignal,
+    introSeen,
+    markIntroSeen,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
-  // First-run spotlight handoff. OverviewView owns the phase + the localStorage
-  // flag; OverviewIntro / ByteGuide / the reopen chip are thin consumers.
-  // OverviewView is imported ssr:false, so reading localStorage in the lazy
-  // initializer is safe.
-  const [introPhase, setIntroPhase] = useState<IntroPhase>(() =>
-    introInitialPhase(readIntroSeen()),
-  );
+  // First-run spotlight handoff. OverviewView owns the phase; the account's
+  // introSeen flag (from the store) seeds it, so OverviewIntro / ByteGuide /
+  // the reopen chip remain thin consumers.
+  const [introPhase, setIntroPhase] = useState<IntroPhase>(() => introInitialPhase(introSeen));
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
   const [beaconFlip, setBeaconFlip] = useState(false);
