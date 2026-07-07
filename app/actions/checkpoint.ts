@@ -66,6 +66,32 @@ export async function createCheckpoint(projectDir: string): Promise<{ ref: strin
   }
 }
 
+/** The files the build changed since its checkpoint — modified/deleted tracked files
+ *  plus new untracked ones — so the recap can say "here's what Byte changed" in plain
+ *  terms. Returns null when unavailable (non-repo / remote). */
+export async function buildChangeSummary(
+  projectDir: string,
+  ref: string,
+): Promise<{ files: string[]; count: number } | null> {
+  if (detectCapability(process.env).mode !== 'local') return null;
+  if (!projectDir || !isObjectId(ref)) return null;
+  try {
+    const split = (s: string) =>
+      s
+        .split('\n')
+        .map((x) => x.trim())
+        .filter(Boolean);
+    const changed = split((await git(projectDir, ['diff', '--name-only', ref])).stdout);
+    const untracked = split(
+      (await git(projectDir, ['ls-files', '--others', '--exclude-standard'])).stdout,
+    );
+    const files = Array.from(new Set([...changed, ...untracked])).sort();
+    return { files: files.slice(0, 60), count: files.length };
+  } catch {
+    return null;
+  }
+}
+
 /** Restore the project to a snapshot from createCheckpoint (destructive by design:
  *  undoes everything the build changed). Guarded on a hex object id. */
 export async function rewindToCheckpoint(

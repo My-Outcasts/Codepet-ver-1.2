@@ -9,6 +9,7 @@ import type { TrackEvent } from '@/lib/tracking';
 import { useApp } from '@/lib/store';
 import { useAuth } from '@/lib/firebase/auth';
 import { loadTrackEventForSession, writeNotebookNote } from '@/lib/firebase/companyData';
+import { buildChangeSummary } from '@/app/actions/checkpoint';
 
 // "Let's build" — the Build Coach flow, adapted to the app's light theme. It
 // brackets one real Claude Code session: think first (START, now in the byte
@@ -169,6 +170,7 @@ function EndStep({
   brief,
   actions,
   checkpoint,
+  projectDir,
   onRewind,
 }: {
   companyId: string | null;
@@ -177,6 +179,7 @@ function EndStep({
   brief: string;
   actions: number;
   checkpoint: { ref: string } | null;
+  projectDir: string;
   onRewind: () => void;
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
@@ -185,6 +188,20 @@ function EndStep({
   // Two-step confirm — rewinding throws the build's changes away.
   const [confirmRewind, setConfirmRewind] = useState(false);
   const [rewound, setRewound] = useState(false);
+  // Plain "here's what Byte changed" — the files touched since the pre-build snapshot.
+  const [changes, setChanges] = useState<{ files: string[]; count: number } | null>(null);
+
+  useEffect(() => {
+    const ref = checkpoint?.ref;
+    if (!ref || !projectDir) return;
+    let cancelled = false;
+    buildChangeSummary(projectDir, ref).then((c) => {
+      if (!cancelled) setChanges(c);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [checkpoint, projectDir]);
   const noSession = !companyId || !sessionId;
   const loaded = noSession || fetched;
 
@@ -284,6 +301,23 @@ function EndStep({
           >
             {saved ? '· Saved to Byte’s notebook ✓' : '▸ Write it down in Byte’s notebook'}
           </div>
+          {changes && changes.count > 0 && !rewound && (
+            <div className="bc-changes">
+              <div className="bc-changes-h">
+                📝 Byte changed <b>{changes.count}</b> file{changes.count === 1 ? '' : 's'}
+              </div>
+              <div className="bc-changes-list">
+                {changes.files.slice(0, 12).map((f) => (
+                  <span key={f} className="bc-file">
+                    {f}
+                  </span>
+                ))}
+                {changes.count > 12 && (
+                  <span className="bc-file more">+{changes.count - 12} more</span>
+                )}
+              </div>
+            </div>
+          )}
           {checkpoint && !rewound && (
             <div className="bc-rewind">
               {!confirmRewind ? (
@@ -388,6 +422,7 @@ export function BuildCoachView() {
             brief={buildBrief}
             actions={actions}
             checkpoint={buildCheckpoint}
+            projectDir={buildProjectDir}
             onRewind={rewindBuild}
           />
         )}
