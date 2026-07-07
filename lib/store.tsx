@@ -43,7 +43,13 @@ import {
   loadProjectDirs,
   envUsageFromCatalog,
   persistEnvUsage,
+  loadThreadMessages,
+  persistThread,
+  updateThreadTitle,
+  deleteThreadAndMessages,
 } from './firebase/companyData';
+import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
+import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
@@ -66,7 +72,9 @@ import { requestBuildPlan } from './ai/buildPlan';
 import { buildOpeningPrompt, terminalCommand } from './armSession';
 import { armBuildSession } from '@/app/actions/build';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
-import { getCapability } from '@/app/actions/install';
+import { getCapability, getStatus } from '@/app/actions/install';
+import { shouldPromptInstall, INSTALL_PROMPTED_KEY } from './installPrompt';
+import { ACTIVE_BUILD_KEY, serializeActiveBuild, parseActiveBuild } from './buildPersist';
 import type { BytePlan } from './ai/plan';
 import type { LiveState } from './liveBuild';
 
@@ -116,6 +124,15 @@ const newId = (): string =>
   typeof crypto !== 'undefined' && crypto.randomUUID
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+// Strip the tap-to-continue "Turn this into a plan" buttons from past messages, so
+// the thread never accumulates a trail of live buttons — only the newest carries one.
+const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] =>
+  msgs.map((m) => {
+    if (!m.buildAction || m.buildAction.kind !== 'to-plan') return m;
+    const { buildAction: _drop, ...rest } = m;
+    return rest;
+  });
 import type { CompanyBrief } from './firebase/schema';
 import {
   buildRevealSummary,
@@ -132,7 +149,6 @@ export type View =
   | 'tasks'
   | 'library'
   | 'env'
-  | 'install'
   | 'settings'
   | 'billing'
   | 'build';
@@ -192,6 +208,11 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
+  /** The one-time "wake byte up" install popup (auto-opens once; the Topbar pill
+   * and Settings reopen it). */
+  installPromptOpen: boolean;
+  openInstallPrompt: () => void;
+  closeInstallPrompt: () => void;
   library: LibItem[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
@@ -220,6 +241,23 @@ interface AppState {
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** All conversation threads (history entries) for the "chat history" panel. */
+  threads: ThreadMeta[];
+  /** The thread whose messages are currently in `chatMessages`, or null before one exists. */
+  activeThreadId: string | null;
+  /** Whether the chat-history list is open. */
+  chatHistoryOpen: boolean;
+  /** Start a fresh thread — clears the active chat; the thread itself is created in
+   * Firestore lazily, on the first message sent into it. */
+  newChat: () => void;
+  /** Switch the active thread and hydrate its messages. */
+  openThread: (id: string) => void;
+  /** Rename a thread (optimistic + persisted). */
+  renameThread: (id: string, title: string) => void;
+  /** Delete a thread and its messages; falls back to another thread or a new chat. */
+  deleteThread: (id: string) => void;
+  /** Open/close the chat-history list. */
+  toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
    * history, so the founder doesn't have to retype. */
   retryChat: (byteMsgId: string) => void;
@@ -271,7 +309,15 @@ interface AppState {
   buildProjectDir: string;
   buildArming: boolean;
   buildIntakeActive: boolean;
+  /** True when this build was restored after a reload — the live view re-attaches
+   *  to the running session instead of spawning a new one. */
+  buildResumed: boolean;
+  /** Local in-UI builds fold their own transcript into the meter (there's no
+   *  hook→Firestore feed for them); the live view reports each reading here. */
+  applyLocalLive: (s: LiveState) => void;
   startBuildIntake: () => void;
+  /** Leave intake without building — the composer goes back to normal chat. */
+  cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
   generateBuildPlan: () => void;
   armBuild: () => void;
@@ -316,6 +362,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Consume-once: the Overview clears the signal after easing the camera, so a later
   // remount (growthSignal already null) can never replay the unlock reveal.
   const clearGrowthSignal = useCallback(() => setGrowthSignal(null), []);
+  // The one-time "wake byte up" popup — auto-opened by the effect next to
+  // setInstalledFlag below; reopened any time via the Topbar pill or Settings.
+  const [installPromptOpen, setInstallPromptOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -360,39 +409,86 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
+  // Threads (history entries), the active one, and the history panel's open state.
+  const [threads, setThreads] = useState<ThreadMeta[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
+  const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
+  const pendingThreadRef = useRef(false); // true ⇒ active thread not yet written to Firestore
+
+  // Every persisted chat message carries the active thread id. Route all persistence
+  // through here so no call site forgets it.
+  const persistMsg = useCallback(
+    (msg: { id: string; role: 'me' | 'byte'; text: string; ts: number }) => {
+      if (!companyId || !activeThreadId) return;
+      persistChatMessage(companyId, {
+        id: msg.id,
+        role: msg.role,
+        text: msg.text,
+        createdAt: msg.ts,
+        threadId: activeThreadId,
+      }).catch((err) => console.error('[store] persist message failed', err));
+      // Keep the in-memory thread list fresh so History re-sorts / shows fresh
+      // relative time without a reload. Harmless no-op for a brand-new thread not
+      // yet in `threads` — the map simply matches nothing until sendChat adds it.
+      setThreads((prev) =>
+        prev.map((t) => (t.id === activeThreadId ? { ...t, updatedAt: msg.ts } : t)),
+      );
+    },
+    [companyId, activeThreadId],
+  );
   // Aborts the in-flight chat stream — on a new send, a retry, or provider unmount
   // (e.g. sign-out), so a stream never keeps running or writes against a stale account.
   const chatAbort = useRef<AbortController | null>(null);
 
   // "Let's build" flow (was BuildCoachView local state; lifted here so the chat
   // panel drives START and the main view renders DURING/END from one source).
-  const [buildStep, setBuildStep] = useState<BuildStep>('during');
-  const [buildProject, setBuildProject] = useState('');
-  const [buildBrief, setBuildBrief] = useState('');
-  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(null);
-  const [buildSessionId, setBuildSessionId] = useState<string | null>(null);
-  const [buildLive, setBuildLive] = useState<LiveState | null>(null);
-  const [buildLocal, setBuildLocal] = useState(false);
-  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(null);
-  const [buildProjectDir, setBuildProjectDir] = useState('');
+  // An active build survives a page reload: its snapshot is read back synchronously
+  // here (same company only — AppProvider mounts post-auth, so companyId is known)
+  // and seeds the state below; the live view then re-attaches via `resume`. The
+  // mirror effect further down keeps the snapshot current.
+  const [restoredBuild] = useState(() => {
+    try {
+      return companyId ? parseActiveBuild(localStorage.getItem(ACTIVE_BUILD_KEY), companyId) : null;
+    } catch {
+      return null; // SSR / storage unavailable — start fresh
+    }
+  });
+  const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
+  const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
+  const [buildBrief, setBuildBrief] = useState(restoredBuild?.brief ?? '');
+  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(restoredBuild?.plan ?? null);
+  const [buildSessionId, setBuildSessionId] = useState<string | null>(
+    restoredBuild?.buildSessionId ?? null,
+  );
+  const [buildLive, setBuildLive] = useState<LiveState | null>(restoredBuild?.live ?? null);
+  const [buildLocal, setBuildLocal] = useState(restoredBuild?.local ?? false);
+  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(
+    restoredBuild?.launchCommand ?? null,
+  );
+  const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  const [buildResumed, setBuildResumed] = useState(!!restoredBuild);
   // A git snapshot of the project taken right before a local build, so the founder can
   // rewind everything the build changed. null when the project isn't a git repo.
-  const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(null);
+  const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(
+    restoredBuild?.checkpoint ?? null,
+  );
   // How hands-on the founder wants to be — passed to the live session (permission mode
   // + the bridge's auto-approval). Defaults to the most conservative.
   const [buildAutonomy, setBuildAutonomy] = useState<'suggest' | 'copilot' | 'autopilot'>(
-    'suggest',
+    restoredBuild?.autonomy ?? 'suggest',
   );
   // Guards the one-time "session ended" nudge so the live subscription posts it once.
   const buildEndedNudged = useRef(false);
 
-  // Subscribe to the live build doc once a session is armed. Updating state from the
-  // subscription is intended; when the rollup marks the doc ended we flip to END and
-  // post one closing nudge in chat.
+  // Subscribe to the live build doc once a session is armed — remote/terminal builds
+  // only. Local in-UI builds fold their own transcript into buildLive (applyLocalLive);
+  // subscribing there would clobber it with the doc's null snapshot. Updating state
+  // from the subscription is intended; when the rollup marks the doc ended we flip to
+  // END and post one closing nudge in chat.
   useEffect(() => {
-    if (!companyId || !buildSessionId) return;
+    if (!companyId || !buildSessionId || buildLocal) return;
     return subscribeLiveBuild(companyId, buildSessionId, (s) => {
       setBuildLive(s);
       setBuildStep(stepForLive(s));
@@ -405,17 +501,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ts: Date.now(),
         };
         setChatMessages((prev) => [...prev, nudge]);
-        if (companyId) {
-          persistChatMessage(companyId, {
-            id: nudge.id,
-            role: 'byte',
-            text: nudge.text,
-            createdAt: nudge.ts,
-          }).catch((err) => console.error('[store] persist build message failed', err));
-        }
+        persistMsg({ id: nudge.id, role: 'byte', text: nudge.text, ts: nudge.ts });
       }
     });
-  }, [companyId, buildSessionId]);
+  }, [companyId, buildSessionId, buildLocal, persistMsg]);
+
+  // Mirror the active build to localStorage on every change (and clear it when the
+  // flow resets), so the restore above always sees the latest step/checkpoint/meter.
+  useEffect(() => {
+    if (!companyId) return;
+    try {
+      if (!buildSessionId || !buildPlan) {
+        localStorage.removeItem(ACTIVE_BUILD_KEY);
+        return;
+      }
+      localStorage.setItem(
+        ACTIVE_BUILD_KEY,
+        serializeActiveBuild({
+          companyId,
+          buildSessionId,
+          step: buildStep,
+          project: buildProject,
+          projectDir: buildProjectDir,
+          brief: buildBrief,
+          plan: buildPlan,
+          autonomy: buildAutonomy,
+          local: buildLocal,
+          launchCommand: buildLaunchCommand,
+          checkpoint: buildCheckpoint,
+          live: buildLive,
+        }),
+      );
+    } catch {
+      /* storage full/unavailable — the build just won't survive a reload */
+    }
+  }, [
+    companyId,
+    buildSessionId,
+    buildStep,
+    buildProject,
+    buildProjectDir,
+    buildBrief,
+    buildPlan,
+    buildAutonomy,
+    buildLocal,
+    buildLaunchCommand,
+    buildCheckpoint,
+    buildLive,
+  ]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
   // never disagree. Set instantly to the authored golden path (so nothing is ever
@@ -467,6 +600,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           scaffoldedAt,
           roadmapStage,
           chat,
+          threads: loadedThreads,
+          activeThreadId: loadedActive,
           decisions: dec,
           projectAnalysis: pa,
         }) => {
@@ -487,6 +622,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setChatMessages(
             chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
           );
+          setThreads(loadedThreads);
+          if (loadedActive) {
+            setActiveThreadId(loadedActive);
+            // Defensive: a stale `true` (e.g. if hydration ever re-runs) must never
+            // clobber this real, already-persisted thread.
+            pendingThreadRef.current = false;
+          } else {
+            // Fresh company with no threads yet: start a PENDING thread so the
+            // founder's first message creates + persists it (mirrors newChat,
+            // without a UI click). Without this, the first conversation is never
+            // written to Firestore.
+            setActiveThreadId(newId());
+            pendingThreadRef.current = true;
+          }
           // Restore the last-viewed roadmap stage (drawer stays closed — we restore
           // position, not an open panel). Absent ⇒ keep the UI default.
           if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
@@ -947,6 +1096,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
+  const openInstallPrompt = useCallback(() => setInstallPromptOpen(true), []);
+  // Closing the popup — any way — counts as "prompted": it never auto-shows again.
+  const closeInstallPrompt = useCallback(() => {
+    setInstallPromptOpen(false);
+    try {
+      localStorage.setItem(INSTALL_PROMPTED_KEY, '1');
+    } catch {}
+  }, []);
+
+  // Auto-show the install popup ONCE, the first time the app is ready (hydrated,
+  // onboarding done) without the toolkit. Before popping, sync against the real
+  // machine state: a fresh browser on an already-installed machine just records
+  // the fact instead of nagging. A failed status check still offers the popup.
+  const installPromptChecked = useRef(false);
+  useEffect(() => {
+    if (installPromptChecked.current) return;
+    let prompted = false;
+    try {
+      prompted = localStorage.getItem(INSTALL_PROMPTED_KEY) === '1';
+    } catch {}
+    if (!shouldPromptInstall({ hydrated, onboarding, installed, prompted })) return;
+    installPromptChecked.current = true;
+    let cancelled = false;
+    getStatus()
+      .then((s) => {
+        if (cancelled) return;
+        if (s.some((x) => x.installed)) {
+          setInstalledFlag(true);
+          try {
+            localStorage.setItem(INSTALL_PROMPTED_KEY, '1');
+          } catch {}
+        } else {
+          setInstallPromptOpen(true);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setInstallPromptOpen(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, onboarding, installed, setInstalledFlag]);
+
   const runTask = useCallback((task: Task, dept: Dept, walk?: boolean) => {
     track('task.run', { dept: dept.k });
     setModal({ kind: 'run', task, dept, walk });
@@ -1378,6 +1570,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [openDeliverable, viewItem],
   );
 
+  // Chat-history actions: switch/rename/delete threads, open/close the history list,
+  // and start a fresh one. The new thread's Firestore doc is written lazily on the
+  // first message (see sendChat) so a never-sent "New chat" never litters the list.
+  const toggleChatHistory = useCallback((open?: boolean) => {
+    setChatHistoryOpen((c) => (open === undefined ? !c : open));
+  }, []);
+
+  const newChat = useCallback(() => {
+    // Cancel any in-flight stream first — otherwise its stream-end persistMsg (bound
+    // to the OLD threadId) can land after we've switched threads.
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    setActiveThreadId(newId());
+    pendingThreadRef.current = true; // created in Firestore on first send
+    setChatMessages([]);
+    setChatHistoryOpen(false);
+  }, []);
+
+  const openThread = useCallback(
+    (id: string) => {
+      if (!companyId) return;
+      // Cancel any in-flight stream first — see newChat for why.
+      chatAbort.current?.abort();
+      setChatStreaming(false);
+      pendingThreadRef.current = false;
+      setActiveThreadId(id);
+      setChatHistoryOpen(false);
+      loadThreadMessages(companyId, id)
+        .then((msgs) =>
+          setChatMessages(
+            msgs.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
+          ),
+        )
+        .catch((err) => console.error('[store] loadThreadMessages failed', err));
+    },
+    [companyId],
+  );
+
+  const renameThread = useCallback(
+    (id: string, title: string) => {
+      const clean = title.trim();
+      if (!clean) return;
+      setThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title: clean } : t)));
+      if (companyId)
+        updateThreadTitle(companyId, id, clean).catch((err) =>
+          console.error('[store] updateThreadTitle failed', err),
+        );
+    },
+    [companyId],
+  );
+
+  const deleteThread = useCallback(
+    (id: string) => {
+      if (!companyId) return;
+      // Cancel any in-flight stream first — otherwise deleting the active thread
+      // mid-stream lets the stream-end persistMsg re-create it via the `{updatedAt}`
+      // merge in persistChatMessage, leaving a titleless zombie thread on reload.
+      chatAbort.current?.abort();
+      setChatStreaming(false);
+      const fallback = activeThreadId === id ? pickFallbackThreadId(threads, id) : null;
+      setThreads((prev) => prev.filter((t) => t.id !== id));
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      );
+      if (activeThreadId === id) {
+        if (fallback) openThread(fallback);
+        else newChat();
+      }
+    },
+    [companyId, activeThreadId, threads, openThread, newChat],
+  );
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -1529,18 +1793,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
         // fallback). The inline result card itself is transient, like the briefings.
         if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
-          persistChatMessage(companyId, {
-            id: byteMsgId,
-            role: 'byte',
-            text: finalText,
-            createdAt: byteTs,
-          }).catch((err) => console.error('[store] persist byte message failed', err));
+          persistMsg({ id: byteMsgId, role: 'byte', text: finalText, ts: byteTs });
         }
         // byte decided to run a task — produce it inline now.
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat],
+    [companyId, nextStep, runTaskInChat, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -1558,17 +1817,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       track('chat.send', {});
 
       if (companyId) {
-        persistChatMessage(companyId, {
-          id: userMsg.id,
-          role: 'me',
-          text,
-          createdAt: userMsg.ts,
-        }).catch((err) => console.error('[store] persist user message failed', err));
+        if (pendingThreadRef.current && activeThreadId) {
+          const thread: ThreadMeta = {
+            id: activeThreadId,
+            title: deriveThreadTitle(text),
+            createdAt: now,
+            updatedAt: now,
+          };
+          pendingThreadRef.current = false;
+          setThreads((prev) => [thread, ...prev]);
+          persistThread(companyId, thread).catch((err) =>
+            console.error('[store] persist thread failed', err),
+          );
+        }
+        persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
       }
 
       runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, runByteStream],
+    [companyId, chatMessages, chatStreaming, runByteStream, persistMsg, activeThreadId],
   );
 
   // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
@@ -1605,16 +1872,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ts: Date.now(),
     };
     setChatMessages((prev) => [...prev, opening]);
-    if (companyId) {
-      persistChatMessage(companyId, {
-        id: opening.id,
-        role: 'byte',
-        text: opening.text,
-        createdAt: opening.ts,
-      }).catch((err) => console.error('[store] persist build message failed', err));
-    }
+    persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
-  }, [companyId]);
+  }, [companyId, persistMsg]);
+
+  const cancelBuildIntake = useCallback(() => {
+    setBuildIntakeActive(false);
+    setBuildBrief('');
+    const msg: ChatMessage = {
+      id: newId(),
+      role: 'byte',
+      text: 'No worries — we can build whenever you like. What else can I help with?',
+      ts: Date.now(),
+    };
+    setChatMessages((prev) => [...stripBuildButtons(prev), msg]);
+    persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+    track('build.intake.cancel', {});
+  }, [persistMsg]);
 
   const addIntakeTurn = useCallback(
     (raw: string) => {
@@ -1625,7 +1899,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
       setChatMessages((prev) => [
-        ...prev,
+        ...stripBuildButtons(prev),
         userMsg,
         // After the first answer, Byte nudges once and surfaces the "to plan" button.
         {
@@ -1638,16 +1912,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ]);
       // Persist the founder's real answer; the byte follow-up carries an in-memory-only
       // buildAction button (dead after reload) so it stays transient, like result cards.
-      if (companyId) {
-        persistChatMessage(companyId, {
-          id: userMsg.id,
-          role: 'me',
-          text,
-          createdAt: userMsg.ts,
-        }).catch((err) => console.error('[store] persist build message failed', err));
-      }
+      persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
     },
-    [buildBrief, companyId],
+    [buildBrief, companyId, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
@@ -1657,7 +1924,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // buildAction (dead after reload), so it stays transient like the result cards.
     const thinkingId = newId();
     setChatMessages((prev) => [
-      ...prev,
+      ...stripBuildButtons(prev),
       { id: thinkingId, role: 'byte', text: 'Byte is turning this into a plan…', ts: Date.now() },
     ]);
     (async () => {
@@ -1678,10 +1945,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ),
         );
       } catch {
+        // The failure message carries its own retry button — no scrolling back to
+        // hunt for the previous "turn this into a plan" one (those were stripped).
         setChatMessages((prev) =>
           prev.map((m) =>
             m.id === thinkingId
-              ? { ...m, text: "Byte couldn't put the plan together just now. Give it another go?" }
+              ? {
+                  ...m,
+                  text: "Byte couldn't put the plan together just now. Give it another go?",
+                  buildAction: { kind: 'to-plan', label: 'Try again' },
+                }
               : m,
           ),
         );
@@ -1694,14 +1967,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const armBuild = useCallback(() => {
-    if (!buildPlan || !companyId || buildArming) return;
+    // A project is required — never fall back to '.' (the app server's own cwd),
+    // which would let Byte build inside whatever directory the server runs from.
+    if (!buildPlan || !companyId || buildArming || !buildProject.trim()) return;
     setBuildArming(true);
     buildEndedNudged.current = false;
+    setBuildResumed(false);
     (async () => {
       try {
         const id = crypto.randomUUID();
         const dirs = await loadProjectDirs(companyId);
-        const dir = dirs.find((p) => p.name === buildProject)?.path ?? (buildProject.trim() || '.');
+        const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
         setBuildProjectDir(dir);
         const cap = await getCapability();
         if (cap.mode === 'local') {
@@ -1739,24 +2015,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ts: Date.now(),
         };
         setChatMessages((prev) => [...prev, live]);
-        if (companyId) {
-          persistChatMessage(companyId, {
-            id: live.id,
-            role: 'byte',
-            text: live.text,
-            createdAt: live.ts,
-          }).catch((err) => console.error('[store] persist build message failed', err));
-        }
+        persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
         track('build.arm', {});
       } finally {
         setBuildArming(false);
       }
     })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
+  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, persistMsg]);
 
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
   const endBuild = useCallback(() => setBuildStep('end'), []);
+
+  // Local in-UI builds report each transcript reading here — DURING meter + END
+  // recap read buildLive either way, so both modes share one render path.
+  const applyLocalLive = useCallback((s: LiveState) => setBuildLive(s), []);
 
   const rewindBuild = useCallback(() => {
     const ref = buildCheckpoint?.ref;
@@ -1774,16 +2047,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       setChatMessages((prev) => [...prev, msg]);
       if (res.ok) setBuildCheckpoint(null);
-      if (companyId)
-        persistChatMessage(companyId, {
-          id: msg.id,
-          role: 'byte',
-          text: msg.text,
-          createdAt: now,
-        }).catch((err) => console.error('[store] persist build message failed', err));
+      persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: now });
       track('build.rewind', { ok: res.ok });
     })();
-  }, [buildCheckpoint, buildProjectDir, companyId]);
+  }, [buildCheckpoint, buildProjectDir, companyId, persistMsg]);
 
   const resetBuildFlow = useCallback(() => {
     setBuildStep('during');
@@ -1798,6 +2065,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildLaunchCommand(null);
     setBuildProjectDir('');
     setBuildIntakeActive(false);
+    setBuildResumed(false);
     buildEndedNudged.current = false;
   }, []);
 
@@ -1836,6 +2104,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalled: setInstalledFlag,
+      installPromptOpen,
+      openInstallPrompt,
+      closeInstallPrompt,
       library,
       tracking,
       projects,
@@ -1855,6 +2126,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      threads,
+      activeThreadId,
+      chatHistoryOpen,
+      newChat,
+      openThread,
+      renameThread,
+      deleteThread,
+      toggleChatHistory,
       retryChat,
       runTaskInChat,
       reviseTaskInChat,
@@ -1880,7 +2159,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildProjectDir,
       buildArming,
       buildIntakeActive,
+      buildResumed,
+      applyLocalLive,
       startBuildIntake,
+      cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
       armBuild,
@@ -1925,6 +2207,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       deleteDecision,
       installed,
       setInstalledFlag,
+      installPromptOpen,
+      openInstallPrompt,
+      closeInstallPrompt,
       library,
       tracking,
       projects,
@@ -1944,6 +2229,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       chatMessages,
       chatStreaming,
       sendChat,
+      threads,
+      activeThreadId,
+      chatHistoryOpen,
+      newChat,
+      openThread,
+      renameThread,
+      deleteThread,
+      toggleChatHistory,
       retryChat,
       runTaskInChat,
       reviseTaskInChat,
@@ -1969,7 +2262,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildProjectDir,
       buildArming,
       buildIntakeActive,
+      buildResumed,
+      applyLocalLive,
       startBuildIntake,
+      cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
       armBuild,

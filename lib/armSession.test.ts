@@ -21,6 +21,14 @@ describe('buildOpeningPrompt', () => {
     expect(p).toMatch(/non-interactive/i);
     expect(p).toContain('AskUserQuestion');
   });
+
+  it('twoWay allows questions instead of forbidding them (the in-UI live session)', () => {
+    const p = buildOpeningPrompt(plan, 'anything', { twoWay: true });
+    expect(p).not.toMatch(/non-interactive/i);
+    expect(p).not.toContain('do NOT ask');
+    expect(p).toMatch(/watching this session live/i);
+    for (const s of plan.steps) expect(p).toContain(s);
+  });
 });
 
 describe('terminalCommand', () => {

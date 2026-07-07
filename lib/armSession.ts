@@ -4,8 +4,27 @@
 // See docs/superpowers/specs/2026-07-02-build-coach-live-session-design.md.
 import type { BytePlan } from './ai/plan';
 
-/** The first message the launched `claude` session receives, so it starts on-scope. */
-export function buildOpeningPrompt(plan: BytePlan, brief: string): string {
+/** The first message the launched `claude` session receives, so it starts on-scope.
+ *  `twoWay` = the in-UI live session, where the founder is watching and can reply —
+ *  questions are allowed there. The terminal/copy-paste path stays non-interactive. */
+export function buildOpeningPrompt(
+  plan: BytePlan,
+  brief: string,
+  opts?: { twoWay?: boolean },
+): string {
+  const closing = opts?.twoWay
+    ? [
+        'The user is watching this session live and can reply. If a decision genuinely',
+        'needs their input, ask briefly and wait; otherwise make reasonable assumptions',
+        'and note them when you summarize at the end.',
+        'Keep it small and token-thrifty; double-check before calling it done.',
+      ]
+    : [
+        'This is a non-interactive session: do NOT ask the user questions and do NOT use',
+        'AskUserQuestion — Byte already agreed the plan above. Make reasonable assumptions,',
+        'proceed on your own, and note any assumptions when you summarize at the end.',
+        'Keep it small and token-thrifty; double-check before calling it done.',
+      ];
   return [
     `Let's build: ${plan.title}`,
     `What to build: ${brief}`,
@@ -13,10 +32,7 @@ export function buildOpeningPrompt(plan: BytePlan, brief: string): string {
     'Plan:',
     ...plan.steps.map((s, i) => `${i + 1}. ${s}`),
     '',
-    'This is a non-interactive session: do NOT ask the user questions and do NOT use',
-    'AskUserQuestion — Byte already agreed the plan above. Make reasonable assumptions,',
-    'proceed on your own, and note any assumptions when you summarize at the end.',
-    'Keep it small and token-thrifty; double-check before calling it done.',
+    ...closing,
   ].join('\n');
 }
 

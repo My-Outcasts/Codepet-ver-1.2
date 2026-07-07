@@ -9,6 +9,7 @@ import { Byte } from './Byte';
 import { ExecLog, StaticLog } from './artifact/ExecLog';
 import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
+import { sortThreadsByRecent, relativeTime } from '@/lib/chat/threads';
 
 // Quick-start prompts shown only before the first message — they send to byte.
 const CHIPS = [
@@ -290,6 +291,52 @@ function NotedChip({ m }: { m: ChatMessage }) {
   );
 }
 
+function ThreadList() {
+  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread } = useApp();
+  // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
+  // render is an impure call the React Compiler lint rejects. The list remounts each
+  // time History opens, so the relative times refresh then.
+  const [now] = useState(() => Date.now());
+  const rows = sortThreadsByRecent(threads);
+  return (
+    <div className="cthreads">
+      <button className="cthreads-new" onClick={newChat}>
+        + New chat
+      </button>
+      <ul className="cthreads-list">
+        {rows.map((t) => (
+          <li key={t.id} className={`cthreads-row${t.id === activeThreadId ? ' is-active' : ''}`}>
+            <button className="cthreads-open" onClick={() => openThread(t.id)}>
+              <span className="cthreads-title">{t.title}</span>
+              <span className="cthreads-time">{relativeTime(t.updatedAt, now)}</span>
+            </button>
+            <button
+              className="cthreads-rename"
+              title="Rename"
+              onClick={() => {
+                const next = window.prompt('Rename chat', t.title);
+                if (next != null) renameThread(t.id, next);
+              }}
+            >
+              Rename
+            </button>
+            <button
+              className="cthreads-del"
+              title="Delete"
+              onClick={() => {
+                if (window.confirm('Delete this chat?')) deleteThread(t.id);
+              }}
+            >
+              Delete
+            </button>
+          </li>
+        ))}
+        {rows.length === 0 && <li className="cthreads-empty">No chats yet.</li>}
+      </ul>
+    </div>
+  );
+}
+
 export function Copilot() {
   const {
     toggleCopilot,
@@ -304,6 +351,7 @@ export function Copilot() {
     advanceStage,
     buildIntakeActive,
     startBuildIntake,
+    cancelBuildIntake,
     addIntakeTurn,
     generateBuildPlan,
     armBuild,
@@ -316,6 +364,8 @@ export function Copilot() {
     buildAutonomy,
     setBuildAutonomy,
     navigateTo,
+    chatHistoryOpen,
+    toggleChatHistory,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -385,6 +435,14 @@ export function Copilot() {
           </div>
         </div>
         <button
+          className="ccopilot-history"
+          title={chatHistoryOpen ? 'Back to chat' : 'Chat history'}
+          aria-label={chatHistoryOpen ? 'Back to chat' : 'Chat history'}
+          onClick={() => toggleChatHistory()}
+        >
+          {chatHistoryOpen ? '‹ Back' : '☰ History'}
+        </button>
+        <button
           className="cop-collapse"
           title="Collapse chat"
           aria-label="Collapse chat"
@@ -401,284 +459,322 @@ export function Copilot() {
           </svg>
         </button>
       </div>
-      <div className="cop-body" ref={bodyRef} onScroll={onBodyScroll}>
-        {/* Greeting is an empty-state opener, not a permanent fixture — once the thread has
+      {chatHistoryOpen ? (
+        <ThreadList />
+      ) : (
+        <>
+          <div className="cop-body" ref={bodyRef} onScroll={onBodyScroll}>
+            {/* Greeting is an empty-state opener, not a permanent fixture — once the thread has
             messages, byte's own turns are the presence, so it's hidden. */}
-        {empty && (
-          <div className="bub">
-            Welcome{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> — where
-            to focus, what&apos;s blocking you, or what to build next.
-          </div>
-        )}
+            {empty && (
+              <div className="bub">
+                Welcome{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> —
+                where to focus, what&apos;s blocking you, or what to build next.
+              </div>
+            )}
 
-        {chatMessages.map((m) => {
-          if (m.result) return <ResultCard key={m.id} m={m} />;
-          if (m.interview) return <InterviewCard key={m.id} m={m} />;
-          if (m.noted) return <NotedChip key={m.id} m={m} />;
-          if (m.setup)
-            return (
-              <div key={m.id}>
-                {m.text ? <div className="bub">{plain(m.text)}</div> : null}
-                <SetupCard m={m} />
-              </div>
-            );
-          if (m.advance) {
-            return (
-              <div key={m.id} className="bub">
-                {plain(m.text)}
-                <button className="bub-adv" onClick={advanceStage}>
-                  Advance to {m.advance.toStage}
-                </button>
-              </div>
-            );
-          }
-          const streamingByte = chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
-          if (streamingByte && !m.text) {
-            return (
-              <div key={m.id} className="bub byte-thinking">
-                byte is thinking…
-              </div>
-            );
-          }
-          if (m.buildPlan) {
-            // While this is the live plan card (before arming), edit the store's plan so
-            // the founder can refine the steps; older/armed cards read as static history.
-            const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
-            const plan = editable ? buildPlan! : m.buildPlan;
-            const steps = plan.steps;
-            const unsure = new Set<number>(plan.uncertain ?? []);
-            return (
-              <div key={m.id} className="bub">
-                {plain(m.text)}
-                <div className="cop-plan">
-                  <div className="cop-plan-h">{plan.title}</div>
-                  {editable ? (
-                    <div className="cop-steps">
-                      {steps.map((s, i) => (
-                        <div
-                          className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
-                          key={i}
-                          title={
-                            unsure.has(i)
-                              ? "Byte isn't fully sure here — tweak it if needed"
-                              : undefined
-                          }
-                        >
-                          <span className="cop-step-n">{i + 1}</span>
-                          <textarea
-                            className="cop-step-in"
-                            rows={1}
-                            value={s}
-                            onChange={(e) =>
-                              setBuildPlanSteps(steps.map((x, j) => (j === i ? e.target.value : x)))
-                            }
-                          />
+            {chatMessages.map((m) => {
+              if (m.result) return <ResultCard key={m.id} m={m} />;
+              if (m.interview) return <InterviewCard key={m.id} m={m} />;
+              if (m.noted) return <NotedChip key={m.id} m={m} />;
+              if (m.setup)
+                return (
+                  <div key={m.id}>
+                    {m.text ? <div className="bub">{plain(m.text)}</div> : null}
+                    <SetupCard m={m} />
+                  </div>
+                );
+              if (m.advance) {
+                return (
+                  <div key={m.id} className="bub">
+                    {plain(m.text)}
+                    <button className="bub-adv" onClick={advanceStage}>
+                      Advance to {m.advance.toStage}
+                    </button>
+                  </div>
+                );
+              }
+              const streamingByte = chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
+              if (streamingByte && !m.text) {
+                return (
+                  <div key={m.id} className="bub byte-thinking">
+                    byte is thinking…
+                  </div>
+                );
+              }
+              if (m.buildPlan) {
+                // While this is the live plan card (before arming), edit the store's plan so
+                // the founder can refine the steps; older/armed cards read as static history.
+                const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
+                const plan = editable ? buildPlan! : m.buildPlan;
+                const steps = plan.steps;
+                const unsure = new Set<number>(plan.uncertain ?? []);
+                return (
+                  <div key={m.id} className="bub">
+                    {plain(m.text)}
+                    <div className="cop-plan">
+                      <div className="cop-plan-h">{plan.title}</div>
+                      {editable ? (
+                        <div className="cop-steps">
+                          {steps.map((s, i) => (
+                            <div
+                              className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
+                              key={i}
+                              title={
+                                unsure.has(i)
+                                  ? "Byte isn't fully sure here — tweak it if needed"
+                                  : undefined
+                              }
+                            >
+                              <span className="cop-step-n">{i + 1}</span>
+                              <textarea
+                                className="cop-step-in"
+                                rows={1}
+                                value={s}
+                                onChange={(e) =>
+                                  setBuildPlanSteps(
+                                    steps.map((x, j) => (j === i ? e.target.value : x)),
+                                  )
+                                }
+                              />
+                              <button
+                                className="cop-step-x"
+                                title="Remove this step"
+                                aria-label="Remove this step"
+                                onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
                           <button
-                            className="cop-step-x"
-                            title="Remove this step"
-                            aria-label="Remove this step"
-                            onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
+                            className="cop-step-add"
+                            onClick={() => setBuildPlanSteps([...steps, ''])}
                           >
-                            ×
+                            + Add a step
                           </button>
                         </div>
-                      ))}
-                      <button
-                        className="cop-step-add"
-                        onClick={() => setBuildPlanSteps([...steps, ''])}
-                      >
-                        + Add a step
-                      </button>
-                    </div>
-                  ) : (
-                    <ol>
-                      {steps.map((s, i) => (
-                        <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
-                          {s}
-                          {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </div>
-                {m.buildAction?.kind === 'start-building' && (
-                  <>
-                    <label className="cop-proj">
-                      <span>Which project?</span>
-                      {projects.length > 0 ? (
-                        <select
-                          value={buildProject}
-                          onChange={(e) => setBuildProject(e.target.value)}
-                        >
-                          <option value="">No project — just this build</option>
-                          {projects.map((name) => (
-                            <option key={name} value={name}>
-                              {name}
-                            </option>
-                          ))}
-                        </select>
                       ) : (
-                        <input
-                          value={buildProject}
-                          onChange={(e) => setBuildProject(e.target.value)}
-                          placeholder="Type a project folder path (or run the project scan)…"
-                        />
+                        <ol>
+                          {steps.map((s, i) => (
+                            <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
+                              {s}
+                              {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
+                            </li>
+                          ))}
+                        </ol>
                       )}
-                    </label>
-                    <div className="cop-auto">
-                      <span>How hands-on?</span>
-                      <div className="cop-auto-opts">
-                        {(
-                          [
-                            ['suggest', 'Ask me', 'Approve each risky step'],
-                            ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
-                            ['autopilot', 'Autopilot', 'Run everything without asking'],
-                          ] as const
-                        ).map(([mode, label, hint]) => (
-                          <button
-                            key={mode}
-                            className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                            onClick={() => setBuildAutonomy(mode)}
-                            title={hint}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
                     </div>
+                    {m.buildAction?.kind === 'start-building' && (
+                      <>
+                        <label className="cop-proj">
+                          <span>Which project?</span>
+                          {projects.length > 0 ? (
+                            <select
+                              value={buildProject}
+                              onChange={(e) => setBuildProject(e.target.value)}
+                            >
+                              {/* A project is required — building "nowhere" would land
+                                  in the app server's own folder. */}
+                              <option value="" disabled>
+                                Choose a project…
+                              </option>
+                              {projects.map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              value={buildProject}
+                              onChange={(e) => setBuildProject(e.target.value)}
+                              placeholder="Type a project folder path (or run the project scan)…"
+                            />
+                          )}
+                        </label>
+                        <div className="cop-auto">
+                          <span>How hands-on?</span>
+                          <div className="cop-auto-opts">
+                            {(
+                              [
+                                ['suggest', 'Ask me', 'Approve each risky step'],
+                                ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+                                ['autopilot', 'Autopilot', 'Run everything without asking'],
+                              ] as const
+                            ).map(([mode, label, hint]) => (
+                              <button
+                                key={mode}
+                                className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+                                onClick={() => setBuildAutonomy(mode)}
+                                title={hint}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <button
+                          className="bub-act"
+                          onClick={armBuild}
+                          disabled={
+                            buildArming || steps.every((s) => !s.trim()) || !buildProject.trim()
+                          }
+                          title={!buildProject.trim() ? 'Pick a project first' : undefined}
+                        >
+                          {buildArming
+                            ? 'Opening your session…'
+                            : !buildProject.trim()
+                              ? 'Pick a project to start'
+                              : m.buildAction.label}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              }
+              if (m.buildAction?.kind === 'to-plan') {
+                return (
+                  <div key={m.id} className="bub">
+                    {plain(m.text)}
+                    <button className="bub-act" onClick={generateBuildPlan}>
+                      {m.buildAction.label}
+                    </button>
+                  </div>
+                );
+              }
+              if (m.buildAction?.kind === 'begin-intake') {
+                return (
+                  <div key={m.id} className="bub">
+                    {plain(m.text)}
+                    <button className="bub-act" onClick={startBuildIntake}>
+                      {m.buildAction.label}
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
+                  {m.role === 'byte' ? plain(m.text) : m.text}
+                  {m.action && (
                     <button
                       className="bub-act"
-                      onClick={armBuild}
-                      disabled={buildArming || steps.every((s) => !s.trim())}
+                      onClick={() => {
+                        if (m.action!.inline) {
+                          track('firstrun.action_clicked', { dept: m.action!.deptK });
+                          runTaskInChat(m.action!.deptK, m.action!.taskTitle);
+                          dismissChatAction(m.id);
+                        } else {
+                          runBriefedTask(m.action!.deptK, m.action!.taskTitle);
+                        }
+                      }}
                     >
-                      {buildArming ? 'Opening your session…' : m.buildAction.label}
+                      {m.action.label}
                     </button>
-                  </>
-                )}
-              </div>
-            );
-          }
-          if (m.buildAction?.kind === 'to-plan') {
-            return (
-              <div key={m.id} className="bub">
-                {plain(m.text)}
-                <button className="bub-act" onClick={generateBuildPlan}>
-                  {m.buildAction.label}
-                </button>
-              </div>
-            );
-          }
-          if (m.buildAction?.kind === 'begin-intake') {
-            return (
-              <div key={m.id} className="bub">
-                {plain(m.text)}
-                <button className="bub-act" onClick={startBuildIntake}>
-                  {m.buildAction.label}
-                </button>
-              </div>
-            );
-          }
-          return (
-            <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
-              {m.role === 'byte' ? plain(m.text) : m.text}
-              {m.action && (
-                <button
-                  className="bub-act"
-                  onClick={() => {
-                    if (m.action!.inline) {
-                      track('firstrun.action_clicked', { dept: m.action!.deptK });
-                      runTaskInChat(m.action!.deptK, m.action!.taskTitle);
-                      dismissChatAction(m.id);
-                    } else {
-                      runBriefedTask(m.action!.deptK, m.action!.taskTitle);
-                    }
-                  }}
-                >
-                  {m.action.label}
-                </button>
-              )}
-              {m.nav && (
-                <button className="bub-act" onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}>
-                  {m.nav.label}
-                </button>
-              )}
-              {m.error && (
-                <button
-                  className="bub-retry"
-                  onClick={() => retryChat(m.id)}
-                  disabled={chatStreaming}
-                >
-                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
-                    <path
-                      d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
-                      stroke="currentColor"
-                      strokeWidth="1.6"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  Retry
-                </button>
-              )}
-            </div>
-          );
-        })}
+                  )}
+                  {m.nav && (
+                    <button
+                      className="bub-act"
+                      onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}
+                    >
+                      {m.nav.label}
+                    </button>
+                  )}
+                  {m.error && (
+                    <button
+                      className="bub-retry"
+                      onClick={() => retryChat(m.id)}
+                      disabled={chatStreaming}
+                    >
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                        <path
+                          d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      Retry
+                    </button>
+                  )}
+                </div>
+              );
+            })}
 
-        {empty && (
-          <div className="chips">
-            {CHIPS.map((t) => (
-              <button key={t} className="sug" onClick={() => sendChat(t)} disabled={chatStreaming}>
-                {t}
-              </button>
-            ))}
+            {empty && (
+              <div className="chips">
+                {CHIPS.map((t) => (
+                  <button
+                    key={t}
+                    className="sug"
+                    onClick={() => sendChat(t)}
+                    disabled={chatStreaming}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      {showPill && (
-        <button className="cop-new" onClick={jumpToLatest} aria-label="Jump to latest messages">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
-            <path
-              d="M4 6l4 4 4-4"
-              stroke="currentColor"
-              strokeWidth="1.7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          New
-        </button>
-      )}
-      <div className="cop-foot">
-        {!buildIntakeActive && (
-          <button className="cop-build-cta" onClick={startBuildIntake}>
-            🔨 Let&apos;s build
-          </button>
-        )}
-        <div className="composer">
-          <input
-            placeholder="Ask byte anything about your company…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                e.preventDefault();
-                submit();
-              }
-            }}
-          />
-          <button className="send" onClick={submit} disabled={chatStreaming || !draft.trim()}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M2 8h11M9 4l4 4-4 4"
-                stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinecap="round"
-                strokeLinejoin="round"
+          {showPill && (
+            <button className="cop-new" onClick={jumpToLatest} aria-label="Jump to latest messages">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                <path
+                  d="M4 6l4 4 4-4"
+                  stroke="currentColor"
+                  strokeWidth="1.7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              New
+            </button>
+          )}
+          <div className="cop-foot">
+            {!buildIntakeActive ? (
+              <button className="cop-build-cta" onClick={startBuildIntake}>
+                🔨 Let&apos;s build
+              </button>
+            ) : (
+              <div className="cop-intake-bar">
+                <span className="cop-intake-hint">Describing your build…</span>
+                <button className="cop-intake-cancel" onClick={cancelBuildIntake}>
+                  ✕ Never mind
+                </button>
+              </div>
+            )}
+            <div className="composer">
+              <input
+                placeholder={
+                  buildIntakeActive
+                    ? 'Tell Byte what to build — every message adds to the brief…'
+                    : 'Ask byte anything about your company…'
+                }
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    submit();
+                  }
+                }}
               />
-            </svg>
-          </button>
-        </div>
-      </div>
+              <button className="send" onClick={submit} disabled={chatStreaming || !draft.trim()}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M2 8h11M9 4l4 4-4 4"
+                    stroke="currentColor"
+                    strokeWidth="1.7"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </aside>
   );
 }
