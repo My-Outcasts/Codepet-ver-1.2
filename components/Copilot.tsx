@@ -293,7 +293,10 @@ function NotedChip({ m }: { m: ChatMessage }) {
 
 function ThreadList() {
   const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread } = useApp();
-  const now = Date.now();
+  // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
+  // render is an impure call the React Compiler lint rejects. The list remounts each
+  // time History opens, so the relative times refresh then.
+  const [now] = useState(() => Date.now());
   const rows = sortThreadsByRecent(threads);
   return (
     <div className="cthreads">
