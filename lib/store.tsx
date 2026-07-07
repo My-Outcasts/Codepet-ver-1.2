@@ -516,7 +516,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
           );
           setThreads(loadedThreads);
-          setActiveThreadId(loadedActive);
+          if (loadedActive) {
+            setActiveThreadId(loadedActive);
+          } else {
+            // Fresh company with no threads yet: start a PENDING thread so the
+            // founder's first message creates + persists it (mirrors newChat,
+            // without a UI click). Without this, the first conversation is never
+            // written to Firestore.
+            setActiveThreadId(newId());
+            pendingThreadRef.current = true;
+          }
           // Restore the last-viewed roadmap stage (drawer stays closed — we restore
           // position, not an open panel). Absent ⇒ keep the UI default.
           if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
