@@ -93,6 +93,7 @@ interface GNode {
   done?: number;
   total?: number;
   pct?: number;
+  later?: boolean;
   x: number;
   y: number;
   z: number;
@@ -112,7 +113,7 @@ const linkId = (x: unknown): string =>
 // A billboarded ring sprite: a faint full track + an arc filled clockwise from the top to
 // `pct`. Drawn on a canvas → CanvasTexture → Sprite, so it always faces the camera (reads
 // as a clean circle at any orbit angle) with no per-frame screen projection.
-function makeRingSprite(pct: number, colorHex: string, size: number): THREE.Sprite {
+function makeRingSprite(pct: number, colorHex: string, size: number, parked = false): THREE.Sprite {
   const S = 128;
   const canvas = document.createElement('canvas');
   canvas.width = S;
@@ -123,21 +124,32 @@ function makeRingSprite(pct: number, colorHex: string, size: number): THREE.Spri
   const r = S * 0.4;
   const lw = S * 0.08;
   ctx.lineCap = 'round';
-  // track
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-  ctx.lineWidth = lw;
-  ctx.stroke();
-  // filled arc
-  if (pct > 0) {
-    const start = -Math.PI / 2;
-    const end = start + (Math.min(100, pct) / 100) * Math.PI * 2;
+  if (parked) {
+    // Dormant "for later": a single dashed hollow outline, muted — no track, no fill.
+    ctx.setLineDash([S * 0.06, S * 0.06]);
     ctx.beginPath();
-    ctx.arc(cx, cy, r, start, end);
-    ctx.strokeStyle = colorHex;
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(200,190,230,0.42)';
+    ctx.lineWidth = lw * 0.7;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  } else {
+    // track
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = lw;
     ctx.stroke();
+    // filled arc
+    if (pct > 0) {
+      const start = -Math.PI / 2;
+      const end = start + (Math.min(100, pct) / 100) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, start, end);
+      ctx.strokeStyle = colorHex;
+      ctx.lineWidth = lw;
+      ctx.stroke();
+    }
   }
   const tex = new THREE.CanvasTexture(canvas);
   tex.anisotropy = 4;
@@ -242,6 +254,7 @@ export default function OverviewView() {
         done,
         total,
         pct: dp.pct,
+        later: !!d.later,
         x: dx,
         y: dy,
         z: dz,
@@ -249,7 +262,7 @@ export default function OverviewView() {
       links.push({
         source: 'project',
         target: did,
-        color: rgba(dHex, 0.4),
+        color: rgba(dHex, d.later ? 0.12 : 0.4),
         hex: dHex,
         kind: 'pd',
         active: d.status === 'attention',
@@ -530,6 +543,31 @@ export default function OverviewView() {
 
     // Project node: label only (overall progress lives in the hero HUD).
     if (n.kind !== 'dept') return s;
+
+    // Department node.
+    if (n.later) {
+      // Parked "for later": hollow dashed outline + muted two-line label, no count/ring.
+      const label = new SpriteText(n.name);
+      label.color = 'rgba(220,214,245,0.6)';
+      label.textHeight = 4;
+      label.fontFace = 'Inter, system-ui, sans-serif';
+      label.fontWeight = '600';
+      (label as any).backgroundColor = 'rgba(7,5,16,0.6)';
+      (label as any).padding = 2;
+      (label as any).borderRadius = 3;
+      (label as any).position.set(0, radius + 5, 0);
+      const sub = new SpriteText('for later');
+      sub.color = 'rgba(200,190,230,0.4)';
+      sub.textHeight = 2.6;
+      sub.fontFace = 'Inter, system-ui, sans-serif';
+      (sub as any).position.set(0, radius + 1.5, 0);
+      const parkedRing = makeRingSprite(0, n.deptColor ?? '#8B5CF6', radius * 3.4, true);
+      const group = new THREE.Group();
+      group.add(parkedRing);
+      group.add(label);
+      group.add(sub);
+      return group;
+    }
 
     // Department node: label + progress ring around the node.
     const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#8B5CF6');
