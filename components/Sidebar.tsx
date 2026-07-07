@@ -194,6 +194,7 @@ export function Sidebar() {
           <div className="petcard-pop">
             <div className="petcard-pop-h">Choose your companion</div>
             <CompanionPicker
+              variant="list"
               selected={companionId}
               onSelect={(id) => {
                 setCompanion(id);
