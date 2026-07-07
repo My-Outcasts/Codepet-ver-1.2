@@ -21,6 +21,9 @@ export interface BytePlan {
    *  DURING "piggy bank" fills toward this. */
   budgetActions: number;
   steps: string[];
+  /** 0-based indices of steps Byte is genuinely unsure about (assumptions/guesses),
+   *  so the plan card can flag them for the founder to confirm. Empty when confident. */
+  uncertain?: number[];
 }
 
 /** Validate + normalize the request body. Returns null when the brief is
@@ -48,6 +51,9 @@ export function buildPlanPrompt({ brief, project }: PlanInput): string {
     'expected number of agent actions/tool-uses (budgetActions, an integer between 5',
     "and 40), and a short encouraging title in Byte's warm voice. The last step",
     'should always be to double-check the work before calling it done.',
+    'Also return `uncertain`: the 0-based indices of any steps you are genuinely',
+    'guessing at or where you assumed something about their intent (empty array if',
+    'you are confident about every step).',
   ]
     .filter((line): line is string => line !== null)
     .join('\n');
@@ -75,6 +81,12 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
       items: { type: 'string' },
       description: '3-5 concrete, ordered build steps; the last one double-checks the work.',
     },
+    uncertain: {
+      type: 'array',
+      items: { type: 'integer' },
+      description:
+        '0-based indices of steps you are genuinely unsure about (guesses/assumptions); empty if confident.',
+    },
   },
-  required: ['title', 'budgetK', 'budgetActions', 'steps'],
+  required: ['title', 'budgetK', 'budgetActions', 'steps', 'uncertain'],
 };

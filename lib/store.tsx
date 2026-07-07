@@ -38,6 +38,9 @@ import {
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
+  subscribeLiveBuild,
+  ensureIngestToken,
+  loadProjectDirs,
   envUsageFromCatalog,
   persistEnvUsage,
 } from './firebase/companyData';
@@ -51,6 +54,20 @@ import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
 import { nextAction, setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
+import {
+  appendBrief,
+  stepForLive,
+  INTAKE_OPENING,
+  INTAKE_FOLLOWUP,
+  type BuildStep,
+} from './buildFlow';
+import { requestBuildPlan } from './ai/buildPlan';
+import { buildOpeningPrompt, terminalCommand } from './armSession';
+import { armBuildSession } from '@/app/actions/build';
+import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
+import { getCapability } from '@/app/actions/install';
+import type { BytePlan } from './ai/plan';
+import type { LiveState } from './liveBuild';
 
 /** One byte-chat message in the UI. 'me' = the founder, 'byte' = the companion. */
 export interface ChatMessage {
@@ -73,6 +90,10 @@ export interface ChatMessage {
   result?: { deptK: string; taskTitle: string; type: string; approved?: boolean };
   /** A "stage complete — advance?" prompt: the rung the founder can move up to. */
   advance?: { toStage: string };
+  /** A build plan Byte generated in chat — rendered as a plan card + "Start building". */
+  buildPlan?: BytePlan;
+  /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
+  buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
   /** A first-run enrichment question (goal / traction / problem). While `answered` is
@@ -219,6 +240,36 @@ interface AppState {
   nextStep: NextStep | null;
   toastMsg: string;
   toast: (msg: string) => void;
+  /** "Let's build" flow — lifted from BuildCoachView so the chat panel drives START
+   * and the main view renders DURING/END from one shared source. */
+  buildStep: BuildStep;
+  buildProject: string;
+  setBuildProject: (v: string) => void;
+  buildBrief: string;
+  buildPlan: BytePlan | null;
+  /** Edit the generated plan's steps in place before arming (founder can refine intent). */
+  setBuildPlanSteps: (steps: string[]) => void;
+  /** A git snapshot taken before a local build; null when the project isn't a git repo. */
+  buildCheckpoint: { ref: string } | null;
+  /** Undo everything the build changed, restoring the project to the pre-build snapshot. */
+  rewindBuild: () => void;
+  /** Advance a local in-UI build to the recap (there's no live-doc feed to flip it). */
+  endBuild: () => void;
+  /** How hands-on the founder wants to be during the build. */
+  buildAutonomy: 'suggest' | 'copilot' | 'autopilot';
+  setBuildAutonomy: (m: 'suggest' | 'copilot' | 'autopilot') => void;
+  buildSessionId: string | null;
+  buildLive: LiveState | null;
+  buildLocal: boolean;
+  buildLaunchCommand: string | null;
+  buildProjectDir: string;
+  buildArming: boolean;
+  buildIntakeActive: boolean;
+  startBuildIntake: () => void;
+  addIntakeTurn: (text: string) => void;
+  generateBuildPlan: () => void;
+  armBuild: () => void;
+  resetBuildFlow: () => void;
 }
 
 const Ctx = createContext<AppState | null>(null);
@@ -301,6 +352,59 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Aborts the in-flight chat stream — on a new send, a retry, or provider unmount
   // (e.g. sign-out), so a stream never keeps running or writes against a stale account.
   const chatAbort = useRef<AbortController | null>(null);
+
+  // "Let's build" flow (was BuildCoachView local state; lifted here so the chat
+  // panel drives START and the main view renders DURING/END from one source).
+  const [buildStep, setBuildStep] = useState<BuildStep>('during');
+  const [buildProject, setBuildProject] = useState('');
+  const [buildBrief, setBuildBrief] = useState('');
+  const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(null);
+  const [buildSessionId, setBuildSessionId] = useState<string | null>(null);
+  const [buildLive, setBuildLive] = useState<LiveState | null>(null);
+  const [buildLocal, setBuildLocal] = useState(false);
+  const [buildLaunchCommand, setBuildLaunchCommand] = useState<string | null>(null);
+  const [buildProjectDir, setBuildProjectDir] = useState('');
+  const [buildArming, setBuildArming] = useState(false);
+  const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // A git snapshot of the project taken right before a local build, so the founder can
+  // rewind everything the build changed. null when the project isn't a git repo.
+  const [buildCheckpoint, setBuildCheckpoint] = useState<{ ref: string } | null>(null);
+  // How hands-on the founder wants to be — passed to the live session (permission mode
+  // + the bridge's auto-approval). Defaults to the most conservative.
+  const [buildAutonomy, setBuildAutonomy] = useState<'suggest' | 'copilot' | 'autopilot'>(
+    'suggest',
+  );
+  // Guards the one-time "session ended" nudge so the live subscription posts it once.
+  const buildEndedNudged = useRef(false);
+
+  // Subscribe to the live build doc once a session is armed. Updating state from the
+  // subscription is intended; when the rollup marks the doc ended we flip to END and
+  // post one closing nudge in chat.
+  useEffect(() => {
+    if (!companyId || !buildSessionId) return;
+    return subscribeLiveBuild(companyId, buildSessionId, (s) => {
+      setBuildLive(s);
+      setBuildStep(stepForLive(s));
+      if (s?.ended && !buildEndedNudged.current) {
+        buildEndedNudged.current = true;
+        const nudge: ChatMessage = {
+          id: newId(),
+          role: 'byte',
+          text: "Nice — your session wrapped up! Pop over to the recap and let's write down what we learned. 📒",
+          ts: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, nudge]);
+        if (companyId) {
+          persistChatMessage(companyId, {
+            id: nudge.id,
+            role: 'byte',
+            text: nudge.text,
+            createdAt: nudge.ts,
+          }).catch((err) => console.error('[store] persist build message failed', err));
+        }
+      }
+    });
+  }, [companyId, buildSessionId]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
   // never disagree. Set instantly to the authored golden path (so nothing is ever
@@ -1295,6 +1399,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         let pending: { deptK: string; taskTitle: string } | null = null;
         let navChip: NavChip | undefined;
         let setupChip: { category: string; name: string } | undefined;
+        let offerBuild = false;
         try {
           for await (const ev of streamByteChat(
             history,
@@ -1314,6 +1419,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             }
             if (ev.type === 'setup') {
               setupChip = { category: ev.category, name: ev.name };
+              continue;
+            }
+            if (ev.type === 'build-offer') {
+              offerBuild = true;
               continue;
             }
             if (ev.type === 'noted') {
@@ -1368,7 +1477,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   ? 'I couldn’t reach the model — check your connection, then Retry.'
                   : 'I couldn’t reach the model just now.';
         // Errored = a real failure that produced nothing usable → show the Retry affordance.
-        const errored = failed && !acc.trim() && !pending && !navChip && !setupChip;
+        const errored = failed && !acc.trim() && !pending && !navChip && !setupChip && !offerBuild;
         // If byte chose to act but said nothing, synthesize a short lead-in so the run or
         // the "take me there" chip never appears out of nowhere.
         const finalText =
@@ -1379,7 +1488,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               ? 'Here you go.'
               : setupChip
                 ? 'I can turn that on for you — one tap.'
-                : fallback);
+                : offerBuild
+                  ? 'Love it — let’s build it.'
+                  : fallback);
         setChatMessages((prev) =>
           prev.map((m) =>
             m.id === byteMsgId
@@ -1389,6 +1500,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                   nav: navChip,
                   setup: setupChip,
                   error: errored || undefined,
+                  ...(offerBuild
+                    ? { buildAction: { kind: 'begin-intake' as const, label: "Let's build it →" } }
+                    : {}),
                 }
               : m,
           ),
@@ -1397,7 +1511,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         chatAbort.current = null;
         // Persist byte's reply if it's a real answer or a run lead-in (not the error
         // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending || navChip || setupChip)) {
+        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
           persistChatMessage(companyId, {
             id: byteMsgId,
             role: 'byte',
@@ -1463,6 +1577,213 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [chatMessages, chatStreaming, runByteStream],
   );
 
+  const startBuildIntake = useCallback(() => {
+    setBuildIntakeActive(true);
+    setBuildBrief('');
+    setBuildPlanState(null);
+    const opening: ChatMessage = {
+      id: newId(),
+      role: 'byte',
+      text: INTAKE_OPENING,
+      ts: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, opening]);
+    if (companyId) {
+      persistChatMessage(companyId, {
+        id: opening.id,
+        role: 'byte',
+        text: opening.text,
+        createdAt: opening.ts,
+      }).catch((err) => console.error('[store] persist build message failed', err));
+    }
+    track('build.intake.start', {});
+  }, [companyId]);
+
+  const addIntakeTurn = useCallback(
+    (raw: string) => {
+      const text = raw.trim();
+      if (!text) return;
+      const first = buildBrief.trim().length === 0;
+      setBuildBrief((b) => appendBrief(b, text));
+      const now = Date.now();
+      const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      setChatMessages((prev) => [
+        ...prev,
+        userMsg,
+        // After the first answer, Byte nudges once and surfaces the "to plan" button.
+        {
+          id: newId(),
+          role: 'byte',
+          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
+          ts: now + 1,
+          buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
+        },
+      ]);
+      // Persist the founder's real answer; the byte follow-up carries an in-memory-only
+      // buildAction button (dead after reload) so it stays transient, like result cards.
+      if (companyId) {
+        persistChatMessage(companyId, {
+          id: userMsg.id,
+          role: 'me',
+          text,
+          createdAt: userMsg.ts,
+        }).catch((err) => console.error('[store] persist build message failed', err));
+      }
+    },
+    [buildBrief, companyId],
+  );
+
+  const generateBuildPlan = useCallback(() => {
+    const brief = buildBrief.trim();
+    if (!brief) return;
+    // The thinking → plan-card message carries an in-memory-only buildPlan +
+    // buildAction (dead after reload), so it stays transient like the result cards.
+    const thinkingId = newId();
+    setChatMessages((prev) => [
+      ...prev,
+      { id: thinkingId, role: 'byte', text: 'Byte is turning this into a plan…', ts: Date.now() },
+    ]);
+    (async () => {
+      try {
+        const plan = await requestBuildPlan({ brief, project: buildProject || undefined });
+        setBuildPlanState(plan);
+        setBuildIntakeActive(false);
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? {
+                  ...m,
+                  text: `Here's the plan — aim for ~${plan.budgetActions} actions.`,
+                  buildPlan: plan,
+                  buildAction: { kind: 'start-building', label: 'Start building' },
+                }
+              : m,
+          ),
+        );
+      } catch {
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? { ...m, text: "Byte couldn't put the plan together just now. Give it another go?" }
+              : m,
+          ),
+        );
+      }
+    })();
+  }, [buildBrief, buildProject]);
+
+  const setBuildPlanSteps = useCallback((steps: string[]) => {
+    setBuildPlanState((p) => (p ? { ...p, steps } : p));
+  }, []);
+
+  const armBuild = useCallback(() => {
+    if (!buildPlan || !companyId || buildArming) return;
+    setBuildArming(true);
+    buildEndedNudged.current = false;
+    (async () => {
+      try {
+        const id = crypto.randomUUID();
+        const dirs = await loadProjectDirs(companyId);
+        const dir = dirs.find((p) => p.name === buildProject)?.path ?? (buildProject.trim() || '.');
+        setBuildProjectDir(dir);
+        const cap = await getCapability();
+        if (cap.mode === 'local') {
+          // Snapshot the project BEFORE the session touches anything, so END can offer
+          // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
+          setBuildCheckpoint(await createCheckpoint(dir));
+          setBuildLocal(true);
+          setBuildLaunchCommand(null);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        } else {
+          setBuildLocal(false);
+          const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
+          const token = await ensureIngestToken(companyId);
+          const res = await armBuildSession({
+            buildSessionId: id,
+            projectDir: dir,
+            plan: buildPlan,
+            brief: buildBrief,
+            companyId,
+            token,
+            apiUrl: window.location.origin,
+          });
+          setBuildLaunchCommand(res.ok && res.launched ? null : command);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        }
+        setView('build');
+        const live: ChatMessage = {
+          id: newId(),
+          role: 'byte',
+          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+          ts: Date.now(),
+        };
+        setChatMessages((prev) => [...prev, live]);
+        if (companyId) {
+          persistChatMessage(companyId, {
+            id: live.id,
+            role: 'byte',
+            text: live.text,
+            createdAt: live.ts,
+          }).catch((err) => console.error('[store] persist build message failed', err));
+        }
+        track('build.arm', {});
+      } finally {
+        setBuildArming(false);
+      }
+    })();
+  }, [buildPlan, companyId, buildArming, buildProject, buildBrief]);
+
+  // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
+  // subscription; local mode has no such feed, so this is the explicit "wrap up".)
+  const endBuild = useCallback(() => setBuildStep('end'), []);
+
+  const rewindBuild = useCallback(() => {
+    const ref = buildCheckpoint?.ref;
+    if (!ref || !buildProjectDir) return;
+    (async () => {
+      const res = await rewindToCheckpoint(buildProjectDir, ref);
+      const now = Date.now();
+      const msg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: res.ok
+          ? '↩ Rewound your project to before this build — everything it changed is undone.'
+          : "I couldn't rewind the project just now. If you need to, you can undo the changes with git yourself.",
+        ts: now,
+      };
+      setChatMessages((prev) => [...prev, msg]);
+      if (res.ok) setBuildCheckpoint(null);
+      if (companyId)
+        persistChatMessage(companyId, {
+          id: msg.id,
+          role: 'byte',
+          text: msg.text,
+          createdAt: now,
+        }).catch((err) => console.error('[store] persist build message failed', err));
+      track('build.rewind', { ok: res.ok });
+    })();
+  }, [buildCheckpoint, buildProjectDir, companyId]);
+
+  const resetBuildFlow = useCallback(() => {
+    setBuildStep('during');
+    setBuildProject('');
+    setBuildBrief('');
+    setBuildPlanState(null);
+    setBuildCheckpoint(null);
+    setBuildAutonomy('suggest');
+    setBuildSessionId(null);
+    setBuildLive(null);
+    setBuildLocal(false);
+    setBuildLaunchCommand(null);
+    setBuildProjectDir('');
+    setBuildIntakeActive(false);
+    buildEndedNudged.current = false;
+  }, []);
+
   const value = useMemo<AppState>(
     () => ({
       tick,
@@ -1527,6 +1848,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       nextStep,
       toastMsg,
       toast,
+      buildStep,
+      buildProject,
+      setBuildProject,
+      buildBrief,
+      buildPlan,
+      setBuildPlanSteps,
+      buildSessionId,
+      buildLive,
+      buildLocal,
+      buildLaunchCommand,
+      buildProjectDir,
+      buildArming,
+      buildIntakeActive,
+      startBuildIntake,
+      addIntakeTurn,
+      generateBuildPlan,
+      armBuild,
+      buildCheckpoint,
+      rewindBuild,
+      endBuild,
+      buildAutonomy,
+      setBuildAutonomy,
+      resetBuildFlow,
     }),
     [
       tick,
@@ -1591,6 +1935,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       nextStep,
       toastMsg,
       toast,
+      buildStep,
+      buildProject,
+      setBuildProject,
+      buildBrief,
+      buildPlan,
+      setBuildPlanSteps,
+      buildSessionId,
+      buildLive,
+      buildLocal,
+      buildLaunchCommand,
+      buildProjectDir,
+      buildArming,
+      buildIntakeActive,
+      startBuildIntake,
+      addIntakeTurn,
+      generateBuildPlan,
+      armBuild,
+      buildCheckpoint,
+      rewindBuild,
+      endBuild,
+      buildAutonomy,
+      setBuildAutonomy,
+      resetBuildFlow,
     ],
   );
 

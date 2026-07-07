@@ -302,6 +302,19 @@ export function Copilot() {
     runTaskInChat,
     dismissChatAction,
     advanceStage,
+    buildIntakeActive,
+    startBuildIntake,
+    addIntakeTurn,
+    generateBuildPlan,
+    armBuild,
+    buildArming,
+    projects,
+    buildProject,
+    setBuildProject,
+    buildPlan,
+    setBuildPlanSteps,
+    buildAutonomy,
+    setBuildAutonomy,
     navigateTo,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
@@ -345,11 +358,16 @@ export function Copilot() {
   };
 
   const submit = () => {
-    if (!draft.trim() || chatStreaming) return;
-    // Sending your own turn always re-pins — you expect to follow your message.
-    pinnedRef.current = true;
-    setShowPill(false);
-    sendChat(draft);
+    if (!draft.trim()) return;
+    if (buildIntakeActive) {
+      addIntakeTurn(draft);
+    } else {
+      if (chatStreaming) return;
+      // Sending your own turn always re-pins — you expect to follow your message.
+      pinnedRef.current = true;
+      setShowPill(false);
+      sendChat(draft);
+    }
     setDraft('');
   };
 
@@ -419,6 +437,144 @@ export function Copilot() {
             return (
               <div key={m.id} className="bub byte-thinking">
                 byte is thinking…
+              </div>
+            );
+          }
+          if (m.buildPlan) {
+            // While this is the live plan card (before arming), edit the store's plan so
+            // the founder can refine the steps; older/armed cards read as static history.
+            const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
+            const plan = editable ? buildPlan! : m.buildPlan;
+            const steps = plan.steps;
+            const unsure = new Set<number>(plan.uncertain ?? []);
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <div className="cop-plan">
+                  <div className="cop-plan-h">{plan.title}</div>
+                  {editable ? (
+                    <div className="cop-steps">
+                      {steps.map((s, i) => (
+                        <div
+                          className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
+                          key={i}
+                          title={
+                            unsure.has(i)
+                              ? "Byte isn't fully sure here — tweak it if needed"
+                              : undefined
+                          }
+                        >
+                          <span className="cop-step-n">{i + 1}</span>
+                          <textarea
+                            className="cop-step-in"
+                            rows={1}
+                            value={s}
+                            onChange={(e) =>
+                              setBuildPlanSteps(steps.map((x, j) => (j === i ? e.target.value : x)))
+                            }
+                          />
+                          <button
+                            className="cop-step-x"
+                            title="Remove this step"
+                            aria-label="Remove this step"
+                            onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        className="cop-step-add"
+                        onClick={() => setBuildPlanSteps([...steps, ''])}
+                      >
+                        + Add a step
+                      </button>
+                    </div>
+                  ) : (
+                    <ol>
+                      {steps.map((s, i) => (
+                        <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
+                          {s}
+                          {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+                {m.buildAction?.kind === 'start-building' && (
+                  <>
+                    <label className="cop-proj">
+                      <span>Which project?</span>
+                      {projects.length > 0 ? (
+                        <select
+                          value={buildProject}
+                          onChange={(e) => setBuildProject(e.target.value)}
+                        >
+                          <option value="">No project — just this build</option>
+                          {projects.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={buildProject}
+                          onChange={(e) => setBuildProject(e.target.value)}
+                          placeholder="Type a project folder path (or run the project scan)…"
+                        />
+                      )}
+                    </label>
+                    <div className="cop-auto">
+                      <span>How hands-on?</span>
+                      <div className="cop-auto-opts">
+                        {(
+                          [
+                            ['suggest', 'Ask me', 'Approve each risky step'],
+                            ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+                            ['autopilot', 'Autopilot', 'Run everything without asking'],
+                          ] as const
+                        ).map(([mode, label, hint]) => (
+                          <button
+                            key={mode}
+                            className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+                            onClick={() => setBuildAutonomy(mode)}
+                            title={hint}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      className="bub-act"
+                      onClick={armBuild}
+                      disabled={buildArming || steps.every((s) => !s.trim())}
+                    >
+                      {buildArming ? 'Opening your session…' : m.buildAction.label}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          }
+          if (m.buildAction?.kind === 'to-plan') {
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <button className="bub-act" onClick={generateBuildPlan}>
+                  {m.buildAction.label}
+                </button>
+              </div>
+            );
+          }
+          if (m.buildAction?.kind === 'begin-intake') {
+            return (
+              <div key={m.id} className="bub">
+                {plain(m.text)}
+                <button className="bub-act" onClick={startBuildIntake}>
+                  {m.buildAction.label}
+                </button>
               </div>
             );
           }
@@ -493,6 +649,11 @@ export function Copilot() {
         </button>
       )}
       <div className="cop-foot">
+        {!buildIntakeActive && (
+          <button className="cop-build-cta" onClick={startBuildIntake}>
+            🔨 Let&apos;s build
+          </button>
+        )}
         <div className="composer">
           <input
             placeholder="Ask byte anything about your company…"

@@ -70,28 +70,6 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
       ),
   },
   {
-    view: 'build',
-    label: "Let's build",
-    icon: (
-      <svg className="ic" viewBox="0 0 20 20" fill="none">
-        <path
-          d="M4 13.5 8.5 9l2.5 2.5L16 6"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M12.5 6H16v3.5"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
     view: 'library',
     label: 'Library',
     icon: (

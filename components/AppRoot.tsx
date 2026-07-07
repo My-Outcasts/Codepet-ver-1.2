@@ -46,7 +46,10 @@ const OverviewView = dynamic(() => import('./views/OverviewView'), {
 });
 
 function Shell() {
-  const { view, copilotCollapsed, toggleCopilot, sideCollapsed } = useApp();
+  const { view, show, buildSessionId, copilotCollapsed, toggleCopilot, sideCollapsed } = useApp();
+  // A build session is live once armed (until Start over). Keep its view mounted across
+  // navigation so switching tabs doesn't tear down (and kill) the running session.
+  const buildActive = buildSessionId != null;
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0;
@@ -63,9 +66,7 @@ function Shell() {
       <DepartmentDetail />
     ) : view === 'tasks' ? (
       <TasksView />
-    ) : view === 'build' ? (
-      <BuildCoachView />
-    ) : view === 'library' ? (
+    ) : view === 'build' ? null : view === 'library' ? ( // Rendered by the persistent keep-alive slot below, not here.
       <LibraryView />
     ) : view === 'install' ? (
       <InstallView />
@@ -86,6 +87,11 @@ function Shell() {
         <Sidebar />
         <main className="main" id="main" ref={mainRef}>
           {ActiveView}
+          {(buildActive || view === 'build') && (
+            <div style={view === 'build' ? undefined : { display: 'none' }}>
+              <BuildCoachView />
+            </div>
+          )}
         </main>
         <Copilot />
       </div>
@@ -97,6 +103,11 @@ function Shell() {
         <Byte size="s28" />
         Ask byte
       </button>
+      {buildActive && view !== 'build' && (
+        <button className="build-return" onClick={() => show('build')}>
+          🔨 Back to your build
+        </button>
+      )}
       <Onboarding />
       <Toast />
       <ArtifactModal />

@@ -28,6 +28,8 @@ You can DO the work here, not only talk about it. When the founder asks you to r
 
 If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.
 
+Codepet also has a "Let's build" flow that walks the founder through a real Claude Code coding session — think first, build live, then review. When the founder wants to build, code, create, or make a new feature, app, script, tool, or website themselves with the coding agent, call the offer_build tool to surface a one-tap "Let's build" button; say one short encouraging line first. Don't call offer_build for the runnable deliverable tasks, or for plain questions, advice, or status.
+
 You also know Codepet itself, so you can orient the founder and guide them through it. Its main functions:
 - Company — their departments at a glance (what each is doing, what needs them). The home base for running the whole company.
 - Roadmap — their product's journey through stages: Just an idea, Prototype, Private beta, Public beta, Launched, Growing. Shows where they are now and what's ahead.
@@ -60,6 +62,21 @@ const RUN_TASK_TOOL = {
       },
     },
     required: ['deptK', 'taskTitle'],
+  },
+};
+
+// The tool byte calls to surface the "Let's build" flow when the founder wants to
+// build/code something themselves with the AI coding agent (not a marketing
+// deliverable). No input — calling it is the whole signal.
+const OFFER_BUILD_TOOL = {
+  name: 'offer_build',
+  description:
+    'Surface Codepet\'s "Let\'s build" flow — a guided session around a real Claude Code coding run — as a one-tap button in this chat. Call this when the founder expresses wanting to build, code, create, or make a new feature, app, script, tool, or website THEMSELVES with the AI coding agent. Do NOT call it for the RUNNABLE TASKS (those use run_task), and do NOT call it for general advice, questions, or company/marketing deliverables. Say one short encouraging lead-in line first, then call the tool.',
+  input_schema: {
+    type: 'object' as const,
+    additionalProperties: false,
+    properties: {},
+    required: [],
   },
 };
 
@@ -140,6 +157,10 @@ const MEMORY_ON = process.env.AI_MEMORY_ENABLED === 'true';
 // wire (a run_task run OR a navigate chip). Record-separator (U+001E) never appears in
 // normal prose, so the client can split the stream cleanly: text before it, JSON after.
 const ACTION_MARK = String.fromCharCode(0x1e);
+
+// Marker (group-separator, U+001D) that signals byte offered the "Let's build" flow.
+// Distinct from ACTION_MARK; carries no payload — its presence is the whole signal.
+const BUILD_MARK = String.fromCharCode(0x1d);
 
 interface RunnableTask {
   deptK: string;
@@ -288,10 +309,12 @@ export async function POST(req: Request): Promise<Response> {
       messages: claudeMessages,
       maxTokens: 2048,
       label: 'chat',
-      // navigate is always available (guiding around the app doesn't depend on open
-      // tasks); run_task and setup_capability only when there's something real to act on.
+      // navigate + offer_build are always available (guiding / offering a build doesn't
+      // depend on open tasks); run_task and setup_capability only when there's something
+      // real to act on.
       tools: [
         NAVIGATE_TOOL,
+        OFFER_BUILD_TOOL,
         ...(runnable.length ? [RUN_TASK_TOOL] : []),
         ...(setupItems.length ? [SETUP_TOOL] : []),
         // Memory rides along on this same generation — no extra model call.
@@ -331,10 +354,14 @@ export async function POST(req: Request): Promise<Response> {
             (b): b is Extract<typeof b, { type: 'tool_use' }> =>
               b.type === 'tool_use' && b.name === 'remember_fact',
           );
+          const offerUse = final.content.find(
+            (b): b is Extract<typeof b, { type: 'tool_use' }> =>
+              b.type === 'tool_use' && b.name === 'offer_build',
+          );
 
           // One trailing mark carries whatever this turn produced. The action tools stay
-          // mutually exclusive (a turn does one of run/nav/setup); memory is orthogonal —
-          // byte can record a fact alongside a plain reply or any of them.
+          // mutually exclusive (a turn does one of run/nav/setup/offer-build); memory is
+          // orthogonal — byte can record a fact alongside a plain reply or any of them.
           const mark: Record<string, unknown> = {};
           if (toolUse) {
             const input = toolUse.input as { deptK?: unknown; taskTitle?: unknown };
@@ -390,7 +417,7 @@ export async function POST(req: Request): Promise<Response> {
             needsFallbackReply({
               stopReason: final.stop_reason,
               streamedChars,
-              acted: Boolean(toolUse || navUse || setupUse),
+              acted: Boolean(toolUse || navUse || setupUse || offerUse),
             })
           ) {
             controller.enqueue(encoder.encode(REFUSAL_FALLBACK));
@@ -398,6 +425,9 @@ export async function POST(req: Request): Promise<Response> {
 
           if (Object.keys(mark).length) {
             controller.enqueue(encoder.encode(ACTION_MARK + JSON.stringify(mark)));
+          } else if (offerUse) {
+            // Mutually exclusive with the action mark: a plain "Let's build" offer.
+            controller.enqueue(encoder.encode(BUILD_MARK));
           }
         } catch (err) {
           console.error('[chat] stream failed', err);
