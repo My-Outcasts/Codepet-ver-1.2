@@ -129,6 +129,18 @@ export interface ChatMessageDoc {
   role: 'me' | 'byte';
   text: string;
   createdAt: Millis;
+  /** Which conversation thread this message belongs to. */
+  threadId: string;
+}
+
+/** One conversation thread (a "history entry") for a company's byte chat. */
+export interface ThreadMeta {
+  id: string;
+  /** Derived from the first founder message; user-renameable. */
+  title: string;
+  createdAt: Millis;
+  /** Bumped on each new message; drives list sort + relative time. */
+  updatedAt: Millis;
 }
 
 // ---- Collection / document path helpers (single source of truth) ----
@@ -150,6 +162,9 @@ export const paths = {
   notebook: (companyId: string) => `companies/${companyId}/notebook`,
   chat: (companyId: string) => `companies/${companyId}/chat`,
   chatMessage: (companyId: string, msgId: string) => `companies/${companyId}/chat/${msgId}`,
+  threads: (companyId: string) => `companies/${companyId}/threads`,
+  thread: (companyId: string, threadId: string) =>
+    `companies/${companyId}/threads/${threadId}`,
 };
 
 // Re-export the shared shapes so persistence consumers import everything from one place.
