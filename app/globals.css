@@ -9730,9 +9730,11 @@ body {
 }
 .cpick.is-list .cpick-cell {
   flex-direction: row;
-  align-items: center;
+  /* Top-align so the sprite + check line up with the name when the tone wraps
+     to multiple lines (rows are no longer fixed-height). */
+  align-items: flex-start;
   gap: 10px;
-  padding: 7px 8px;
+  padding: 8px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
@@ -9756,18 +9758,20 @@ body {
 .cpick.is-list .cpick-name {
   font-size: 13px;
   line-height: 1.2;
+  margin-top: 4px;
 }
 .cpick.is-list .cpick-tone {
   font-size: 11px;
   opacity: 0.6;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  line-height: 1.35;
+  /* Show each pet's full personality — wrap instead of truncating. */
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .cpick.is-list .cpick-check {
   flex: none;
+  align-self: flex-start;
+  margin-top: 8px;
   color: var(--accent, #7c5cff);
 }
 .petcard-pop-h {
