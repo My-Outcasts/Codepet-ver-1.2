@@ -338,29 +338,21 @@ async function backfillLegacyThread(companyId: string): Promise<ThreadMeta | nul
     createdAt: legacy[0].createdAt,
     updatedAt: legacy[legacy.length - 1].createdAt,
   };
-  // Chunk into batches of at most BATCH_CHUNK ops (Firestore's hard cap is 500 per
-  // batch): the thread doc set (once, in the first batch) + one `{threadId}` merge
-  // per legacy message.
-  let i = 0;
-  {
+  // Tag every legacy message with the thread id, in batches of at most BATCH_CHUNK
+  // ops (Firestore's hard cap is 500 per batch). The thread doc is written LAST, in
+  // its own write, so a mid-migration failure leaves NO thread — `needsBackfill`
+  // stays true and the next load retries cleanly (re-tagging with a fresh id) rather
+  // than orphaning the messages that hadn't been tagged yet.
+  for (let i = 0; i < legacy.length; i += BATCH_CHUNK) {
     const batch = writeBatch(db);
-    batch.set(doc(db, paths.thread(companyId, id)), thread);
-    const slice = legacy.slice(0, BATCH_CHUNK - 1);
-    slice.forEach((m) =>
-      batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
-    );
+    legacy
+      .slice(i, i + BATCH_CHUNK)
+      .forEach((m) =>
+        batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
+      );
     await batch.commit();
-    i = slice.length;
   }
-  while (i < legacy.length) {
-    const batch = writeBatch(db);
-    const slice = legacy.slice(i, i + BATCH_CHUNK);
-    slice.forEach((m) =>
-      batch.set(doc(db, paths.chatMessage(companyId, m.id)), { threadId: id }, { merge: true }),
-    );
-    await batch.commit();
-    i += slice.length;
-  }
+  await setDoc(doc(db, paths.thread(companyId, id)), thread);
   return thread;
 }
 
