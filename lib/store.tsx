@@ -139,6 +139,12 @@ interface AppState {
   scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
+  /** True once the map reflects a plan byte generated from this founder's product; false
+   *  while it's still the built-in example seed. */
+  planTailored: boolean;
+  /** True when a scaffold attempt this session couldn't complete (e.g. model unreachable),
+   *  so the example-plan banner can say so rather than just "not generated yet". */
+  scaffoldFailed: boolean;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
@@ -286,6 +292,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
   // on hydrate and after every approval. On failure the authored fallback stands.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  // Whether the map reflects a plan byte generated from THIS founder's product, vs. the
+  // built-in example seed. Set from the persisted `scaffoldedAt` on hydrate, flipped true
+  // the moment a scaffold succeeds. `scaffoldFailed` distinguishes "generation was tried
+  // and couldn't complete" (e.g. the model was unreachable) from "not generated yet", so
+  // the example-plan banner can be honest about which it is.
+  const [planTailored, setPlanTailored] = useState(false);
+  const [scaffoldFailed, setScaffoldFailed] = useState(false);
   const computeNextStep = useCallback(() => {
     const fb = nextAction();
     const fallback: NextStep | null = fb
@@ -316,27 +329,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat, decisions: dec }) => {
-        if (cancelled) return;
-        setLibrary(lib);
-        setBrief(b);
-        setDecisions(dec);
-        setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
-        setChatMessages(
-          chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
-        );
-        // Restore the last-viewed roadmap stage (drawer stays closed — we restore
-        // position, not an open panel). Absent ⇒ keep the UI default.
-        if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
-        // Show onboarding only to users who haven't done it. A non-empty brief
-        // also counts as onboarded, so legacy users (saved a brief before the
-        // `onboardedAt` stamp existed) aren't asked again.
-        const onboarded = Boolean(onboardedAt) || Object.keys(b).length > 0;
-        setOnboarding(!onboarded);
-        bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
-        setHydrated(true);
-        computeNextStep(); // DEPTS is hydrated now — pick the next step
-      })
+      .then(
+        ({
+          library: lib,
+          brief: b,
+          onboardedAt,
+          scaffoldedAt,
+          roadmapStage,
+          chat,
+          decisions: dec,
+        }) => {
+          if (cancelled) return;
+          setLibrary(lib);
+          setBrief(b);
+          setDecisions(dec);
+          // A stamped scaffold ⇒ the map is this founder's generated plan; absent ⇒ it's
+          // still the example seed (banner shows).
+          setPlanTailored(Boolean(scaffoldedAt));
+          setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
+          setChatMessages(
+            chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
+          );
+          // Restore the last-viewed roadmap stage (drawer stays closed — we restore
+          // position, not an open panel). Absent ⇒ keep the UI default.
+          if (typeof roadmapStage === 'number') setSelStage(roadmapStage);
+          // Show onboarding only to users who haven't done it. A non-empty brief
+          // also counts as onboarded, so legacy users (saved a brief before the
+          // `onboardedAt` stamp existed) aren't asked again.
+          const onboarded = Boolean(onboardedAt) || Object.keys(b).length > 0;
+          setOnboarding(!onboarded);
+          bump(); // force consumers to re-read the now-hydrated DEPTS/ENV singletons
+          setHydrated(true);
+          computeNextStep(); // DEPTS is hydrated now — pick the next step
+        },
+      )
       .catch((err) => {
         console.error('[store] hydrate failed', err);
         if (!cancelled) setHydrated(true); // fail open to the seed rather than hang
@@ -569,7 +595,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
       if (!companyId) return buildRevealSummary(DEPTS, false);
       const changed = await scaffoldCompany(companyId, briefData);
-      if (changed > 0) bump();
+      if (changed > 0) {
+        bump();
+        setPlanTailored(true); // the map now reflects the founder's generated plan
+      } else {
+        setScaffoldFailed(true); // attempted here but produced nothing → example stands
+      }
       return buildRevealSummary(DEPTS, changed > 0);
     },
     [companyId, bump],
@@ -591,7 +622,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
             if (!briefData || scaffoldedInWizard.current) return;
             return scaffoldCompany(companyId, briefData).then((changed) => {
-              if (changed) bump();
+              if (changed) {
+                bump();
+                setPlanTailored(true);
+              } else {
+                setScaffoldFailed(true);
+              }
             });
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
@@ -610,8 +646,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (changed) {
         bump();
         computeNextStep();
+        setPlanTailored(true); // real plan landed — the example banner clears
+        setScaffoldFailed(false);
         toast('Company re-planned for your stage');
       } else {
+        setScaffoldFailed(true); // couldn't generate → the example still stands, say so
         toast('Couldn’t re-plan just now — try again');
       }
     });
@@ -1399,6 +1438,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
+      planTailored,
+      scaffoldFailed,
       advanceStage,
       brief,
       decisions,
@@ -1458,6 +1499,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       finishOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
+      planTailored,
+      scaffoldFailed,
       advanceStage,
       brief,
       decisions,
