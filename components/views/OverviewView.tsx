@@ -206,12 +206,12 @@ export default function OverviewView() {
     analysisLoading,
     ensureProjectAnalysis,
     planTailored,
-    scaffoldFailed,
+    scaffoldFailure,
     regenerateCompany,
     growthSignal,
     clearGrowthSignal,
   } = useApp();
-  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailed });
+  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);

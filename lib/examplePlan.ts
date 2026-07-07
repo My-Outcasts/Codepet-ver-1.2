@@ -16,20 +16,24 @@ export interface ExamplePlanBanner {
 /**
  * What (if anything) to show. Returns null once the plan is tailored (byte's scaffold
  * landed) — no banner. Otherwise the map is the example: if a scaffold attempt this session
- * failed, say so plainly; if it simply hasn't run yet, invite the founder to generate it.
+ * failed, name the actual cause; if it simply hasn't run yet, invite the founder to generate it.
  */
 export function examplePlanBanner(opts: {
   planTailored: boolean;
-  scaffoldFailed: boolean;
+  scaffoldFailure: string | null;
 }): ExamplePlanBanner | null {
   if (opts.planTailored) return null;
-  return opts.scaffoldFailed
-    ? {
-        text: 'byte couldn’t reach the model — this is an example company, not your plan yet.',
-        cta: 'Retry',
-      }
-    : {
-        text: 'Example company — byte hasn’t tailored this map to your product yet.',
-        cta: 'Generate my plan',
-      };
+  if (!opts.scaffoldFailure) {
+    return {
+      text: 'Example company — byte hasn’t tailored this map to your product yet.',
+      cta: 'Generate my plan',
+    };
+  }
+  const text =
+    opts.scaffoldFailure === 'refused'
+      ? 'byte couldn’t tailor this one — try again. This is still an example, not your plan.'
+      : opts.scaffoldFailure === 'rate_limited'
+        ? 'You’ve hit today’s limit — it resets tomorrow. This is still an example, not your plan.'
+        : 'byte couldn’t reach the model — this is an example company, not your plan yet.';
+  return { text, cta: 'Retry' };
 }

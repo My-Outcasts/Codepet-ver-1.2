@@ -190,9 +190,10 @@ interface AppState {
   /** True once the map reflects a plan byte generated from this founder's product; false
    *  while it's still the built-in example seed. */
   planTailored: boolean;
-  /** True when a scaffold attempt this session couldn't complete (e.g. model unreachable),
-   *  so the example-plan banner can say so rather than just "not generated yet". */
-  scaffoldFailed: boolean;
+  /** Set when a scaffold attempt this session couldn't complete, to the failure cause
+   *  (e.g. 'refused', 'rate_limited', 'network'); null when nothing failed, so the
+   *  example-plan banner can name the actual cause rather than just "not generated yet". */
+  scaffoldFailure: string | null;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
@@ -565,11 +566,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
   // Whether the map reflects a plan byte generated from THIS founder's product, vs. the
   // built-in example seed. Set from the persisted `scaffoldedAt` on hydrate, flipped true
-  // the moment a scaffold succeeds. `scaffoldFailed` distinguishes "generation was tried
-  // and couldn't complete" (e.g. the model was unreachable) from "not generated yet", so
-  // the example-plan banner can be honest about which it is.
+  // the moment a scaffold succeeds. `scaffoldFailure` carries *why* a scaffold attempt
+  // this session couldn't complete (e.g. the model was unreachable) rather than just
+  // "not generated yet", so the example-plan banner can be honest about which it is.
   const [planTailored, setPlanTailored] = useState(false);
-  const [scaffoldFailed, setScaffoldFailed] = useState(false);
+  const [scaffoldFailure, setScaffoldFailure] = useState<string | null>(null);
   const computeNextStep = useCallback(() => {
     const fb = nextAction();
     const fallback: NextStep | null = fb
@@ -903,12 +904,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     async (briefData: CompanyBrief): Promise<RevealSummary> => {
       scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
       if (!companyId) return buildRevealSummary(DEPTS, false);
-      const changed = await scaffoldCompany(companyId, briefData);
+      const { changed, failure } = await scaffoldCompany(companyId, briefData);
       if (changed > 0) {
         bump();
         setPlanTailored(true); // the map now reflects the founder's generated plan
       } else {
-        setScaffoldFailed(true); // attempted here but produced nothing → example stands
+        setScaffoldFailure(failure); // attempted here but produced nothing → example stands, say why
       }
       return buildRevealSummary(DEPTS, changed > 0);
     },
@@ -930,12 +931,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // The wizard's analysis step already scaffolded (the real reveal). Only
             // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
             if (!briefData || scaffoldedInWizard.current) return;
-            return scaffoldCompany(companyId, briefData).then((changed) => {
+            return scaffoldCompany(companyId, briefData).then(({ changed, failure }) => {
               if (changed) {
                 bump();
                 setPlanTailored(true);
               } else {
-                setScaffoldFailed(true);
+                setScaffoldFailure(failure);
               }
             });
           })
@@ -952,17 +953,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     toast('Re-planning your company for your stage…');
     const beforeLater = new Set(DEPTS.filter((d) => d.later).map((d) => d.k));
-    scaffoldCompany(companyId, brief).then((changed) => {
+    scaffoldCompany(companyId, brief).then(({ changed, failure }) => {
       if (changed) {
         bump();
         computeNextStep();
         setPlanTailored(true); // real plan landed — the example banner clears
-        setScaffoldFailed(false);
+        setScaffoldFailure(null);
         toast('Company re-planned for your stage');
         const unlocked = unlockedKeys(beforeLater, DEPTS);
         if (unlocked.length) setGrowthSignal({ unlockedKeys: unlocked, ts: Date.now() });
       } else {
-        setScaffoldFailed(true); // couldn't generate → the example still stands, say so
+        setScaffoldFailure(failure); // couldn't generate → the example still stands, say why
         toast('Couldn’t re-plan just now — try again');
       }
     });
@@ -1071,7 +1072,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ]);
     if (!companyId) return;
     const beforeLater = new Set(DEPTS.filter((d) => d.later).map((d) => d.k));
-    scaffoldCompany(companyId, updated).then((changed) => {
+    scaffoldCompany(companyId, updated).then(({ changed }) => {
       if (changed) {
         // Re-plan took — now it's safe to persist the new stage.
         persistBrief(companyId, updated).catch((err) =>
@@ -2117,7 +2118,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldFromOnboarding,
       regenerateCompany,
       planTailored,
-      scaffoldFailed,
+      scaffoldFailure,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
@@ -2222,7 +2223,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       scaffoldFromOnboarding,
       regenerateCompany,
       planTailored,
-      scaffoldFailed,
+      scaffoldFailure,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
