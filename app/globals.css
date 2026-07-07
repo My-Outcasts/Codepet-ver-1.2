@@ -9693,6 +9693,10 @@ body {
 }
 .petcard-wrap {
   position: relative;
+  /* Pin the companion card to the bottom of the sidebar (a flex column) instead of
+     letting it sit right under the nav with empty space below. The picker popover
+     already opens upward (bottom: 100%), so it fills the freed space cleanly. */
+  margin-top: auto;
 }
 .petcard {
   width: 100%;
