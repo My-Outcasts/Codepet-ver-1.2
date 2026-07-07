@@ -11,6 +11,10 @@ export interface Task {
   run?: 'route' | 'draft';
   out: string;
   done?: boolean;
+  // Set true once byte has produced a reviewable draft the founder hasn't approved
+  // yet — persisted on the task so the "awaiting approval" state survives reload.
+  // Moot once `done`. Never meaningfully set for ship (route) tasks — they go to Done.
+  drafted?: boolean;
   // Explicit deliverable type for tasks with no payload yet (e.g. byte-generated
   // stage tasks). artType() honours this first; authored tasks omit it and are
   // typed by the payload/run they carry.
@@ -27,6 +31,7 @@ export interface Task {
   email?: any;
   calendar?: any;
   legal?: any;
+  doc?: { title?: string; call: string; sections: { h: string; p: string }[]; next?: string[] };
   dms?: any[];
   checklist?: any[];
   // runtime annotations:
@@ -68,6 +73,12 @@ export interface EnvItem {
   s: number;
   rec?: number;
   why?: string;
+  /** Deliverable types this item plausibly applies to — used to credit it when byte
+   * runs a fitting task (see lib/ai/toolkitUse). */
+  fits?: string[];
+  /** Distinct task titles this item has been used on (append-on-use, deduped). Drives
+   * the "Used in N tasks · last: …" receipt. Hydrated from the persisted envUsage. */
+  tasks?: string[];
 }
 
 export interface LibItem {
@@ -87,6 +98,7 @@ export interface LibItem {
   email?: any;
   calendar?: any;
   legal?: any;
+  doc?: { title?: string; call: string; sections: { h: string; p: string }[]; next?: string[] };
   dms?: any[];
   checklist?: any[];
   plan?: any;
@@ -1041,6 +1053,7 @@ export const ENV: Record<string, EnvItem[]> = {
       ab: 'Wr',
       d: 'byte searches the web and cites sources in its drafts.',
       s: 0,
+      fits: ['post', 'doc', 'plan', 'sheet', 'email'],
     },
     {
       n: 'PRD writer',
@@ -1049,6 +1062,7 @@ export const ENV: Record<string, EnvItem[]> = {
       s: 1,
       rec: 1,
       why: 'Turn each beta feature into a clear spec before byte builds it.',
+      fits: ['plan', 'doc', 'prep', 'build'],
     },
     {
       n: 'Code review',
@@ -1057,8 +1071,15 @@ export const ENV: Record<string, EnvItem[]> = {
       s: 0,
       rec: 1,
       why: 'Catch bugs before they reach your beta testers.',
+      fits: ['build'],
     },
-    { n: 'Changelog', ab: 'Ch', d: 'Auto-drafts release notes from your commits.', s: 0 },
+    {
+      n: 'Changelog',
+      ab: 'Ch',
+      d: 'Auto-drafts release notes from your commits.',
+      s: 0,
+      fits: ['post', 'doc'],
+    },
   ],
   connectors: [
     {
@@ -1068,6 +1089,7 @@ export const ENV: Record<string, EnvItem[]> = {
       s: 1,
       rec: 1,
       why: 'byte reads your repo and opens PRs as it ships beta work.',
+      fits: ['build', 'site'],
     },
     {
       n: 'Notion',
@@ -1076,14 +1098,45 @@ export const ENV: Record<string, EnvItem[]> = {
       s: 0,
       rec: 1,
       why: 'You collect beta feedback in Notion — connect it so byte can write there.',
+      fits: ['doc', 'plan', 'prep', 'post', 'dms', 'checklist', 'calendar'],
     },
-    { n: 'Figma', ab: 'Fi', d: 'Pull designs and components into context.', s: 0 },
-    { n: 'Slack', ab: 'Sl', d: 'Post updates and gather feedback.', s: 0 },
-    { n: 'Linear', ab: 'Li', d: 'Create and update issues from your tasks.', s: 0 },
+    {
+      n: 'Figma',
+      ab: 'Fi',
+      d: 'Pull designs and components into context.',
+      s: 0,
+      fits: ['screens', 'site'],
+    },
+    {
+      n: 'Slack',
+      ab: 'Sl',
+      d: 'Post updates and gather feedback.',
+      s: 0,
+      fits: ['dms', 'post', 'calendar'],
+    },
+    {
+      n: 'Linear',
+      ab: 'Li',
+      d: 'Create and update issues from your tasks.',
+      s: 0,
+      fits: ['checklist', 'plan', 'build'],
+    },
   ],
   agents: [
-    { n: 'Code Reviewer', ab: 'Cr', d: 'A subagent that audits changes for correctness.', s: 0 },
-    { n: 'Explorer', ab: 'Ex', d: 'Searches the codebase to answer questions fast.', s: 1 },
+    {
+      n: 'Code Reviewer',
+      ab: 'Cr',
+      d: 'A subagent that audits changes for correctness.',
+      s: 0,
+      fits: ['build'],
+    },
+    {
+      n: 'Explorer',
+      ab: 'Ex',
+      d: 'Searches the codebase to answer questions fast.',
+      s: 1,
+      fits: ['build', 'doc'],
+    },
     {
       n: 'Test Writer',
       ab: 'Tw',
@@ -1091,8 +1144,15 @@ export const ENV: Record<string, EnvItem[]> = {
       s: 0,
       rec: 1,
       why: 'Writes tests as byte ships each new beta feature.',
+      fits: ['build'],
     },
-    { n: 'Migrator', ab: 'Mg', d: 'Runs large, repetitive refactors safely.', s: 0 },
+    {
+      n: 'Migrator',
+      ab: 'Mg',
+      d: 'Runs large, repetitive refactors safely.',
+      s: 0,
+      fits: ['build'],
+    },
   ],
 };
 // Pristine deep-clone snapshots of the seed catalogs, captured at module load BEFORE

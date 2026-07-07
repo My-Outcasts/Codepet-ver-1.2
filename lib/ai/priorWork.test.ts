@@ -64,6 +64,55 @@ describe('selectPriorWork', () => {
   });
 });
 
+describe('selectPriorWork — relevance mode (query given)', () => {
+  it('ranks a relevant cross-dept item above an irrelevant same-dept one', () => {
+    const items = [
+      item({ title: 'Brand palette', dept: 'Marketing', out: 'muted greens' }),
+      item({ title: 'Pricing sheet', dept: 'Finance', out: 'three tiers' }),
+    ];
+    const picked = selectPriorWork(items, {
+      deptName: 'Marketing',
+      query: 'Write the launch post referencing our pricing',
+    });
+    // "pricing" matches the Finance sheet's title (weight 3) and beats the same-dept
+    // palette's dept bonus (2), so the relevant cross-dept item leads.
+    expect(picked.map((i) => i.title)).toEqual(['Pricing sheet', 'Brand palette']);
+  });
+
+  it('weights a title match above a body match', () => {
+    const items = [
+      item({ title: 'Roadmap', out: 'notes on pricing and pricing tiers' }),
+      item({ title: 'Pricing plan', out: 'unrelated body' }),
+    ];
+    const picked = selectPriorWork(items, { query: 'pricing' });
+    expect(picked.map((i) => i.title)).toEqual(['Pricing plan', 'Roadmap']);
+  });
+
+  it('uses the same-department bonus to break ties when nothing matches', () => {
+    const items = [
+      item({ title: 'M', dept: 'Marketing', out: 'aaa' }),
+      item({ title: 'F', dept: 'Finance', out: 'bbb' }),
+    ];
+    const picked = selectPriorWork(items, { deptName: 'Finance', query: 'zzz' });
+    expect(picked.map((i) => i.title)).toEqual(['F', 'M']);
+  });
+
+  it('still excludes the current task by title in relevance mode', () => {
+    const items = [
+      item({ title: 'Pricing', out: 'the current one' }),
+      item({ title: 'Positioning', out: 'our pricing tone of voice' }),
+    ];
+    const picked = selectPriorWork(items, { query: 'pricing', excludeTitle: 'pricing' });
+    expect(picked.map((i) => i.title)).toEqual(['Positioning']);
+  });
+
+  it('falls back to recency when the query has no content tokens (stopwords only)', () => {
+    const items = [item({ title: 'A', dept: 'X' }), item({ title: 'B', dept: 'X' })];
+    // "the a of" → all stopwords / too short → empty token set → recency fallback.
+    expect(selectPriorWork(items, { query: 'the a of' }).map((i) => i.title)).toEqual(['A', 'B']);
+  });
+});
+
 describe('composePriorWorkContext', () => {
   it('returns empty string for no items', () => {
     expect(composePriorWorkContext([])).toBe('');

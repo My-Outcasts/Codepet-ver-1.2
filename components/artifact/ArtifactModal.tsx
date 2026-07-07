@@ -5,7 +5,10 @@ import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/dat
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
 import { LIVE_TYPES, liveKind, currentDraft, applyResult } from '@/lib/ai/applyResult';
+import { toolkitUsedFor, runLogWithToolkit } from '@/lib/ai/toolkitUse';
+import { ENV } from '@/lib/data';
 import { ArtifactViewer } from './viewers';
+import { ExecLog } from './ExecLog';
 
 // Scrollable modal body with a soft bottom fade that shows only while there's more
 // content below the fold — a scroll cue, since macOS hides the scrollbar. Used by
@@ -52,82 +55,6 @@ function Phx({ a }: { a: number }) {
       {ph(1, 'Execute')}
       <span className="pa">→</span>
       {ph(2, 'Deliver')}
-    </div>
-  );
-}
-
-/* streaming execute log */
-function ExecLog({
-  steps,
-  title,
-  onDone,
-}: {
-  steps: LogStep[];
-  title: string;
-  onDone: () => void;
-}) {
-  const [shown, setShown] = useState(0);
-  const [complete, setComplete] = useState(false);
-  const actions = useRef(0);
-  const [actionCount, setActionCount] = useState(0);
-
-  useEffect(() => {
-    setShown(0);
-    setComplete(false);
-    actions.current = 0;
-    setActionCount(0);
-    let i = 0;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    const tick = () => {
-      if (i < steps.length) {
-        const s = steps[i];
-        actions.current += 3 + ((s.t || s.ck || '').length % 6);
-        setActionCount(actions.current);
-        i++;
-        setShown(i);
-        timers.push(setTimeout(tick, s.ck ? 700 : s.mono ? 340 : 520));
-      } else {
-        setComplete(true);
-        timers.push(setTimeout(onDone, 320));
-      }
-    };
-    timers.push(setTimeout(tick, 40));
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps]);
-
-  return (
-    <div className="exec">
-      <div className="exec-h">
-        <span className="spin" />
-        <span>{title}</span>
-        <span className="ec">Ran {actionCount} actions</span>
-      </div>
-      <div className="exec-log">
-        {steps.slice(0, shown).map((s, i) => {
-          const live = i === shown - 1 && !complete;
-          if (s.ck)
-            return (
-              <div className="exec-ck" key={i}>
-                <span className="ckd" />
-                <span>{s.ck}</span>
-              </div>
-            );
-          if (s.mono)
-            return (
-              <div className={`wrow mono${live ? ' live' : ''}`} key={i}>
-                <span className="wk tk0">›</span>
-                <span className="wm" dangerouslySetInnerHTML={{ __html: s.t || '' }} />
-              </div>
-            );
-          return (
-            <div className={`wrow${live ? ' live' : ''}`} key={i}>
-              <span className="wk">{live ? '' : '✓'}</span>
-              <span>{s.t}</span>
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -195,8 +122,18 @@ function planFor(type: string): string {
 }
 
 export function ArtifactModal() {
-  const { modal, closeModal, approveTask, openDeliverable, runTask, toast, brief, toggleCopilot } =
-    useApp();
+  const {
+    modal,
+    closeModal,
+    approveTask,
+    openDeliverable,
+    runTask,
+    toast,
+    brief,
+    toggleCopilot,
+    persistTaskDraft,
+    creditToolkitUse,
+  } = useApp();
   const [stage, setStage] = useState<Stage>('exec');
   // Run mode docks as a right-hand panel so the map stays visible as context;
   // "Expand" swaps to a full centered card for the rich deliverables that need room.
@@ -313,10 +250,13 @@ export function ArtifactModal() {
         taskTitle: t.t,
         taskHint: t.d || (typeof t.out === 'string' ? t.out.slice(0, 160) : undefined),
         deptName: d.name,
+        deptKey: d.k,
         brief,
       })
         .then((res) => {
           applyResult(t, type, res);
+          creditToolkitUse(t.t, type);
+          persistTaskDraft(d.k, t.t);
           setGenStatus('done');
         })
         .catch((err) => {
@@ -343,12 +283,14 @@ export function ArtifactModal() {
         taskTitle: t.t,
         taskHint: t.d,
         deptName: d.name,
+        deptKey: d.k,
         reviseNote: note,
         current: currentDraft(t, type),
         brief,
       })
         .then((res) => {
           applyResult(t, type, res);
+          persistTaskDraft(d.k, t.t);
           setGenStatus('done');
         })
         .catch((err) => {
@@ -412,13 +354,19 @@ export function ArtifactModal() {
       <>First draft ready — written from your brief, in your voice</>
     );
 
-  // The line shown when a live pass fails. A rate-limit is a friendly, specific
-  // message (the account hit today's cap); anything else falls back to the generic
-  // "showing the saved draft" note.
+  // The line shown when a live pass fails — cause-specific so it's honest, not one
+  // vague snag. A rate-limit hit today's cap; a refusal means byte reached the model
+  // but held back (rephrase/add detail); ai_unavailable is a provider/credit outage on
+  // our side; anything else is the generic "couldn't reach byte". All fall back to the
+  // saved draft so the founder still sees something.
   const liveErrorMsg =
     genError === 'rate_limited'
       ? 'You’ve reached today’s generation limit — it resets tomorrow. Showing the saved draft.'
-      : 'Couldn’t reach byte just now — showing the saved draft.';
+      : genError === 'refused'
+        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail. Showing the saved draft.'
+        : genError === 'ai_unavailable'
+          ? 'byte is temporarily unavailable — try again shortly. Showing the saved draft.'
+          : 'Couldn’t reach byte just now — showing the saved draft.';
 
   const olLabel: React.CSSProperties = {
     fontSize: 11,
@@ -448,7 +396,13 @@ export function ArtifactModal() {
       </>
     );
   } else if (stage === 'exec') {
-    const steps = execKind === 'revise' ? reviseSteps(rev || '') : buildLog(t, logType, d);
+    const steps =
+      execKind === 'revise'
+        ? reviseSteps(rev || '')
+        : // `logType` is the log's rendering family (RICH_META remaps post→doc, etc.); the
+          // toolkit `fits` tags are keyed on the REAL deliverable type, and credit uses `type`
+          // too — so name items off `type` to keep the mention and the receipt in sync.
+          runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, type));
     const title =
       execKind === 'revise' ? <>byte is revising — “{rev}”</> : 'byte is doing the work…';
     bodyContent = (
@@ -457,7 +411,7 @@ export function ArtifactModal() {
         <ExecLog
           key={execKind}
           steps={steps}
-          title={title as unknown as string}
+          title={title}
           onDone={() => {
             setDeliverReady(false);
             setStage('deliver');

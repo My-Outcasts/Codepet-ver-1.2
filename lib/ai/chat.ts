@@ -5,6 +5,7 @@
 // The server separates the two with a record-separator marker (see ACTION_MARK).
 import { authHeader } from './runTask';
 import type { ChatTurn } from './chatMessages';
+import type { SetupItem } from './envSetup';
 
 const ACTION_MARK = String.fromCharCode(0x1e);
 const BUILD_MARK = String.fromCharCode(0x1d);
@@ -20,7 +21,10 @@ export interface RunnableTask {
 export type ChatEvent =
   | { type: 'text'; text: string }
   | { type: 'action'; deptK: string; taskTitle: string }
-  | { type: 'build-offer' };
+  | { type: 'build-offer' }
+  | { type: 'nav'; dest: string; target?: string }
+  | { type: 'setup'; category: string; name: string }
+  | { type: 'noted'; items: { topic: string; statement: string }[] };
 
 export class ChatError extends Error {
   constructor(public code: string) {
@@ -39,11 +43,14 @@ export async function* streamByteChat(
   history: ChatTurn[],
   deptSummary?: string,
   openTasks?: RunnableTask[],
+  envSetup?: SetupItem[],
+  signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ messages: history, deptSummary, openTasks }),
+    body: JSON.stringify({ messages: history, deptSummary, openTasks, envSetup }),
+    signal,
   });
   if (!res.ok || !res.body) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
@@ -88,9 +95,39 @@ export async function* streamByteChat(
   }
   if (acting && buf) {
     try {
-      const a = JSON.parse(buf) as { deptK?: unknown; taskTitle?: unknown };
+      const a = JSON.parse(buf) as {
+        deptK?: unknown;
+        taskTitle?: unknown;
+        nav?: unknown;
+        target?: unknown;
+        setup?: unknown;
+        noted?: unknown;
+      };
+      // The action tools are mutually exclusive; memory (noted) is orthogonal and may
+      // accompany any of them, so it's yielded independently of the action branch.
       if (typeof a.deptK === 'string' && typeof a.taskTitle === 'string') {
         yield { type: 'action', deptK: a.deptK, taskTitle: a.taskTitle };
+      } else if (typeof a.nav === 'string') {
+        yield {
+          type: 'nav',
+          dest: a.nav,
+          target: typeof a.target === 'string' ? a.target : undefined,
+        };
+      } else if (a.setup && typeof a.setup === 'object') {
+        const s = a.setup as { category?: unknown; name?: unknown };
+        if (typeof s.category === 'string' && typeof s.name === 'string') {
+          yield { type: 'setup', category: s.category, name: s.name };
+        }
+      }
+      if (Array.isArray(a.noted)) {
+        const items = a.noted
+          .map((n) => n as { topic?: unknown; statement?: unknown })
+          .filter(
+            (n): n is { topic: string; statement: string } =>
+              typeof n.topic === 'string' && typeof n.statement === 'string',
+          )
+          .map((n) => ({ topic: n.topic, statement: n.statement }));
+        if (items.length) yield { type: 'noted', items };
       }
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */

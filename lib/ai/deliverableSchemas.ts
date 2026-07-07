@@ -8,6 +8,7 @@
 // fails in CI instead of 400-ing at runtime.
 
 export type StructuredKind =
+  | 'doc'
   | 'post'
   | 'email'
   | 'legal'
@@ -445,7 +446,51 @@ export const PLAN_SCHEMA: Record<string, unknown> = {
   required: ['goal', 'steps', 'changes', 'verify', 'risks'],
 };
 
+// A decision-grade document: the call up front, the reasoning as labeled sections, and
+// the next actions. Structured so DocViewer can lead with the decision (a tinted call-out)
+// instead of a flat text blob. Used for `doc` tasks (prep/build stay plain text).
+export const DOC_SCHEMA: Record<string, unknown> = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    title: { type: 'string', description: 'Short document title, e.g. "Codepet MVP Scope".' },
+    call: {
+      type: 'string',
+      description:
+        'The decision, recommendation, or core answer in 1-2 sentences — the takeaway, stated up front before any reasoning.',
+    },
+    sections: {
+      type: 'array',
+      description:
+        'The reasoning as labeled blocks: why this is the right call, tradeoffs, what is out.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          h: {
+            type: 'string',
+            description: 'Short section heading, e.g. "Why this scope", "What\'s out".',
+          },
+          p: {
+            type: 'string',
+            description:
+              'The section body — a real paragraph grounded in THIS company, not a placeholder.',
+          },
+        },
+        required: ['h', 'p'],
+      },
+    },
+    next: {
+      type: 'array',
+      description: '1-3 concrete next actions this decision unlocks.',
+      items: { type: 'string' },
+    },
+  },
+  required: ['title', 'call', 'sections', 'next'],
+};
+
 export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>> = {
+  doc: DOC_SCHEMA,
   post: POST_SCHEMA,
   email: EMAIL_SCHEMA,
   legal: LEGAL_SCHEMA,
@@ -459,7 +504,8 @@ export const STRUCTURED_SCHEMAS: Record<StructuredKind, Record<string, unknown>>
 };
 
 export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> = {
-  text: 'Write the deliverable as plain text.',
+  text: 'Write a decision-grade document for THIS company — specific and reasoned, not a generic explainer. Open with the actual answer, recommendation, or core point in the very first line, so the founder gets the takeaway immediately. Then make the case for it: WHY this is the right call, and why the obvious alternatives fall short — grounded in the specifics of their project, brief, and prior work (real names, numbers, and choices; never vague filler or hedging). Give enough concrete detail that the founder understands the reasoning and could act on it. End with the next action or two it unlocks. Organize it into a few short, clearly-labeled sections; keep it tight — depth, not length.',
+  doc: "Write a decision-grade document for THIS company as structured fields. `call`: the actual decision, recommendation, or core answer in 1-2 sentences — the takeaway, stated up front. `sections`: 2-5 labeled blocks that make the case — WHY this is the right call, the key tradeoffs, and what is explicitly out — each grounded in the founder's real project, brief, and prior work (real names, numbers, choices; never vague filler or hedging). `next`: 1-3 concrete next actions the decision unlocks. Be specific and reasoned, not a generic explainer; depth over length.",
   post: 'Write exactly 3 distinct launch-post variants that take different angles on the same announcement.',
   email:
     'Write a launch/activation email: a subject, a preheader, 3-5 short body paragraphs, a CTA label, and a 2-3 step follow-up sequence.',

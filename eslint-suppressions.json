@@ -1,4 +1,9 @@
 {
+  "components/Copilot.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
+    }
+  },
   "components/Onboarding.tsx": {
     "react-hooks/set-state-in-effect": {
       "count": 1
@@ -15,12 +20,22 @@
       "count": 2
     },
     "react-hooks/set-state-in-effect": {
-      "count": 3
+      "count": 2
+    }
+  },
+  "components/artifact/ExecLog.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "components/artifact/viewers.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 20
+    }
+  },
+  "components/ui/Starfield.tsx": {
+    "react-hooks/set-state-in-effect": {
+      "count": 1
     }
   },
   "components/views/InstallView.tsx": {
@@ -33,9 +48,9 @@
       "count": 13
     }
   },
-  "components/views/RoadmapView.tsx": {
+  "components/views/overview/StageDrawer.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "react-hooks/static-components": {
       "count": 1
@@ -52,6 +67,9 @@
     }
   },
   "lib/store.tsx": {
+    "react-hooks/immutability": {
+      "count": 1
+    },
     "react-hooks/set-state-in-effect": {
       "count": 1
     }

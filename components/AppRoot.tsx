@@ -15,13 +15,13 @@ import { Byte } from './Byte';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
-import { RoadmapView } from './views/RoadmapView';
 import { DepartmentDetail } from './views/DepartmentDetail';
 import { TasksView } from './views/TasksView';
 import { LibraryView } from './views/LibraryView';
 import { EnvironmentView } from './views/EnvironmentView';
 import { InstallView } from './views/InstallView';
 import { SettingsView } from './views/SettingsView';
+import { BillingView } from './views/BillingView';
 import { BuildCoachView } from './views/BuildCoachView';
 
 // 3D graph view — client-only (three.js / WebGL), lazy-loaded so three.js
@@ -62,8 +62,6 @@ function Shell() {
       <OverviewView />
     ) : view === 'home' ? (
       <CompanyView />
-    ) : view === 'roadmap' ? (
-      <RoadmapView />
     ) : view === 'dept' ? (
       <DepartmentDetail />
     ) : view === 'tasks' ? (
@@ -75,6 +73,8 @@ function Shell() {
       <InstallView />
     ) : view === 'settings' ? (
       <SettingsView />
+    ) : view === 'billing' ? (
+      <BillingView />
     ) : (
       <EnvironmentView />
     );

@@ -151,6 +151,7 @@ body {
   font-weight: 600;
   color: #fff;
   background: var(--t-1);
+  border: none;
   border-radius: 8px;
   padding: 6px 12px;
   cursor: pointer;
@@ -208,8 +209,6 @@ body {
 }
 .tb-menu .who {
   padding: 8px 10px 9px;
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: 5px;
 }
 .tb-menu .who b {
   display: block;
@@ -234,6 +233,24 @@ body {
 .tb-menu a:hover {
   background: var(--well);
   color: var(--t-1);
+}
+/* account menu — grouped rows */
+.tb-menu .tb-sep {
+  height: 1px;
+  background: var(--hairline);
+  margin: 6px 0;
+}
+.tb-menu a {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--t-1);
+  font-size: 13.5px;
+}
+.tb-menu a:hover {
+  background: var(--surface-2, #f4f1fb);
+  color: var(--accent-deep, #5b27b0);
 }
 .tb-ic {
   width: 30px;
@@ -1516,6 +1533,21 @@ body {
   font-weight: 500;
   color: var(--t-1);
 }
+/* toolkit usage receipt — "Used in N tasks · last: …" */
+.rc-used {
+  margin-top: 8px;
+  font-size: 11.5px;
+  color: var(--t-3);
+}
+.env-card .en {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.env-card .en-used {
+  font-size: 11px;
+  color: var(--t-4);
+}
 .eb {
   font-size: 12px;
   font-weight: 600;
@@ -1720,6 +1752,7 @@ body {
   background-repeat: no-repeat;
   image-rendering: auto;
   box-shadow: var(--sh-s);
+  animation: mediaIn 0.6s ease both;
 }
 .dhero2 .dh-tint {
   position: absolute;
@@ -2042,6 +2075,8 @@ body {
     transform 0.14s ease,
     box-shadow 0.14s ease,
     border-color 0.14s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 128px;
 }
 .deptrow:hover {
   transform: translateY(-2px);
@@ -2052,8 +2087,51 @@ body {
 .dr-img {
   flex: 0 0 40%;
   position: relative;
+  overflow: hidden;
   background-size: cover;
   background-position: center;
+  animation: mediaIn 0.6s ease both;
+}
+/* hover shine sweep */
+.dr-img::before,
+.dhero2::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 45%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 55%
+  );
+  transform: translateX(-120%);
+  opacity: 0;
+}
+.deptrow:hover .dr-img::before,
+.dhero2:hover::before {
+  animation: shine 0.9s ease;
+}
+@keyframes mediaIn {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes shine {
+  from {
+    transform: translateX(-120%);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(120%);
+    opacity: 1;
+  }
 }
 .dr-badge {
   position: absolute;
@@ -2285,18 +2363,20 @@ body {
   border: 1px solid var(--hairline);
   border-radius: 14px;
 }
-/* Color lives on the lanes, not the cards — each lane wears its state's hue. */
-.kb-col--draft {
+/* Each lane wears its own hue so the board reads as four colorful swimlanes
+   rather than a wall of white. Light pastel tints keep the white cards popping
+   and the text legible. */
+.kb-col--upnext {
+  background: var(--accent-tint);
+  border-color: var(--accent-line);
+}
+.kb-col--awaiting {
   background: var(--gold-tint);
   border-color: var(--gold-line);
 }
 .kb-col--you {
   background: var(--blue-tint);
   border-color: var(--blue-line);
-}
-.kb-col--does {
-  background: var(--accent-tint);
-  border-color: var(--accent-line);
 }
 .kb-col--done {
   background: #e7f6ee;
@@ -2392,31 +2472,76 @@ body {
   text-align: center;
   padding: 20px 0;
 }
-/* ===== Library: filter bar + preview grid ===== */
+/* ==== Library ==== */
+/* masthead: display title + monospace specimen index */
+.lib-mast {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+.lib-mast h1 {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+/* description sits directly under the heading, then the count index */
+.lib-say {
+  max-width: 52ch;
+  margin-top: 9px;
+}
+.lib-idx {
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--t-4);
+  margin-top: 12px;
+}
+/* state pip — filled teal = live/shipped, hollow ring = draft */
+.lib-pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--teal);
+  box-shadow: 0 0 0 3px var(--teal-tint);
+  flex: none;
+}
+.lib-pip.hollow {
+  background: transparent;
+  border: 1.5px solid var(--t-4);
+  box-shadow: none;
+}
+
+/* filter row — monospace catalog tabs */
 .lib-bar {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 26px 2px;
+  padding: 18px 26px 2px;
 }
 .lib-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 4px;
 }
 .lib-chip {
-  font-size: 12px;
+  font-family: var(--sans);
   font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   color: var(--t-3);
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-  border-radius: 99px;
-  padding: 5px 13px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 7px 12px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  box-shadow: var(--sh-s);
+  gap: 7px;
   transition:
     color 0.14s,
     border-color 0.14s,
@@ -2424,160 +2549,513 @@ body {
 }
 .lib-chip:hover {
   color: var(--t-1);
-  border-color: var(--t-4);
+  background: var(--surface);
+  border-color: var(--hairline);
 }
 .lib-chip.on {
   color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
+  background: var(--t-1);
+  border-color: var(--t-1);
 }
 .lib-chip .n {
-  font-size: 10.5px;
-  opacity: 0.75;
+  font-size: 10px;
+  opacity: 0.5;
   font-variant-numeric: tabular-nums;
 }
-.lib-count {
-  margin-left: auto;
-  font-size: 12px;
+
+/* status groups — structure comes from Live vs Drafts, not decoration */
+.lib-group:last-child {
+  padding-bottom: 44px;
+}
+.lib-ghead {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--t-3);
+  padding: 20px 26px 14px;
+}
+.lib-ghead .gn {
   color: var(--t-4);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
+/* department avatar chip in the group header (colours come from .c-<dept>) */
+.lib-gav {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  display: inline-grid;
+  place-items: center;
+  font-family: var(--sans);
+  font-size: 8.5px;
+  font-weight: 700;
+  flex: none;
+}
+
+/* compact card grid */
+/* vertical stack — one row per item, filling the full content width */
 .lib-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr));
-  gap: 16px;
-  align-content: start;
-  padding: 16px 26px 44px;
-}
-.lib-card {
-  position: relative;
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  padding: 0 26px;
+}
+
+/* poster row — Outcome preview on the left, details on the right */
+.lib-tile {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-height: 150px;
+  background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 14px;
-  background: var(--surface);
   overflow: hidden;
   cursor: pointer;
   box-shadow: var(--sh-s);
   transition:
-    transform 0.16s ease,
-    box-shadow 0.16s ease;
+    transform 0.14s ease,
+    box-shadow 0.14s ease;
 }
-.lib-card:hover {
+.lib-tile:hover {
   transform: translateY(-2px);
   box-shadow: var(--sh-m);
 }
-/* per-type tinted preview — hue passed in via --tint/--line/--ink-h (info-box house style) */
-.lib-prev {
-  position: relative;
-  height: 142px;
-  overflow: hidden;
-  background: var(--tint, var(--surface-2));
-  border-bottom: 1px solid var(--line, var(--hairline));
-}
-.lib-prev .lib-snip {
-  padding: 36px 16px 16px;
-  font-family: var(--mono);
-  font-size: 11px;
-  line-height: 1.62;
-  color: var(--t-3);
-  white-space: pre-wrap;
-}
-.lib-prev.txt-doc .lib-snip {
-  font-family: var(--sans);
-  font-size: 12.5px;
-  color: var(--t-2);
-  line-height: 1.55;
-}
-.lib-prev:after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 46px;
-  background: linear-gradient(transparent, var(--tint, var(--surface-2)));
-  pointer-events: none;
-}
-.lib-prev.site {
-  background: #fff;
-  pointer-events: none;
-}
-.lib-prev.site:after {
-  display: none;
-}
-.lib-prev.site iframe {
-  width: 250%;
-  height: 345px;
-  border: 0;
-  transform: scale(0.4);
-  transform-origin: top left;
-}
-/* the type label lives ON the tint as a floating colored caption (no solid pill) */
-.lib-tag {
-  position: absolute;
-  top: 12px;
-  left: 15px;
-  z-index: 2;
-  font-family: var(--sans);
-  font-size: 8px;
-  text-transform: uppercase;
-  letter-spacing: 0.6px;
-  color: var(--ink-h, var(--t-3));
-}
-.lib-prev.site .lib-tag {
-  top: 11px;
-  left: 11px;
-  padding: 3px 8px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.88);
-  box-shadow: var(--sh-s);
-}
-.lib-foot {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  padding: 13px 15px;
-}
-.lib-foot .di {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  display: grid;
-  place-items: center;
-  font-family: var(--sans);
-  font-size: 10px;
-  font-weight: 600;
-  flex: none;
-}
-.lib-foot .lf-t {
+.lt-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 15px 18px;
 }
-.lib-foot .lf-title {
-  font-size: 13.5px;
+.lt-tag {
+  font-family: var(--sans);
   font-weight: 600;
-  color: var(--t-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.lib-foot .lf-meta {
-  font-size: 11.5px;
+  font-size: 10px;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
   color: var(--t-3);
-  margin-top: 2px;
+  margin-bottom: 5px;
 }
-.lib-foot .lf-open {
-  font-size: 11px;
+.lt-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--t-1);
+  line-height: 1.28;
+}
+.lt-desc {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--t-3);
+  margin-top: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lt-metarow {
+  margin-top: auto;
+  padding-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.lt-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--sans);
   font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--t-4);
+}
+.lt-state.live {
+  color: #0f9d8f;
+}
+.lt-state .lib-pip {
+  width: 6px;
+  height: 6px;
+  box-shadow: 0 0 0 2.5px var(--teal-tint);
+}
+.lt-open {
+  margin-left: auto;
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
   color: var(--accent);
   opacity: 0;
   transition: opacity 0.14s;
+}
+.lib-tile:hover .lt-open {
+  opacity: 1;
+}
+
+/* ===== Outcome preview panel (left of each row) ===== */
+/* Tint + border come inline from LIB_SKIN; --op carries the type's accent ink,
+   which every shape below draws from so the set reads as one system. */
+.lt-prev {
+  width: 300px;
+  flex: none;
+  position: relative;
+  padding: 16px;
+  overflow: hidden;
+  border-right: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+}
+.lt-prev > *:not(.op-ship) {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+.op-l {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--hairline);
+  margin-bottom: 7px;
+}
+.op-l:last-child {
+  margin-bottom: 0;
+}
+/* browser chrome — site / build */
+.op-chrome {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 3px 10px -7px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+}
+.op-ctop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--hairline);
   flex: none;
 }
-.lib-card:hover .lf-open {
-  opacity: 1;
+.op-ctop i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hairline);
+}
+.op-url {
+  margin-left: 6px;
+  height: 9px;
+  flex: 1;
+  background: var(--well);
+  border-radius: 5px;
+}
+.op-cbody {
+  padding: 12px 13px;
+}
+.op-h {
+  display: block;
+  height: 11px;
+  width: 62%;
+  border-radius: 4px;
+  background: var(--op);
+  opacity: 0.85;
+  margin-bottom: 9px;
+}
+.op-ship {
+  position: absolute;
+  left: 15px;
+  bottom: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f9d8f;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  padding: 3px 8px;
+}
+/* numbered steps — plan */
+.op-steps {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 11px;
+}
+.op-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.op-n {
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--op);
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.op-t {
+  height: 7px;
+  border-radius: 3px;
+  background: var(--op);
+  opacity: 0.28;
+}
+/* checkboxes — checklist */
+.op-checks {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+.op-ck {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.op-ck b {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  border: 1.5px solid var(--op);
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #fff;
+  background: transparent;
+}
+.op-ck.on b {
+  background: var(--op);
+  border-color: var(--op);
+}
+.op-ct {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--op);
+  opacity: 0.26;
+  flex: 1;
+}
+.op-ck.on .op-ct {
+  opacity: 0.42;
+}
+/* paper document — doc / legal */
+.op-doc {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 13px 14px;
+  box-shadow: 0 3px 10px -7px rgba(0, 0, 0, 0.25);
+}
+.op-dh {
+  display: block;
+  height: 9px;
+  width: 52%;
+  border-radius: 4px;
+  background: var(--op);
+  opacity: 0.8;
+  margin-bottom: 10px;
+}
+.op-flag {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--sans);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--op);
+  border: 1px solid var(--op);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+/* spreadsheet band — sheet */
+.op-sheet {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 7px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 7px;
+  padding: 13px;
+  box-shadow: 0 3px 10px -7px rgba(0, 0, 0, 0.25);
+}
+.op-srow {
+  height: 10px;
+  border-radius: 3px;
+  background: var(--hairline);
+}
+.op-srow.op-shead {
+  background: var(--op);
+  opacity: 0.75;
+}
+.op-srow.op-sshort {
+  width: 62%;
+}
+/* social card — post */
+.op-post {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 12px;
+  box-shadow: 0 3px 10px -7px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.op-prow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.op-av {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--op);
+  flex: none;
+}
+.op-nm {
+  height: 7px;
+  width: 90px;
+  border-radius: 3px;
+  background: var(--hairline);
+}
+.op-ptx {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--t-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* email — email */
+.op-mail {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 3px 10px -7px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+.op-subj {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--hairline);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--op);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: none;
+}
+.op-mbody {
+  padding: 11px 12px;
+}
+.op-seq {
+  margin-top: 9px;
+  font-family: var(--sans);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--op);
+  opacity: 0.75;
+}
+/* two-week grid — calendar */
+.op-cal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-auto-rows: 1fr;
+  gap: 5px;
+}
+.op-cd {
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  position: relative;
+}
+.op-cd.mk::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  height: 5px;
+  border-radius: 2px;
+  background: var(--op);
+}
+/* stacked phones — screens */
+.op-phones {
+  position: relative;
+}
+.op-phone {
+  position: absolute;
+  top: 50%;
+  width: 62px;
+  height: 108px;
+  border-radius: 11px;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 4px 12px -7px rgba(0, 0, 0, 0.35);
+}
+.op-phone-b {
+  left: calc(50% - 52px);
+  transform: translateY(-50%) rotate(-7deg);
+  opacity: 0.6;
+}
+.op-phone-a {
+  left: calc(50% - 12px);
+  transform: translateY(-50%) rotate(5deg);
+  border-top: 5px solid var(--op);
+}
+/* chat bubbles — dms */
+.op-dms {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+.op-bub {
+  border-radius: 11px;
+  padding: 9px 11px;
+  font-size: 11px;
+  line-height: 1.4;
+  max-width: 84%;
+}
+.op-bub-in {
+  align-self: flex-start;
+  height: 22px;
+  width: 55%;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+}
+.op-bub-out {
+  align-self: flex-end;
+  color: #fff;
+  background: var(--op);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .lib-empty {
   grid-column: 1/-1;
@@ -2586,9 +3064,23 @@ body {
   padding: 8px 2px;
   line-height: 1.6;
 }
-@media (max-width: 900px) {
-  .lib-grid {
-    grid-template-columns: 1fr;
+@media (max-width: 720px) {
+  .lib-tile {
+    flex-direction: column;
+  }
+  .lt-prev {
+    width: 100%;
+    min-height: 128px;
+    border-right: none;
+    border-bottom: 1px solid var(--hairline);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lib-tile {
+    transition: none;
+  }
+  .lib-tile:hover {
+    transform: none;
   }
 }
 .tk-act {
@@ -2701,11 +3193,36 @@ body {
 
 /* ===== copilot ===== */
 .copilot {
+  position: relative;
   background: var(--surface-2);
   border-left: 1px solid var(--hairline);
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+/* "New" jump pill — floats just above the composer when byte adds content while the
+   reader is scrolled up. Clicking it smooth-scrolls to the latest and re-pins. */
+.cop-new {
+  position: absolute;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line);
+  background: var(--surface);
+  color: var(--accent-deep);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  z-index: 5;
+}
+.cop-new:hover {
+  background: var(--accent-tint);
 }
 .shell.cop-collapsed {
   grid-template-columns: 212px 1fr 0;
@@ -2954,6 +3471,35 @@ body {
   font-weight: 600;
   color: var(--accent-deep);
   margin-top: 11px;
+}
+/* inline execute log — reuse the modal's .exec styling, sized for the chat card */
+.cres .exec {
+  margin-top: 12px;
+}
+.cres .exec-log {
+  font-size: 12px;
+}
+/* the persistent "What byte did" record on a produced/saved card */
+.cres-rec {
+  margin-top: 12px;
+}
+.cres-rec-t {
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--t-3);
+  background: var(--surface-2, #f7f5fc);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.cres-rec-t:hover {
+  color: var(--accent-deep);
+}
+.cres-rec .exec-log.static {
+  margin-top: 9px;
 }
 /* Revise-in-place: quick chips + a note input, revealed on a produced card. */
 .cres-rev {
@@ -3275,7 +3821,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/splash.jpg') center / cover no-repeat;
+  background: url('/splash.webp') center / cover no-repeat;
   animation: kenburns 30s ease-in-out infinite alternate;
 }
 /* readability scrim */
@@ -3288,12 +3834,22 @@ body {
     linear-gradient(rgba(13, 5, 34, 0.52), rgba(13, 5, 34, 0.52)),
     radial-gradient(135% 95% at 50% 46%, transparent 32%, rgba(13, 5, 34, 0.5) 100%);
 }
+/* pointer-parallax glow — a pre-blurred radial gradient, NOT a runtime blur */
+.splash-glow {
+  position: absolute;
+  inset: -12%;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(38% 38% at 50% 44%, rgba(150, 100, 245, 0.3), transparent 70%);
+  transform: translate3d(calc(var(--px, 0) * 10px), calc(var(--py, 0) * 10px), 0);
+  will-change: transform;
+}
 .splash.hide {
   opacity: 0;
   pointer-events: none;
 }
 
-/* Branded loading screen — same splash.jpg world as splash/sign-in, so every
+/* Branded loading screen — same splash.webp world as splash/sign-in, so every
    pre-app moment is one continuous flow. Reuses fadeIn/kenburns/riseIn. */
 .loadscr {
   position: fixed;
@@ -3310,7 +3866,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/loading.jpg') center / cover no-repeat;
+  background: url('/loading.webp') center / cover no-repeat;
   animation: kenburns 30s ease-in-out infinite alternate;
 }
 .loadscr::after {
@@ -3349,7 +3905,7 @@ body {
     titleGlow 5s ease-in-out 1.4s infinite;
 }
 .splash-sub {
-  animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.32s both;
+  animation: none;
 }
 .splash-btn {
   animation: riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.48s both;
@@ -3358,6 +3914,41 @@ body {
   animation:
     riseIn 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.66s both,
     hintPulse 2.8s ease-in-out 1.6s infinite;
+}
+/* slow light-sweep across the wordmark */
+.splash-title {
+  position: relative;
+  overflow: hidden;
+}
+.splash-title::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 58%
+  );
+  mix-blend-mode: overlay;
+  transform: translateX(-120%);
+  animation: titleSweep 4.6s ease-in-out 1.7s infinite;
+  pointer-events: none;
+}
+@keyframes titleSweep {
+  0% {
+    transform: translateX(-120%);
+  }
+  55%,
+  100% {
+    transform: translateX(120%);
+  }
+}
+/* word-by-word rise on the subtitle (replaces the single-block riseIn) */
+.splash-sub .w {
+  display: inline-block;
+  animation: riseIn 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation-delay: calc(0.32s + var(--i) * 0.06s);
 }
 .splash-title {
   font-family: 'Codepet Pixel', var(--sans);
@@ -3460,10 +4051,10 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/onboarding/ob-team.jpg') center / cover no-repeat;
+  background: url('/onboarding/ob-team.webp') center / cover no-repeat;
   animation: kenburns 32s ease-in-out infinite alternate;
 }
-/* readability scrim */
+/* readability scrim — keeps the whole left column crisp while the scene shows through right */
 .ob-cold::before {
   content: '';
   position: absolute;
@@ -3471,30 +4062,36 @@ body {
   z-index: 1;
   background:
     linear-gradient(
-      90deg,
-      rgba(13, 5, 34, 0.9) 0%,
-      rgba(13, 5, 34, 0.72) 44%,
-      rgba(13, 5, 34, 0.3) 100%
+      96deg,
+      rgba(13, 5, 34, 0.96) 0%,
+      rgba(13, 5, 34, 0.9) 34%,
+      rgba(13, 5, 34, 0.62) 56%,
+      rgba(13, 5, 34, 0.12) 86%
     ),
-    linear-gradient(0deg, rgba(13, 5, 34, 0.6) 0%, transparent 46%);
+    linear-gradient(0deg, rgba(13, 5, 34, 0.7) 0%, transparent 42%),
+    radial-gradient(120% 90% at 18% 42%, rgba(124, 58, 237, 0.16), transparent 60%);
+}
+/* cold-open pointer-parallax glow (pre-blurred gradient, not a runtime blur) */
+.ob-cold-glow {
+  position: absolute;
+  inset: -12%;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(34% 40% at 24% 46%, rgba(124, 58, 237, 0.26), transparent 70%);
+  transform: translate3d(calc(var(--px, 0) * 9px), calc(var(--py, 0) * 9px), 0);
+  will-change: transform;
 }
 .ob-cold-in > * {
   animation: riseIn 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
-.ob-cold-byte {
-  animation-delay: 0.12s;
-}
 .ob-cold-in h1 {
-  animation-delay: 0.24s;
+  animation-delay: 0.1s;
 }
 .ob-cold-in p {
-  animation-delay: 0.38s;
+  animation-delay: 0.24s;
 }
 .ob-cold-in .splash-btn {
-  animation-delay: 0.52s;
-}
-.ob-cold-meta {
-  animation-delay: 0.66s;
+  animation-delay: 0.5s;
 }
 .ob-cold .skip-pre {
   background: rgba(255, 255, 255, 0.14);
@@ -3512,42 +4109,77 @@ body {
   margin: auto 0 auto clamp(40px, 9vw, 150px);
   padding-right: 40px;
 }
-.ob-cold-byte {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
-  font-family: var(--sans);
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.82);
-}
 .ob-cold-in h1 {
   font-family: var(--sans);
   font-size: clamp(34px, 4vw, 52px);
+  font-weight: 700;
   line-height: 1.08;
   letter-spacing: -0.5px;
   color: #fff;
   text-shadow: 0 2px 30px rgba(12, 4, 36, 0.55);
 }
-.ob-cold-in p {
-  margin-top: 20px;
-  font-size: 16px;
-  line-height: 1.6;
-  color: rgba(245, 243, 255, 0.82);
-  max-width: 520px;
+/* gradient accent on the punchline */
+.ob-hl {
+  background: linear-gradient(100deg, #c9a6ff, #8b5cf6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
-.ob-cold-in p b {
+/* NOTE: `.ob p` (dark, for the light question screens) has equal specificity and
+   comes later in the file, so it wins by source order — qualify with .ob-cold to
+   keep the cold-open paragraph light and readable. */
+.ob-cold .ob-cold-in p {
+  margin-top: 20px;
+  font-size: 16.5px;
+  line-height: 1.6;
+  color: rgba(240, 238, 252, 0.95);
+  max-width: 500px;
+}
+.ob-cold .ob-cold-in p b {
   color: #fff;
+  font-weight: 700;
+}
+/* department preview — the signature that shows what byte will set up */
+.ob-depts {
+  margin-top: 26px;
+  animation-delay: 0.5s;
+}
+.ob-depts-ey {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 11px;
+}
+.ob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 540px;
+}
+.ob-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(4px);
+}
+.ob-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dc);
+  box-shadow: 0 0 8px var(--dc);
 }
 .ob-cold-in .splash-btn {
   margin-top: 30px;
-}
-.ob-cold-meta {
-  margin-top: 22px;
-  font-family: var(--sans);
-  font-size: 12px;
-  color: rgba(245, 243, 255, 0.55);
 }
 /* taller question screens (the project step) align to the top and scroll */
 .ob-body.tall {
@@ -3668,28 +4300,41 @@ body {
 }
 /* full-height left image panel */
 .ob-art {
+  position: relative;
   width: 42%;
   flex: none;
-  display: flex;
   overflow: hidden;
+  background-color: #100a26;
 }
+/* every scene is a stacked layer; only .on is visible — opacity crossfade + slow zoom */
 .ob-art span {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   background-color: #100a26;
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
-  animation:
-    obArtIn 0.6s ease,
-    kenburns 22s ease-in-out infinite alternate;
+  opacity: 0;
+  transform: scale(1.07) translate3d(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px), 0);
+  transition:
+    opacity 1.1s ease,
+    transform 7s ease;
+  will-change: opacity, transform;
 }
-@keyframes obArtIn {
-  from {
-    opacity: 0.35;
-  }
-  to {
-    opacity: 1;
-  }
+.ob-art span.on {
+  opacity: 1;
+  transform: scale(1) translate3d(calc(var(--px, 0) * -8px), calc(var(--py, 0) * -8px), 0);
+}
+/* per-step colour grade */
+.ob-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 30%, var(--grade, transparent));
+  mix-blend-mode: soft-light;
+  transition: background 0.8s ease;
 }
 /* form column — centered vertically, capped width */
 .ob-top {
@@ -4803,6 +5448,30 @@ body {
 .bub-act:hover {
   background: var(--accent-deep);
 }
+/* Retry — quiet, secondary affordance on a failed byte reply (not a primary accent CTA). */
+.bub-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-3);
+  background: none;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.bub-retry:hover:not(:disabled) {
+  color: var(--t-1);
+  border-color: var(--t-4);
+}
+.bub-retry:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 /* "Advance to <stage>" — the stage-complete prompt's confirm button in a bubble. */
 .bub-adv {
   display: block;
@@ -4871,6 +5540,15 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+/* .mbody is the single scroll region. Its children must keep their natural
+   height and never shrink: a rich viewer wrapper (.planart, .docart, …) sets
+   overflow:hidden, which zeroes its flex auto-min-size, so the default
+   flex-shrink:1 would squeeze it to fit and CLIP the overflow — the body then
+   never scrolls. Pinning shrink to 0 makes tall content overflow and scroll.
+   (.artifact opts back into growing via its own higher-specificity rule.) */
+.mbody > * {
+  flex-shrink: 0;
 }
 /* Soft scroll cue: fade the bottom edge whenever there's more below the fold
    (JS toggles .has-more). A mask touches no layout and can't skew the scroll math,
@@ -4969,6 +5647,24 @@ body {
    .art-body but manages its own block spacing, so it opts out of the pre-wrap default. */
 .art-body .md-body {
   white-space: normal;
+}
+/* In a deliverable modal, the panel fills the body's full height instead of a
+   short 280px box floating in whitespace: the card stretches to the available
+   space and the document scrolls inside it. The bar stays pinned; the body is
+   the scroll region. */
+.mbody > .artifact {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mbody > .artifact > .art-bar {
+  flex: none;
+}
+.mbody > .artifact > .art-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
 }
 .md-body > :first-child {
   margin-top: 0;
@@ -5536,6 +6232,95 @@ body {
   border-top: 1px solid var(--hairline);
 }
 
+/* decision doc — the call up front (tinted call-out), reasoning sections, next steps */
+.docart {
+  margin-top: 8px;
+  border: 1px solid var(--hair-2);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.doc-sheet {
+  padding: 24px 26px;
+  max-height: 330px;
+  overflow: auto;
+  background: #fff;
+}
+.doc-title {
+  margin-bottom: 14px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+  color: var(--t-1);
+}
+.doc-call {
+  margin-bottom: 18px;
+  padding: 13px 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 12%, #fff);
+}
+.doc-call-k {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 62%, var(--t-2));
+}
+.doc-call p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.55;
+  color: var(--t-1);
+}
+.doc-sec {
+  margin-bottom: 15px;
+}
+.doc-sec h5 {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--t-1);
+}
+.doc-sec p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--t-2);
+}
+.doc-next {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline);
+}
+.doc-next h5 {
+  margin: 0 0 6px;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--t-1);
+}
+.doc-next ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.doc-next li {
+  margin-bottom: 3px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--t-2);
+}
+.doc-foot {
+  display: flex;
+  gap: 8px;
+  padding: 11px 15px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--hairline);
+}
+
 /* sales DM cards */
 .dmart {
   margin-top: 8px;
@@ -5825,6 +6610,16 @@ body {
   padding: 11px 16px;
   background: var(--surface-2);
   font-size: 11.5px;
+  color: var(--t-3);
+}
+
+/* Quiet trust/liability line under finance/legal/advice deliverables. One muted line,
+   no icon — informational, not alarming (see DelivNote in viewers.tsx). */
+.deliv-note {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-1, rgba(255, 255, 255, 0.06));
+  font-size: 11px;
+  line-height: 1.5;
   color: var(--t-3);
 }
 
@@ -6971,6 +7766,60 @@ body {
   }
 }
 
+/* drifting particle layer (Starfield) — parallax via ancestor --px/--py */
+.starfield {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  overflow: hidden;
+  transform: translate3d(calc(var(--px, 0) * 6px), calc(var(--py, 0) * 6px), 0);
+}
+.starfield i {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.75);
+  box-shadow: 0 0 6px rgba(180, 150, 255, 0.7);
+  opacity: 0;
+  animation-name: twinkle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.1;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 0.8;
+    transform: translateY(-6px);
+  }
+}
+
+/* mobile-lite: strip parallax / particles / sweeps from the intro (max-width:820px).
+   Starfield already returns null here; these hide the CSS-only heavy layers. */
+@media (max-width: 820px) {
+  .splash-glow,
+  .ob-cold-glow,
+  .starfield,
+  .splash-title::after,
+  .dr-img::before,
+  .dhero2::before {
+    display: none !important;
+  }
+  .ob-art span {
+    transition: opacity 0.5s ease;
+    transform: none;
+  }
+  .ob-art span.on {
+    transform: none;
+  }
+  .splash-sub .w {
+    animation-delay: 0.32s;
+  }
+}
+
 /* per-step content entrance (re-keyed on step change in Onboarding.tsx) */
 .ob-body > * {
   animation: riseIn 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -7033,7 +7882,7 @@ body {
   position: absolute;
   inset: -3%;
   z-index: 0;
-  background: url('/auth.jpg') center / cover no-repeat;
+  background: url('/auth.webp') center / cover no-repeat;
   animation: kenburns 34s ease-in-out infinite alternate;
 }
 /* vignette scrim so the card reads against the busy art */
@@ -7260,6 +8109,26 @@ body {
   cursor: default;
   transform: none;
 }
+.so-modal.sup {
+  width: 420px;
+  max-width: calc(100vw - 40px);
+}
+.sup-in {
+  width: 100%;
+  min-height: 96px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  font-family: var(--sans);
+  font-size: 14px;
+  resize: vertical;
+}
+.sup-err {
+  color: #c0392b;
+  font-size: 12.5px;
+  margin-bottom: 8px;
+}
 
 /* respect reduced-motion: drop drift, glow, and slide; keep content visible */
 @media (prefers-reduced-motion: reduce) {
@@ -7268,47 +8137,68 @@ body {
   .signin-card,
   .splash,
   .splash::before,
+  .splash-glow,
   .splash-title,
+  .splash-title::after,
   .splash-sub,
+  .splash-sub .w,
   .splash-btn,
   .splash-hint,
+  .starfield,
+  .starfield i,
   .ob-cold,
   .ob-cold::after,
+  .ob-cold-glow,
   .ob-cold-in > *,
-  .ob-art span,
-  .ob-body > * {
+  .ob-body > *,
+  .dr-img,
+  .dhero2,
+  .dr-img::before,
+  .dhero2::before {
     animation: none !important;
     translate: none !important;
+    transform: none !important;
     opacity: 1 !important;
+    transition: none !important;
+  }
+  /* `.ob-art span` is a LAYERED stack (all 8 scenes mounted, only `.on` visible).
+     It must NOT be in the group above — a blanket `opacity: 1 !important` would
+     reveal all 8 layers at once. Kill its motion but let the base opacity:0 / .on
+     opacity:1 rules keep only the current scene visible. */
+  .ob-art span {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+  .ob-art span.on {
+    opacity: 1 !important;
+  }
+  /* the per-step colour grade crossfades via `transition: background` — kill it
+     so the tint swaps instantly under reduced-motion (no crossfade). */
+  .ob-art::after {
+    transition: none !important;
   }
 }
 
-/* Settings (dev-only) ------------------------------------------------------ */
-.set-sec {
-  margin: 20px 26px 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--t-3);
+/* Settings & Billing ------------------------------------------------------- */
+.set-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 26px 44px;
+  max-width: 760px;
 }
 .set-card {
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1px solid var(--hairline);
   border-radius: 16px;
-  padding: 4px 20px;
-  box-shadow:
-    0 1px 2px rgba(31, 27, 21, 0.04),
-    0 8px 24px -14px rgba(31, 27, 21, 0.18);
-  transition:
-    transform 0.18s ease,
-    box-shadow 0.18s ease;
+  padding: 4px 22px;
 }
-.set-card:hover {
-  transform: translateY(-1px);
-  box-shadow:
-    0 2px 4px rgba(31, 27, 21, 0.05),
-    0 14px 30px -14px rgba(31, 27, 21, 0.22);
+/* account card — a touch of accent so "you" reads as the hero of Settings */
+.set-card.you {
+  background: linear-gradient(180deg, var(--accent-tint) 0%, var(--surface) 62%);
+  border-color: var(--accent-line);
+  padding: 6px 22px;
 }
 .set-row {
   display: flex;
@@ -7343,6 +8233,28 @@ body {
   font-size: 13px;
   line-height: 1.5;
   max-width: 52ch;
+}
+/* settings — account row */
+.acct {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.acct-av {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(150deg, #8b5cf6, #6d28d9);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 18px;
+  flex: none;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.28);
+}
+.acct .set-txt b {
+  font-size: 15px;
 }
 .set-link {
   flex-shrink: 0;
@@ -7388,6 +8300,104 @@ body {
 }
 .switch.on .knob {
   transform: translateX(20px);
+}
+
+/* billing & usage */
+.bill-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 0;
+}
+.bill-meter {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--hairline);
+  overflow: hidden;
+  margin: 0 0 18px;
+}
+.bill-meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent, #7c3aed);
+  transition: width 0.4s ease;
+}
+
+/* today's usage — the run count is the hero */
+.usage-card {
+  padding: 20px 22px;
+}
+.usage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.usage-head b {
+  color: var(--t-1);
+  font-size: 14px;
+  font-weight: 650;
+}
+.usage-left {
+  flex: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  border-radius: 99px;
+  padding: 2px 10px;
+}
+.usage-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin: 12px 0;
+}
+.usage-n {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+  color: var(--t-1);
+}
+.usage-tot {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--t-3);
+}
+.usage-card .bill-meter {
+  margin: 0;
+}
+.usage-cap {
+  display: block;
+  margin-top: 11px;
+  font-size: 12px;
+  color: var(--t-4);
+}
+.usage-note {
+  display: block;
+  margin: 12px 0 4px;
+  font-size: 13px;
+  color: var(--t-3);
+}
+
+/* plan — an accent hairline marks the upgrade path */
+.plan-card {
+  border-color: var(--accent-line);
+}
+/* deliberately inert, still branded — reads as "coming", not "broken" */
+.upg-soon {
+  flex-shrink: 0;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  padding: 9px 15px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: default;
+  white-space: nowrap;
 }
 
 /* ===== Build Coach view ("Cùng làm") — Chapter 3, light-theme adaptation ===== */
@@ -8287,4 +9297,204 @@ body {
 .lc-deny {
   background: #e74c3c;
   color: #fff;
+/* byte's in-chat "turn this on" toolkit card (SetupCard) */
+.cset {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 12px 13px;
+  margin: 2px 0 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cset-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cset-ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+}
+.cset-cat {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--t-3);
+}
+.cset-n {
+  font-weight: 650;
+  font-size: 14px;
+}
+.cset-why {
+  font-size: 12.5px;
+  color: var(--t-3);
+  line-height: 1.4;
+}
+.cset-b {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cset-b:hover {
+  filter: brightness(1.05);
+}
+.cset-done {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.cset-done .ck {
+  font-size: 12px;
+}
+
+/* First-run enrichment question card (goal / traction / problem). */
+.civ {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--accent-line);
+  background: linear-gradient(135deg, var(--accent-tint), var(--surface));
+}
+.civ-q {
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.35;
+}
+.civ-why {
+  font-size: 12px;
+  color: var(--t-3);
+  line-height: 1.4;
+  margin-top: -3px;
+}
+.civ-in {
+  width: 100%;
+  padding: 8px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+.civ-in:focus {
+  border-color: var(--accent);
+}
+.civ-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.civ-send {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.civ-send:hover {
+  filter: brightness(1.05);
+}
+.civ-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.civ-skip {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--t-3);
+  font-weight: 600;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.civ-skip:hover {
+  color: var(--t-1);
+}
+
+/* "Noted" chip — a fact/decision byte quietly captured from chat into company memory.
+   Deliberately minimal: one muted line, no box/tint/icon, with a subtle undo. */
+.cnote {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 0 2px 4px;
+  margin: 0 0 2px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--t-3);
+}
+.cnote-txt {
+  flex: 1;
+  min-width: 0;
+}
+.cnote-k {
+  color: var(--t-2);
+  font-weight: 600;
+}
+.cnote-undo {
+  border: 0;
+  background: transparent;
+  color: var(--t-4);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 0;
+  flex: none;
+}
+.cnote-undo:hover {
+  color: var(--t-2);
+  text-decoration: underline;
+}
+.cnote-off {
+  padding: 0 2px 4px;
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--t-4);
+  font-style: italic;
+  text-decoration: line-through;
+}
+
+/* Overview stage ribbon — text-forward breadcrumb. Full row by default;
+   below 640px it collapses done/ahead phases to counts (see StageRibbon). */
+.stage-ribbon-full {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: nowrap;
+}
+.stage-ribbon-compact {
+  display: none;
+  align-items: center;
+  gap: 9px;
+}
+@media (max-width: 640px) {
+  .stage-ribbon-full {
+    display: none;
+  }
+  .stage-ribbon-compact {
+    display: flex;
+  }
 }

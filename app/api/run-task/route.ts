@@ -19,24 +19,24 @@ import {
   DELIVERABLE_INSTRUCTIONS,
   type StructuredKind,
 } from '@/lib/ai/deliverableSchemas';
+import {
+  CODEPET_CONTEXT,
+  composeRunSystem,
+  buildTaskPrompt,
+  type TaskFields,
+} from '@/lib/ai/runTaskPrompt';
 
 export const runtime = 'nodejs';
 
-// byte's voice + output contract.
-const BYTE_SYSTEM = `You are byte, the AI building companion inside Codepet. You produce real, ready-to-use deliverables for a founder building their company with AI — not descriptions of deliverables.
-
-Voice: warm, plain-language, confident, specific. No hype, no emoji, no clichés. Write the thing the founder will actually use.`;
-
-// Baseline company context. Phase 4 will swap this for the user's real business
-// brief once onboarding persists it; until then byte writes from the product.
-const CODEPET_CONTEXT = `Codepet is a macOS companion that builds your whole company with you, department by department. It reads your project, writes the business brief and roadmap, then does real work across Engineering, Marketing, Design, Finance, Operations, Legal, Sales, and Support — producing real deliverables you approve. The promise is comprehension plus control: a real company, and one you actually understand.`;
-
 // Structured-output schemas + prompt instructions live in a pure, unit-tested
 // module (lib/ai/deliverableSchemas.ts). `text` has no schema (plain text).
+// Prompt construction (byte's system contract + the cache-safe system/user split)
+// lives in lib/ai/runTaskPrompt.ts.
 type Kind = 'text' | StructuredKind;
 
 const KINDS: Record<Kind, { schema: Record<string, unknown> | null; instruction: string }> = {
   text: { schema: null, instruction: DELIVERABLE_INSTRUCTIONS.text },
+  doc: { schema: STRUCTURED_SCHEMAS.doc, instruction: DELIVERABLE_INSTRUCTIONS.doc },
   post: { schema: STRUCTURED_SCHEMAS.post, instruction: DELIVERABLE_INSTRUCTIONS.post },
   email: { schema: STRUCTURED_SCHEMAS.email, instruction: DELIVERABLE_INSTRUCTIONS.email },
   legal: { schema: STRUCTURED_SCHEMAS.legal, instruction: DELIVERABLE_INSTRUCTIONS.legal },
@@ -60,49 +60,10 @@ interface RunTaskBody {
   taskTitle?: unknown;
   taskHint?: unknown;
   deptName?: unknown;
+  deptKey?: unknown;
   reviseNote?: unknown;
   current?: unknown;
   brief?: unknown;
-}
-
-function buildPrompt(
-  kind: Kind,
-  context: string,
-  priorWork: string,
-  fields: {
-    taskTitle: string;
-    taskHint?: string;
-    deptName?: string;
-    reviseNote?: string;
-    current?: string;
-  },
-): string {
-  const { taskTitle, taskHint, deptName, reviseNote, current } = fields;
-  const lines = [
-    `Company context: ${context}`,
-    ...(priorWork ? ['', priorWork] : []),
-    '',
-    deptName ? `Department: ${deptName}` : null,
-    `Task: ${taskTitle}`,
-    taskHint ? `Intended deliverable: ${taskHint}` : null,
-    '',
-    KINDS[kind].instruction,
-  ];
-
-  if (reviseNote && current) {
-    lines.push(
-      '',
-      'You previously produced this draft:',
-      '---',
-      current,
-      '---',
-      `Revise it to address this feedback: ${reviseNote}`,
-      'Return the full revised deliverable (not a diff).',
-    );
-  } else {
-    lines.push('', 'Produce the deliverable now.');
-  }
-  return lines.filter((l) => l !== null).join('\n');
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -144,10 +105,11 @@ export async function POST(req: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  const fields = {
+  const fields: TaskFields = {
     taskTitle,
     taskHint: typeof body.taskHint === 'string' ? body.taskHint.slice(0, 400) : undefined,
     deptName: typeof body.deptName === 'string' ? body.deptName : undefined,
+    deptKey: typeof body.deptKey === 'string' ? body.deptKey : undefined,
     reviseNote: typeof body.reviseNote === 'string' ? body.reviseNote.slice(0, 400) : undefined,
     current: typeof body.current === 'string' ? body.current.slice(0, 6000) : undefined,
   };
@@ -183,17 +145,26 @@ export async function POST(req: Request): Promise<Response> {
       shipped: library,
     }) || CODEPET_CONTEXT;
   const priorWork = composePriorWorkContext(
-    selectPriorWork(library, { deptName: fields.deptName, excludeTitle: fields.taskTitle }),
+    selectPriorWork(library, {
+      deptName: fields.deptName,
+      excludeTitle: fields.taskTitle,
+      // Rank prior work by relevance to what this task is actually about, so byte grounds
+      // on the pieces it must stay consistent with (across departments), not just recency.
+      query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
+    }),
   );
-  const { schema } = KINDS[kind];
-  const prompt = buildPrompt(kind, context, priorWork, fields);
+  const { schema, instruction } = KINDS[kind];
+  // Cache-safe split: the stable company context goes in the system (cached across the
+  // session's generations); only the per-task prompt varies call to call.
+  const system = composeRunSystem(context);
+  const prompt = buildTaskPrompt({ instruction, priorWork, fields });
   const onUsage = usageSink(uid, idToken, 'runTask');
 
   try {
     if (schema) {
       const payload = await generateJson({
         client,
-        system: BYTE_SYSTEM,
+        system,
         prompt,
         maxTokens: 4096,
         label: `run-task:${kind}`,
@@ -204,7 +175,7 @@ export async function POST(req: Request): Promise<Response> {
     }
     const text = await generateText({
       client,
-      system: BYTE_SYSTEM,
+      system,
       prompt,
       maxTokens: 4096,
       label: `run-task:${kind}`,

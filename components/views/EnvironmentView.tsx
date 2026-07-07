@@ -1,6 +1,7 @@
 'use client';
 import { useApp } from '@/lib/store';
 import { ENV, ENV_CATS, ENV_META } from '@/lib/data';
+import { usageReceipt } from '@/lib/ai/toolkitUse';
 import { Byte } from '../Byte';
 
 export function EnvironmentView() {
@@ -56,6 +57,7 @@ export function EnvironmentView() {
                 </div>
                 <div className="rc-n">{x.n}</div>
                 <div className="rc-why">{x.why || x.d}</div>
+                {usageReceipt(x.tasks) && <div className="rc-used">{usageReceipt(x.tasks)}</div>}
                 <div className="rc-act">
                   {x.s ? (
                     <span className="rc-done">
@@ -95,7 +97,12 @@ export function EnvironmentView() {
                   {items.map((x, i) => (
                     <div className={`erow ec-${cls}`} key={i}>
                       <div className="eic">{x.ab}</div>
-                      <div className="en">{x.n}</div>
+                      <div className="en">
+                        <span className="en-n">{x.n}</span>
+                        {usageReceipt(x.tasks) && (
+                          <span className="en-used">{usageReceipt(x.tasks)}</span>
+                        )}
+                      </div>
                       <button className={`eb${x.s ? ' on' : ''}`} onClick={() => toggle(key, i)}>
                         {x.s ? (
                           <>

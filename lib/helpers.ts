@@ -66,13 +66,15 @@ export interface TaskStateInfo {
   label: string;
   cls: string;
 }
-// shared task-state vocabulary — what each task needs from whom
+// shared task-state vocabulary — the honest state a task is actually in.
+// Order matters: done and locked first, then a produced-but-unapproved draft
+// (Awaiting), then the founder's own tasks, then byte's queue (draft-not-yet + does).
 export function taskState(t: Task, available?: boolean): TaskStateInfo {
   if (t.done) return { label: 'Done', cls: 'st-done' };
   if (available === false) return { label: 'Locked', cls: 'st-locked' };
-  if (t.who === 'draft') return { label: 'Needs your approval', cls: 'st-draft' };
-  if (t.who === 'you') return { label: 'Needs your input', cls: 'st-you' };
-  return { label: 'byte does this', cls: 'st-does' };
+  if (t.drafted) return { label: 'Awaiting your approval', cls: 'st-draft' };
+  if (t.who === 'you') return { label: 'Your move', cls: 'st-you' };
+  return { label: 'Up next', cls: 'st-does' };
 }
 
 const artTag = (c: string, l: string): string =>
@@ -175,7 +177,7 @@ export function artMeta(t: Task, type: string): ArtMeta {
   return type === 'site'
     ? {
         file: 'index.html',
-        head: 'Built &amp; shipped',
+        head: 'Built & shipped',
         tag: '<span class="art-tag" style="background:var(--accent)">live</span>',
       }
     : type === 'screens'
@@ -193,7 +195,7 @@ export function artMeta(t: Task, type: string): ArtMeta {
         : type === 'build'
           ? {
               file: s + '.diff',
-              head: 'Built &amp; verified',
+              head: 'Built & verified',
               tag: '<span class="art-tag" style="background:var(--accent)">verified</span>',
             }
           : type === 'prep'
@@ -290,4 +292,10 @@ export function buildLog(t: Task, type: string, d: { k: string }): LogStep[] {
     L('Shaping it into sections and adding a variant or two'),
     L('Writing the deliverable ↓'),
   ];
+}
+
+/** "8 steps" / "1 step" — the count label for the inline "What byte did" record. */
+export function stepCountLabel(steps: LogStep[]): string {
+  const n = steps.length;
+  return `${n} step${n === 1 ? '' : 's'}`;
 }

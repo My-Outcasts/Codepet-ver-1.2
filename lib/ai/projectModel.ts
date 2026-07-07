@@ -81,7 +81,11 @@ export function normalizeDecisions(raw: unknown, max = MAX_DECISIONS): DecisionE
 export function composeDecisions(decisions: DecisionEntry[]): string {
   if (!decisions.length) return '';
   const lines = decisions.map((d) => `- ${d.topic}: ${d.statement}`);
-  return `Decisions the founder has locked in — honor these; don't contradict or re-open them:\n${lines.join('\n')}`;
+  return (
+    'Decisions the founder has locked in — honor these; never contradict or silently re-open them:\n' +
+    lines.join('\n') +
+    '\nIf the current work genuinely conflicts with one, do NOT quietly override it and do NOT ignore the conflict: stay consistent with the decision, and add one short, clearly-marked note flagging the tension so the founder can decide (e.g. "Note: this holds to your decision that <…>; tell me if you want to revisit it").'
+  );
 }
 
 export interface DigestOptions {

@@ -15,6 +15,7 @@ export async function authHeader(): Promise<Record<string, string>> {
 
 export type DeliverableKind =
   | 'text'
+  | 'doc'
   | 'post'
   | 'email'
   | 'legal'
@@ -31,6 +32,7 @@ export interface RunArgs {
   taskTitle: string;
   taskHint?: string;
   deptName?: string;
+  deptKey?: string;
   /** Revise pass: byte's feedback + the current draft to revise. */
   reviseNote?: string;
   current?: string;
@@ -61,4 +63,31 @@ export async function runByteTask(args: RunArgs): Promise<RunResult> {
     throw new GenerateError(data.error || `http_${res.status}`);
   }
   return (await res.json()) as RunResult;
+}
+
+export interface EnrichAnswerResult {
+  saved: boolean;
+  gap: string;
+  /** byte's distilled value that was persisted (present only when saved). */
+  value?: string;
+}
+
+/** Send one first-run interview answer for byte to distill + persist into the brief.
+ *  Fail-soft: a thrown/!ok response just means that field stays empty — the caller
+ *  advances the interview regardless (never block onboarding on this). */
+export async function postEnrichAnswer(
+  gap: string,
+  answer: string,
+): Promise<EnrichAnswerResult | null> {
+  try {
+    const res = await fetch('/api/enrich-answer', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ gap, answer }),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as EnrichAnswerResult;
+  } catch {
+    return null;
+  }
 }

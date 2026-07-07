@@ -1,8 +1,13 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { DEPTS } from '@/lib/data';
+import { track } from '@/lib/analytics';
+import { DEPTS, ENV, ENV_META } from '@/lib/data';
+import { resolveEnvIndex } from '@/lib/ai/envSetup';
+import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
 import { Byte } from './Byte';
+import { ExecLog, StaticLog } from './artifact/ExecLog';
+import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
 
 // Quick-start prompts shown only before the first message — they send to byte.
@@ -50,15 +55,31 @@ function ResultCard({ m }: { m: ChatMessage }) {
   const { reviseTaskInChat, approveChatResult, openChatResult } = useApp();
   const [revising, setRevising] = useState(false);
   const [note, setNote] = useState('');
-  // Latches true once a revise pass fires, so the spinner reads "Revising…" rather
-  // than "Producing…". A card's spinner only re-shows via revise (the initial produce
-  // is a separate card), so the flag never needs resetting.
   const [reviseBusy, setReviseBusy] = useState(false);
+  // Dual-gate: the card leaves the run view only when the produce is done (m.running=false)
+  // AND the log has played through (logDone). Reset whenever a new run/revise starts.
+  const [logDone, setLogDone] = useState(false);
+  // Latches true only once this card has actually been in flight, so a card that first
+  // mounts already-done (ran=false) shows its result immediately instead of replaying the
+  // log. (Inline result cards are session-only today; this keeps the gate correct if they
+  // ever start rehydrating.)
+  const [ran, setRan] = useState(false);
+  // The persistent "What byte did" record is collapsed by default.
+  const [showRecord, setShowRecord] = useState(false);
+  useEffect(() => {
+    if (m.running) {
+      setRan(true);
+      setLogDone(false);
+    }
+  }, [m.running]);
+
   const r = m.result!;
   const d = DEPTS.find((x) => x.k === r.deptK);
   const t = d?.tasks.find((x) => x.t === r.taskTitle);
   const noun = TYPE_NOUN[r.type] || 'Deliverable';
   const preview = (t?.out || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+  const steps = m.steps;
+  const hasSteps = !!steps?.length;
 
   const revise = (text: string) => {
     reviseTaskInChat(m.id, r.deptK, r.taskTitle, text);
@@ -66,6 +87,11 @@ function ResultCard({ m }: { m: ChatMessage }) {
     setReviseBusy(true);
     setNote('');
   };
+
+  // Show the run view while producing, or — once a run has started — until the log
+  // finishes playing. A card that mounts already-done (ran=false) skips straight to the
+  // result, so a finished log never replays.
+  const running = m.running || (ran && hasSteps && !logDone);
 
   return (
     <div className="cres">
@@ -76,13 +102,33 @@ function ResultCard({ m }: { m: ChatMessage }) {
           {noun}
         </span>
       </div>
-      {m.running ? (
-        <div className="cres-run">
-          <span className="cres-spin" />
-          {reviseBusy ? 'Revising…' : 'Producing…'}
-        </div>
+      {running ? (
+        hasSteps ? (
+          <ExecLog
+            steps={steps!}
+            title={reviseBusy ? 'byte is revising…' : 'byte is doing the work…'}
+            onDone={() => setLogDone(true)}
+          />
+        ) : (
+          <div className="cres-run">
+            <span className="cres-spin" />
+            {reviseBusy ? 'Revising…' : 'Producing…'}
+          </div>
+        )
       ) : (
         <>
+          {hasSteps && (
+            <div className="cres-rec">
+              <button
+                className="cres-rec-t"
+                onClick={() => setShowRecord((v) => !v)}
+                aria-expanded={showRecord}
+              >
+                {showRecord ? '▾' : '▸'} What byte did · {stepCountLabel(steps!)}
+              </button>
+              {showRecord && <StaticLog steps={steps!} />}
+            </div>
+          )}
           {preview && <div className="cres-prev">{preview}</div>}
           {r.approved ? (
             <div className="cres-saved">Saved to your library</div>
@@ -138,7 +184,7 @@ function ResultCard({ m }: { m: ChatMessage }) {
                 Approve
               </button>
               <button className="cres-b" onClick={() => openChatResult(r.deptK, r.taskTitle)}>
-                {r.type === 'site' ? 'Open' : 'Copy'}
+                {r.type === 'site' ? 'Open' : 'Read'}
               </button>
               <button className="cres-b" onClick={() => setRevising(true)}>
                 Revise
@@ -151,6 +197,99 @@ function ResultCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// A one-tap card byte offers to turn on an off toolkit item. Reads the LIVE ENV item so
+// a flip (setupCapability → bump) re-renders this card into its confirmed state.
+function SetupCard({ m }: { m: ChatMessage }) {
+  const { setupCapability } = useApp();
+  const s = m.setup!;
+  const idx = resolveEnvIndex(ENV, s.category, s.name);
+  if (idx === -1) return null; // stale/unknown item — drop quietly
+  const item = ENV[s.category][idx];
+  const meta = ENV_META[s.category];
+  return (
+    <div className="cset">
+      <div className="cset-h">
+        <span className="cset-ic">{item.ab}</span>
+        <span className="cset-cat">{meta.label}</span>
+      </div>
+      <div className="cset-n">{item.n}</div>
+      <div className="cset-why">{item.why || item.d}</div>
+      {item.s ? (
+        <div className="cset-done">
+          <span className="ck">✓</span>
+          {meta.on}
+        </div>
+      ) : (
+        <button className="cset-b" onClick={() => setupCapability(s.category, s.name)}>
+          {meta.add}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// A first-run enrichment question (goal / traction / problem). While unanswered it shows
+// byte's question, a why-line, and an answer input + Skip; once the founder answers or
+// skips, it collapses to a plain past question (the affordance is gone).
+function InterviewCard({ m }: { m: ChatMessage }) {
+  const { answerInterview } = useApp();
+  const [text, setText] = useState('');
+  const iv = m.interview!;
+  const q = QUESTION_FOR[iv.gap];
+  const send = () => answerInterview(m.id, iv.gap, text.trim() || null);
+  if (iv.answered) {
+    return <div className="bub">{q.ask}</div>;
+  }
+  return (
+    <div className="bub civ">
+      <div className="civ-q">{q.ask}</div>
+      <div className="civ-why">{q.why}</div>
+      <input
+        className="civ-in"
+        placeholder="Type your answer…"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            send();
+          }
+        }}
+        autoFocus
+      />
+      <div className="civ-row">
+        <button className="civ-send" onClick={send} disabled={!text.trim()}>
+          Send
+        </button>
+        <button className="civ-skip" onClick={() => answerInterview(m.id, iv.gap, null)}>
+          Skip
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// A "Noted" chip: a durable fact/decision byte captured from the founder's last message
+// into company memory. Subtle by design (byte quietly got smarter), with an undo so the
+// founder stays in control of what byte remembers. Strikes to "Removed" once undone.
+function NotedChip({ m }: { m: ChatMessage }) {
+  const { undoNoted } = useApp();
+  const n = m.noted!;
+  if (n.undone) {
+    return <div className="cnote cnote-off">Removed from memory</div>;
+  }
+  return (
+    <div className="cnote">
+      <span className="cnote-txt">
+        <span className="cnote-k">Noted · {n.topic}</span> — {n.statement}
+      </span>
+      <button className="cnote-undo" onClick={() => undoNoted(m.id, n.topic)}>
+        undo
+      </button>
+    </div>
+  );
+}
+
 export function Copilot() {
   const {
     toggleCopilot,
@@ -158,7 +297,10 @@ export function Copilot() {
     chatMessages,
     chatStreaming,
     sendChat,
+    retryChat,
     runBriefedTask,
+    runTaskInChat,
+    dismissChatAction,
     advanceStage,
     buildIntakeActive,
     startBuildIntake,
@@ -173,6 +315,7 @@ export function Copilot() {
     setBuildPlanSteps,
     buildAutonomy,
     setBuildAutonomy,
+    navigateTo,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -180,12 +323,39 @@ export function Copilot() {
 
   const [draft, setDraft] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
+  // Whether the reader is pinned to the bottom — a ref, so scroll checks never trigger a
+  // re-render or re-run the follow effect. `showPill` surfaces the "New" jump button when
+  // fresh content arrives while they're scrolled up reading earlier history.
+  const pinnedRef = useRef(true);
+  const [showPill, setShowPill] = useState(false);
 
-  // Keep the latest message in view as the conversation grows / byte streams.
-  useEffect(() => {
+  const scrollToBottom = (smooth = false) => {
     const el = bodyRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  };
+
+  // Follow new content (including each streamed token) ONLY when pinned to the bottom. If
+  // the reader has scrolled up, leave their position untouched and flag that there's new
+  // content — so byte streaming no longer yanks them away from what they're reading.
+  useEffect(() => {
+    if (pinnedRef.current) scrollToBottom();
+    else setShowPill(true);
   }, [chatMessages]);
+
+  // Re-evaluate bottom-ness as they scroll; scrolling back down clears the pill.
+  const onBodyScroll = () => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    pinnedRef.current = atBottom;
+    if (atBottom) setShowPill(false);
+  };
+
+  const jumpToLatest = () => {
+    pinnedRef.current = true;
+    setShowPill(false);
+    scrollToBottom(true);
+  };
 
   const submit = () => {
     if (!draft.trim()) return;
@@ -193,6 +363,9 @@ export function Copilot() {
       addIntakeTurn(draft);
     } else {
       if (chatStreaming) return;
+      // Sending your own turn always re-pins — you expect to follow your message.
+      pinnedRef.current = true;
+      setShowPill(false);
       sendChat(draft);
     }
     setDraft('');
@@ -228,14 +401,27 @@ export function Copilot() {
           </svg>
         </button>
       </div>
-      <div className="cop-body" ref={bodyRef}>
-        <div className="bub">
-          Welcome back{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> —
-          where to focus, what&apos;s blocking you, or what to build next.
-        </div>
+      <div className="cop-body" ref={bodyRef} onScroll={onBodyScroll}>
+        {/* Greeting is an empty-state opener, not a permanent fixture — once the thread has
+            messages, byte's own turns are the presence, so it's hidden. */}
+        {empty && (
+          <div className="bub">
+            Welcome{founder ? `, ${founder}` : ''}. Ask me anything about <b>{company}</b> — where
+            to focus, what&apos;s blocking you, or what to build next.
+          </div>
+        )}
 
         {chatMessages.map((m) => {
           if (m.result) return <ResultCard key={m.id} m={m} />;
+          if (m.interview) return <InterviewCard key={m.id} m={m} />;
+          if (m.noted) return <NotedChip key={m.id} m={m} />;
+          if (m.setup)
+            return (
+              <div key={m.id}>
+                {m.text ? <div className="bub">{plain(m.text)}</div> : null}
+                <SetupCard m={m} />
+              </div>
+            );
           if (m.advance) {
             return (
               <div key={m.id} className="bub">
@@ -398,9 +584,40 @@ export function Copilot() {
               {m.action && (
                 <button
                   className="bub-act"
-                  onClick={() => runBriefedTask(m.action!.deptK, m.action!.taskTitle)}
+                  onClick={() => {
+                    if (m.action!.inline) {
+                      track('firstrun.action_clicked', { dept: m.action!.deptK });
+                      runTaskInChat(m.action!.deptK, m.action!.taskTitle);
+                      dismissChatAction(m.id);
+                    } else {
+                      runBriefedTask(m.action!.deptK, m.action!.taskTitle);
+                    }
+                  }}
                 >
                   {m.action.label}
+                </button>
+              )}
+              {m.nav && (
+                <button className="bub-act" onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}>
+                  {m.nav.label}
+                </button>
+              )}
+              {m.error && (
+                <button
+                  className="bub-retry"
+                  onClick={() => retryChat(m.id)}
+                  disabled={chatStreaming}
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                    <path
+                      d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
+                      stroke="currentColor"
+                      strokeWidth="1.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Retry
                 </button>
               )}
             </div>
@@ -417,6 +634,20 @@ export function Copilot() {
           </div>
         )}
       </div>
+      {showPill && (
+        <button className="cop-new" onClick={jumpToLatest} aria-label="Jump to latest messages">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path
+              d="M4 6l4 4 4-4"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          New
+        </button>
+      )}
       <div className="cop-foot">
         {!buildIntakeActive && (
           <button className="cop-build-cta" onClick={startBuildIntake}>

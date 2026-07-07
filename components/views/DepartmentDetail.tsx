@@ -5,9 +5,10 @@ import { taskState } from '@/lib/helpers';
 import { Byte } from '../Byte';
 
 function Delivered({ item, onOpen }: { item: LibItem; onOpen: () => void }) {
-  // Minimal: the compact summary card + one light action — a site opens in a new
-  // tab, everything else copies. No inline full render.
-  const openLbl = item.type === 'site' ? 'Open ↗' : 'Copy';
+  // Compact summary card + one light action — a site opens in a new tab, every
+  // other deliverable opens the readable viewer (scrollable full text, with its
+  // own Copy inside). The card body still previews the first few lines.
+  const openLbl = item.type === 'site' ? 'Open ↗' : 'Read';
   return (
     <div className={`delivered${item.type === 'site' ? ' site' : ''}`} onClick={onOpen}>
       <div className={`dl-bar ${item.type}`}>
@@ -21,7 +22,7 @@ function Delivered({ item, onOpen }: { item: LibItem; onOpen: () => void }) {
 }
 
 function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
-  const { runTask, openDeliverable } = useApp();
+  const { runTask, openDeliverable, viewItem } = useApp();
   if (t.done) {
     return (
       <div className="tk tk-done">
@@ -36,7 +37,14 @@ function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
             <span className="ok">✓</span> {t.run === 'route' ? 'Shipped' : 'Approved'} · delivered
           </span>
           {t._item && (
-            <Delivered item={t._item} onOpen={() => openDeliverable(t._item as LibItem)} />
+            <Delivered
+              item={t._item}
+              onOpen={() =>
+                (t._item as LibItem).type === 'site'
+                  ? openDeliverable(t._item as LibItem)
+                  : viewItem(t._item as LibItem)
+              }
+            />
           )}
         </div>
       </div>
@@ -56,7 +64,11 @@ function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
         </span>
       </div>
       <div className="tk-act">
-        {t.who === 'you' ? (
+        {t.drafted ? (
+          <button className="btn" onClick={() => runTask(t, dept)}>
+            Review &amp; approve
+          </button>
+        ) : t.who === 'you' ? (
           <button className="btn ghost" onClick={() => runTask(t, dept, true)}>
             Walk me through it
           </button>
@@ -98,7 +110,12 @@ export function DepartmentDetail() {
           </svg>
           Company
         </div>
-        <div className="dhero2" style={{ backgroundImage: `url('/covers/${d.k}.png')` }}>
+        <div
+          className="dhero2"
+          style={{
+            backgroundImage: `image-set(url('/covers/${d.k}.avif') type('image/avif'), url('/covers/${d.k}.webp') type('image/webp'))`,
+          }}
+        >
           <span
             className="dh-tint"
             style={{

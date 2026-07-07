@@ -27,6 +27,7 @@ import {
   type DepartmentDoc,
   type LibraryDoc,
   type EnvState,
+  type EnvUsage,
   type CompanyBrief,
   type ScannedProject,
   type ChatMessageDoc,
@@ -39,6 +40,8 @@ import {
   type TrackEvent,
   type TrackingSummary,
 } from '../tracking';
+import { normalizeDecisions, type DecisionEntry } from '../ai/projectModel';
+import { dayKey } from '../ai/rateLimit';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -89,6 +92,31 @@ export function applyEnvState(env: EnvState): void {
   }
 }
 
+// ---- env usage <-> ENV catalog (additive; independent of the on/off env map) ----
+export function envUsageFromCatalog(): EnvUsage {
+  const usage: EnvUsage = {};
+  for (const [category, items] of Object.entries(ENV)) {
+    usage[category] = {};
+    for (const item of items) if (item.tasks?.length) usage[category][item.n] = item.tasks;
+  }
+  return usage;
+}
+
+/** Apply a persisted usage map back onto the ENV catalog singleton. Self-resetting: an
+ * item not present in `usage` is cleared, so a previously signed-in account's usage can
+ * never leak into a freshly loaded one (an empty map clears everything). */
+export function applyEnvUsage(usage: EnvUsage): void {
+  for (const [category, items] of Object.entries(ENV)) {
+    const saved = usage[category] ?? {};
+    for (const item of items) item.tasks = Array.isArray(saved[item.n]) ? saved[item.n] : undefined;
+  }
+}
+
+export async function persistEnvUsage(companyId: string, usage: EnvUsage): Promise<void> {
+  const db = getDb();
+  await updateDoc(doc(db, paths.company(companyId)), { envUsage: usage, updatedAt: Date.now() });
+}
+
 /** Merge persisted departments onto the DEPTS singleton (by department key). */
 export function applyDepartments(departments: DepartmentDoc[]): void {
   for (const loaded of departments) {
@@ -128,6 +156,8 @@ export interface CompanyData {
   roadmapStage?: number;
   /** Recent byte-chat history, oldest-first. */
   chat: ChatMessageDoc[];
+  /** Durable company decisions byte maintains (the memory the founder can curate). */
+  decisions: DecisionEntry[];
 }
 
 /** How many recent chat messages to hydrate on load. */
@@ -162,6 +192,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
   const company = companySnap.data();
   applyEnvState((company?.env ?? {}) as EnvState);
+  applyEnvUsage((company?.envUsage ?? {}) as EnvUsage);
 
   const library = libSnap.docs.map((d) => {
     // Strip persistence-only fields so the shape matches the in-app LibItem.
@@ -181,7 +212,24 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     onboardedAt: company?.onboardedAt as number | undefined,
     roadmapStage: validStage(company?.roadmapStage),
     chat,
+    decisions: normalizeDecisions(company?.decisions),
   };
+}
+
+/**
+ * Persist the founder-curated decisions memory. byte writes decisions server-side on
+ * approval (/api/remember); this is the client path for the founder editing/removing
+ * them in the "What byte remembers" panel. `clean` drops undefined fields (e.g. an
+ * absent `source`) since Firestore rejects them.
+ */
+export async function persistDecisions(
+  companyId: string,
+  decisions: DecisionEntry[],
+): Promise<void> {
+  await updateDoc(doc(getDb(), paths.company(companyId)), {
+    decisions: decisions.map((d) => clean(d)),
+    updatedAt: Date.now(),
+  });
 }
 
 /** Persist a single byte-chat message under the company. */
@@ -243,6 +291,13 @@ export async function loadTrackingSummary(companyId: string): Promise<TrackingSu
   } catch {
     return EMPTY_TRACKING;
   }
+}
+
+/** Today's AI-run count for the company (the daily cost-guard counter), or 0 if none yet. */
+export async function loadTodayUsage(companyId: string): Promise<number> {
+  const snap = await getDoc(doc(getDb(), `companies/${companyId}/usage/${dayKey(new Date())}`));
+  const n = snap.exists() ? (snap.data() as { n?: unknown }).n : 0;
+  return typeof n === 'number' && Number.isFinite(n) ? n : 0;
 }
 
 /** Local projects for the Build Coach's "Which project?" picker. Prefers the
@@ -457,6 +512,16 @@ export async function persistPersonalization(companyId: string, depts: Dept[]): 
 }
 
 // ---- write-through ----
+/** Persist a single department's current tasks (e.g. after byte produces a draft,
+ * so the task's `drafted` flag + draft payload survive reload). Members may write
+ * department docs, so no rules change is needed. Optimistic: the in-memory task
+ * already updated; this write-through can fail without breaking the session. */
+export async function persistDepartmentTasks(companyId: string, dept: Dept): Promise<void> {
+  await setDoc(doc(getDb(), paths.department(companyId, dept.k)), serializeDept(dept), {
+    merge: true,
+  });
+}
+
 /** Persist a task approval: the updated department doc + a new library item. */
 export async function persistApproval(
   companyId: string,
@@ -476,4 +541,15 @@ export async function persistApproval(
 export async function persistEnv(companyId: string, env: EnvState): Promise<void> {
   const db = getDb();
   await updateDoc(doc(db, paths.company(companyId)), { env, updatedAt: Date.now() });
+}
+
+/** A founder-initiated support message → the existing `feedback` collection (kind:'support'). */
+export async function sendSupportMessage(msg: string, name: string, email: string): Promise<void> {
+  await addDoc(collection(getDb(), 'feedback'), {
+    kind: 'support',
+    message: msg.trim(),
+    name,
+    email,
+    ts: Date.now(),
+  });
 }

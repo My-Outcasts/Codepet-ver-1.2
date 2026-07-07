@@ -1,8 +1,12 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
-import { OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL } from '@/lib/data';
-import { Byte } from './Byte';
+import { DEPTS, OB_ROLES, OB_TECH, OB_STAGES, OB_NOTES, OB_CATEGORIES, OB_TOTAL } from '@/lib/data';
+import { buildRevealSummary, type RevealSummary } from '@/lib/onboarding/firstRun';
+import type { CompanyBrief } from '@/lib/firebase/schema';
+import { track } from '@/lib/analytics';
+import { useParallax } from '@/lib/ui/useParallax';
+import { Starfield } from '@/components/ui/Starfield';
 
 interface ObData {
   name: string;
@@ -18,16 +22,40 @@ interface ObData {
   stage: number;
 }
 
+// Bright-on-dark dot colour per department, for the cold-open department preview chips.
+const DEPT_DOT: Record<string, string> = {
+  eng: '#6ea8ff',
+  mkt: '#ff9d6b',
+  ops: '#4fe0cf',
+  fin: '#f2c94c',
+  legal: '#b98cf0',
+  design: '#d08cf5',
+  sales: '#7ea8ff',
+  support: '#7fd694',
+};
+
 // One cinematic scene per step (left panel art; step 0 is the full-bleed cold-open).
 const STEP_ART = [
-  '/onboarding/ob-team.jpg', // 0 cold-open
-  '/onboarding/ob-couch.jpg', // 1 name
-  '/onboarding/ob-chess.jpg', // 2 role
-  '/onboarding/ob-drummer.jpg', // 3 tech
-  '/onboarding/ob-observatory.jpg', // 4 project
-  '/onboarding/ob-isometric.jpg', // 5 stage
-  '/onboarding/ob-boardroom.jpg', // 6 analysis
-  '/onboarding/ob-team.jpg', // 7 summary
+  '/onboarding/ob-team.webp', // 0 cold-open
+  '/onboarding/ob-couch.webp', // 1 name
+  '/onboarding/ob-chess.webp', // 2 role
+  '/onboarding/ob-drummer.webp', // 3 tech
+  '/onboarding/ob-observatory.webp', // 4 project
+  '/onboarding/ob-isometric.webp', // 5 stage
+  '/onboarding/ob-boardroom.webp', // 6 analysis
+  '/onboarding/ob-team.webp', // 7 summary
+];
+
+// Per-step colour grade laid over the art panel (soft-light) — one hue per scene.
+const STEP_GRADE = [
+  'rgba(124,58,237,0.28)', // 0
+  'rgba(255,157,107,0.24)', // 1
+  'rgba(110,168,255,0.24)', // 2
+  'rgba(79,224,207,0.24)', // 3
+  'rgba(208,140,245,0.26)', // 4
+  'rgba(242,201,76,0.22)', // 5
+  'rgba(126,168,255,0.26)', // 6
+  'rgba(124,58,237,0.26)', // 7
 ];
 
 const AN_LINES = [
@@ -36,6 +64,22 @@ const AN_LINES = [
   'Cross-checking your space & stage',
   'Drafting your roadmap to launch',
 ];
+
+// The wizard's collected answers → the CompanyBrief byte scaffolds + grounds work in.
+function briefFromData(data: ObData): CompanyBrief {
+  return {
+    founderName: data.name || undefined,
+    role: data.roleLabel || undefined,
+    tech: OB_TECH.find(([, k]) => k === data.tech)?.[0],
+    stage: OB_STAGES[data.stage],
+    projectName: data.projName || undefined,
+    oneLiner: data.oneLiner || undefined,
+    notes: data.proj || undefined,
+    link: data.link || undefined,
+    categories: data.categories.length ? data.categories : undefined,
+    audience: data.audience || undefined,
+  };
+}
 
 function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) => void }) {
   const n = OB_STAGES.length,
@@ -102,7 +146,7 @@ function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) =>
 }
 
 export function Onboarding() {
-  const { onboarding, finishOnboarding, toast } = useApp();
+  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding } = useApp();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<ObData>({
     name: '',
@@ -119,21 +163,59 @@ export function Onboarding() {
   });
   const [anShown, setAnShown] = useState(0);
   const [anDone, setAnDone] = useState(false);
+  const [reveal, setReveal] = useState<RevealSummary | null>(null);
+  const [slow, setSlow] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
+  const coldRef = useRef<HTMLDivElement>(null);
+  useParallax(coldRef);
 
-  // step 6: run the analysis animation
+  // step 6: play the analysis animation AND run the real scaffold. "See what I found"
+  // unlocks only when both the animation has finished and the scaffold has resolved.
   useEffect(() => {
     if (step !== 6) {
       setAnShown(0);
       setAnDone(false);
+      if (step < 6) {
+        setReveal(null);
+        setSlow(false);
+      }
       return;
     }
     setAnShown(0);
     setAnDone(false);
+    setReveal(null);
+    setSlow(false);
+    let done = false;
     const timers: ReturnType<typeof setTimeout>[] = [];
     AN_LINES.forEach((_, i) => timers.push(setTimeout(() => setAnShown(i + 1), i * 640)));
     timers.push(setTimeout(() => setAnDone(true), AN_LINES.length * 640 + 300));
-    return () => timers.forEach(clearTimeout);
+    // subtle "still working…" affordance if the API runs long
+    timers.push(
+      setTimeout(
+        () => {
+          if (!done) setSlow(true);
+        },
+        AN_LINES.length * 640 + 3000,
+      ),
+    );
+    // the real work
+    scaffoldFromOnboarding(briefFromData(data)).then((sum) => {
+      if (done) return;
+      setReveal(sum);
+      if (sum.ok) track('firstrun.scaffold_shown', { depts: sum.deptCount, tasks: sum.taskCount });
+    });
+    // hard safety net: never leave the founder stuck on the analysis screen
+    timers.push(
+      setTimeout(() => {
+        if (!done) setReveal(buildRevealSummary(DEPTS, false));
+      }, 20000),
+    );
+    return () => {
+      done = true;
+      timers.forEach(clearTimeout);
+    };
+    // data is complete + frozen by step 6; scaffoldFromOnboarding is stable (useCallback)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
 
   // focus the name field on step 1
@@ -153,20 +235,9 @@ export function Onboarding() {
     }));
   const enterApp = () => finishOnboarding();
   const finish = () => {
-    finishOnboarding({
-      founderName: data.name || undefined,
-      role: data.roleLabel || undefined,
-      tech: OB_TECH.find(([, k]) => k === data.tech)?.[0],
-      stage: OB_STAGES[data.stage],
-      projectName: data.projName || undefined,
-      oneLiner: data.oneLiner || undefined,
-      notes: data.proj || undefined,
-      link: data.link || undefined,
-      categories: data.categories.length ? data.categories : undefined,
-      audience: data.audience || undefined,
-    });
+    finishOnboarding(briefFromData(data));
     setTimeout(
-      () => toast('Your roadmap is ready — byte mapped 9 steps across 8 departments.'),
+      () => toast('Your roadmap is ready — byte mapped your company across your departments.'),
       400,
     );
   };
@@ -174,27 +245,38 @@ export function Onboarding() {
   // Step 0 — cinematic cold-open (full-bleed hero), distinct from the question screens.
   if (step === 0) {
     return (
-      <div className="ob ob-cold">
+      <div className="ob ob-cold" ref={coldRef}>
+        <div className="ob-cold-glow" aria-hidden />
+        <Starfield />
         <button className="skip-pre" onClick={enterApp}>
           Skip onboarding →
         </button>
         <div className="ob-cold-in">
-          <div className="ob-cold-byte">
-            <Byte size="s28" />
-            <span>byte</span>
-          </div>
-          <h1>Let&apos;s build your company — not just your code.</h1>
+          <h1>
+            Let&apos;s build your company — <span className="ob-hl">not just your code.</span>
+          </h1>
           <p>
-            I&apos;m byte. I&apos;ll run the whole company around your product, department by
-            department — and I do the work <b>with</b> you, so you always understand what&apos;s
-            happening.
+            Codepet runs the whole company around your product, department by department — and does
+            the work <b>with</b> you, so you always understand what&apos;s happening.
           </p>
+          <div className="ob-depts">
+            <div className="ob-depts-ey">Codepet runs all {DEPTS.length} departments</div>
+            <div className="ob-chips">
+              {DEPTS.map((d) => (
+                <span
+                  key={d.k}
+                  className="ob-chip"
+                  style={{ ['--dc' as string]: DEPT_DOT[d.k] || '#9d5cf5' }}
+                >
+                  <i />
+                  {d.name}
+                </span>
+              ))}
+            </div>
+          </div>
           <button className="splash-btn" onClick={() => setStep(1)}>
             Set up my company
           </button>
-          <div className="ob-cold-meta">
-            About a minute · I map your roadmap across 8 departments · you approve every move
-          </div>
         </div>
       </div>
     );
@@ -296,7 +378,10 @@ export function Onboarding() {
     body = (
       <>
         <h2>Now — what are you building?</h2>
-        <p>Just a name and one line is plenty. The rest helps me do sharper work.</p>
+        <p>
+          A name and one clear sentence — that line is what I read to tailor your whole plan.
+          Everything else is optional but sharpens it.
+        </p>
         <label>Project name</label>
         <input
           className="t"
@@ -360,7 +445,13 @@ export function Onboarding() {
         />
       </>
     );
-    foot = <Foot label="Continue" disabled={!data.projName.trim()} onClick={() => setStep(5)} />;
+    foot = (
+      <Foot
+        label="Continue"
+        disabled={!data.projName.trim() || !data.oneLiner.trim()}
+        onClick={() => setStep(5)}
+      />
+    );
   } else if (step === 5) {
     body = (
       <>
@@ -396,54 +487,72 @@ export function Onboarding() {
         </div>
       </>
     );
-    foot = anDone ? (
-      <div className="ob-foot">
-        <div className="ob-prog">
-          <div className="ob-bar">
-            <i style={{ width: `${pct}%` }} />
+    foot =
+      anDone && reveal ? (
+        <div className="ob-foot">
+          <div className="ob-prog">
+            <div className="ob-bar">
+              <i style={{ width: `${pct}%` }} />
+            </div>
+            <span className="rstep">
+              Step {step + 1} of {OB_TOTAL}
+            </span>
           </div>
-          <span className="rstep">
-            Step {step + 1} of {OB_TOTAL}
-          </span>
+          <span className="grow" />
+          <button className="btnlg" onClick={() => setStep(7)}>
+            See what I found
+          </button>
         </div>
-        <span className="grow" />
-        <button className="btnlg" onClick={() => setStep(7)}>
-          See what I found
-        </button>
-      </div>
-    ) : null;
+      ) : slow ? (
+        <div className="ob-foot">
+          <span className="rstep">Still building your company…</span>
+        </div>
+      ) : null;
   } else {
     const rl = (data.roleLabel || 'founder').toLowerCase();
+    const r = reveal;
     body = (
       <>
         <h2>Here&apos;s your company{data.name ? ', ' + data.name : ''}.</h2>
         <p>
-          You&apos;re a <b>{rl}</b> at the <b>{OB_STAGES[data.stage].toLowerCase()}</b> stage. I
-          built your roadmap and staffed all eight departments — here&apos;s what I&apos;ll take off
-          your plate:
+          You&apos;re a <b>{rl}</b> at the <b>{OB_STAGES[data.stage].toLowerCase()}</b> stage.
+          {r && r.ok
+            ? ` I built your roadmap and staffed ${r.deptCount} departments — ${r.taskCount} tasks already prepped:`
+            : ' I built your roadmap and staffed your departments — here’s what I’ll take off your plate:'}
         </p>
         <div className="val">
-          <div className="vrow">
-            <div className="vi">✦</div>
-            <div>
-              <b>A living roadmap</b> — staged from &quot;{OB_STAGES[data.stage]}&quot; all the way
-              to launch.
-            </div>
-          </div>
-          <div className="vrow">
-            <div className="vi">✦</div>
-            <div>
-              <b>Real work, done with you</b> — 11 tasks already prepped across Engineering,
-              Marketing, Legal &amp; more.
-            </div>
-          </div>
-          <div className="vrow">
-            <div className="vi">✦</div>
-            <div>
-              <b>You stay in control</b> — I draft &amp; build; you approve. Nothing ships behind
-              your back.
-            </div>
-          </div>
+          {r && r.ok && r.sampleTasks.length ? (
+            r.sampleTasks.map((t) => (
+              <div className="vrow" key={t}>
+                <div className="vi">✦</div>
+                <div>
+                  <b>{t}</b>
+                </div>
+              </div>
+            ))
+          ) : (
+            <>
+              <div className="vrow">
+                <div className="vi">✦</div>
+                <div>
+                  <b>A living roadmap</b> — staged from &quot;{OB_STAGES[data.stage]}&quot; to
+                  launch.
+                </div>
+              </div>
+              <div className="vrow">
+                <div className="vi">✦</div>
+                <div>
+                  <b>Real work, done with you</b> — tasks prepped across your departments.
+                </div>
+              </div>
+              <div className="vrow">
+                <div className="vi">✦</div>
+                <div>
+                  <b>You stay in control</b> — I draft &amp; build; you approve.
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </>
     );
@@ -456,8 +565,14 @@ export function Onboarding() {
         Skip onboarding →
       </button>
       <div className="obcard">
-        <div className="ob-art">
-          <span key={step} style={{ backgroundImage: `url(${STEP_ART[step]})` }} />
+        <div className="ob-art" style={{ ['--grade' as string]: STEP_GRADE[step] }}>
+          {STEP_ART.map((src, i) => (
+            <span
+              key={i}
+              className={i === step ? 'on' : ''}
+              style={{ backgroundImage: `url(${src})` }}
+            />
+          ))}
         </div>
         <div className="ob-main" id="obIn">
           <div className="ob-top">

@@ -14,8 +14,9 @@ import React, {
   useState,
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
-import { artMeta, artType } from './helpers';
-import { runByteTask, GenerateError } from './ai/runTask';
+import { artMeta, artType, buildLog, type LogStep } from './helpers';
+import { runByteTask, GenerateError, postEnrichAnswer } from './ai/runTask';
+import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
 import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
@@ -25,20 +26,28 @@ import {
   loadTrackingSummary,
   loadProjects,
   persistApproval,
+  persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
   persistBrief,
   persistChatMessage,
+  persistDecisions,
   envStateFromCatalog,
   completeOnboarding,
   resetCompanyData,
   subscribeLiveBuild,
   ensureIngestToken,
   loadProjectDirs,
+  envUsageFromCatalog,
+  persistEnvUsage,
 } from './firebase/companyData';
+import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
+import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
+import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
+import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
 import { fetchNextStep, type NextStep } from './ai/nextStep';
 import { nextAction, setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
@@ -63,8 +72,13 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
-  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>"). */
-  action?: { label: string; deptK: string; taskTitle: string };
+  /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
+   * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
+   * opening the department run modal (runBriefedTask). */
+  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
+  /** A one-tap "take me there" chip byte offers when the founder asks where an app
+   * function is. Tapping it navigates (never auto-navigates). */
+  nav?: NavChip;
   /** Transient arrival briefing (not persisted; only the latest is kept in the thread). */
   brief?: boolean;
   /** byte is producing a deliverable for this message right now (inline run). */
@@ -77,6 +91,21 @@ export interface ChatMessage {
   buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
   buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
+  /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
+  setup?: { category: string; name: string };
+  /** A first-run enrichment question (goal / traction / problem). While `answered` is
+   * falsy, the chat renders an answer input + Skip; once answered/skipped it's a plain
+   * past question. See lib/ai/enrichInterview. */
+  interview?: { gap: Gap; answered?: boolean };
+  /** The execute-log steps for this run — streamed live in the card, then kept as the
+   * "What byte did" record. Generated once (buildLog) when the run starts. */
+  steps?: LogStep[];
+  /** A "Noted" chip: a durable fact/decision byte captured from the founder's last message
+   * into company memory, with an undo. `undone` strikes it once the founder undoes. */
+  noted?: { topic: string; statement: string; undone?: boolean };
+  /** byte's reply failed (network / model / auth). Renders the fallback text + a Retry
+   * that re-runs the turn. Cleared when a retry succeeds. */
+  error?: boolean;
 }
 
 const newId = (): string =>
@@ -84,19 +113,24 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 import type { CompanyBrief } from './firebase/schema';
+import {
+  buildRevealSummary,
+  buildFirstRunGreeting,
+  type RevealSummary,
+} from './onboarding/firstRun';
 import { EMPTY_TRACKING, type TrackingSummary } from './tracking';
 
 export type View =
   | 'summary'
   | 'overview'
   | 'home'
-  | 'roadmap'
   | 'dept'
   | 'tasks'
   | 'library'
   | 'env'
   | 'install'
   | 'settings'
+  | 'billing'
   | 'build';
 
 export type Modal =
@@ -109,6 +143,8 @@ interface AppState {
   show: (v: View) => void;
   deptKey: string | null;
   openDept: (k: string) => void;
+  /** Guide the founder to an app function from byte's chat "take me there" chip. */
+  navigateTo: (dest: NavDest, target?: string) => void;
   selStage: number;
   drawerOpen: boolean;
   selectStage: (n: number) => void;
@@ -120,11 +156,19 @@ interface AppState {
   toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
+  /** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
+  scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
   regenerateCompany: () => void;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
+  /** Durable decisions byte maintains about the company — the founder-curatable memory. */
+  decisions: DecisionEntry[];
+  /** Edit a decision in place (e.g. correct a wrong extraction). */
+  updateDecision: (index: number, patch: Partial<DecisionEntry>) => void;
+  /** Remove a decision byte is holding. */
+  deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
   library: LibItem[];
@@ -149,9 +193,15 @@ interface AppState {
   openDeliverable: (item: LibItem) => void;
   approveTask: (task: Task, dept: Dept, type: string) => { item: LibItem; next?: Task };
   toggleEnv: (category: string, index: number) => void;
+  setupCapability: (category: string, name: string) => void;
+  /** Credit the on-items that fit a produced task's type (deduped) + persist. */
+  creditToolkitUse: (taskTitle: string, type: string) => void;
   chatMessages: ChatMessage[];
   chatStreaming: boolean;
   sendChat: (text: string) => void;
+  /** Re-run a byte reply that failed — re-streams into the same bubble against the same
+   * history, so the founder doesn't have to retype. */
+  retryChat: (byteMsgId: string) => void;
   /** Produce a task's deliverable inline in chat (byte's "run it from here"). */
   runTaskInChat: (deptK: string, taskTitle: string) => void;
   /** Revise an inline chat result against byte's feedback, updating the card in place.
@@ -161,6 +211,16 @@ interface AppState {
   approveChatResult: (deptK: string, taskTitle: string) => void;
   /** Open an inline chat result the minimal way (site → new tab, else copy). */
   openChatResult: (deptK: string, taskTitle: string) => void;
+  /** Drop a chat message's one-tap action once it has been used. */
+  dismissChatAction: (msgId: string) => void;
+  /** Answer (or skip, with null) a first-run enrichment question. byte distills + persists
+   * a real answer into the brief, then the interview advances to the next gap or hands off
+   * to the "best first move" greeting. */
+  answerInterview: (msgId: string, gap: Gap, answer: string | null) => void;
+  /** Undo a "Noted" chip: strike it in the thread and forget that fact from company memory. */
+  undoNoted: (msgId: string, topic: string) => void;
+  /** Mark a task as awaiting the founder's approval and persist so it survives reload. */
+  persistTaskDraft: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
   toastMsg: string;
@@ -215,7 +275,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tick, setTick] = useState(0);
   const bump = useCallback(() => setTick((n) => n + 1), []);
 
-  const [view, setView] = useState<View>('home');
+  // Land on the Overview (the company map) by default.
+  const [view, setView] = useState<View>('overview');
   const [deptKey, setDeptKey] = useState<string | null>(null);
   const [selStage, setSelStage] = useState(6);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -242,7 +303,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // singletons then, so one account's in-memory edits can never linger into the next
   // account's session on the same browser — belt-and-suspenders alongside the
   // reset-on-load in loadCompanyData.
-  useEffect(() => () => resetCompanyData(), []);
+  // Also abort any in-flight chat stream on unmount, so a sign-out mid-reply doesn't leave
+  // the request running or persist a byte message against the previous account.
+  useEffect(
+    () => () => {
+      chatAbort.current?.abort();
+      resetCompanyData();
+    },
+    [],
+  );
 
   const [modal, setModal] = useState<Modal>(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -252,11 +321,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
+  // Durable decisions byte maintains (hydrated from Firestore; founder-curatable).
+  const [decisions, setDecisions] = useState<DecisionEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
 
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatStreaming, setChatStreaming] = useState(false);
+  // Aborts the in-flight chat stream — on a new send, a retry, or provider unmount
+  // (e.g. sign-out), so a stream never keeps running or writes against a stale account.
+  const chatAbort = useRef<AbortController | null>(null);
 
   // "Let's build" flow (was BuildCoachView local state; lifted here so the chat
   // panel drives START and the main view renders DURING/END from one source).
@@ -331,6 +405,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const firstApproveTracked = useRef(false);
+  const scaffoldedInWizard = useRef(false);
   const toast = useCallback((msg: string) => {
     setToastMsg(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -344,10 +420,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!companyId) return;
     let cancelled = false;
     loadCompanyData(companyId)
-      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat }) => {
+      .then(({ library: lib, brief: b, onboardedAt, roadmapStage, chat, decisions: dec }) => {
         if (cancelled) return;
         setLibrary(lib);
         setBrief(b);
+        setDecisions(dec);
         setStageWatermark(roadmapWatermarkFor(b.stage)); // position the roadmap at their stage
         setChatMessages(
           chat.map((m) => ({ id: m.id, role: m.role, text: m.text, ts: m.createdAt })),
@@ -393,6 +470,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDeptKey(k);
     setView('dept');
   }, []);
+  // Guide the founder to a part of the app when they tap byte's "take me there" chip.
+  // Maps a resolved NavChip destination to the matching view/action.
+  const navigateTo = useCallback((dest: NavDest, target?: string) => {
+    switch (dest) {
+      case 'roadmap':
+        setView('overview'); // Roadmap retired — the Overview carries the journey now
+        break;
+      case 'tasks':
+        setView('tasks');
+        break;
+      case 'library':
+        setView('library');
+        break;
+      case 'company':
+        setView('home');
+        break;
+      case 'environment':
+        setView('env');
+        break;
+      case 'department':
+        if (target) {
+          setDeptKey(target);
+          setView('dept');
+        } else {
+          setView('home');
+        }
+        break;
+    }
+    track('chat.navigate', { dest });
+  }, []);
   const selectStage = useCallback(
     (n: number) => {
       setSelStage(n);
@@ -420,6 +527,158 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return next;
     });
   }, []);
+
+  // The "best first move" hand-off: byte's landing greeting with the single best first
+  // move as a one-tap INLINE action (produces the deliverable in-thread). Seeds immediately
+  // from the authored fallback, then upgrades to byte's own pick when /api/next-step
+  // resolves — the greeting message updates in place (stable id). Runs AFTER the first-run
+  // enrichment interview, or immediately when the brief already has every plan-shaping field.
+  const seedBestFirstMove = useCallback((briefData: CompanyBrief) => {
+    const gid = newId();
+    // Fire firstrun.action_offered at most once — when an action first appears,
+    // whether it came from the synchronous authored fallback or the async byte pick.
+    let offered = false;
+    const seed = (ns: NextStep | null) => {
+      const g = buildFirstRunGreeting(briefData, ns);
+      setChatMessages((prev) => {
+        const msg: ChatMessage = {
+          id: gid,
+          role: 'byte',
+          text: g.text,
+          ts: Date.now(),
+          action: g.action,
+        };
+        const i = prev.findIndex((m) => m.id === gid);
+        return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+      });
+      if (g.action && !offered) {
+        offered = true;
+        track('firstrun.action_offered', { dept: g.action.deptK });
+      }
+    };
+    const fb = nextAction();
+    const fallback: NextStep | null = fb
+      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
+      : null;
+    setNextStep(fallback);
+    seed(fallback);
+    // Always ask byte for the best first move — even when the synchronous authored
+    // fallback is momentarily null (e.g. the roadmap isn't settled the instant
+    // onboarding finishes). Recovering the action here keeps the greeting's
+    // "Do it with me" — the whole B→C bridge — from silently vanishing.
+    // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
+    fetchNextStep()
+      .then((pick) => {
+        if (pick) {
+          setNextStep(pick);
+          seed(pick);
+        }
+      })
+      .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
+  }, []);
+
+  // Progress of the first-run enrichment interview: the empty gaps to ask, which one we're
+  // on, and the brief accumulating byte's distilled answers. Null when no interview is active.
+  const interviewRef = useRef<{ gaps: Gap[]; idx: number; brief: CompanyBrief } | null>(null);
+
+  const askInterviewGap = useCallback((gap: Gap) => {
+    setChatMessages((prev) => [
+      ...prev,
+      {
+        id: newId(),
+        role: 'byte',
+        text: QUESTION_FOR[gap].ask,
+        ts: Date.now(),
+        interview: { gap },
+      },
+    ]);
+  }, []);
+
+  // First-run only: byte opens chat and — before offering the best first move — asks the
+  // ≤3 plan-shaping questions the onboarding brief is missing (goal / traction / problem).
+  // A full brief skips straight to the hand-off, so nothing changes for returning founders.
+  const greetFirstRun = useCallback(
+    (briefData: CompanyBrief) => {
+      toggleCopilot(false); // open the chat panel so the greeting is seen
+      const gaps = detectGaps(briefData);
+      if (gaps.length === 0) {
+        seedBestFirstMove(briefData);
+        return;
+      }
+      interviewRef.current = { gaps, idx: 0, brief: briefData };
+      const who = briefData.founderName?.trim();
+      const proj = briefData.projectName?.trim() || 'your product';
+      const lead =
+        `${who ? `${who}, your` : 'Your'} company for ${proj} is ready. ` +
+        `A couple quick questions first, so I plan the right moves — not generic ones.`;
+      setChatMessages((prev) => [
+        ...prev,
+        { id: newId(), role: 'byte', text: lead, ts: Date.now() },
+      ]);
+      track('firstrun.interview_started', { gaps: gaps.length });
+      askInterviewGap(gaps[0]);
+    },
+    [toggleCopilot, seedBestFirstMove, askInterviewGap],
+  );
+
+  const answerInterview = useCallback(
+    (msgId: string, gap: Gap, answer: string | null) => {
+      // Retire this question's input/Skip affordance immediately.
+      setChatMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, interview: { gap, answered: true } } : m)),
+      );
+      const st = interviewRef.current;
+      // Move to the next gap, or hand off to the best-first-move greeting when done.
+      const advance = (brief: CompanyBrief) => {
+        const next = (st?.idx ?? 0) + 1;
+        if (st && next < st.gaps.length) {
+          interviewRef.current = { gaps: st.gaps, idx: next, brief };
+          askInterviewGap(st.gaps[next]);
+        } else {
+          interviewRef.current = null;
+          setBrief(brief); // the enriched brief now grounds every run + chat
+          seedBestFirstMove(brief);
+        }
+      };
+      const text = answer?.trim();
+      if (!text) {
+        track('firstrun.interview_skipped', { gap });
+        advance(st?.brief ?? {});
+        return;
+      }
+      // Echo the founder's answer, then let byte distill + persist it.
+      setChatMessages((prev) => [...prev, { id: newId(), role: 'me', text, ts: Date.now() }]);
+      track('firstrun.interview_answered', { gap });
+      postEnrichAnswer(gap, text)
+        .then((res) => {
+          const base = interviewRef.current?.brief ?? st?.brief ?? {};
+          const brief = res?.saved && res.value ? { ...base, [gap]: res.value } : base;
+          setChatMessages((prev) => [
+            ...prev,
+            { id: newId(), role: 'byte', text: 'Got it.', ts: Date.now() },
+          ]);
+          advance(brief);
+        })
+        .catch(() => advance(interviewRef.current?.brief ?? st?.brief ?? {}));
+    },
+    [seedBestFirstMove, askInterviewGap],
+  );
+
+  // Run the real stage-aware scaffold DURING onboarding (the wizard's "analysis" step),
+  // so the founder watches byte build their actual company instead of a fake animation.
+  // Marks scaffoldedInWizard so finishOnboarding won't run it a second time. Returns a
+  // reveal summary read from the now-live DEPTS (ok=false ⇒ generation failed, seed kept).
+  const scaffoldFromOnboarding = useCallback(
+    async (briefData: CompanyBrief): Promise<RevealSummary> => {
+      scaffoldedInWizard.current = true; // we attempted it here; don't double-run in finish
+      if (!companyId) return buildRevealSummary(DEPTS, false);
+      const changed = await scaffoldCompany(companyId, briefData);
+      if (changed > 0) bump();
+      return buildRevealSummary(DEPTS, changed > 0);
+    },
+    [companyId, bump],
+  );
+
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
@@ -432,19 +691,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (companyId) {
         completeOnboarding(companyId, briefData)
           .then(() => {
-            // Part 1: once the brief is persisted, byte generates the stage-aware
-            // company (active/dormant departments + tasks) and applies + persists it.
-            // Best-effort — on any failure the current departments stay. Skipped when
-            // no brief was given (a "skip" keeps the seed).
-            if (!briefData) return;
+            // The wizard's analysis step already scaffolded (the real reveal). Only
+            // scaffold here as a fallback when it didn't (e.g. a "skip" with a brief).
+            if (!briefData || scaffoldedInWizard.current) return;
             return scaffoldCompany(companyId, briefData).then((changed) => {
-              if (changed) bump(); // re-render with the now-generated DEPTS
+              if (changed) bump();
             });
           })
           .catch((err) => console.error('[store] completeOnboarding failed', err));
       }
+      if (briefData) greetFirstRun(briefData);
     },
-    [companyId, bump],
+    [companyId, bump, greetFirstRun],
   );
 
   // Manual re-plan: regenerate the stage-aware company for the current account
@@ -462,6 +720,53 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     });
   }, [companyId, brief, bump, toast, computeNextStep]);
+
+  // Founder-curated memory: edit or remove a decision byte is holding. Optimistic —
+  // the panel reflects the change at once; the Firestore write is best-effort (a failed
+  // write just leaves the persisted copy; it re-hydrates on next load). Editing stamps
+  // updatedAt so the entry sorts as freshly-touched.
+  const updateDecision = useCallback(
+    (index: number, patch: Partial<DecisionEntry>) => {
+      setDecisions((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const next = prev.map((d, i) =>
+          i === index ? { ...d, ...patch, updatedAt: Date.now() } : d,
+        );
+        if (companyId) persistDecisions(companyId, next).catch(() => {});
+        return next;
+      });
+    },
+    [companyId],
+  );
+  const deleteDecision = useCallback(
+    (index: number) => {
+      setDecisions((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const next = prev.filter((_, i) => i !== index);
+        if (companyId) persistDecisions(companyId, next).catch(() => {});
+        return next;
+      });
+    },
+    [companyId],
+  );
+  // Undo a "Noted" chip: strike it in the thread and forget that topic from company memory
+  // (local + persisted), so byte stops grounding on something the founder didn't mean to keep.
+  const undoNoted = useCallback(
+    (msgId: string, topic: string) => {
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId && m.noted ? { ...m, noted: { ...m.noted, undone: true } } : m,
+        ),
+      );
+      const k = topic.trim().toLowerCase();
+      setDecisions((prev) => {
+        const next = prev.filter((d) => d.topic.trim().toLowerCase() !== k);
+        if (companyId) persistDecisions(companyId, next).catch(() => {});
+        return next;
+      });
+    },
+    [companyId],
+  );
 
   // Advance to the next product stage (confirmed from the "stage complete" prompt).
   // Optimistically bumps brief.stage so the map moves at once, then re-plans the company
@@ -726,6 +1031,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // Credit the on-items whose `fits` includes a produced task's type (deduped) and
+  // persist, same as toggleEnv.
+  const creditToolkitUse = useCallback(
+    (taskTitle: string, type: string) => {
+      const used = toolkitUsedFor(ENV, type);
+      if (!used.length) return;
+      for (const u of used) {
+        const item = ENV[u.category]?.find((x) => x.n === u.name);
+        if (item) item.tasks = appendTaskUse(item.tasks, taskTitle);
+      }
+      bump();
+      if (companyId) {
+        persistEnvUsage(companyId, envUsageFromCatalog()).catch((err) => {
+          console.error('[store] persistEnvUsage failed', err);
+        });
+      }
+    },
+    [bump, companyId],
+  );
+
+  // byte produced a reviewable draft for this task — mark it awaiting the founder's
+  // approval and persist so the state survives reload. `done` (on approve) supersedes.
+  const persistTaskDraft = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t || t.done || t.run === 'route') return; // ship-type never "awaits"
+      t.drafted = true;
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] persistTaskDraft failed', err),
+        );
+    },
+    [companyId, bump],
+  );
+
+  // Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
+  // Idempotent (never flips an already-on item off) and persisted like toggleEnv.
+  const setupCapability = useCallback(
+    (category: string, name: string) => {
+      const idx = resolveEnvIndex(ENV, category, name);
+      if (idx === -1) return;
+      const item = ENV[category][idx];
+      if (item.s) return; // already on — nothing to do
+      item.s = 1;
+      bump();
+      if (companyId) {
+        persistEnv(companyId, envStateFromCatalog()).catch((err) => {
+          console.error('[store] persistEnv (setup) failed', err);
+        });
+      }
+    },
+    [companyId, bump],
+  );
+
   // Produce a task's deliverable INLINE in chat — byte's "run it from here." Runs the
   // exact same generation the department panel uses (runByteTask → applyResult), then
   // leaves a result card in the thread for the founder to approve. Reads live DEPTS, so
@@ -760,6 +1121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           text: '',
           ts: Date.now(),
           running: true,
+          steps: buildLog(t, type, d),
           result: { deptK, taskTitle, type },
         },
       ]);
@@ -769,10 +1131,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           taskTitle: t.t,
           taskHint: t.d,
           deptName: d.name,
+          deptKey: d.k,
           brief,
         });
         applyResult(t, type, res);
+        creditToolkitUse(t.t, type);
         bump();
+        persistTaskDraft(d.k, t.t);
         track('chat.run_task', { dept: d.k, type });
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
@@ -788,7 +1153,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     },
-    [brief, bump],
+    [brief, bump, persistTaskDraft, creditToolkitUse],
   );
 
   // Revise an inline chat result against the founder's feedback — the same revise pass
@@ -805,19 +1170,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const kind = liveKind(type);
       if (!kind) return;
       const trimmed = note.trim();
-      setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: true } : m)));
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === msgId ? { ...m, running: true, steps: buildLog(t, type, d) } : m,
+        ),
+      );
       try {
         const res = await runByteTask({
           kind,
           taskTitle: t.t,
           taskHint: t.d,
           deptName: d.name,
+          deptKey: d.k,
           brief,
           reviseNote: trimmed || undefined,
           current: trimmed ? currentDraft(t, type) : undefined,
         });
         applyResult(t, type, res);
         bump();
+        persistTaskDraft(d.k, t.t);
         track('chat.revise_task', { dept: d.k, type });
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
@@ -831,7 +1202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       }
     },
-    [brief, bump, toast],
+    [brief, bump, persistTaskDraft, toast],
   );
 
   // Approve an inline chat result: same as approving from the panel (Library + done),
@@ -843,6 +1214,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!d || !t) return;
       const type = artType(t);
       approveTask(t, d, type);
+      if (!firstApproveTracked.current) {
+        firstApproveTracked.current = true;
+        track('firstrun.first_approve', { dept: deptK });
+      }
       setChatMessages((prev) =>
         prev.map((m) =>
           m.result && m.result.deptK === deptK && m.result.taskTitle === taskTitle
@@ -854,8 +1229,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [approveTask],
   );
 
-  // Open an inline chat result the minimal way (site → new tab, else copy) — reuses
-  // the shared openDeliverable behavior, built from the live task.
+  // Drop a chat message's one-tap action once it's been used (e.g. after the
+  // first-run greeting's "Do it with me" is tapped) so it can't be re-run.
+  const dismissChatAction = useCallback((msgId: string) => {
+    setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, action: undefined } : m)));
+  }, []);
+
+  // Open an inline chat result: a site opens in a new tab, every other deliverable
+  // opens the readable viewer (scrollable full text, with its own Copy inside).
+  // Built from the live task.
   const openChatResult = useCallback(
     (deptK: string, taskTitle: string) => {
       const d = DEPTS.find((x) => x.k === deptK);
@@ -863,7 +1245,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!d || !t) return;
       const type = artType(t);
       const { file, head, tag } = artMeta(t, type);
-      openDeliverable({
+      const item: LibItem = {
         title: t.t,
         dept: d.name,
         k: d.k,
@@ -880,16 +1262,185 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email: t.email,
         calendar: t.calendar,
         legal: t.legal,
+        doc: t.doc,
         dms: t.dms,
         checklist: t.checklist,
         plan: t.plan,
-      });
+      };
+      // A site opens in a new tab; every other deliverable opens the readable
+      // viewer (scrollable full text, with its own Copy inside) — the same modal
+      // the department card and Library use.
+      if (type === 'site') openDeliverable(item);
+      else viewItem(item);
     },
-    [openDeliverable],
+    [openDeliverable, viewItem],
   );
 
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
+  // The streaming engine both sendChat and retryChat drive: run byte's reply into an
+  // existing byte bubble (`byteMsgId`) against `history`. Aborts any prior in-flight stream,
+  // handles action/nav/setup/memory events, gives distinct copy per failure, and flags the
+  // bubble for Retry when it fails. Company context is snapshotted fresh on each run.
+  const runByteStream = useCallback(
+    (byteMsgId: string, byteTs: number, history: { role: 'me' | 'byte'; text: string }[]) => {
+      chatAbort.current?.abort();
+      const ac = new AbortController();
+      chatAbort.current = ac;
+      setChatStreaming(true);
+
+      // A compact snapshot of the departments so byte talks about THIS company — plus the
+      // single next step byte already picked, so chat and the map beacon never disagree.
+      const deptLines = DEPTS.map(
+        (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
+      ).join('\n');
+      const focusDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : undefined;
+      const focus =
+        nextStep && focusDept
+          ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
+          : '';
+      const deptSummary = deptLines + focus;
+      const openTasks = DEPTS.flatMap((d) =>
+        d.tasks
+          .filter((t) => !t.done && liveKind(artType(t)) !== null)
+          .map((t) => ({ deptK: d.k, deptName: d.name, taskTitle: t.t, hint: t.d ?? '' })),
+      );
+      const envSetup = collectSetupItems(ENV);
+
+      (async () => {
+        let acc = '';
+        let errCode = '';
+        let failed = false;
+        let pending: { deptK: string; taskTitle: string } | null = null;
+        let navChip: NavChip | undefined;
+        let setupChip: { category: string; name: string } | undefined;
+        let offerBuild = false;
+        try {
+          for await (const ev of streamByteChat(
+            history,
+            deptSummary,
+            openTasks,
+            envSetup,
+            ac.signal,
+          )) {
+            if (ev.type === 'action') {
+              pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
+              continue;
+            }
+            if (ev.type === 'nav') {
+              // Resolve to a real chip client-side (drops a stale/unknown destination).
+              navChip = resolveNavChip(ev.dest, ev.target, DEPTS);
+              continue;
+            }
+            if (ev.type === 'setup') {
+              setupChip = { category: ev.category, name: ev.name };
+              continue;
+            }
+            if (ev.type === 'build-offer') {
+              offerBuild = true;
+              continue;
+            }
+            if (ev.type === 'noted') {
+              // byte recorded durable facts (in this same generation — no extra call). The
+              // server already merged them into memory; reflect them locally as a quiet
+              // "Noted" chip per fact and fold into decisions so grounding updates now.
+              const now = Date.now();
+              setChatMessages((prev) => [
+                ...prev,
+                ...ev.items.map((c) => ({
+                  id: newId(),
+                  role: 'byte' as const,
+                  text: '',
+                  ts: now,
+                  noted: { topic: c.topic, statement: c.statement },
+                })),
+              ]);
+              setDecisions((prev) => {
+                const byTopic = new Map(prev.map((d) => [d.topic.trim().toLowerCase(), d]));
+                for (const c of ev.items) {
+                  byTopic.set(c.topic.trim().toLowerCase(), {
+                    topic: c.topic,
+                    statement: c.statement,
+                    source: 'chat',
+                    updatedAt: now,
+                  });
+                }
+                return [...byTopic.values()];
+              });
+              continue;
+            }
+            acc += ev.text;
+            setChatMessages((prev) =>
+              prev.map((m) => (m.id === byteMsgId ? { ...m, text: acc } : m)),
+            );
+          }
+        } catch (err) {
+          // A deliberate abort (new send / retry / sign-out) leaves state untouched.
+          if (ac.signal.aborted) return;
+          console.error('[store] chat stream failed', err);
+          failed = true;
+          errCode = err instanceof ChatError ? err.code : 'network';
+        }
+        const fallback =
+          errCode === 'rate_limited'
+            ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
+            : errCode === 'unauthorized'
+              ? 'Your session looks expired — sign in again and I’ll pick right back up.'
+              : errCode === 'ai_unavailable'
+                ? 'I’m temporarily unavailable — try again shortly and I’ll pick right back up.'
+                : errCode === 'network'
+                  ? 'I couldn’t reach the model — check your connection, then Retry.'
+                  : 'I couldn’t reach the model just now.';
+        // Errored = a real failure that produced nothing usable → show the Retry affordance.
+        const errored = failed && !acc.trim() && !pending && !navChip && !setupChip && !offerBuild;
+        // If byte chose to act but said nothing, synthesize a short lead-in so the run or
+        // the "take me there" chip never appears out of nowhere.
+        const finalText =
+          acc.trim() ||
+          (pending
+            ? `On it — running “${pending.taskTitle}”.`
+            : navChip
+              ? 'Here you go.'
+              : setupChip
+                ? 'I can turn that on for you — one tap.'
+                : offerBuild
+                  ? 'Love it — let’s build it.'
+                  : fallback);
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === byteMsgId
+              ? {
+                  ...m,
+                  text: finalText,
+                  nav: navChip,
+                  setup: setupChip,
+                  error: errored || undefined,
+                  ...(offerBuild
+                    ? { buildAction: { kind: 'begin-intake' as const, label: "Let's build it →" } }
+                    : {}),
+                }
+              : m,
+          ),
+        );
+        setChatStreaming(false);
+        chatAbort.current = null;
+        // Persist byte's reply if it's a real answer or a run lead-in (not the error
+        // fallback). The inline result card itself is transient, like the briefings.
+        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
+          persistChatMessage(companyId, {
+            id: byteMsgId,
+            role: 'byte',
+            text: finalText,
+            createdAt: byteTs,
+          }).catch((err) => console.error('[store] persist byte message failed', err));
+        }
+        // byte decided to run a task — produce it inline now.
+        if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
+      })();
+    },
+    [companyId, nextStep, runTaskInChat],
+  );
+
   const sendChat = useCallback(
     (raw: string) => {
       const text = raw.trim();
@@ -902,7 +1453,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Build the history to send BEFORE the empty byte placeholder is added.
       const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
       setChatMessages((prev) => [...prev, userMsg, byteMsg]);
-      setChatStreaming(true);
       track('chat.send', {});
 
       if (companyId) {
@@ -914,92 +1464,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }).catch((err) => console.error('[store] persist user message failed', err));
       }
 
-      // A compact snapshot of the departments so byte talks about THIS company —
-      // plus the single next step byte already picked, so chat and the map beacon
-      // never disagree about what's next.
-      const deptLines = DEPTS.map(
-        (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
-      ).join('\n');
-      const focusDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : undefined;
-      const focus =
-        nextStep && focusDept
-          ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
-          : '';
-      const deptSummary = deptLines + focus;
-
-      // The tasks byte may run from chat: every open task with a live deliverable type.
-      const openTasks = DEPTS.flatMap((d) =>
-        d.tasks
-          .filter((t) => !t.done && liveKind(artType(t)) !== null)
-          .map((t) => ({ deptK: d.k, deptName: d.name, taskTitle: t.t, hint: t.d ?? '' })),
-      );
-
-      (async () => {
-        let acc = '';
-        let errCode = '';
-        let pending: { deptK: string; taskTitle: string } | null = null;
-        let offerBuild = false;
-        try {
-          for await (const ev of streamByteChat(history, deptSummary, openTasks)) {
-            if (ev.type === 'action') {
-              pending = { deptK: ev.deptK, taskTitle: ev.taskTitle };
-              continue;
-            }
-            if (ev.type === 'build-offer') {
-              offerBuild = true;
-              continue;
-            }
-            acc += ev.text;
-            setChatMessages((prev) =>
-              prev.map((m) => (m.id === byteMsg.id ? { ...m, text: acc } : m)),
-            );
-          }
-        } catch (err) {
-          console.error('[store] chat stream failed', err);
-          errCode = err instanceof ChatError ? err.code : '';
-        }
-        const fallback =
-          errCode === 'rate_limited'
-            ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
-            : 'I hit a snag reaching the model — give it another try.';
-        // If byte chose to run a task but said nothing, synthesize a short lead-in so
-        // the run never appears out of nowhere.
-        const finalText =
-          acc.trim() ||
-          (pending
-            ? `On it — running “${pending.taskTitle}”.`
-            : offerBuild
-              ? 'Love it — let’s build it.'
-              : fallback);
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === byteMsg.id
-              ? {
-                  ...m,
-                  text: finalText,
-                  ...(offerBuild
-                    ? { buildAction: { kind: 'begin-intake' as const, label: "Let's build it →" } }
-                    : {}),
-                }
-              : m,
-          ),
-        );
-        setChatStreaming(false);
-        // Persist byte's reply if it's a real answer or a run lead-in (not the error
-        // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending)) {
-          persistChatMessage(companyId, {
-            id: byteMsg.id,
-            role: 'byte',
-            text: finalText,
-            createdAt: byteMsg.ts,
-          }).catch((err) => console.error('[store] persist byte message failed', err));
-        }
-        // byte decided to run a task — produce it inline now.
-        if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
-      })();
+      runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, nextStep, runTaskInChat],
+    [companyId, chatMessages, chatStreaming, runByteStream],
+  );
+
+  // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
+  // that failed, reset the bubble to a fresh placeholder, and re-stream into it.
+  const retryChat = useCallback(
+    (byteMsgId: string) => {
+      if (chatStreaming) return;
+      const target = chatMessages.find((m) => m.id === byteMsgId);
+      if (!target) return;
+      const history = chatMessages
+        .filter((m) => m.id !== byteMsgId)
+        .map((m) => ({ role: m.role, text: m.text }));
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === byteMsgId
+            ? { ...m, text: '', error: undefined, nav: undefined, setup: undefined }
+            : m,
+        ),
+      );
+      track('chat.retry', {});
+      runByteStream(byteMsgId, target.ts, history);
+    },
+    [chatMessages, chatStreaming, runByteStream],
   );
 
   const startBuildIntake = useCallback(() => {
@@ -1217,6 +1707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       show,
       deptKey,
       openDept,
+      navigateTo,
       selStage,
       drawerOpen,
       selectStage,
@@ -1227,9 +1718,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSide,
       onboarding,
       finishOnboarding,
+      scaffoldFromOnboarding,
       regenerateCompany,
       advanceStage,
       brief,
+      decisions,
+      updateDecision,
+      deleteDecision,
       installed,
       setInstalled: setInstalledFlag,
       library,
@@ -1246,13 +1741,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openDeliverable,
       approveTask,
       toggleEnv,
+      setupCapability,
+      creditToolkitUse,
       chatMessages,
       chatStreaming,
       sendChat,
+      retryChat,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
       openChatResult,
+      dismissChatAction,
+      answerInterview,
+      undoNoted,
+      persistTaskDraft,
       nextStep,
       toastMsg,
       toast,
@@ -1287,6 +1789,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       show,
       deptKey,
       openDept,
+      navigateTo,
       selStage,
       drawerOpen,
       selectStage,
@@ -1297,9 +1800,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSide,
       onboarding,
       finishOnboarding,
+      scaffoldFromOnboarding,
       regenerateCompany,
       advanceStage,
       brief,
+      decisions,
+      updateDecision,
+      deleteDecision,
       installed,
       setInstalledFlag,
       library,
@@ -1316,13 +1823,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openDeliverable,
       approveTask,
       toggleEnv,
+      setupCapability,
+      creditToolkitUse,
       chatMessages,
       chatStreaming,
       sendChat,
+      retryChat,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
       openChatResult,
+      dismissChatAction,
+      answerInterview,
+      undoNoted,
+      persistTaskDraft,
       nextStep,
       toastMsg,
       toast,

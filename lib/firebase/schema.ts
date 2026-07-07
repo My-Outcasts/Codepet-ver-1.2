@@ -35,6 +35,9 @@ export interface CompanyBrief {
   projectName?: string;
   /** One-sentence description of the product (highest-signal field for byte). */
   oneLiner?: string;
+  /** byte's enriched read of the product (from "byte reads it"), when the founder's
+   * inputs were rich enough to extract one. Sharper/fuller than the founder's one-liner. */
+  summary?: string;
   /** Free-form details: pitch, README, PRD notes, anything pasted. */
   notes?: string;
   /** Website / repo / Figma link. */
@@ -43,10 +46,23 @@ export interface CompanyBrief {
   categories?: string[];
   /** Who the product is for (target user / customer). */
   audience?: string;
+  /** The founder's immediate objective for the next few weeks — what byte should
+   * plan toward. Captured by byte's first-chat enrichment (lib/ai/enrichInterview). */
+  goal?: string;
+  /** Where the product actually is right now: real assets and numbers (waitlist size,
+   * launched or not, users, revenue, live links). Grounds Finance/Marketing in reality
+   * instead of invented figures. Captured by byte's first-chat enrichment. */
+  traction?: string;
+  /** The core problem the product solves and who feels it — makes positioning and copy
+   * specific. Captured by byte's first-chat enrichment. */
+  problem?: string;
 }
 
 /** Per-company toolkit state: category → item key → enabled. Mirrors ENV in data.ts. */
 export type EnvState = Record<string, Record<string, boolean>>;
+
+/** Per-item usage: category → item name → the distinct task titles it's been used on. */
+export type EnvUsage = Record<string, Record<string, string[]>>;
 
 export interface CompanyDoc {
   id: string;
@@ -64,6 +80,7 @@ export interface CompanyDoc {
   /** Current roadmap stage number (see PHASES in lib/data.ts). */
   roadmapStage: number;
   env: EnvState;
+  envUsage?: EnvUsage;
   /** Shared secret the local Claude Code hook presents to POST /api/track. Minted
    *  server-side; the installer bakes it into the machine's hook config. */
   ingestToken?: string;
