@@ -81,7 +81,9 @@ export function LiveChat({
     mode,
   });
   const [draft, setDraft] = useState('');
+  const [queue, setQueue] = useState<string[]>([]);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushing = useRef(false);
 
   useEffect(() => {
     // A pending teardown means this is React strict-mode's immediate remount after a
@@ -103,12 +105,30 @@ export function LiveChat({
     };
   }, [start, stop]);
 
-  const canSend = state.status === 'awaiting-input' && draft.trim().length > 0;
+  const idle = state.status === 'ended' || state.status === 'error';
+  const awaiting = state.status === 'awaiting-input';
+  const canSubmit = !idle && draft.trim().length > 0;
   const submit = () => {
-    if (!canSend) return;
-    send(draft);
+    if (!canSubmit) return;
+    if (awaiting) send(draft.trim());
+    else setQueue((q) => [...q, draft.trim()]); // busy → line it up for when it's ready
     setDraft('');
   };
+
+  // Flush the queue one item at a time whenever the session is ready for input, so the
+  // founder can stack up instructions instead of waiting. The ref stops a re-render
+  // from double-sending within the same awaiting-input window.
+  useEffect(() => {
+    if (state.status !== 'awaiting-input') {
+      flushing.current = false;
+      return;
+    }
+    if (flushing.current || queue.length === 0) return;
+    flushing.current = true;
+    const [next, ...rest] = queue;
+    setQueue(rest);
+    send(next);
+  }, [state.status, queue, send]);
 
   const chip = STATE_CHIP[state.status];
   const active = state.status !== 'ended' && state.status !== 'error';
@@ -147,6 +167,22 @@ export function LiveChat({
         )}
       </div>
       {state.pendingPermission && <PermissionCard p={state.pendingPermission} onDecide={decide} />}
+      {queue.length > 0 && (
+        <div className="lc-queue">
+          <span className="lc-queue-h">Up next:</span>
+          {queue.map((q, i) => (
+            <span key={i} className="lc-queue-item">
+              {q.length > 42 ? q.slice(0, 42) + '…' : q}
+              <button
+                aria-label="Remove from queue"
+                onClick={() => setQueue(queue.filter((_, j) => j !== i))}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       <div className="lc-composer">
         <textarea
           value={draft}
@@ -159,16 +195,16 @@ export function LiveChat({
           }}
           rows={2}
           placeholder={
-            state.status === 'awaiting-input'
+            awaiting
               ? 'Reply to Claude…'
-              : state.status === 'running'
-                ? 'Claude is working — hang on…'
-                : 'Session is not active'
+              : idle
+                ? 'Session is not active'
+                : 'Type your next instruction — I’ll queue it…'
           }
-          disabled={state.status !== 'awaiting-input'}
+          disabled={idle}
         />
-        <button className="lc-send" onClick={submit} disabled={!canSend}>
-          Send
+        <button className="lc-send" onClick={submit} disabled={!canSubmit}>
+          {awaiting ? 'Send' : 'Queue'}
         </button>
       </div>
     </div>

@@ -7811,6 +7811,9 @@ body {
   color: #8b8398;
   border-style: dashed;
 }
+.bc-plan-size {
+  opacity: 0.65;
+}
 /* Save-point rewind (undo the whole build) — a quiet control until it's confirmed. */
 .bc-rewind {
   margin-top: 10px;
@@ -8026,6 +8029,41 @@ body {
 .lc-done {
   opacity: 0.6;
   font-size: 13px;
+}
+/* Queued instructions — stacked while the session is busy, sent when it's ready. */
+.lc-queue {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.lc-queue-h {
+  color: #8b8398;
+  font-weight: 600;
+}
+.lc-queue-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px 3px 9px;
+  border-radius: 999px;
+  background: #efe6ff;
+  color: #4a4458;
+}
+.lc-queue-item button {
+  border: none;
+  background: transparent;
+  color: #8b8398;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 3px;
+  border-radius: 50%;
+}
+.lc-queue-item button:hover {
+  color: #cf3d3d;
 }
 .lc-composer {
   display: flex;

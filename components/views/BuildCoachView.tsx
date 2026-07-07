@@ -141,6 +141,9 @@ function DuringStep({
         <div className="bc-slide-row">
           <span className="bc-pct">
             {actions} / {target} actions
+            {plan && plan.steps.length > 0 && (
+              <span className="bc-plan-size"> · {plan.steps.length}-step plan</span>
+            )}
           </span>
         </div>
         {recent.length > 0 && <div className="bc-live-feed">Byte sees: {recent.join(' · ')}</div>}
