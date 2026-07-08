@@ -154,7 +154,7 @@ export default function OverviewSection() {
             }}
           >
             {toggle}
-            <div style={{ textAlign: 'right' }}>
+            <div style={{ flex: 1, textAlign: 'right' }}>
               <h1
                 style={{
                   fontSize: 21,
@@ -171,7 +171,6 @@ export default function OverviewSection() {
                   fontSize: 13,
                   color: 'rgba(245,243,255,.55)',
                   marginTop: 3,
-                  maxWidth: '62ch',
                 }}
               >
                 Your whole company as a roadmap — where you are, what byte does next, and how far
