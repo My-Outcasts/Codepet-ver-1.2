@@ -327,7 +327,7 @@ export default function OverviewSection() {
                   cursor: 'pointer',
                 }}
               >
-                Start →
+                Start
               </button>
             </div>
           )}
