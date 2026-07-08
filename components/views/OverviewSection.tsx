@@ -36,9 +36,9 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 });
 
 const CY = '#7c3aed';
-// The progress card + the "do this next" bar sit neatly on the left, capped — not stretched
-// edge-to-edge. Shared so the two line up. (calc accounts for the 24px left inset.)
-const PANEL_W = 'min(460px, calc(100% - 48px))';
+// The two cards sit side by side in this row (capped); each takes half. Narrow enough that they
+// don't read as long lone bars, wide enough to fill the top so there's no big right-hand void.
+const PANEL_W = 'min(860px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
@@ -245,235 +245,246 @@ export default function OverviewSection() {
             {toggle}
           </div>
 
-          {/* Project Progress — a compact summary card in the reference's glowing style. Just the
-              essentials (phase · % · glowing bar · next); the roadmap below carries the detail. */}
+          {/* Project Progress + Do This Next side by side — one compact top strip so the roadmap
+              below gets the space (and the wide right-hand void goes away). */}
           <style>{`.rm-pfill::before{content:"";position:absolute;inset:-5px;border-radius:999px;background:inherit;filter:blur(11px);opacity:.5;z-index:-1}`}</style>
           <div
             style={{
               flex: 'none',
-              alignSelf: 'flex-start',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'stretch',
+              gap: 14,
+              margin: '12px 0 0 24px',
               width: PANEL_W,
-              boxSizing: 'border-box',
-              margin: '10px 0 0 24px',
-              padding: '10px 16px 11px',
-              borderRadius: 14,
-              background: '#ffffff',
-              border: '1px solid rgba(31,27,21,0.08)',
-              boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-              <span
-                style={{
-                  fontFamily: 'var(--sans)',
-                  fontSize: 13.5,
-                  fontWeight: 650,
-                  color: 'var(--ink)',
-                  letterSpacing: '-0.01em',
-                }}
-              >
-                Project Progress
-              </span>
-              {currentPhaseName && (
-                <span
-                  style={{
-                    fontFamily: 'var(--sans)',
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: 'var(--accent)',
-                    background: 'var(--accent-tint)',
-                    border: '1px solid var(--accent-line)',
-                    padding: '3px 9px',
-                    borderRadius: 999,
-                  }}
-                >
-                  {currentPhaseName}
-                </span>
-              )}
-            </div>
-
-            <div style={{ margin: '3px 0 6px', display: 'flex', alignItems: 'baseline', gap: 9 }}>
-              <span
-                style={{
-                  fontFamily: 'var(--sans)',
-                  fontWeight: 750,
-                  letterSpacing: '-0.03em',
-                  lineHeight: 1,
-                  color: 'var(--ink)',
-                }}
-              >
-                <span style={{ fontSize: 24, fontVariantNumeric: 'tabular-nums' }}>{prog.pct}</span>
-                <span style={{ fontSize: 15, color: 'rgba(31,27,21,0.4)' }}>%</span>
-              </span>
-              {needsYou > 0 && (
-                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
-                  needs you {needsYou}
-                </span>
-              )}
-            </div>
-
             <div
               style={{
-                position: 'relative',
-                height: 14,
-                borderRadius: 999,
-                background: 'rgba(31,27,21,0.07)',
-                display: 'flex',
-                alignItems: 'center',
-              }}
-            >
-              <div
-                className="rm-pfill"
-                style={{
-                  position: 'relative',
-                  height: '100%',
-                  width: `${prog.pct}%`,
-                  minWidth: prog.pct > 0 ? 14 : 0,
-                  borderRadius: 999,
-                  background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                  boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
-                  transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
-                }}
-              />
-              {nextMilestone && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    right: 5,
-                    fontFamily: 'var(--sans)',
-                    fontSize: 10.5,
-                    fontWeight: 600,
-                    color: 'var(--accent)',
-                    background: 'rgba(124,58,237,0.12)',
-                    padding: '2px 8px',
-                    borderRadius: 999,
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  Next: {nextMilestone}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* the single actionable next move — Start runs byte on the real task */}
-          {move && (
-            <div
-              style={{
-                flex: 'none',
-                alignSelf: 'flex-start',
-                width: PANEL_W,
+                flex: '1 1 300px',
+                minWidth: 0,
                 boxSizing: 'border-box',
-                position: 'relative',
-                overflow: 'hidden',
-                margin: '8px 0 0 24px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '8px 10px 8px 14px',
-                borderRadius: 12,
-                background: 'var(--accent-tint)',
-                border: '1px solid var(--accent-line)',
+                padding: '10px 16px 11px',
+                borderRadius: 14,
+                background: '#ffffff',
+                border: '1px solid rgba(31,27,21,0.08)',
+                boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
               }}
             >
-              <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
-              {/* soft radiance emanating from the beacon */}
-              <span
-                aria-hidden
-                style={{
-                  position: 'absolute',
-                  left: -28,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  width: 150,
-                  height: 150,
-                  borderRadius: '50%',
-                  background: 'radial-gradient(circle, rgba(124,58,237,0.2), transparent 68%)',
-                  pointerEvents: 'none',
-                }}
-              />
-              {/* the beacon — byte's guide star, pinging like on the map */}
-              <span
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                <span
+                  style={{
+                    fontFamily: 'var(--sans)',
+                    fontSize: 13.5,
+                    fontWeight: 650,
+                    color: 'var(--ink)',
+                    letterSpacing: '-0.01em',
+                  }}
+                >
+                  Project Progress
+                </span>
+                {currentPhaseName && (
+                  <span
+                    style={{
+                      fontFamily: 'var(--sans)',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: 'var(--accent)',
+                      background: 'var(--accent-tint)',
+                      border: '1px solid var(--accent-line)',
+                      padding: '3px 9px',
+                      borderRadius: 999,
+                    }}
+                  >
+                    {currentPhaseName}
+                  </span>
+                )}
+              </div>
+
+              <div style={{ margin: '3px 0 6px', display: 'flex', alignItems: 'baseline', gap: 9 }}>
+                <span
+                  style={{
+                    fontFamily: 'var(--sans)',
+                    fontWeight: 750,
+                    letterSpacing: '-0.03em',
+                    lineHeight: 1,
+                    color: 'var(--ink)',
+                  }}
+                >
+                  <span style={{ fontSize: 24, fontVariantNumeric: 'tabular-nums' }}>
+                    {prog.pct}
+                  </span>
+                  <span style={{ fontSize: 15, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                </span>
+                {needsYou > 0 && (
+                  <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
+                    needs you {needsYou}
+                  </span>
+                )}
+              </div>
+
+              <div
                 style={{
                   position: 'relative',
-                  flex: 'none',
-                  width: 13,
-                  height: 13,
-                  display: 'inline-flex',
+                  height: 14,
+                  borderRadius: 999,
+                  background: 'rgba(31,27,21,0.07)',
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
               >
-                <span
-                  aria-hidden
-                  className="rm-beacon-ping"
+                <div
+                  className="rm-pfill"
                   style={{
-                    position: 'absolute',
-                    inset: 0,
-                    borderRadius: '50%',
-                    background: 'var(--accent)',
-                    animation: 'beaconPing 2.2s ease-out infinite',
+                    position: 'relative',
+                    height: '100%',
+                    width: `${prog.pct}%`,
+                    minWidth: prog.pct > 0 ? 14 : 0,
+                    borderRadius: 999,
+                    background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                    boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
+                    transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
                   }}
                 />
+                {nextMilestone && (
+                  <span
+                    style={{
+                      position: 'absolute',
+                      right: 5,
+                      fontFamily: 'var(--sans)',
+                      fontSize: 10.5,
+                      fontWeight: 600,
+                      color: 'var(--accent)',
+                      background: 'rgba(124,58,237,0.12)',
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    Next: {nextMilestone}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* the single actionable next move — Start runs byte on the real task */}
+            {move && (
+              <div
+                style={{
+                  flex: '1 1 300px',
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '8px 10px 8px 14px',
+                  borderRadius: 12,
+                  background: 'var(--accent-tint)',
+                  border: '1px solid var(--accent-line)',
+                }}
+              >
+                <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
+                {/* soft radiance emanating from the beacon */}
+                <span
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    left: -28,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 150,
+                    height: 150,
+                    borderRadius: '50%',
+                    background: 'radial-gradient(circle, rgba(124,58,237,0.2), transparent 68%)',
+                    pointerEvents: 'none',
+                  }}
+                />
+                {/* the beacon — byte's guide star, pinging like on the map */}
                 <span
                   style={{
                     position: 'relative',
+                    flex: 'none',
                     width: 13,
                     height: 13,
-                    borderRadius: '50%',
-                    background: 'var(--accent)',
-                    boxShadow: '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                    display: 'inline-flex',
                   }}
-                />
-              </span>
-              <span
-                style={{
-                  position: 'relative',
-                  fontFamily: 'var(--sans)',
-                  fontSize: 10,
-                  letterSpacing: '0.13em',
-                  textTransform: 'uppercase',
-                  color: 'var(--accent)',
-                  flex: 'none',
-                }}
-              >
-                byte · do this next
-              </span>
-              <span
-                style={{
-                  position: 'relative',
-                  fontFamily: 'var(--sans)',
-                  fontSize: 13.5,
-                  fontWeight: 600,
-                  color: 'var(--ink)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {move.title}
-              </span>
-              <button
-                type="button"
-                onClick={startMove}
-                style={{
-                  position: 'relative',
-                  marginLeft: 'auto',
-                  flex: 'none',
-                  fontFamily: 'var(--sans)',
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  color: '#ffffff',
-                  background: 'var(--accent)',
-                  border: 'none',
-                  borderRadius: 9,
-                  padding: '7px 18px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
-                }}
-              >
-                Start
-              </button>
-            </div>
-          )}
+                >
+                  <span
+                    aria-hidden
+                    className="rm-beacon-ping"
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: '50%',
+                      background: 'var(--accent)',
+                      animation: 'beaconPing 2.2s ease-out infinite',
+                    }}
+                  />
+                  <span
+                    style={{
+                      position: 'relative',
+                      width: 13,
+                      height: 13,
+                      borderRadius: '50%',
+                      background: 'var(--accent)',
+                      boxShadow:
+                        '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                    }}
+                  />
+                </span>
+                <span
+                  style={{
+                    position: 'relative',
+                    fontFamily: 'var(--sans)',
+                    fontSize: 10,
+                    letterSpacing: '0.13em',
+                    textTransform: 'uppercase',
+                    color: 'var(--accent)',
+                    flex: 'none',
+                  }}
+                >
+                  byte · do this next
+                </span>
+                <span
+                  style={{
+                    position: 'relative',
+                    fontFamily: 'var(--sans)',
+                    fontSize: 13.5,
+                    fontWeight: 600,
+                    color: 'var(--ink)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {move.title}
+                </span>
+                <button
+                  type="button"
+                  onClick={startMove}
+                  style={{
+                    position: 'relative',
+                    marginLeft: 'auto',
+                    flex: 'none',
+                    fontFamily: 'var(--sans)',
+                    fontSize: 12.5,
+                    fontWeight: 700,
+                    color: '#ffffff',
+                    background: 'var(--accent)',
+                    border: 'none',
+                    borderRadius: 9,
+                    padding: '7px 18px',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
+                  }}
+                >
+                  Start
+                </button>
+              </div>
+            )}
+          </div>
           {/* roadmap — the hero. Sits right under the two cards (top-aligned, no centered dead
               gap above it) and takes the rest of the height. */}
           <div
