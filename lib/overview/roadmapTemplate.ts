@@ -102,8 +102,10 @@ export const ROADMAP_TEMPLATE: RoadmapTaskDef[] = [
     id: 'ship-terms',
     phase: 'ship',
     dept: 'legal',
+    // depends on Auth & accounts (adjacent Build column, same row) → a clean straight
+    // connector, instead of spanning back to Foundation across the Build column
     title: 'Terms & privacy',
-    dependsOn: ['found-incorporate'],
+    dependsOn: ['build-auth'],
   },
   {
     id: 'ship-help',

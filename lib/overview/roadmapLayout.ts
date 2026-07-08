@@ -78,11 +78,20 @@ function rowTop(row: number): number {
 }
 
 /** Orthogonal connector from a right-edge point to a left-edge point (x2 ≥ x1). A straight
- *  segment when the rows line up, otherwise a mid-gutter elbow — the reference's look. */
+ *  segment when the rows line up, otherwise an elbow whose vertical sits in the gutter just
+ *  left of the TARGET column — so it never crosses an intermediate column's cards, even when
+ *  the edge spans more than one column. */
 function elbow(x1: number, y1: number, x2: number, y2: number): string {
   if (y1 === y2) return `M${x1},${y1} H${x2}`;
-  const mid = Math.round((x1 + x2) / 2);
+  const mid = Math.round(x2 - COL_GAP / 2);
   return `M${x1},${y1} H${mid} V${y2} H${x2}`;
+}
+
+/** Connector between two cards stacked in the SAME column: a hook that drops into the column's
+ *  LEFT gutter instead of doubling back through the cards. Both x's are the column's left edge. */
+function sideElbow(x1: number, y1: number, x2: number, y2: number): string {
+  const g = Math.round(x1 - COL_GAP / 2);
+  return `M${x1},${y1} H${g} V${y2} H${x2}`;
 }
 
 /**
@@ -124,12 +133,13 @@ export function layoutRoadmap(
       const a = nodeById.get(e.from);
       const b = nodeById.get(e.to);
       if (!a || !b) return null;
-      return {
-        from: e.from,
-        to: e.to,
-        critical: e.critical,
-        d: elbow(rightX(a), centerY(a), b.x, centerY(b)),
-      };
+      // Same-column (within-phase) deps hook through the left gutter; cross-column deps run
+      // from the source's right edge into the target's left gutter.
+      const d =
+        a.col === b.col
+          ? sideElbow(a.x, centerY(a), b.x, centerY(b))
+          : elbow(rightX(a), centerY(a), b.x, centerY(b));
+      return { from: e.from, to: e.to, critical: e.critical, d };
     })
     .filter((e): e is EdgePath => e !== null);
 

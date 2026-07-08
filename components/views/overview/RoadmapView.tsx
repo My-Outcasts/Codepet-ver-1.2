@@ -33,7 +33,7 @@ const DOT: Record<RoadmapState, string> = {
 const BADGE: Record<RoadmapState, { text: string; fg: string; bg: string; border: string } | null> =
   {
     done: null,
-    current: { text: 'Available', fg: '#ffffff', bg: CY, border: CY },
+    current: null, // byte-is-here pill already marks it; a badge would be redundant
     available: {
       text: 'Available',
       fg: CY,
@@ -397,7 +397,7 @@ export default function RoadmapView({
                 <span
                   style={{
                     display: 'block',
-                    fontFamily: 'Georgia, serif',
+                    fontFamily: 'var(--sans)',
                     fontSize: 19,
                     fontWeight: 600,
                     color: TX,
