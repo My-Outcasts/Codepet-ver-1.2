@@ -36,9 +36,9 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 });
 
 const CY = '#7c3aed';
-// The two cards sit side by side in this row (capped); each takes half. Narrow enough that they
-// don't read as long lone bars, wide enough to fill the top so there's no big right-hand void.
-const PANEL_W = 'min(860px, calc(100% - 48px))';
+// The two cards sit side by side, each ~HUD-sized (matching the Second Brain "building your
+// company" card). The row is capped so they stay small.
+const PANEL_W = 'min(580px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
@@ -377,23 +377,23 @@ export default function OverviewSection() {
                   position: 'relative',
                   overflow: 'hidden',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '8px 10px 8px 14px',
+                  flexDirection: 'column',
+                  alignItems: 'flex-start',
+                  gap: 6,
+                  padding: '10px 14px 12px',
                   borderRadius: 12,
                   background: 'var(--accent-tint)',
                   border: '1px solid var(--accent-line)',
                 }}
               >
                 <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
-                {/* soft radiance emanating from the beacon */}
+                {/* soft radiance emanating from the beacon (top-left) */}
                 <span
                   aria-hidden
                   style={{
                     position: 'absolute',
-                    left: -28,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
+                    left: -34,
+                    top: -30,
                     width: 150,
                     height: 150,
                     borderRadius: '50%',
@@ -401,63 +401,64 @@ export default function OverviewSection() {
                     pointerEvents: 'none',
                   }}
                 />
-                {/* the beacon — byte's guide star, pinging like on the map */}
+                {/* beacon + label on one row, then the title and Start stacked below */}
                 <span
-                  style={{
-                    position: 'relative',
-                    flex: 'none',
-                    width: 13,
-                    height: 13,
-                    display: 'inline-flex',
-                  }}
+                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}
                 >
                   <span
-                    aria-hidden
-                    className="rm-beacon-ping"
                     style={{
-                      position: 'absolute',
-                      inset: 0,
-                      borderRadius: '50%',
-                      background: 'var(--accent)',
-                      animation: 'beaconPing 2.2s ease-out infinite',
+                      flex: 'none',
+                      width: 13,
+                      height: 13,
+                      display: 'inline-flex',
                     }}
-                  />
+                  >
+                    <span
+                      aria-hidden
+                      className="rm-beacon-ping"
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        animation: 'beaconPing 2.2s ease-out infinite',
+                      }}
+                    />
+                    <span
+                      style={{
+                        position: 'relative',
+                        width: 13,
+                        height: 13,
+                        borderRadius: '50%',
+                        background: 'var(--accent)',
+                        boxShadow:
+                          '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                      }}
+                    />
+                  </span>
                   <span
                     style={{
                       position: 'relative',
-                      width: 13,
-                      height: 13,
-                      borderRadius: '50%',
-                      background: 'var(--accent)',
-                      boxShadow:
-                        '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                      fontFamily: 'var(--sans)',
+                      fontSize: 10,
+                      letterSpacing: '0.13em',
+                      textTransform: 'uppercase',
+                      color: 'var(--accent)',
+                      flex: 'none',
+                      whiteSpace: 'nowrap',
                     }}
-                  />
+                  >
+                    byte · do this next
+                  </span>
                 </span>
                 <span
                   style={{
                     position: 'relative',
                     fontFamily: 'var(--sans)',
-                    fontSize: 10,
-                    letterSpacing: '0.13em',
-                    textTransform: 'uppercase',
-                    color: 'var(--accent)',
-                    flex: 'none',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  byte · do this next
-                </span>
-                <span
-                  style={{
-                    position: 'relative',
-                    fontFamily: 'var(--sans)',
-                    fontSize: 13.5,
-                    fontWeight: 600,
+                    fontSize: 14,
+                    fontWeight: 650,
                     color: 'var(--ink)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
+                    lineHeight: 1.3,
                   }}
                 >
                   {move.title}
@@ -467,7 +468,7 @@ export default function OverviewSection() {
                   onClick={startMove}
                   style={{
                     position: 'relative',
-                    marginLeft: 'auto',
+                    marginTop: 3,
                     flex: 'none',
                     fontFamily: 'var(--sans)',
                     fontSize: 12.5,
