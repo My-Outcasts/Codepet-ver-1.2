@@ -4,7 +4,7 @@
 // lazy-loaded (three.js is only fetched when you actually open it). This wrapper is
 // deliberately thin and leaves OverviewView untouched, so it doesn't conflict with ongoing
 // work on that component — the only app-wide change is one line in AppRoot pointing here.
-import { useState, type CSSProperties } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import RoadmapView from './overview/RoadmapView';
@@ -169,8 +169,9 @@ export default function OverviewSection() {
   );
 }
 
-// A deliberately slim reassurance strip — the roadmap is the focus, so shipped count + real
-// repo activity ride in one thin row rather than two big cards.
+// Progress at a glance — a row of colourful glowing stat cards. One accent per metric, a
+// soft corner glow, a big number. Compact (one row, so the roadmap stays the hero) but
+// vivid. Shipped is byte's approved deliverables; the rest is real Claude Code activity.
 function ProofStrip({
   shipped,
   sessions,
@@ -182,53 +183,81 @@ function ProofStrip({
   commits: number;
   hours: number;
 }) {
-  const b: CSSProperties = {
-    color: '#f5f3ff',
-    fontWeight: 700,
-    fontSize: 14,
-    marginRight: 4,
-    fontVariantNumeric: 'tabular-nums',
-  };
+  const stats: { accent: string; value: string; label: string }[] = [
+    { accent: '#7de3ff', value: String(shipped), label: 'shipped' },
+    { accent: '#8b5cf6', value: String(sessions), label: 'sessions' },
+    { accent: '#34d399', value: String(commits), label: 'commits' },
+    { accent: '#fdb022', value: `~${hours}h`, label: 'saved' },
+  ];
   return (
     <div
       style={{
         flex: 'none',
         display: 'flex',
-        alignItems: 'center',
-        gap: 16,
-        flexWrap: 'wrap',
-        margin: '0 24px 20px',
-        padding: '10px 16px',
-        background: '#151222',
-        border: '1px solid rgba(245,243,255,0.09)',
-        borderRadius: 12,
-        fontSize: 12.5,
-        color: 'rgba(245,243,255,0.64)',
+        gap: 12,
+        margin: '2px 24px 20px',
       }}
     >
-      <span>
-        <b style={b}>{shipped}</b>shipped
-      </span>
-      <span style={{ width: 1, height: 15, background: 'rgba(245,243,255,0.16)' }} />
-      <span>
-        <b style={b}>{sessions}</b>sessions
-      </span>
-      <span>
-        <b style={b}>{commits}</b>commits
-      </span>
-      <span>
-        <b style={b}>~{hours}h</b>saved
-      </span>
-      <span
+      {stats.map((s) => (
+        <StatCard key={s.label} accent={s.accent} value={s.value} label={s.label} />
+      ))}
+    </div>
+  );
+}
+
+function StatCard({ accent, value, label }: { accent: string; value: string; label: string }) {
+  return (
+    <div
+      style={{
+        flex: 1,
+        position: 'relative',
+        overflow: 'hidden',
+        borderRadius: 14,
+        padding: '13px 16px 14px',
+        background: `linear-gradient(150deg, ${accent}24, ${accent}0d 46%, rgba(21,18,34,0.55))`,
+        border: `1px solid ${accent}38`,
+      }}
+    >
+      {/* soft accent glow in the corner */}
+      <div
+        aria-hidden
         style={{
-          marginLeft: 'auto',
-          fontFamily: 'ui-monospace, monospace',
-          fontSize: 10.5,
-          color: 'rgba(245,243,255,0.4)',
+          position: 'absolute',
+          top: -26,
+          right: -26,
+          width: 78,
+          height: 78,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${accent}45, transparent 70%)`,
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'relative',
+          fontSize: 27,
+          fontWeight: 750,
+          color: '#f5f3ff',
+          fontVariantNumeric: 'tabular-nums',
+          lineHeight: 1,
+          letterSpacing: '-0.02em',
         }}
       >
-        byte’s real work in your repos
-      </span>
+        {value}
+      </div>
+      <div
+        style={{
+          position: 'relative',
+          marginTop: 7,
+          fontFamily: 'ui-monospace, monospace',
+          fontSize: 10.5,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: accent,
+        }}
+      >
+        {label}
+      </div>
     </div>
   );
 }
