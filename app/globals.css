@@ -3635,6 +3635,35 @@ body {
 .cop-build-cta:hover {
   border-color: var(--accent, #7c3aed);
 }
+/* Project-first intake card — collapsed confirmation + read-only plan-card row. */
+.cop-pick-done {
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-1);
+}
+.cop-pick-done.off {
+  color: var(--t-4);
+  font-weight: 500;
+}
+.cop-proj-ro {
+  margin: 10px 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-1);
+}
+
+/* Hosted-preview notice on the plan card — the build runs on the founder's machine. */
+.cop-remote-note {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #7a4a1e;
+  background: #fdf6ec;
+  border: 1px solid #ecd9a8;
+  border-radius: 10px;
+}
 /* While intake is on, the CTA row flips into "you're describing a build" + an exit. */
 .cop-intake-bar {
   display: flex;
@@ -8112,6 +8141,47 @@ body {
   color: var(--t-1);
   letter-spacing: -0.2px;
 }
+/* Step 0 in the install popup — the claude CLI itself is missing. */
+.ins-cli {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid #ecd9a8;
+  background: #fdf8ec;
+  border-radius: 12px;
+}
+.ins-cli-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--t-1);
+  margin-bottom: 6px;
+}
+.ins-cli-h .ins-ic {
+  color: #b98a1d;
+}
+.ins-cli p {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--t-3);
+  margin: 0 0 8px;
+}
+.ins-cli-check {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--hairline, #e8e3f0);
+  background: var(--surface, #fff);
+  color: var(--t-2);
+  cursor: pointer;
+}
+.ins-cli-check:hover {
+  border-color: #b98a1d;
+  color: #7a4a1e;
+}
+
 /* The one-time "wake byte up" install popup — a roomier so-modal that hosts the
    ins-* rows; the toolkit list scrolls instead of growing past the viewport. */
 .so-modal.ins-modal {
@@ -8366,6 +8436,58 @@ body {
 }
 .switch.on .knob {
   transform: translateX(20px);
+}
+/* settings — section labels above each card group */
+.set-sec {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 12px 2px -4px;
+}
+.set-sec:first-child {
+  margin-top: 0;
+}
+.set-sec h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t-2);
+}
+.set-sec p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--t-3);
+}
+/* settings — visible on/off state under a toggle's helper text */
+.set-status {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-3);
+}
+.set-status.on {
+  color: var(--accent-deep);
+}
+.set-signout {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--t-2);
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  padding: 8px 14px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+.set-signout:hover {
+  border-color: var(--t-3);
+  color: var(--t-1);
 }
 
 /* billing & usage */
@@ -9291,9 +9413,69 @@ body {
 .lc-err {
   color: #c0392b;
 }
+/* What-to-do-about-it hint under a raw claude error (install / login guidance). */
+.lc-err-hint {
+  margin-top: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #7a4a1e;
+  background: #fdf6ec;
+  border: 1px solid #ecd9a8;
+  border-radius: 9px;
+  padding: 8px 10px;
+}
 .lc-done {
   opacity: 0.6;
   font-size: 13px;
+}
+
+/* codepet_ask — Byte's question card with one-tap answer chips. */
+.lc-ask {
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--violet-line, #d9c8ff);
+  background: var(--violet-tint, #f6f0ff);
+  border-radius: 12px;
+}
+.lc-ask-h {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--violet, #7c3aed);
+  margin-bottom: 6px;
+}
+.lc-ask-q {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--t-1);
+  line-height: 1.5;
+}
+.lc-ask-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.lc-ask-opt {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--violet-line, #d9c8ff);
+  background: var(--surface, #fff);
+  color: var(--violet, #7c3aed);
+  cursor: pointer;
+}
+.lc-ask-opt:hover {
+  background: var(--violet, #7c3aed);
+  border-color: var(--violet, #7c3aed);
+  color: #fff;
+}
+.lc-ask-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--t-3);
 }
 /* Queued instructions — stacked while the session is busy, sent when it's ready. */
 .lc-queue {

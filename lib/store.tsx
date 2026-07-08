@@ -65,13 +65,18 @@ import {
   stepForLive,
   INTAKE_OPENING,
   INTAKE_FOLLOWUP,
+  INTAKE_ENOUGH,
+  MAX_INTAKE_QUESTIONS,
+  briefToText,
+  scanOpening,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
+import { requestIntakeReply } from './ai/buildIntake';
 import { buildOpeningPrompt, terminalCommand } from './armSession';
-import { armBuildSession } from '@/app/actions/build';
+import { armBuildSession, scanProject, isAppDir } from '@/app/actions/build';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
-import { getCapability, getStatus } from '@/app/actions/install';
+import { getCapability, getStatus, detectClaudeCli } from '@/app/actions/install';
 import { shouldPromptInstall, INSTALL_PROMPTED_KEY } from './installPrompt';
 import { ACTIVE_BUILD_KEY, serializeActiveBuild, parseActiveBuild } from './buildPersist';
 import type { BytePlan } from './ai/plan';
@@ -102,6 +107,9 @@ export interface ChatMessage {
   buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
   buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
+  /** The project-picker card that opens the build intake. `chosen` is set once the
+   * founder picks (the card collapses to a confirmation). In-memory only. */
+  buildPick?: { chosen?: string };
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
   /** A first-run enrichment question (goal / traction / problem). While `answered` is
@@ -146,6 +154,7 @@ export type View =
   | 'home'
   | 'dept'
   | 'tasks'
+  | 'research'
   | 'library'
   | 'env'
   | 'settings'
@@ -207,6 +216,9 @@ interface AppState {
   installPromptOpen: boolean;
   openInstallPrompt: () => void;
   closeInstallPrompt: () => void;
+  /** Where the app runs: 'local' can drive live builds; 'remote' (hosted preview)
+   * only hands out a command. null while detecting. */
+  capMode: 'local' | 'remote' | null;
   library: LibItem[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
@@ -310,6 +322,9 @@ interface AppState {
    *  hook→Firestore feed for them); the live view reports each reading here. */
   applyLocalLive: (s: LiveState) => void;
   startBuildIntake: () => void;
+  /** The founder picked the project on the intake card — scan it and open the
+   * brainstorm with what the scan shows. */
+  chooseBuildProject: (name: string) => void;
   /** Leave intake without building — the composer goes back to normal chat. */
   cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
@@ -354,6 +369,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // The one-time "wake byte up" popup — auto-opened by the effect next to
   // setInstalledFlag below; reopened any time via the Topbar pill or Settings.
   const [installPromptOpen, setInstallPromptOpen] = useState(false);
+  // local = this machine can spawn live builds; remote = hosted preview (command
+  // hand-off only). The Copilot plan card reads this to set honest expectations.
+  const [capMode, setCapMode] = useState<'local' | 'remote' | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getCapability()
+      .then((c) => {
+        if (!cancelled) setCapMode(c.mode === 'local' ? 'local' : 'remote');
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -445,6 +474,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
   const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
   const [buildBrief, setBuildBrief] = useState(restoredBuild?.brief ?? '');
+  // Prompt-ready project-scan text (live scan on local, CLI-uploaded brief on
+  // hosted) — grounds the intake questions and the generated plan. '' = no scan.
+  const [buildScan, setBuildScan] = useState('');
   const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(restoredBuild?.plan ?? null);
   const [buildSessionId, setBuildSessionId] = useState<string | null>(
     restoredBuild?.buildSessionId ?? null,
@@ -1848,20 +1880,80 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildIntakeActive(true);
     setBuildBrief('');
     setBuildPlanState(null);
+    setBuildProject('');
+    setBuildScan('');
+    // The opener + picker card. The card is in-memory only (dead after reload),
+    // like the plan card; the text itself persists as history.
     const opening: ChatMessage = {
       id: newId(),
       role: 'byte',
       text: INTAKE_OPENING,
       ts: Date.now(),
+      buildPick: {},
     };
     setChatMessages((prev) => [...prev, opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
   }, [companyId, persistMsg]);
 
+  // The founder picked a project: collapse the card, scan the codebase (live on
+  // local; the CLI-uploaded brief on hosted), and open the brainstorm with what
+  // the scan shows. A failed/absent scan just means a generic opening.
+  const chooseBuildProject = useCallback(
+    (name: string) => {
+      const project = name.trim();
+      if (!project || !companyId) return;
+      setBuildProject(project);
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.buildPick && !m.buildPick.chosen ? { ...m, buildPick: { chosen: project } } : m,
+        ),
+      );
+      (async () => {
+        let scanText = '';
+        let briefData: Parameters<typeof scanOpening>[1] = null;
+        let selfBuild = false;
+        try {
+          const dirs = await loadProjectDirs(companyId);
+          const entry = dirs.find((p) => p.name === project);
+          if (capMode === 'local') {
+            const dir = entry?.path ?? project;
+            [briefData, selfBuild] = await Promise.all([scanProject(dir), isAppDir(dir)]);
+          } else {
+            briefData = entry?.brief ?? null;
+          }
+          scanText = briefToText(briefData);
+        } catch {
+          // no scan — generic intake still works
+        }
+        setBuildScan(scanText);
+        const now = Date.now();
+        const msgs: ChatMessage[] = [
+          { id: newId(), role: 'byte', text: scanOpening(project, briefData), ts: now },
+        ];
+        if (selfBuild) {
+          // Snake-eats-tail heads-up: editing the running app hot-reloads it. The
+          // session survives that now (detach + re-attach), but the page will blink
+          // and a broken edit can take the whole app down.
+          msgs.push({
+            id: newId(),
+            role: 'byte',
+            text: '⚠️ Heads-up: this is the very app you’re running right now. When the build edits its code the page will reload mid-build (I’ll reconnect), and a bad edit can crash the app itself. A second copy of the repo (ask about “git worktree”) is the safer playground.',
+            ts: now + 1,
+          });
+        }
+        setChatMessages((prev) => [...prev, ...msgs]);
+        for (const m of msgs) persistMsg({ id: m.id, role: 'byte', text: m.text, ts: m.ts });
+        track('build.intake.project', { scanned: scanText ? 1 : 0, selfBuild });
+      })();
+    },
+    [companyId, capMode, persistMsg],
+  );
+
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
     setBuildBrief('');
+    setBuildScan('');
     const msg: ChatMessage = {
       id: newId(),
       role: 'byte',
@@ -1877,27 +1969,50 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
-      const first = buildBrief.trim().length === 0;
+      const turns = [...buildBrief.split('\n').filter(Boolean), text];
       setBuildBrief((b) => appendBrief(b, text));
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      const replyId = newId();
       setChatMessages((prev) => [
         ...stripBuildButtons(prev),
         userMsg,
-        // After the first answer, Byte nudges once and surfaces the "to plan" button.
+        // Placeholder while Byte thinks up the next scan-grounded question; the
+        // to-plan button is present from the start so the founder is never gated
+        // on the AI. In-memory-only buildAction, like result cards.
         {
-          id: newId(),
+          id: replyId,
           role: 'byte',
-          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
+          text: 'Byte is thinking…',
           ts: now + 1,
           buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
         },
       ]);
-      // Persist the founder's real answer; the byte follow-up carries an in-memory-only
-      // buildAction button (dead after reload) so it stays transient, like result cards.
+      // Persist the founder's real answer; byte's follow-up stays transient.
       persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
+
+      // Byte's next line: an AI question grounded in the scan, capped at
+      // MAX_INTAKE_QUESTIONS; scripted fallback on any failure.
+      const setReply = (say: string) =>
+        setChatMessages((prev) => prev.map((m) => (m.id === replyId ? { ...m, text: say } : m)));
+      if (turns.length > MAX_INTAKE_QUESTIONS) {
+        setReply(INTAKE_ENOUGH);
+        return;
+      }
+      (async () => {
+        try {
+          const reply = await requestIntakeReply({
+            context: buildScan,
+            turns,
+            project: buildProject || undefined,
+          });
+          setReply(reply.say.trim() || (turns.length === 1 ? INTAKE_FOLLOWUP : INTAKE_ENOUGH));
+        } catch {
+          setReply(turns.length === 1 ? INTAKE_FOLLOWUP : 'Got it — added. 👍');
+        }
+      })();
     },
-    [buildBrief, companyId, persistMsg],
+    [buildBrief, buildScan, buildProject, companyId, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
@@ -1912,7 +2027,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     ]);
     (async () => {
       try {
-        const plan = await requestBuildPlan({ brief, project: buildProject || undefined });
+        const plan = await requestBuildPlan({
+          brief,
+          project: buildProject || undefined,
+          context: buildScan || undefined,
+        });
         setBuildPlanState(plan);
         setBuildIntakeActive(false);
         setChatMessages((prev) =>
@@ -1943,7 +2062,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     })();
-  }, [buildBrief, buildProject]);
+  }, [buildBrief, buildProject, buildScan]);
 
   const setBuildPlanSteps = useCallback((steps: string[]) => {
     setBuildPlanState((p) => (p ? { ...p, steps } : p));
@@ -1964,6 +2083,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setBuildProjectDir(dir);
         const cap = await getCapability();
         if (cap.mode === 'local') {
+          // Live builds drive the real `claude` CLI — catch a missing binary here
+          // with guidance instead of letting the spawn fail into "Hit a snag".
+          const cli = await detectClaudeCli();
+          if (!cli.installed) {
+            const msg: ChatMessage = {
+              id: newId(),
+              role: 'byte',
+              text: 'Byte needs Claude Code on this machine to build — I opened the setup guide. Install it (one paste in Terminal), then tap Start building again. 🔧',
+              ts: Date.now(),
+            };
+            setChatMessages((prev) => [...prev, msg]);
+            persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+            setInstallPromptOpen(true);
+            return;
+          }
           // Snapshot the project BEFORE the session touches anything, so END can offer
           // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
           setBuildCheckpoint(await createCheckpoint(dir));
@@ -2039,6 +2173,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildStep('during');
     setBuildProject('');
     setBuildBrief('');
+    setBuildScan('');
     setBuildPlanState(null);
     setBuildCheckpoint(null);
     setBuildAutonomy('suggest');
@@ -2088,6 +2223,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
+      capMode,
       library,
       tracking,
       projects,
@@ -2143,6 +2279,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      chooseBuildProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
@@ -2189,6 +2326,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
+      capMode,
       library,
       tracking,
       projects,
@@ -2244,6 +2382,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      chooseBuildProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,

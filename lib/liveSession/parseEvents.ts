@@ -13,7 +13,10 @@ export type SessionEvent =
   | { kind: 'result'; text: string; sessionId: string }
   | { kind: 'error'; message: string }
   | { kind: 'exit'; code: number | null }
-  | { kind: 'permission-request'; requestId: string; tool: string; input: unknown };
+  | { kind: 'permission-request'; requestId: string; tool: string; input: unknown }
+  /** A codepet_ask question from the live session (emitted by the engine, not
+   *  parsed from stdout — same as permission-request). */
+  | { kind: 'question'; requestId: string; question: string; options?: string[] };
 
 /** Coerce tool_result `content` (string, or an array of text blocks) to a string. */
 function resultSummary(content: unknown): string {

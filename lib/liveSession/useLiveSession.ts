@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useRef, useState } from 'react';
+import { stopBuildSession } from './stopClient';
 import { initialTranscript, reduceTranscript, type TranscriptState } from './transcript';
 import type { SessionEvent } from './parseEvents';
 import type { BytePlan } from '../ai/plan';
@@ -38,6 +39,14 @@ export function applyDecision(state: TranscriptState): TranscriptState {
   if (!state.pendingPermission) return state;
   const { pendingPermission: _drop, ...rest } = state;
   return { ...rest, status: 'running' };
+}
+
+/** Pure: optimistically record the founder's answer to a codepet_ask question —
+ *  the answer shows as their own turn and the session reads as running again. */
+export function applyAnswer(state: TranscriptState, text: string): TranscriptState {
+  if (!state.pendingQuestion) return state;
+  const { pendingQuestion: _drop, ...rest } = state;
+  return { ...rest, status: 'running', messages: [...rest.messages, { role: 'user', text }] };
 }
 
 export function useLiveSession(opts: {
@@ -107,23 +116,21 @@ export function useLiveSession(opts: {
     }
   }, [opts]);
 
+  // Close OUR side of the stream only — the server child keeps running, and a
+  // remount re-attaches to its replay buffer. This is the unmount teardown: a
+  // dev hot-reload (or tab churn) must never kill a build mid-task.
+  const detach = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   const stop = useCallback(() => {
     abortRef.current?.abort();
     // Aborting the stream means we won't receive the child's exit event, so flip the
     // transcript to ended ourselves — otherwise the UI looks frozen after Stop.
     setState((s) => reduceTranscript(s, { kind: 'exit', code: 0 }));
-    // Tell the server to kill the persistent claude child. keepalive lets this
-    // POST survive component unmount / tab close. Best-effort — ignore failures.
-    try {
-      fetch('/api/build-session/stop', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ buildSessionId: opts.buildSessionId }),
-        keepalive: true,
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    // Tell the server to kill the persistent claude child (keepalive survives
+    // unmount / tab close). Explicit user intent only: Stop button / Wrap up.
+    stopBuildSession(opts.buildSessionId);
   }, [opts.buildSessionId]);
 
   const send = useCallback(
@@ -145,6 +152,31 @@ export function useLiveSession(opts: {
       } catch {
         setState((s) =>
           reduceTranscript(s, { kind: 'error', message: 'Could not send that message.' }),
+        );
+      }
+    },
+    [opts.buildSessionId],
+  );
+
+  const answer = useCallback(
+    async (requestId: string, text: string) => {
+      const t = text.trim();
+      if (!t) return;
+      setState((s) => applyAnswer(s, t));
+      try {
+        const res = await fetch('/api/build-session/answer', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ buildSessionId: opts.buildSessionId, requestId, answer: t }),
+        });
+        if (!res.ok) {
+          setState((s) =>
+            reduceTranscript(s, { kind: 'error', message: 'Could not send that answer.' }),
+          );
+        }
+      } catch {
+        setState((s) =>
+          reduceTranscript(s, { kind: 'error', message: 'Could not send that answer.' }),
         );
       }
     },
@@ -174,5 +206,5 @@ export function useLiveSession(opts: {
     [opts.buildSessionId],
   );
 
-  return { state, start, stop, send, decide };
+  return { state, start, stop, detach, send, decide, answer };
 }

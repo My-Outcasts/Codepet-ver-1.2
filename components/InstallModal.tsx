@@ -11,7 +11,11 @@ import {
   installToolkit,
   uninstallToolkit,
   getInstallCommand,
+  detectClaudeCli,
 } from '@/app/actions/install';
+
+/** How to get the `claude` CLI itself — shown when it's missing. */
+const CLI_INSTALL_CMD = 'npm install -g @anthropic-ai/claude-code';
 
 // The one-time "wake byte up" popup — the former First-install view, now a modal.
 // Auto-opens once for a fresh account (see the store's install-prompt effect);
@@ -42,6 +46,10 @@ export function InstallModal() {
   const [cmd, setCmd] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  // The claude CLI itself (the live build session spawns it) — null while checking.
+  const [cli, setCli] = useState<{ installed: boolean; version?: string } | null>(null);
+  const [cliCopied, setCliCopied] = useState(false);
+  const [cliChecking, setCliChecking] = useState(false);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // The config the installed tracker needs to report activity: the company's ingest
@@ -61,10 +69,16 @@ export function InstallModal() {
   };
 
   const refresh = async () => {
-    const [c, t, s] = await Promise.all([getCapability(), getToolkit(), getStatus()]);
+    const [c, t, s, cliState] = await Promise.all([
+      getCapability(),
+      getToolkit(),
+      getStatus(),
+      detectClaudeCli(),
+    ]);
     setCap(c as Cap);
     setToolkit(t as Item[]);
     setStatus(s as Status[]);
+    setCli(cliState);
     // store `installed` = "any toolkit item installed" (coarse); this modal uses
     // `allInstalled` for the full-set gate.
     setInstalled(s.some((x) => x.installed));
@@ -148,6 +162,64 @@ export function InstallModal() {
             <div className="ins-meta">
               <b>Checking your environment…</b>
             </div>
+          </div>
+        )}
+
+        {/* Step 0 — the claude CLI itself. Live builds spawn it; without it the
+            toolkit works but "Let's build" can't run. */}
+        {cap?.mode === 'local' && cli && !cli.installed && (
+          <div className="ins-cli">
+            <div className="ins-cli-h">
+              <span className="ins-ic">✗</span>
+              <b>Claude Code isn&apos;t on this machine yet</b>
+            </div>
+            <p>
+              Byte builds by driving Claude Code. Open the Terminal app, paste this, and press Enter
+              (you&apos;ll sign in to Claude once after):
+            </p>
+            <div className="ins-cmd-box">
+              <code>{CLI_INSTALL_CMD}</code>
+              <button
+                className="ins-cmd-copy"
+                onClick={() => {
+                  navigator.clipboard?.writeText(CLI_INSTALL_CMD).then(
+                    () => {
+                      setCliCopied(true);
+                      setTimeout(() => setCliCopied(false), 1500);
+                    },
+                    () => {},
+                  );
+                }}
+              >
+                {cliCopied ? 'Copied ✓' : 'Copy'}
+              </button>
+            </div>
+            <button
+              className="ins-cli-check"
+              disabled={cliChecking}
+              onClick={async () => {
+                setCliChecking(true);
+                try {
+                  setCli(await detectClaudeCli());
+                } finally {
+                  setCliChecking(false);
+                }
+              }}
+            >
+              {cliChecking ? 'Checking…' : 'I installed it — check again'}
+            </button>
+          </div>
+        )}
+        {cap?.mode === 'local' && cli?.installed && (
+          <div className="ins-row on done">
+            <span className="ins-ic">✓</span>
+            <div className="ins-meta">
+              <b>
+                Claude Code CLI <span className="ins-kind">engine</span>
+              </b>
+              <span>{cli.version || 'installed on this machine'}</span>
+            </div>
+            <span className="ins-tag">installed</span>
           </div>
         )}
 

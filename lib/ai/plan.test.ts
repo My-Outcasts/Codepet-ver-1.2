@@ -34,6 +34,19 @@ describe('sanitizePlanInput', () => {
     expect(sanitizePlanInput({ brief: 'x' })?.project).toBeUndefined();
     expect(sanitizePlanInput({ brief: 'x', project: '   ' })?.project).toBeUndefined();
   });
+
+  it('keeps a trimmed, capped context (project scan) when provided', () => {
+    const out = sanitizePlanInput({ brief: 'x', context: `  ${'c'.repeat(2000)}  ` });
+    expect(out?.context?.length).toBe(1200);
+    expect(sanitizePlanInput({ brief: 'x' })?.context).toBeUndefined();
+  });
+
+  it('grounds the prompt in the scan when context is present', () => {
+    const p = buildPlanPrompt({ brief: 'a paywall', context: 'Stack: Next.js\nDeps: stripe' });
+    expect(p).toContain('Deps: stripe');
+    expect(p).toMatch(/reuse existing dependencies/);
+    expect(buildPlanPrompt({ brief: 'a paywall' })).not.toMatch(/quick scan/);
+  });
 });
 
 describe('buildPlanPrompt', () => {

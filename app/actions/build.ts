@@ -6,10 +6,10 @@
 // See docs/superpowers/specs/2026-07-02-build-coach-live-session-design.md.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { detectCapability } from '@/lib/installer/capability.mjs';
 import { resolveClaudeDir } from '@/lib/installer/paths.mjs';
-import { buildOpeningPrompt, terminalCommand } from '@/lib/armSession';
+import { buildOpeningPrompt, terminalCommand, terminalLaunchCandidates } from '@/lib/armSession';
 import type { BytePlan } from '@/lib/ai/plan';
 
 interface ArmInput {
@@ -59,7 +59,8 @@ export async function armBuildSession(
 
   writeArmFile(resolveClaudeDir(), input);
 
-  // macOS-first Terminal open. Other platforms: no launch, caller shows the command.
+  // Best-effort terminal open per platform; any failure just falls back to the
+  // copy-paste card the caller already shows.
   if (process.platform === 'darwin') {
     const script = `tell application "Terminal" to do script ${JSON.stringify(command)}\ntell application "Terminal" to activate`;
     try {
@@ -69,5 +70,53 @@ export async function armBuildSession(
       return { ok: true, launched: false };
     }
   }
+  for (const c of terminalLaunchCandidates(process.platform, command)) {
+    if (!binaryAvailable(c.cmd)) continue;
+    try {
+      spawn(c.cmd, c.args, { detached: true, stdio: 'ignore' }).unref();
+      return { ok: true, launched: true };
+    } catch {
+      // try the next emulator
+    }
+  }
   return { ok: true, launched: false };
+}
+
+/** Whether a chosen project directory IS the running Codepet app itself.
+ *  Building the app that hosts the build is the snake eating its own tail: an
+ *  edit triggers a dev hot-reload which used to kill the live session — the UI
+ *  warns before the founder starts such a build. */
+export async function isAppDir(projectDir: string): Promise<boolean> {
+  if (!projectDir) return false;
+  try {
+    return path.resolve(projectDir) === path.resolve(process.cwd());
+  } catch {
+    return false;
+  }
+}
+
+/** Scan one project directory on demand (local mode) — the compact brief Byte's
+ *  intake brainstorm + plan prompt read. Hosted mode returns null (the founder's
+ *  disk is unreachable from the cloud); the caller falls back to the stored brief
+ *  the scan CLI uploaded, or to a generic intake. */
+export async function scanProject(
+  projectDir: string,
+): Promise<{ frameworks: string[]; deps: string[]; dirs: string[]; readme: string } | null> {
+  if (!projectDir || detectCapability(process.env).mode !== 'local') return null;
+  try {
+    const { summarizeProject } = await import('@/lib/installer/projectBrief.mjs');
+    return summarizeProject(projectDir);
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a launcher binary exists on PATH (`where` on Windows, `which` elsewhere). */
+function binaryAvailable(cmd: string): boolean {
+  try {
+    const probe = process.platform === 'win32' ? 'where' : 'which';
+    return spawnSync(probe, [cmd], { stdio: 'ignore', timeout: 3000 }).status === 0;
+  } catch {
+    return false;
+  }
 }

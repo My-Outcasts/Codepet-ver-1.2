@@ -58,6 +58,9 @@ describe('startSession', () => {
         'mcp__codepet_permit__codepet_permit',
         '--mcp-config',
         expect.any(String),
+        // codepet_ask must never itself stall on a permission prompt.
+        '--allowedTools',
+        'mcp__codepet_permit__codepet_ask',
       ],
       { cwd: '/proj', env: expect.any(Object) },
     );

@@ -14,6 +14,8 @@ export interface LiveSession {
   status: 'running' | 'ended' | 'error';
   buffer: SessionEvent[];
   pending: Map<string, (d: PermissionDecision) => void>;
+  /** Parked codepet_ask questions awaiting the user's answer (null = no answer). */
+  pendingAsks: Map<string, (answer: string | null) => void>;
   /** Autonomy level for this session — drives the bridge's auto-approval. */
   mode: Autonomy;
 }

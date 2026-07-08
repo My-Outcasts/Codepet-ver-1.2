@@ -18,11 +18,13 @@ export function liveFromTranscript(t: TranscriptState, startedAt: Millis, now: M
   const lastAssistant = [...t.messages].reverse().find((m) => m.role === 'assistant')?.text;
   const lastSay = lastAssistant?.trim() ? lastAssistant.trim().slice(0, SAY_MAX) : undefined;
   const pendingAsk =
-    t.status === 'awaiting-permission'
-      ? ASK_PERMISSION
-      : t.status === 'awaiting-input'
-        ? ASK_REPLY
-        : undefined;
+    t.status === 'awaiting-question' && t.pendingQuestion
+      ? t.pendingQuestion.question.slice(0, SAY_MAX)
+      : t.status === 'awaiting-permission'
+        ? ASK_PERMISSION
+        : t.status === 'awaiting-input'
+          ? ASK_REPLY
+          : undefined;
   const out: LiveState = {
     sessionId: t.sessionId ?? '',
     actionCount: t.actionCount,

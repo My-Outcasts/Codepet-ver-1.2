@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Byte } from '../Byte';
 import { budgetState, byteDuringLine, DANGER_PCT } from '@/lib/buildCoach';
+import { stopBuildSession } from '@/lib/liveSession/stopClient';
 import { LiveChat } from './build/LiveChat';
 import type { BytePlan } from '@/lib/ai/plan';
 import type { LiveState } from '@/lib/liveBuild';
@@ -168,7 +169,7 @@ function DuringStep({
         </div>
         <div className="bc-slide-row">
           <span className="bc-pct">
-            {actions} / {target} actions
+            {actions} actions · {target} planned
             {plan && plan.steps.length > 0 && (
               <span className="bc-plan-size"> · {plan.steps.length}-step plan</span>
             )}
@@ -308,7 +309,7 @@ function EndStep({
             <div className="bc-rc">
               <label>spent</label>
               <div className={`v${underBudget ? ' ok' : ' warn'}`}>
-                {actions}/{target} actions
+                {actions} of {target} planned
               </div>
             </div>
             <div className="bc-rc">
@@ -449,6 +450,13 @@ export function BuildCoachView() {
   const [confirmWrap, setConfirmWrap] = useState(false);
   const busy = liveStatus === 'running' || liveStatus === 'awaiting-permission';
 
+  // Wrap up is the explicit teardown now (unmount only detaches the stream, so
+  // hot-reloads can't kill a build) — stop the server child, then flip to END.
+  const wrapUp = () => {
+    if (buildLocal && buildSessionId) stopBuildSession(buildSessionId);
+    endBuild();
+  };
+
   const idx = step === 'during' ? 0 : 1;
 
   return (
@@ -512,7 +520,7 @@ export function BuildCoachView() {
                   anyway?
                 </span>
                 <div className="bc-wrap-row">
-                  <button className="bc-wrap-yes" onClick={endBuild}>
+                  <button className="bc-wrap-yes" onClick={wrapUp}>
                     Yes, wrap up
                   </button>
                   <button className="bc-wrap-no" onClick={() => setConfirmWrap(false)}>
@@ -527,7 +535,7 @@ export function BuildCoachView() {
                   // A busy local session deserves a second look; an idle (or remote)
                   // one wraps up immediately.
                   if (buildLocal && busy) setConfirmWrap(true);
-                  else endBuild();
+                  else wrapUp();
                 }}
               >
                 {NEXT_LABEL.during}

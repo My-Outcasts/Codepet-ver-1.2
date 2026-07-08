@@ -15,7 +15,8 @@ export function buildOpeningPrompt(
   const closing = opts?.twoWay
     ? [
         'The user is watching this session live and can reply. If a decision genuinely',
-        'needs their input, ask briefly and wait; otherwise make reasonable assumptions',
+        'needs their input, ask ONE short question with the codepet_ask tool (give 2-4',
+        'short options when possible) and wait; otherwise make reasonable assumptions',
         'and note them when you summarize at the end.',
         'Keep it small and token-thrifty; double-check before calling it done.',
       ]
@@ -44,4 +45,28 @@ function shq(s: string): string {
 /** `cd "<dir>" && claude "<prompt>"` — the command a new Terminal window runs. */
 export function terminalCommand(projectDir: string, prompt: string): string {
   return `cd "${shq(projectDir)}" && claude "${shq(prompt)}"`;
+}
+
+/** Terminal-app launch candidates per platform, tried in order until one spawns.
+ *  darwin is handled separately (osascript); win32 has one canonical opener; on
+ *  linux we try the common emulators. Pure — availability checks + spawn live in
+ *  the server action. */
+export function terminalLaunchCandidates(
+  platform: string,
+  command: string,
+): Array<{ cmd: string; args: string[] }> {
+  if (platform === 'win32') {
+    // `start` needs a window title arg when the command is quoted.
+    return [{ cmd: 'cmd', args: ['/c', 'start', 'Codepet build', 'cmd', '/k', command] }];
+  }
+  if (platform === 'linux') {
+    const bash = ['bash', '-lc', `${command}; exec bash`];
+    return [
+      { cmd: 'x-terminal-emulator', args: ['-e', ...bash] },
+      { cmd: 'gnome-terminal', args: ['--', ...bash] },
+      { cmd: 'konsole', args: ['-e', ...bash] },
+      { cmd: 'xterm', args: ['-e', ...bash] },
+    ];
+  }
+  return [];
 }

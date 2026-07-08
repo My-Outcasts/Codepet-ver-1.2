@@ -14,6 +14,10 @@ import type { PermissionDecision } from './registry';
 import { permissionModeFor, autoAllows, riskLevel, type Autonomy } from './permissionSummary';
 
 export const PERMISSION_TIMEOUT_MS = 120_000;
+/** How long a codepet_ask question waits for the user before Claude is told to
+ *  proceed on its own judgment. Longer than permissions — questions are rarer
+ *  and the founder may be reading. */
+export const ASK_TIMEOUT_MS = 600_000;
 
 /** MCP server key that hosts the permission-prompt tool (see writeMcpConfig). */
 const PERMIT_SERVER = 'codepet_permit';
@@ -23,6 +27,8 @@ const PERMIT_SERVER = 'codepet_permit';
  *  MUST get this qualified name, not the bare tool name, or claude errors with
  *  "MCP tool codepet_permit ... not found". */
 const PERMIT_TOOL = `mcp__${PERMIT_SERVER}__codepet_permit`;
+/** The question tool on the same server (see permissionServer.mjs). */
+const ASK_TOOL = `mcp__${PERMIT_SERVER}__codepet_ask`;
 
 /** Base headless streaming args. The permission wiring (--permission-prompt-tool +
  *  --mcp-config) is appended per session in startSession, since the mcp-config path
@@ -45,6 +51,7 @@ interface ChildLike {
   stdin: { write(s: string): void; end(): void };
   on(event: string, cb: (arg?: unknown) => void): void;
   kill(): void;
+  pid?: number;
 }
 export type SpawnFn = (
   cmd: string,
@@ -89,6 +96,68 @@ function writeMcpConfig(buildSessionId: string): string {
   return file;
 }
 
+/** On-disk record of live children, so a restarted server can put down orphans
+ *  (their stdio pipes died with the old process — they can't be re-adopted, only
+ *  stopped so an unsupervised claude never keeps editing code). */
+export function sessionsFilePath(): string {
+  return path.join(os.tmpdir(), 'codepet-live-sessions.json');
+}
+
+type PidMap = Record<string, number>;
+
+function readPidMap(file: string): PidMap {
+  try {
+    const raw = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return raw && typeof raw === 'object' ? (raw as PidMap) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writePidMap(file: string, map: PidMap): void {
+  try {
+    if (Object.keys(map).length === 0) fs.rmSync(file, { force: true });
+    else fs.writeFileSync(file, JSON.stringify(map));
+  } catch {
+    // best-effort — losing the pid file only weakens the orphan sweep
+  }
+}
+
+export function recordSessionPid(id: string, pid: number | undefined, file = sessionsFilePath()) {
+  if (!pid) return;
+  const map = readPidMap(file);
+  map[id] = pid;
+  writePidMap(file, map);
+}
+
+export function clearSessionPid(id: string, file = sessionsFilePath()) {
+  const map = readPidMap(file);
+  if (!(id in map)) return;
+  delete map[id];
+  writePidMap(file, map);
+}
+
+/** Kill children recorded by a previous server process. Entries for sessions this
+ *  process knows about are kept; everything else is put down and removed. */
+export function sweepOrphanSessions(file = sessionsFilePath()): void {
+  const map = readPidMap(file);
+  const kept: PidMap = {};
+  for (const [id, pid] of Object.entries(map)) {
+    if (getSession(id)) {
+      kept[id] = pid;
+      continue;
+    }
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      // already gone
+    }
+  }
+  writePidMap(file, kept);
+}
+
+let sweptOnBoot = false;
+
 export function startSession(opts: {
   buildSessionId: string;
   projectDir: string;
@@ -96,6 +165,12 @@ export function startSession(opts: {
   mode?: Autonomy;
   spawnFn?: SpawnFn;
 }): void {
+  // First spawn after a server (re)start: put down any children the previous
+  // process left running unsupervised.
+  if (!sweptOnBoot) {
+    sweptOnBoot = true;
+    sweepOrphanSessions();
+  }
   const spawnFn = opts.spawnFn ?? defaultSpawn;
   const mode: Autonomy = opts.mode ?? 'suggest';
   const mcpConfigPath = writeMcpConfig(opts.buildSessionId);
@@ -107,6 +182,10 @@ export function startSession(opts: {
     PERMIT_TOOL,
     '--mcp-config',
     mcpConfigPath,
+    // codepet_ask is how claude asks the founder a question — it must never
+    // itself stall on a permission prompt.
+    '--allowedTools',
+    ASK_TOOL,
   ];
   // Run the child as the user's own claude (their claude.ai login), the same as if
   // they ran `claude` in a terminal. The server sets ANTHROPIC_API_KEY for the chat /
@@ -124,9 +203,11 @@ export function startSession(opts: {
     status: 'running',
     buffer: [],
     pending: new Map(),
+    pendingAsks: new Map(),
     mode,
   };
   setSession(opts.buildSessionId, session);
+  recordSessionPid(opts.buildSessionId, child.pid);
 
   const emit = (e: SessionEvent) => {
     session.buffer.push(e);
@@ -146,7 +227,10 @@ export function startSession(opts: {
   child.on('error', (err) =>
     emit({ kind: 'error', message: err instanceof Error ? err.message : String(err) }),
   );
-  child.on('close', (code) => emit({ kind: 'exit', code: typeof code === 'number' ? code : null }));
+  child.on('close', (code) => {
+    clearSessionPid(opts.buildSessionId);
+    emit({ kind: 'exit', code: typeof code === 'number' ? code : null });
+  });
 
   // Send the opening prompt. Phase 2: keep stdin OPEN so follow-up turns can be
   // written via sendTurn; the session ends on stopSession or child exit.
@@ -215,6 +299,49 @@ export function resolvePermission(
   return true;
 }
 
+/** Park a codepet_ask question: emit it to the UI and resolve with the user's
+ *  answer (via resolveQuestion) or null after ASK_TIMEOUT_MS / missing session —
+ *  the bridge then tells claude to proceed on its own judgment. */
+export function enqueueQuestion(
+  buildSessionId: string,
+  req: { requestId: string; question: string; options?: string[] },
+): Promise<{ answer: string | null }> {
+  const s = getSession(buildSessionId);
+  if (!s) return Promise.resolve({ answer: null });
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (answer: string | null) => {
+      if (done) return;
+      done = true;
+      s.pendingAsks.delete(req.requestId);
+      resolve({ answer });
+    };
+    s.pendingAsks.set(req.requestId, finish);
+    setTimeout(() => finish(null), ASK_TIMEOUT_MS);
+    const event = {
+      kind: 'question' as const,
+      requestId: req.requestId,
+      question: req.question,
+      ...(req.options && req.options.length > 0 ? { options: req.options } : {}),
+    };
+    s.buffer.push(event);
+    s.emitter.emit('event', event);
+  });
+}
+
+/** Resolve a parked question with the user's answer. False if not found. */
+export function resolveQuestion(
+  buildSessionId: string,
+  requestId: string,
+  answer: string,
+): boolean {
+  const s = getSession(buildSessionId);
+  const resolver = s?.pendingAsks.get(requestId);
+  if (!resolver) return false;
+  resolver(answer);
+  return true;
+}
+
 export function stopSession(buildSessionId: string): void {
   const s = getSession(buildSessionId);
   if (!s) return;
@@ -223,6 +350,7 @@ export function stopSession(buildSessionId: string): void {
   } catch {
     // already gone
   }
+  clearSessionPid(buildSessionId);
   try {
     fs.rmSync(path.join(os.tmpdir(), `codepet-mcp-${buildSessionId}.json`), { force: true });
   } catch {

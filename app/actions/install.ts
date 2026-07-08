@@ -84,3 +84,18 @@ export async function setTracking(enabled: boolean) {
     return { ok: false as const, reason: 'not-installed' as const };
   }
 }
+
+/** Whether the `claude` CLI itself is on this machine — the live "Let's build"
+ *  session spawns it, so a missing binary must be caught with guidance, not a
+ *  raw spawn failure. Local mode only; remote answers not-installed. */
+export async function detectClaudeCli(): Promise<{ installed: boolean; version?: string }> {
+  if (detectCapability(process.env).mode !== 'local') return { installed: false };
+  try {
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const { stdout } = await promisify(execFile)('claude', ['--version'], { timeout: 10_000 });
+    return { installed: true, version: stdout.trim().slice(0, 60) };
+  } catch {
+    return { installed: false };
+  }
+}

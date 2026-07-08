@@ -5,12 +5,16 @@
 // call. See docs/superpowers/specs/2026-07-02-build-coach-view-design.md.
 
 const MAX_FIELD = 400;
+const MAX_CONTEXT = 1200;
 
 export interface PlanInput {
   /** Free-text description of what the user wants to build — anything they type. */
   brief: string;
   /** Optional project area the build belongs to (e.g. a department name). */
   project?: string;
+  /** Optional project-scan text (stack, deps, folders) so steps match the real
+   *  codebase. See the 2026-07-08 intake design. */
+  context?: string;
 }
 
 /** The plan Byte returns for the START step. */
@@ -34,18 +38,26 @@ export function sanitizePlanInput(body: unknown): PlanInput | null {
   const brief = typeof b.brief === 'string' ? b.brief.trim().slice(0, MAX_FIELD) : '';
   if (!brief) return null;
   const project = typeof b.project === 'string' ? b.project.trim().slice(0, MAX_FIELD) : '';
-  return project ? { brief, project } : { brief };
+  const context = typeof b.context === 'string' ? b.context.trim().slice(0, MAX_CONTEXT) : '';
+  const out: PlanInput = { brief };
+  if (project) out.project = project;
+  if (context) out.context = context;
+  return out;
 }
 
 /** Compose the user prompt from the free-text brief. */
-export function buildPlanPrompt({ brief, project }: PlanInput): string {
+export function buildPlanPrompt({ brief, project, context }: PlanInput): string {
   return [
     'A vibe-coder is about to build a feature with an AI coding agent. Turn their',
     'intent into a small, token-thrifty build plan they can follow.',
     '',
     project ? `Project area: ${project}` : null,
+    context ? `What a quick scan of the project shows:\n${context}` : null,
     `What they want to build: ${brief}`,
     '',
+    context
+      ? 'Ground the steps in what the scan shows — reuse existing dependencies and folders instead of inventing new ones.'
+      : null,
     'Return a plan with 3-5 concrete, ordered steps (each a short imperative line),',
     'a suggested token budget in thousands (budgetK, between 100 and 800), an',
     'expected number of agent actions/tool-uses (budgetActions, an integer between 5',

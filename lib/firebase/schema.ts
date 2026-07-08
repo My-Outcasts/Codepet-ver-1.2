@@ -98,10 +98,23 @@ export interface CompanyDoc {
   updatedAt: Millis;
 }
 
+/** Compact codebase summary the scan CLI uploads per project, so a HOSTED app
+ *  can still ground Byte's build brainstorm in the founder's real code (their
+ *  machine is unreachable from the cloud). Dependency names + folder names +
+ *  a README excerpt only — never source file contents. */
+export interface ProjectBriefData {
+  frameworks: string[];
+  deps: string[];
+  dirs: string[];
+  readme: string;
+  scannedAt: Millis;
+}
+
 /** One local git project discovered by the scan CLI. */
 export interface ScannedProject {
   name: string;
   path: string;
+  brief?: ProjectBriefData;
 }
 
 /** One department document. Tasks are stored inline (bounded, ~handful each). */

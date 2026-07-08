@@ -351,6 +351,7 @@ export function Copilot() {
     advanceStage,
     buildIntakeActive,
     startBuildIntake,
+    chooseBuildProject,
     cancelBuildIntake,
     addIntakeTurn,
     generateBuildPlan,
@@ -366,6 +367,7 @@ export function Copilot() {
     navigateTo,
     chatHistoryOpen,
     toggleChatHistory,
+    capMode,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
@@ -502,6 +504,62 @@ export function Copilot() {
                   </div>
                 );
               }
+              if (m.buildPick) {
+                // The project-first intake card. Once chosen it collapses; a card
+                // abandoned via "Never mind" reads as closed history.
+                if (m.buildPick.chosen) {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <div className="cop-pick-done">📁 {m.buildPick.chosen} ✓</div>
+                    </div>
+                  );
+                }
+                if (!buildIntakeActive) {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <div className="cop-pick-done off">(closed)</div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={m.id} className="bub">
+                    {plain(m.text)}
+                    <label className="cop-proj">
+                      <span>Which project?</span>
+                      {projects.length > 0 ? (
+                        <select
+                          value={buildProject}
+                          onChange={(e) => setBuildProject(e.target.value)}
+                        >
+                          <option value="" disabled>
+                            Choose a project…
+                          </option>
+                          {projects.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={buildProject}
+                          onChange={(e) => setBuildProject(e.target.value)}
+                          placeholder="Type a project folder path (or run the project scan)…"
+                        />
+                      )}
+                    </label>
+                    <button
+                      className="bub-act"
+                      disabled={!buildProject.trim()}
+                      onClick={() => chooseBuildProject(buildProject)}
+                    >
+                      {buildProject.trim() ? 'Scan it & start →' : 'Pick a project first'}
+                    </button>
+                  </div>
+                );
+              }
               if (m.buildPlan) {
                 // While this is the live plan card (before arming), edit the store's plan so
                 // the founder can refine the steps; older/armed cards read as static history.
@@ -567,53 +625,44 @@ export function Copilot() {
                     </div>
                     {m.buildAction?.kind === 'start-building' && (
                       <>
-                        <label className="cop-proj">
-                          <span>Which project?</span>
-                          {projects.length > 0 ? (
-                            <select
-                              value={buildProject}
-                              onChange={(e) => setBuildProject(e.target.value)}
-                            >
-                              {/* A project is required — building "nowhere" would land
-                                  in the app server's own folder. */}
-                              <option value="" disabled>
-                                Choose a project…
-                              </option>
-                              {projects.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              value={buildProject}
-                              onChange={(e) => setBuildProject(e.target.value)}
-                              placeholder="Type a project folder path (or run the project scan)…"
-                            />
-                          )}
-                        </label>
-                        <div className="cop-auto">
-                          <span>How hands-on?</span>
-                          <div className="cop-auto-opts">
-                            {(
-                              [
-                                ['suggest', 'Ask me', 'Approve each risky step'],
-                                ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
-                                ['autopilot', 'Autopilot', 'Run everything without asking'],
-                              ] as const
-                            ).map(([mode, label, hint]) => (
-                              <button
-                                key={mode}
-                                className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                                onClick={() => setBuildAutonomy(mode)}
-                                title={hint}
-                              >
-                                {label}
-                              </button>
-                            ))}
+                        {/* Hosted preview can't spawn the session here — say so up
+                            front instead of a half-working surprise. */}
+                        {capMode === 'remote' && (
+                          <div className="cop-remote-note">
+                            🖥️ This hosted preview can&apos;t run the build in the browser.
+                            You&apos;ll get a ready-made command to run on your own computer — and
+                            if byte&apos;s toolkit is installed there, byte still follows along
+                            live.
                           </div>
-                        </div>
+                        )}
+                        {/* The project was chosen at the top of the intake (and
+                            scanned) — read-only here. */}
+                        <div className="cop-proj-ro">📁 {buildProject || '—'}</div>
+                        {/* The autonomy dial only drives the local in-UI session
+                            (permission modes) — hide it where it does nothing. */}
+                        {capMode !== 'remote' && (
+                          <div className="cop-auto">
+                            <span>How hands-on?</span>
+                            <div className="cop-auto-opts">
+                              {(
+                                [
+                                  ['suggest', 'Ask me', 'Approve each risky step'],
+                                  ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+                                  ['autopilot', 'Autopilot', 'Run everything without asking'],
+                                ] as const
+                              ).map(([mode, label, hint]) => (
+                                <button
+                                  key={mode}
+                                  className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+                                  onClick={() => setBuildAutonomy(mode)}
+                                  title={hint}
+                                >
+                                  {label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <button
                           className="bub-act"
                           onClick={armBuild}

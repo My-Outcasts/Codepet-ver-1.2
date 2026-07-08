@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLiveSession } from '@/lib/liveSession/useLiveSession';
 import { describePermission, riskLevel, friendlyTool } from '@/lib/liveSession/permissionSummary';
 import { liveFromTranscript } from '@/lib/liveSession/liveFromTranscript';
+import { friendlyClaudeError } from '@/lib/liveSession/friendlyError';
 import type { LiveState } from '@/lib/liveBuild';
 import type { BytePlan } from '@/lib/ai/plan';
 
@@ -12,6 +13,7 @@ const STATE_CHIP: Record<string, { label: string; cls: string }> = {
   running: { label: 'Building…', cls: 'working' },
   'awaiting-input': { label: 'Needs your reply', cls: 'needs' },
   'awaiting-permission': { label: 'Waiting for your OK', cls: 'perm' },
+  'awaiting-question': { label: 'Has a question for you', cls: 'needs' },
   ended: { label: 'Done', cls: 'done' },
   error: { label: 'Hit a snag', cls: 'snag' },
 };
@@ -84,7 +86,7 @@ export function LiveChat({
   /** Reports session-status changes, so the parent can guard "Wrap up". */
   onStatus?: (status: string) => void;
 }) {
-  const { state, start, stop, send, decide } = useLiveSession({
+  const { state, start, stop, detach, send, decide, answer } = useLiveSession({
     buildSessionId,
     projectDir,
     plan,
@@ -118,23 +120,27 @@ export function LiveChat({
     }
     start();
     return () => {
-      // Defer teardown. Strict mode (dev) unmounts then synchronously remounts; a
-      // synchronous stop() would kill the claude child that the remount won't respawn
-      // (useLiveSession's `started` guard). The next mount clears this timer; a real
-      // unmount lets it fire on the next tick.
+      // Defer teardown. Strict mode (dev) unmounts then synchronously remounts; the
+      // next mount clears this timer. A REAL unmount only detaches our stream — the
+      // claude child keeps running server-side and a future mount re-attaches to its
+      // replay buffer (the idempotent start route). Killing the session is an
+      // explicit act now: the Stop button or Wrap up — so a dev hot-reload (e.g.
+      // Byte editing this very app) no longer SIGTERMs the build mid-task.
       stopTimer.current = setTimeout(() => {
         stopTimer.current = null;
-        stop();
+        detach();
       }, 0);
     };
-  }, [start, stop]);
+  }, [start, detach]);
 
   const idle = state.status === 'ended' || state.status === 'error';
   const awaiting = state.status === 'awaiting-input';
+  const asking = !!state.pendingQuestion;
   const canSubmit = !idle && draft.trim().length > 0;
   const submit = () => {
     if (!canSubmit) return;
-    if (awaiting) send(draft.trim());
+    if (asking) answer(state.pendingQuestion!.requestId, draft.trim());
+    else if (awaiting) send(draft.trim());
     else setQueue((q) => [...q, draft.trim()]); // busy → line it up for when it's ready
     setDraft('');
   };
@@ -187,10 +193,35 @@ export function LiveChat({
         })}
         {state.status === 'running' && <div className="lc-status">Claude is working…</div>}
         {state.status === 'error' && (
-          <div className="lc-err">{state.error ?? 'Something went wrong.'}</div>
+          <div className="lc-err">
+            {state.error ?? 'Something went wrong.'}
+            {state.error && friendlyClaudeError(state.error) && (
+              <div className="lc-err-hint">{friendlyClaudeError(state.error)}</div>
+            )}
+          </div>
         )}
       </div>
       {state.pendingPermission && <PermissionCard p={state.pendingPermission} onDecide={decide} />}
+      {state.pendingQuestion && (
+        <div className="lc-ask">
+          <div className="lc-ask-h">Byte has a question</div>
+          <div className="lc-ask-q">{state.pendingQuestion.question}</div>
+          {state.pendingQuestion.options && state.pendingQuestion.options.length > 0 && (
+            <div className="lc-ask-opts">
+              {state.pendingQuestion.options.map((o) => (
+                <button
+                  key={o}
+                  className="lc-ask-opt"
+                  onClick={() => answer(state.pendingQuestion!.requestId, o)}
+                >
+                  {o}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="lc-ask-hint">…or type your own answer below.</div>
+        </div>
+      )}
       {queue.length > 0 && (
         <div className="lc-queue">
           <span className="lc-queue-h">Up next:</span>
@@ -219,16 +250,18 @@ export function LiveChat({
           }}
           rows={2}
           placeholder={
-            awaiting
-              ? 'Reply to Claude…'
-              : idle
-                ? 'Session is not active'
-                : 'Type your next instruction — I’ll queue it…'
+            asking
+              ? 'Answer Byte’s question…'
+              : awaiting
+                ? 'Reply to Claude…'
+                : idle
+                  ? 'Session is not active'
+                  : 'Type your next instruction — I’ll queue it…'
           }
           disabled={idle}
         />
         <button className="lc-send" onClick={submit} disabled={!canSubmit}>
-          {awaiting ? 'Send' : 'Queue'}
+          {asking || awaiting ? 'Send' : 'Queue'}
         </button>
       </div>
     </div>

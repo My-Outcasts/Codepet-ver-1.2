@@ -13,11 +13,14 @@ export interface ToolActivity {
 
 export interface TranscriptState {
   sessionId?: string;
-  status: 'running' | 'awaiting-input' | 'awaiting-permission' | 'ended' | 'error';
+  status:
+    'running' | 'awaiting-input' | 'awaiting-permission' | 'awaiting-question' | 'ended' | 'error';
   messages: Array<{ role: 'user' | 'assistant'; text: string }>;
   tools: ToolActivity[];
   actionCount: number;
   pendingPermission?: { requestId: string; tool: string; input: unknown };
+  /** A codepet_ask question waiting on the founder (answer via chips or composer). */
+  pendingQuestion?: { requestId: string; question: string; options?: string[] };
   error?: string;
 }
 
@@ -26,17 +29,19 @@ export function initialTranscript(): TranscriptState {
 }
 
 export function reduceTranscript(state: TranscriptState, event: SessionEvent): TranscriptState {
-  // Any event other than a NEW permission-request resolves/supersedes a pending
-  // permission (allow → tool-use, deny → the model continues with text/result).
-  // Dropping it here also stops a stale, already-resolved card from reappearing
-  // when the buffer is replayed to a reconnecting client.
-  const base: TranscriptState =
-    event.kind === 'permission-request' || !state.pendingPermission
-      ? state
-      : (() => {
-          const { pendingPermission: _drop, ...rest } = state;
-          return rest;
-        })();
+  // Any event other than a NEW permission-request/question resolves/supersedes the
+  // matching pending card (allow → tool-use, answer → the model continues with
+  // text/result). Dropping them here also stops a stale, already-resolved card
+  // from reappearing when the buffer is replayed to a reconnecting client.
+  let base: TranscriptState = state;
+  if (event.kind !== 'permission-request' && base.pendingPermission) {
+    const { pendingPermission: _drop, ...rest } = base;
+    base = rest;
+  }
+  if (event.kind !== 'question' && base.pendingQuestion) {
+    const { pendingQuestion: _drop, ...rest } = base;
+    base = rest;
+  }
   switch (event.kind) {
     case 'init':
       return { ...base, sessionId: event.sessionId };
@@ -71,6 +76,16 @@ export function reduceTranscript(state: TranscriptState, event: SessionEvent): T
         ...base,
         status: 'awaiting-permission',
         pendingPermission: { requestId: event.requestId, tool: event.tool, input: event.input },
+      };
+    case 'question':
+      return {
+        ...base,
+        status: 'awaiting-question',
+        pendingQuestion: {
+          requestId: event.requestId,
+          question: event.question,
+          ...(event.options && event.options.length > 0 ? { options: event.options } : {}),
+        },
       };
     case 'result':
       return { ...base, sessionId: event.sessionId || base.sessionId, status: 'awaiting-input' };

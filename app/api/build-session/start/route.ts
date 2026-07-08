@@ -55,13 +55,16 @@ export async function POST(req: Request): Promise<Response> {
   if (resume === true) {
     return NextResponse.json({ ok: false, reason: 'gone' }, { status: 410 });
   }
+  const resolvedMode =
+    mode && MODES.has(mode) ? (mode as 'suggest' | 'copilot' | 'autopilot') : 'suggest';
   startSession({
     buildSessionId,
     projectDir,
     // The in-UI session is two-way (the founder watches and can reply), so
-    // questions are allowed — unlike the terminal/copy-paste prompt.
-    openingPrompt: buildOpeningPrompt(plan, brief, { twoWay: true }),
-    mode: mode && MODES.has(mode) ? (mode as 'suggest' | 'copilot' | 'autopilot') : 'suggest',
+    // questions are allowed — except on autopilot, where they asked not to be
+    // interrupted (the terminal/copy-paste prompt stays non-interactive too).
+    openingPrompt: buildOpeningPrompt(plan, brief, { twoWay: resolvedMode !== 'autopilot' }),
+    mode: resolvedMode,
   });
   return NextResponse.json({ ok: true });
 }
