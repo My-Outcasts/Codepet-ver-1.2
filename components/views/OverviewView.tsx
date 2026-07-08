@@ -392,7 +392,11 @@ export default function OverviewView() {
     const deptK = here?.dept.k ?? DEPTS.find((d) => !d.later)?.k ?? DEPTS[0]?.k;
     switch (currentTourStep.target) {
       case 'project':
-        return 'project';
+        // The center is the biggest node and sits at the origin. Don't isolate + dim it
+        // (that concentrates the bloom pass into a giant glow) — frame the WHOLE hub like
+        // the resting map, where the center reads at its normal size, and let the card
+        // point at it. So: no focus node here → whole-map framing, no dim.
+        return null;
       case 'dept':
         return deptK ? `dept:${deptK}` : null;
       case 'task':
