@@ -3,8 +3,20 @@
 // eyeballed on the Vercel preview without touching the (concurrently-evolving) Overview.
 // Not linked from anywhere in the app — reach it directly at /roadmap-preview.
 import RoadmapView from '@/components/views/overview/RoadmapView';
+import { ROADMAP_TEMPLATE } from '@/lib/overview/roadmapTemplate';
+import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
 
 export const metadata = { title: 'Roadmap preview — Codepet' };
+
+// Derive states from a founder's position — as the live app will (brief.stage → phase,
+// /api/next-step → the current move, real DEPTS → the per-task overrides). Here: a founder
+// at the "Private beta" stage (Ship phase), billing is byte's next move, and two Ship tasks
+// carry richer states an override would supply.
+const tasks = applyProgress(ROADMAP_TEMPLATE, {
+  currentPhase: stageToPhase('Private beta'),
+  currentTaskId: 'ship-billing',
+  overrides: { 'ship-terms': 'needsYou', 'ship-help': 'approve' },
+});
 
 export default function RoadmapPreviewPage() {
   return (
@@ -61,7 +73,7 @@ export default function RoadmapPreviewPage() {
             padding: 16,
           }}
         >
-          <RoadmapView projectName="Fernweh" />
+          <RoadmapView tasks={tasks} projectName="Fernweh" />
         </div>
       </div>
     </main>

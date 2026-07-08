@@ -10,12 +10,7 @@
 // Self-contained inline styles (no globals.css dependency) so it renders standalone in the
 // preview route without touching the concurrently-evolving app shell.
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
-import {
-  ROADMAP_PHASES,
-  ROADMAP_TEMPLATE,
-  DEPT_LABEL,
-  DEPT_COLOR,
-} from '@/lib/overview/roadmapTemplate';
+import { ROADMAP_PHASES, DEPT_LABEL, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
 const CY = '#7de3ff';
@@ -228,11 +223,11 @@ function Node({ node }: { node: PositionedNode }) {
 
 export default function RoadmapView({
   phases = ROADMAP_PHASES,
-  tasks = ROADMAP_TEMPLATE,
+  tasks,
   projectName = 'Your company',
 }: {
   phases?: RoadmapPhase[];
-  tasks?: RoadmapTask[];
+  tasks: RoadmapTask[];
   projectName?: string;
 }) {
   const L = layoutRoadmap(phases, tasks);

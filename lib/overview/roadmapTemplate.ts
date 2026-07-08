@@ -3,12 +3,12 @@
 // Like the "How to Build a Company" reference, the roadmap is a fixed playbook every
 // founder follows: six phases, each recruiting multiple departments, tasks that unlock the
 // next. A founder's real progress overlays onto this via task state (a later step wires the
-// live done/available/current values off DEPTS + /api/next-step); here the states are a
-// representative snapshot so the view has something real to render.
+// live done/available/current values off DEPTS + /api/next-step). Progress is derived by
+// applyProgress (roadmapProgress.ts) from the founder's position, so tasks carry no state here.
 //
 // Note the phases run Find → Foundation → Build → Ship → Launch → Grow — Foundation is the
 // company shell (incorporate, bank, brand) the product-shaped phases used to skip.
-import type { RoadmapPhase, RoadmapTask } from './roadmapModel';
+import type { RoadmapPhase, RoadmapTaskDef } from './roadmapModel';
 
 export const ROADMAP_PHASES: RoadmapPhase[] = [
   { key: 'find', name: 'Find' },
@@ -20,14 +20,13 @@ export const ROADMAP_PHASES: RoadmapPhase[] = [
 ];
 
 // Department keys match lib/data.ts DEPTS: eng · mkt · ops · fin · legal · design · sales · support.
-export const ROADMAP_TEMPLATE: RoadmapTask[] = [
+export const ROADMAP_TEMPLATE: RoadmapTaskDef[] = [
   // Find — the business bet
   {
     id: 'find-validate',
     phase: 'find',
     dept: 'mkt',
     title: 'Validate the idea',
-    state: 'done',
     dependsOn: [],
   },
   {
@@ -35,7 +34,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'find',
     dept: 'mkt',
     title: 'Name your audience',
-    state: 'done',
     dependsOn: ['find-validate'],
   },
 
@@ -45,7 +43,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'foundation',
     dept: 'legal',
     title: 'Incorporate LLC',
-    state: 'done',
     dependsOn: ['find-validate'],
   },
   {
@@ -53,7 +50,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'foundation',
     dept: 'fin',
     title: 'Business bank account',
-    state: 'done',
     dependsOn: ['found-incorporate'],
   },
   {
@@ -61,7 +57,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'foundation',
     dept: 'design',
     title: 'Brand & voice',
-    state: 'done',
     dependsOn: ['find-audience'],
   },
 
@@ -71,7 +66,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'build',
     dept: 'eng',
     title: 'Core product flow',
-    state: 'done',
     dependsOn: ['found-brand'],
   },
   {
@@ -79,7 +73,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'build',
     dept: 'ops',
     title: 'User onboarding',
-    state: 'done',
     dependsOn: ['build-core'],
   },
   {
@@ -87,7 +80,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'build',
     dept: 'eng',
     title: 'Auth & accounts',
-    state: 'done',
     dependsOn: ['build-core'],
   },
 
@@ -97,7 +89,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'ship',
     dept: 'mkt',
     title: 'Landing site',
-    state: 'done',
     dependsOn: ['build-core'],
   },
   {
@@ -105,7 +96,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'ship',
     dept: 'fin',
     title: 'Set up billing',
-    state: 'current',
     dependsOn: ['build-auth'],
   },
   {
@@ -113,7 +103,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'ship',
     dept: 'legal',
     title: 'Terms & privacy',
-    state: 'needsYou',
     dependsOn: ['found-incorporate'],
   },
   {
@@ -121,7 +110,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'ship',
     dept: 'support',
     title: 'Stand up help center',
-    state: 'approve',
     dependsOn: ['build-onboard'],
   },
 
@@ -131,7 +119,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'launch',
     dept: 'mkt',
     title: 'Launch campaign',
-    state: 'locked',
     dependsOn: ['ship-billing', 'ship-site'],
   },
   {
@@ -139,7 +126,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'launch',
     dept: 'eng',
     title: 'Launch app',
-    state: 'locked',
     dependsOn: ['ship-billing'],
   },
   {
@@ -147,7 +133,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'launch',
     dept: 'sales',
     title: 'First sales outreach',
-    state: 'locked',
     dependsOn: ['ship-help'],
   },
 
@@ -157,7 +142,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'grow',
     dept: 'sales',
     title: 'Sales pipeline',
-    state: 'locked',
     dependsOn: ['launch-sales'],
   },
   {
@@ -165,7 +149,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'grow',
     dept: 'mkt',
     title: 'SEO content engine',
-    state: 'locked',
     dependsOn: ['launch-campaign'],
   },
   {
@@ -173,7 +156,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'grow',
     dept: 'ops',
     title: 'Hire first contractor',
-    state: 'locked',
     dependsOn: ['launch-app'],
   },
 ];
