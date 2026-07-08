@@ -75,6 +75,7 @@ import { requestBuildPlan } from './ai/buildPlan';
 import { requestIntakeReply } from './ai/buildIntake';
 import { buildOpeningPrompt, terminalCommand } from './armSession';
 import { armBuildSession, scanProject, isAppDir } from '@/app/actions/build';
+import { stopBuildSession } from './liveSession/stopClient';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
 import { getCapability, getStatus, detectClaudeCli } from '@/app/actions/install';
 import { shouldPromptInstall, INSTALL_PROMPTED_KEY } from './installPrompt';
@@ -2170,6 +2171,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [buildCheckpoint, buildProjectDir, companyId, persistMsg]);
 
   const resetBuildFlow = useCallback(() => {
+    // Belt-and-suspenders: unmounts only detach now, so a session could in
+    // principle still be running when the founder starts over (e.g. a recap
+    // restored after reload). No-op when it's already dead.
+    if (buildLocal && buildSessionId) stopBuildSession(buildSessionId);
     setBuildStep('during');
     setBuildProject('');
     setBuildBrief('');
@@ -2185,7 +2190,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildIntakeActive(false);
     setBuildResumed(false);
     buildEndedNudged.current = false;
-  }, []);
+  }, [buildLocal, buildSessionId]);
 
   const value = useMemo<AppState>(
     () => ({
