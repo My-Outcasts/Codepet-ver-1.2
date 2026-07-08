@@ -38,7 +38,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 const CY = '#7c3aed';
 // The two cards sit side by side, each ~HUD-sized (matching the Second Brain "building your
 // company" card). The row is capped so they stay small.
-const PANEL_W = 'min(480px, calc(100% - 48px))';
+const PANEL_W = 'min(430px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
@@ -261,21 +261,21 @@ export default function OverviewSection() {
           >
             <div
               style={{
-                flex: '1 1 240px',
+                flex: '1 1 170px',
                 minWidth: 0,
                 boxSizing: 'border-box',
-                padding: '10px 16px 11px',
+                padding: '9px 13px 10px',
                 borderRadius: 14,
                 background: '#ffffff',
                 border: '1px solid rgba(31,27,21,0.08)',
                 boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span
                   style={{
                     fontFamily: 'var(--sans)',
-                    fontSize: 13.5,
+                    fontSize: 12.5,
                     fontWeight: 650,
                     color: 'var(--ink)',
                     letterSpacing: '-0.01em',
@@ -287,12 +287,12 @@ export default function OverviewSection() {
                   <span
                     style={{
                       fontFamily: 'var(--sans)',
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: 600,
                       color: 'var(--accent)',
                       background: 'var(--accent-tint)',
                       border: '1px solid var(--accent-line)',
-                      padding: '3px 9px',
+                      padding: '2px 7px',
                       borderRadius: 999,
                     }}
                   >
@@ -311,10 +311,10 @@ export default function OverviewSection() {
                     color: 'var(--ink)',
                   }}
                 >
-                  <span style={{ fontSize: 24, fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
                     {prog.pct}
                   </span>
-                  <span style={{ fontSize: 15, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                  <span style={{ fontSize: 13, color: 'rgba(31,27,21,0.4)' }}>%</span>
                 </span>
                 {needsYou > 0 && (
                   <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
@@ -371,7 +371,7 @@ export default function OverviewSection() {
             {move && (
               <div
                 style={{
-                  flex: '1 1 240px',
+                  flex: '1 1 170px',
                   minWidth: 0,
                   boxSizing: 'border-box',
                   position: 'relative',
@@ -380,7 +380,7 @@ export default function OverviewSection() {
                   flexDirection: 'column',
                   alignItems: 'flex-start',
                   gap: 6,
-                  padding: '10px 14px 12px',
+                  padding: '9px 13px 11px',
                   borderRadius: 12,
                   background: 'var(--accent-tint)',
                   border: '1px solid var(--accent-line)',
@@ -441,7 +441,7 @@ export default function OverviewSection() {
                   style={{
                     position: 'relative',
                     fontFamily: 'var(--sans)',
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: 650,
                     color: 'var(--ink)',
                     lineHeight: 1.3,
