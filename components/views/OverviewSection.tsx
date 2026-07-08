@@ -66,7 +66,10 @@ export default function OverviewSection() {
 
   const currentPhase = stageToPhase(brief.stage);
   const phaseTasks = defs.filter((t) => t.phase === currentPhase);
-  const projectName = brief.projectName?.trim() || 'Your company';
+  // Guard the root label: ignore a placeholder-y project name (empty, single char, or all
+  // digits like "1") and fall back to "Your company" rather than showing junk on the hero node.
+  const rawName = brief.projectName?.trim() ?? '';
+  const projectName = rawName.length >= 2 && !/^\d+$/.test(rawName) ? rawName : 'Your company';
 
   // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
   // the authored golden path so Start always resolves to a REAL department task.
