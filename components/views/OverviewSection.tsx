@@ -38,7 +38,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 const CY = '#7c3aed';
 // The progress card + the "do this next" bar sit neatly on the left, capped — not stretched
 // edge-to-edge. Shared so the two line up. (calc accounts for the 24px left inset.)
-const PANEL_W = 'min(700px, calc(100% - 48px))';
+const PANEL_W = 'min(540px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
@@ -212,22 +212,28 @@ export default function OverviewSection() {
               flex: 'none',
               padding: '14px 24px 0',
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: 16,
             }}
           >
-            <h1
-              style={{
-                fontSize: 19,
-                fontWeight: 600,
-                color: '#1f1b15',
-                letterSpacing: '-.3px',
-                margin: 0,
-              }}
-            >
-              Overview
-            </h1>
+            <div>
+              <h1
+                style={{
+                  fontSize: 19,
+                  fontWeight: 600,
+                  color: '#1f1b15',
+                  letterSpacing: '-.3px',
+                  margin: 0,
+                }}
+              >
+                Overview
+              </h1>
+              <div style={{ fontSize: 12.5, color: 'rgba(31,27,21,.55)', marginTop: 2 }}>
+                Your whole company as a roadmap — where you are, what byte does next, and how far
+                you’ve come.
+              </div>
+            </div>
             {toggle}
           </div>
 
