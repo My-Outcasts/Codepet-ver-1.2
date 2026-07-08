@@ -220,16 +220,24 @@ export default function OverviewSection() {
             <div>
               <h1
                 style={{
-                  fontSize: 19,
-                  fontWeight: 600,
+                  fontSize: 25,
+                  fontWeight: 650,
                   color: '#1f1b15',
-                  letterSpacing: '-.3px',
+                  letterSpacing: '-.5px',
                   margin: 0,
                 }}
               >
                 Overview
               </h1>
-              <div style={{ fontSize: 12.5, color: 'rgba(31,27,21,.55)', marginTop: 2 }}>
+              <div
+                style={{
+                  fontSize: 14.5,
+                  lineHeight: 1.45,
+                  color: 'rgba(31,27,21,.62)',
+                  marginTop: 4,
+                  maxWidth: 640,
+                }}
+              >
                 Your whole company as a roadmap — where you are, what byte does next, and how far
                 you’ve come.
               </div>
@@ -243,11 +251,10 @@ export default function OverviewSection() {
           <div
             style={{
               flex: 'none',
-              order: 3,
               alignSelf: 'flex-start',
               width: PANEL_W,
               boxSizing: 'border-box',
-              margin: '8px 0 18px 24px',
+              margin: '10px 0 0 24px',
               padding: '12px 18px 13px',
               borderRadius: 14,
               background: '#ffffff',
@@ -354,13 +361,12 @@ export default function OverviewSection() {
             <div
               style={{
                 flex: 'none',
-                order: 2,
                 alignSelf: 'flex-start',
                 width: PANEL_W,
                 boxSizing: 'border-box',
                 position: 'relative',
                 overflow: 'hidden',
-                margin: '12px 0 0 24px',
+                margin: '6px 0 0 24px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
@@ -468,12 +474,10 @@ export default function OverviewSection() {
               </button>
             </div>
           )}
-          {/* roadmap sits directly under the header (the hero); the two cards drop below it
-              via flex order — roadmap(1) → do-this-next(2) → project-progress(3). */}
+          {/* roadmap fills the space below the two cards; vertically centered, no empty void */}
           <div
             style={{
               flex: 1,
-              order: 1,
               overflowY: 'auto',
               overflowX: 'hidden',
               display: 'flex',
