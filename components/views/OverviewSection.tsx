@@ -36,6 +36,9 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 });
 
 const CY = '#7c3aed';
+// The progress card + the "do this next" bar sit neatly on the left, capped — not stretched
+// edge-to-edge. Shared so the two line up. (calc accounts for the 24px left inset.)
+const PANEL_W = 'min(700px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, library, tick, openDept, portalToTask } = useApp();
@@ -253,7 +256,10 @@ export default function OverviewSection() {
           <div
             style={{
               flex: 'none',
-              margin: '12px 24px 0',
+              alignSelf: 'flex-start',
+              width: PANEL_W,
+              boxSizing: 'border-box',
+              margin: '12px 0 0 24px',
               padding: '16px 20px 15px',
               borderRadius: 16,
               background: '#ffffff',
@@ -424,9 +430,12 @@ export default function OverviewSection() {
             <div
               style={{
                 flex: 'none',
+                alignSelf: 'flex-start',
+                width: PANEL_W,
+                boxSizing: 'border-box',
                 position: 'relative',
                 overflow: 'hidden',
-                margin: '6px 24px 0',
+                margin: '6px 0 0 24px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
