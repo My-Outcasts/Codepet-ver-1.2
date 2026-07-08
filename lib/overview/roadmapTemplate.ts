@@ -175,12 +175,13 @@ export const DEPT_LABEL: Record<string, string> = {
 /** Department accent colors for the chip dots — a categorical palette kept distinct from
  *  the task-STATE colors (state lives on the badge, department on the chip). */
 export const DEPT_COLOR: Record<string, string> = {
-  eng: '#6366f1',
-  mkt: '#f97316',
-  ops: '#14b8a6',
-  fin: '#eab308',
+  // the app's warm semantic palette (globals.css tokens) so dept dots match the rest of the app
+  eng: '#2563eb', // --blue
+  mkt: '#ff8c42', // --clay
+  ops: '#2dd4bf', // --teal
+  fin: '#fdb022', // --gold
   legal: '#64748b',
-  design: '#a855f7',
-  sales: '#ec4899',
+  design: '#9333ea', // --violet
+  sales: '#ff6b9d', // --rose
   support: '#06b6d4',
 };

@@ -120,7 +120,7 @@ export default function OverviewSection() {
         gap: 3,
         padding: 4,
         background: '#ffffff',
-        border: '1px solid rgba(26,22,38,0.09)',
+        border: '1px solid rgba(31,27,21,0.09)',
         borderRadius: 11,
       }}
     >
@@ -139,7 +139,7 @@ export default function OverviewSection() {
             border: 'none',
             cursor: 'pointer',
             background: tab === k ? 'rgba(124,58,237,0.13)' : 'transparent',
-            color: tab === k ? CY : 'rgba(26,22,38,0.4)',
+            color: tab === k ? CY : 'rgba(31,27,21,0.4)',
           }}
         >
           {k}
@@ -154,7 +154,7 @@ export default function OverviewSection() {
       style={{
         position: 'absolute',
         inset: 0,
-        background: '#f4f3f8',
+        background: '#f8f7f3',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -185,7 +185,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 21,
                   fontWeight: 600,
-                  color: '#1a1626',
+                  color: '#1f1b15',
                   letterSpacing: '-.3px',
                   margin: 0,
                 }}
@@ -195,7 +195,7 @@ export default function OverviewSection() {
               <div
                 style={{
                   fontSize: 13,
-                  color: 'rgba(26,22,38,.55)',
+                  color: 'rgba(31,27,21,.55)',
                   marginTop: 3,
                 }}
               >
@@ -209,18 +209,18 @@ export default function OverviewSection() {
                   alignItems: 'center',
                   gap: 12,
                   marginTop: 11,
-                  fontFamily: 'ui-monospace, monospace',
+                  fontFamily: 'var(--mono)',
                   fontSize: 11.5,
-                  color: 'rgba(26,22,38,0.5)',
+                  color: 'rgba(31,27,21,0.5)',
                 }}
               >
-                <span style={{ color: '#1a1626', fontWeight: 700 }}>{prog.pct}%</span>
+                <span style={{ color: '#1f1b15', fontWeight: 700 }}>{prog.pct}%</span>
                 <span
                   style={{
                     width: 72,
                     height: 5,
                     borderRadius: 3,
-                    background: 'rgba(26,22,38,0.1)',
+                    background: 'rgba(31,27,21,0.1)',
                     overflow: 'hidden',
                   }}
                 >
@@ -250,10 +250,10 @@ export default function OverviewSection() {
                 disabled={generating}
                 title="byte generates a roadmap tailored to your company"
                 style={{
-                  fontFamily: 'ui-monospace, monospace',
+                  fontFamily: 'var(--mono)',
                   fontSize: 10.5,
                   letterSpacing: '0.06em',
-                  color: generating ? 'rgba(26,22,38,0.4)' : CY,
+                  color: generating ? 'rgba(31,27,21,0.4)' : CY,
                   background: 'transparent',
                   border: '1px solid rgba(124,58,237,0.32)',
                   borderRadius: 8,
@@ -287,7 +287,7 @@ export default function OverviewSection() {
             >
               <span
                 style={{
-                  fontFamily: 'ui-monospace, monospace',
+                  fontFamily: 'var(--mono)',
                   fontSize: 10,
                   letterSpacing: '0.14em',
                   textTransform: 'uppercase',
@@ -301,7 +301,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 13.5,
                   fontWeight: 600,
-                  color: '#1a1626',
+                  color: '#1f1b15',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -377,7 +377,7 @@ function ProofStrip({
 }) {
   const stats: { accent: string; value: string; label: string }[] = [
     { accent: '#7c3aed', value: String(shipped), label: 'shipped' },
-    { accent: '#8b5cf6', value: String(sessions), label: 'sessions' },
+    { accent: '#9333ea', value: String(sessions), label: 'sessions' },
     { accent: '#16a34a', value: String(commits), label: 'commits' },
     { accent: '#d97706', value: `~${hours}h`, label: 'saved' },
   ];
@@ -408,8 +408,8 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
         padding: '14px 18px 15px',
         // light frosted card: white with a subtle accent-tinted top, soft shadow
         background: `linear-gradient(145deg, ${accent}12, #ffffff 55%)`,
-        border: '1px solid rgba(26,22,38,0.08)',
-        boxShadow: '0 6px 20px -10px rgba(26,22,38,0.18)',
+        border: '1px solid rgba(31,27,21,0.08)',
+        boxShadow: '0 6px 20px -10px rgba(31,27,21,0.18)',
       }}
     >
       {/* a soft accent sheen catching the top corner */}
@@ -431,7 +431,7 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
           position: 'relative',
           fontSize: 27,
           fontWeight: 750,
-          color: '#1a1626',
+          color: '#1f1b15',
           fontVariantNumeric: 'tabular-nums',
           lineHeight: 1,
           letterSpacing: '-0.02em',
@@ -446,11 +446,11 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
-          fontFamily: 'ui-monospace, monospace',
+          fontFamily: 'var(--mono)',
           fontSize: 10.5,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          color: 'rgba(26,22,38,0.6)',
+          color: 'rgba(31,27,21,0.6)',
         }}
       >
         <span

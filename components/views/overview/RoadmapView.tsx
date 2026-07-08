@@ -15,10 +15,10 @@ import { ROADMAP_PHASES, DEPT_LABEL, DEPT_COLOR } from '@/lib/overview/roadmapTe
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
 const CY = '#7c3aed';
-const VIO = '#8b5cf6';
-const TX = '#1a1626';
-const TX3 = 'rgba(26,22,38,0.40)';
-const LINE = 'rgba(26,22,38,0.09)';
+const VIO = '#9333ea';
+const TX = '#1f1b15';
+const TX3 = 'rgba(31,27,21,0.40)';
+const LINE = 'rgba(31,27,21,0.09)';
 const CARD_BG = '#ffffff';
 
 // State → the node's icon-dot color + optional corner badge.
@@ -127,7 +127,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
           />
           <span
             style={{
-              fontFamily: 'ui-monospace, monospace',
+              fontFamily: 'var(--mono)',
               fontSize: 9.5,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
@@ -144,7 +144,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             position: 'absolute',
             top: -8,
             right: 10,
-            fontFamily: 'ui-monospace, monospace',
+            fontFamily: 'var(--mono)',
             fontSize: 8.5,
             letterSpacing: '0.05em',
             textTransform: 'uppercase',
@@ -181,7 +181,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
           flex: 'none',
           display: 'grid',
           placeItems: 'center',
-          background: done ? 'rgba(22,163,74,0.14)' : 'rgba(26,22,38,0.06)',
+          background: done ? 'rgba(22,163,74,0.14)' : 'rgba(31,27,21,0.06)',
           border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : LINE}`,
         }}
       >
@@ -218,7 +218,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             gap: 5,
             marginTop: 4,
             fontSize: 10,
-            color: 'rgba(26,22,38,0.64)',
+            color: 'rgba(31,27,21,0.64)',
           }}
         >
           <span
@@ -292,12 +292,12 @@ export default function RoadmapView({
             >
               <span
                 style={{
-                  fontFamily: 'ui-monospace, monospace',
+                  fontFamily: 'var(--mono)',
                   fontSize: 10.5,
                   letterSpacing: '0.14em',
                   textTransform: 'uppercase',
                   color: c.current ? CY : TX3,
-                  background: c.current ? 'rgba(124,58,237,0.08)' : 'rgba(26,22,38,0.05)',
+                  background: c.current ? 'rgba(124,58,237,0.08)' : 'rgba(31,27,21,0.05)',
                   border: `1px solid ${c.current ? 'rgba(124,58,237,0.4)' : LINE}`,
                   padding: '4px 9px',
                   borderRadius: 7,
@@ -305,7 +305,7 @@ export default function RoadmapView({
               >
                 {c.name}
               </span>
-              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, color: TX3 }}>
+              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: TX3 }}>
                 {c.done}/{c.total}
               </span>
             </div>
@@ -335,7 +335,7 @@ export default function RoadmapView({
                 key={`d${i}`}
                 d={e.d}
                 fill="none"
-                stroke="rgba(26,22,38,0.18)"
+                stroke="rgba(31,27,21,0.18)"
                 strokeWidth={1.5}
                 strokeDasharray="3 4"
               />
@@ -410,7 +410,7 @@ export default function RoadmapView({
                   style={{
                     display: 'block',
                     marginTop: 5,
-                    fontFamily: 'ui-monospace, monospace',
+                    fontFamily: 'var(--mono)',
                     fontSize: 9.5,
                     letterSpacing: '0.14em',
                     textTransform: 'uppercase',
