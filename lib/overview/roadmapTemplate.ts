@@ -65,8 +65,9 @@ export const ROADMAP_TEMPLATE: RoadmapTaskDef[] = [
     id: 'build-core',
     phase: 'build',
     dept: 'eng',
+    // the company exists → start building; product work doesn't wait on Brand & voice
     title: 'Core product flow',
-    dependsOn: ['found-brand'],
+    dependsOn: ['found-incorporate'],
   },
   {
     id: 'build-onboard',

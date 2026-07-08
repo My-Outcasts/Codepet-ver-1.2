@@ -9,7 +9,6 @@ import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
 import { nextAction } from '@/lib/roadmap';
-import { overviewProgress } from '@/lib/overview/progress';
 import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
@@ -93,8 +92,16 @@ export default function OverviewSection() {
     );
   }
 
-  // Real overall progress + what's on the founder's plate (from live DEPTS, not the template).
-  const prog = overviewProgress(DEPTS);
+  // Overall progress derives from the roadmap itself (the single source of truth for this
+  // view), so the headline % always agrees with the phase columns instead of contradicting
+  // them. "needs you / approve" stay from live DEPTS — real, actionable nudges that measure a
+  // different thing (work on your plate now) and don't contradict the journey %.
+  const roadmapDone = tasks.filter((t) => t.state === 'done').length;
+  const prog = {
+    done: roadmapDone,
+    total: tasks.length,
+    pct: tasks.length ? Math.round((roadmapDone / tasks.length) * 100) : 0,
+  };
   let needsYou = 0;
   let approve = 0;
   for (const d of DEPTS) {
