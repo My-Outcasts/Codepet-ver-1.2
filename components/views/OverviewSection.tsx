@@ -473,8 +473,8 @@ export default function OverviewSection() {
               </div>
             )}
           </div>
-          {/* roadmap — the hero. Sits right under the two cards (top-aligned, no centered dead
-              gap above it) and takes the rest of the height. */}
+          {/* roadmap — the hero. Vertically centered so leftover height is balanced above/below
+              instead of piling up as dead space at the bottom (the cards above are compact). */}
           <div
             style={{
               flex: 1,
@@ -482,8 +482,8 @@ export default function OverviewSection() {
               overflowX: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'flex-start',
-              padding: '34px 24px 8px',
+              justifyContent: 'center',
+              padding: '14px 24px 14px',
             }}
           >
             <RoadmapView
