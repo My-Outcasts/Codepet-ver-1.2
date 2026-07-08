@@ -32,8 +32,10 @@ export function examplePlanBanner(opts: {
   const text =
     opts.scaffoldFailure === 'refused'
       ? 'byte couldn’t tailor this one — try again. This is still an example, not your plan.'
-      : opts.scaffoldFailure === 'rate_limited'
-        ? 'You’ve hit today’s limit — it resets tomorrow. This is still an example, not your plan.'
-        : 'byte couldn’t reach the model — this is an example company, not your plan yet.';
+      : opts.scaffoldFailure === 'incomplete'
+        ? 'byte couldn’t finish tailoring your map — try again. This is still an example, not your plan.'
+        : opts.scaffoldFailure === 'rate_limited'
+          ? 'You’ve hit today’s limit — it resets tomorrow. This is still an example, not your plan.'
+          : 'byte couldn’t reach the model — this is an example company, not your plan yet.';
   return { text, cta: 'Retry' };
 }
