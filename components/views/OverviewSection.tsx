@@ -36,7 +36,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
   ),
 });
 
-const CY = '#0891b2';
+const CY = '#7c3aed';
 
 export default function OverviewSection() {
   const { brief, nextStep, library, tracking, tick, openDept, portalToTask } = useApp();
@@ -138,7 +138,7 @@ export default function OverviewSection() {
             borderRadius: 8,
             border: 'none',
             cursor: 'pointer',
-            background: tab === k ? 'rgba(8,145,178,0.13)' : 'transparent',
+            background: tab === k ? 'rgba(124,58,237,0.13)' : 'transparent',
             color: tab === k ? CY : 'rgba(26,22,38,0.4)',
           }}
         >
@@ -255,7 +255,7 @@ export default function OverviewSection() {
                   letterSpacing: '0.06em',
                   color: generating ? 'rgba(26,22,38,0.4)' : CY,
                   background: 'transparent',
-                  border: '1px solid rgba(8,145,178,0.32)',
+                  border: '1px solid rgba(124,58,237,0.32)',
                   borderRadius: 8,
                   padding: '5px 11px',
                   cursor: generating ? 'default' : 'pointer',
@@ -281,8 +281,8 @@ export default function OverviewSection() {
                 gap: 12,
                 padding: '10px 12px 10px 15px',
                 borderRadius: 12,
-                background: 'linear-gradient(180deg, rgba(8,145,178,0.10), rgba(8,145,178,0.02))',
-                border: '1px solid rgba(8,145,178,0.4)',
+                background: 'linear-gradient(180deg, rgba(124,58,237,0.10), rgba(124,58,237,0.02))',
+                border: '1px solid rgba(124,58,237,0.4)',
               }}
             >
               <span
@@ -318,7 +318,7 @@ export default function OverviewSection() {
                   fontFamily: 'inherit',
                   fontSize: 12.5,
                   fontWeight: 700,
-                  color: '#04030a',
+                  color: '#ffffff',
                   background: CY,
                   border: 'none',
                   borderRadius: 9,
@@ -376,7 +376,7 @@ function ProofStrip({
   hours: number;
 }) {
   const stats: { accent: string; value: string; label: string }[] = [
-    { accent: '#0891b2', value: String(shipped), label: 'shipped' },
+    { accent: '#7c3aed', value: String(shipped), label: 'shipped' },
     { accent: '#8b5cf6', value: String(sessions), label: 'sessions' },
     { accent: '#16a34a', value: String(commits), label: 'commits' },
     { accent: '#d97706', value: `~${hours}h`, label: 'saved' },
