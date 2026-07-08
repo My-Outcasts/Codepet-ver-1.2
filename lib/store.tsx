@@ -179,6 +179,8 @@ interface AppState {
   toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
+  /** Reopen the onboarding wizard (e.g. to add a brief after skipping). */
+  openOnboarding: () => void;
   /** Run the real scaffold during onboarding's analysis step; returns the reveal summary. */
   scaffoldFromOnboarding: (brief: CompanyBrief) => Promise<RevealSummary>;
   /** Re-generate the stage-aware company for the current account (manual re-plan). */
@@ -945,6 +947,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
     [companyId, bump],
   );
+
+  const openOnboarding = useCallback(() => setOnboarding(true), []);
 
   const finishOnboarding = useCallback(
     (briefData?: CompanyBrief) => {
@@ -2152,6 +2156,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSide,
       onboarding,
       finishOnboarding,
+      openOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
       regenerating,
@@ -2260,6 +2265,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toggleSide,
       onboarding,
       finishOnboarding,
+      openOnboarding,
       scaffoldFromOnboarding,
       regenerateCompany,
       regenerating,

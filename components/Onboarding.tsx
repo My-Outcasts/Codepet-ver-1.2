@@ -241,8 +241,14 @@ export function Onboarding() {
   const enterApp = () => finishOnboarding();
   const finish = () => {
     finishOnboarding(briefFromData(data));
+    const ok = reveal?.ok;
     setTimeout(
-      () => toast('Your roadmap is ready — byte mapped your company across your departments.'),
+      () =>
+        toast(
+          ok
+            ? 'Your roadmap is ready — byte mapped your company across your departments.'
+            : 'You’re in — I’ll tailor your map as soon as byte’s back. For now it’s an example you can regenerate anytime.',
+        ),
       400,
     );
   };

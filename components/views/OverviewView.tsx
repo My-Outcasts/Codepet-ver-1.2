@@ -195,12 +195,21 @@ export default function OverviewView() {
     scaffoldFailure,
     regenerateCompany,
     regenerating,
+    openOnboarding,
     growthSignal,
     clearGrowthSignal,
     introSeen,
     markIntroSeen,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
+  // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
+  // Retry re-plans in place; otherwise "Generate my plan" reopens the wizard to collect one.
+  const hasBrief = !!(
+    brief.oneLiner?.trim() ||
+    brief.summary?.trim() ||
+    brief.projectName?.trim() ||
+    brief.notes?.trim()
+  );
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
@@ -856,7 +865,7 @@ export default function OverviewView() {
             <span>{examplePlan.text}</span>
             <button
               type="button"
-              onClick={regenerateCompany}
+              onClick={() => (hasBrief ? regenerateCompany() : openOnboarding())}
               disabled={regenerating}
               style={{
                 fontFamily: 'inherit',

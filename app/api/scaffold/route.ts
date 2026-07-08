@@ -90,8 +90,6 @@ const SYSTEM = `You are byte, the AI building companion inside Codepet, setting 
 
 Voice: warm, plain-language, specific. No hype, no emoji.`;
 
-const CODEPET_CONTEXT = `a founder building their company with Codepet`;
-
 const SCAFFOLD_SCHEMA: Record<string, unknown> = {
   type: 'object',
   additionalProperties: false,
@@ -99,6 +97,7 @@ const SCAFFOLD_SCHEMA: Record<string, unknown> = {
     departments: {
       type: 'array',
       description: 'Exactly one entry per provided department key, in any order.',
+      minItems: DEPT_KEYS.length,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -170,13 +169,24 @@ export async function POST(req: Request): Promise<Response> {
     return aiErrorResponse(err, 'not_configured');
   }
 
+  let body: { brief?: unknown } = {};
+  try {
+    body = (await req.json()) as { brief?: unknown };
+  } catch {
+    // body is optional; the server-loaded brief is preferred anyway
+  }
+
   const loaded = await loadServerBrief(uid, idToken);
   // byte reads the founder's inputs into a richer brief before planning (once, fail-open).
   const serverBrief =
     loaded && typeof loaded === 'object'
       ? await enrichBrief(client, uid, idToken, loaded as CompanyBrief)
       : loaded;
-  const context = briefToContext(serverBrief) ?? CODEPET_CONTEXT;
+  const context = briefToContext(serverBrief) ?? briefToContext(body.brief);
+  if (!context) {
+    // No real brief anywhere → don't invent a company. Keep the honest example seed.
+    return Response.json({ scaffold: { departments: [] }, noBrief: true });
+  }
   const rawStage =
     serverBrief && typeof serverBrief === 'object'
       ? (serverBrief as { stage?: unknown }).stage

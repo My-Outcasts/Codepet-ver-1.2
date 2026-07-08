@@ -24,6 +24,12 @@ describe('examplePlanBanner', () => {
     expect(b!.text).toContain('still an example');
   });
 
+  it("incomplete cause → couldn't-finish copy + Retry", () => {
+    const b = examplePlanBanner({ planTailored: false, scaffoldFailure: 'incomplete' });
+    expect(b?.cta).toBe('Retry');
+    expect(b?.text.toLowerCase()).toContain('finish');
+  });
+
   it('names a rate-limited generation', () => {
     const b = examplePlanBanner({ planTailored: false, scaffoldFailure: 'rate_limited' });
     expect(b).not.toBeNull();
