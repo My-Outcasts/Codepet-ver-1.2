@@ -279,19 +279,69 @@ export default function OverviewSection() {
             <div
               style={{
                 flex: 'none',
+                position: 'relative',
+                overflow: 'hidden',
                 margin: '6px 24px 0',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 13,
-                padding: '8px 10px 8px 16px',
+                gap: 12,
+                padding: '9px 10px 9px 15px',
                 borderRadius: 12,
-                // the app's soft accent card — the solid Start button carries the emphasis
                 background: 'var(--accent-tint)',
                 border: '1px solid var(--accent-line)',
               }}
             >
+              <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
+              {/* soft radiance emanating from the beacon */}
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: -28,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  width: 150,
+                  height: 150,
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(124,58,237,0.2), transparent 68%)',
+                  pointerEvents: 'none',
+                }}
+              />
+              {/* the beacon — byte's guide star, pinging like on the map */}
               <span
                 style={{
+                  position: 'relative',
+                  flex: 'none',
+                  width: 13,
+                  height: 13,
+                  display: 'inline-flex',
+                }}
+              >
+                <span
+                  aria-hidden
+                  className="rm-beacon-ping"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    borderRadius: '50%',
+                    background: 'var(--accent)',
+                    animation: 'beaconPing 2.2s ease-out infinite',
+                  }}
+                />
+                <span
+                  style={{
+                    position: 'relative',
+                    width: 13,
+                    height: 13,
+                    borderRadius: '50%',
+                    background: 'var(--accent)',
+                    boxShadow: '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                  }}
+                />
+              </span>
+              <span
+                style={{
+                  position: 'relative',
                   fontFamily: 'var(--mono)',
                   fontSize: 10,
                   letterSpacing: '0.13em',
@@ -304,6 +354,7 @@ export default function OverviewSection() {
               </span>
               <span
                 style={{
+                  position: 'relative',
                   fontFamily: 'var(--sans)',
                   fontSize: 13.5,
                   fontWeight: 600,
@@ -319,6 +370,7 @@ export default function OverviewSection() {
                 type="button"
                 onClick={startMove}
                 style={{
+                  position: 'relative',
                   marginLeft: 'auto',
                   flex: 'none',
                   fontFamily: 'var(--sans)',
@@ -330,6 +382,7 @@ export default function OverviewSection() {
                   borderRadius: 9,
                   padding: '7px 18px',
                   cursor: 'pointer',
+                  boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
                 }}
               >
                 Start
