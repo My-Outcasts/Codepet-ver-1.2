@@ -279,23 +279,24 @@ export default function OverviewSection() {
             <div
               style={{
                 flex: 'none',
-                margin: '4px 24px 0',
+                margin: '6px 24px 0',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
-                padding: '10px 12px 10px 15px',
+                gap: 13,
+                padding: '8px 10px 8px 16px',
                 borderRadius: 12,
-                background: 'linear-gradient(180deg, rgba(124,58,237,0.10), rgba(124,58,237,0.02))',
-                border: '1px solid rgba(124,58,237,0.4)',
+                // the app's soft accent card — the solid Start button carries the emphasis
+                background: 'var(--accent-tint)',
+                border: '1px solid var(--accent-line)',
               }}
             >
               <span
                 style={{
                   fontFamily: 'var(--mono)',
                   fontSize: 10,
-                  letterSpacing: '0.14em',
+                  letterSpacing: '0.13em',
                   textTransform: 'uppercase',
-                  color: CY,
+                  color: 'var(--accent)',
                   flex: 'none',
                 }}
               >
@@ -303,9 +304,10 @@ export default function OverviewSection() {
               </span>
               <span
                 style={{
+                  fontFamily: 'var(--sans)',
                   fontSize: 13.5,
                   fontWeight: 600,
-                  color: '#1f1b15',
+                  color: 'var(--ink)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -323,10 +325,10 @@ export default function OverviewSection() {
                   fontSize: 12.5,
                   fontWeight: 700,
                   color: '#ffffff',
-                  background: CY,
+                  background: 'var(--accent)',
                   border: 'none',
                   borderRadius: 9,
-                  padding: '7px 16px',
+                  padding: '7px 18px',
                   cursor: 'pointer',
                 }}
               >
