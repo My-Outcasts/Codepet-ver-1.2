@@ -261,7 +261,7 @@ export default function OverviewSection() {
           >
             <div
               style={{
-                flex: '1 1 300px',
+                flex: '1 1 240px',
                 minWidth: 0,
                 boxSizing: 'border-box',
                 padding: '10px 16px 11px',
@@ -371,7 +371,7 @@ export default function OverviewSection() {
             {move && (
               <div
                 style={{
-                  flex: '1 1 300px',
+                  flex: '1 1 240px',
                   minWidth: 0,
                   boxSizing: 'border-box',
                   position: 'relative',
@@ -387,20 +387,6 @@ export default function OverviewSection() {
                 }}
               >
                 <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
-                {/* soft radiance emanating from the beacon (top-left) */}
-                <span
-                  aria-hidden
-                  style={{
-                    position: 'absolute',
-                    left: -34,
-                    top: -30,
-                    width: 150,
-                    height: 150,
-                    borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(124,58,237,0.2), transparent 68%)',
-                    pointerEvents: 'none',
-                  }}
-                />
                 {/* beacon + label on one row, then the title and Start stacked below */}
                 <span
                   style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}
