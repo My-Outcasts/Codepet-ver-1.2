@@ -270,6 +270,7 @@ export default function RoadmapView({
       style={{
         overflowX: 'auto',
         padding: '6px 0 4px',
+        fontFamily: 'var(--sans)',
         // Hide the scrollbar but keep scrolling (trackpad / shift-wheel).
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',

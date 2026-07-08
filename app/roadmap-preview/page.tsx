@@ -26,14 +26,14 @@ export default function RoadmapPreviewPage() {
         background:
           'radial-gradient(1100px 620px at 78% -8%, rgba(139,92,246,0.16), transparent 60%), #05040b',
         color: '#f5f3ff',
-        fontFamily: 'ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif',
+        fontFamily: 'var(--sans)',
         padding: '40px 28px 80px',
       }}
     >
       <div style={{ maxWidth: 1160, margin: '0 auto' }}>
         <div
           style={{
-            fontFamily: 'ui-monospace, monospace',
+            fontFamily: 'var(--mono)',
             fontSize: 11,
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
@@ -44,7 +44,7 @@ export default function RoadmapPreviewPage() {
         </div>
         <h1
           style={{
-            fontFamily: 'Georgia, serif',
+            fontFamily: 'var(--sans)',
             fontSize: 30,
             fontWeight: 600,
             margin: '10px 0 4px',

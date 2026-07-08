@@ -140,7 +140,7 @@ export default function OverviewSection() {
           type="button"
           onClick={() => setTab(k)}
           style={{
-            fontFamily: 'inherit',
+            fontFamily: 'var(--sans)',
             fontSize: 12.5,
             fontWeight: 600,
             textTransform: 'capitalize',
@@ -168,6 +168,9 @@ export default function OverviewSection() {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        // anchor the app's sans (Google Sans Flex) so all bare text/buttons match the app,
+        // not whatever `body` happens to resolve to; mono labels override with var(--mono)
+        fontFamily: 'var(--sans)',
       }}
     >
       {tab === 'map' ? (
@@ -325,7 +328,7 @@ export default function OverviewSection() {
                 style={{
                   marginLeft: 'auto',
                   flex: 'none',
-                  fontFamily: 'inherit',
+                  fontFamily: 'var(--sans)',
                   fontSize: 12.5,
                   fontWeight: 700,
                   color: '#ffffff',
