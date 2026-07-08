@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
-import { DEPTS, DCOL } from '@/lib/data';
+import { DEPTS } from '@/lib/data';
 import { nextAction } from '@/lib/roadmap';
 import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import RoadmapView from './overview/RoadmapView';
@@ -41,7 +41,7 @@ const CY = '#7c3aed';
 const PANEL_W = 'min(700px, calc(100% - 48px))';
 
 export default function OverviewSection() {
-  const { brief, nextStep, library, tick, openDept, portalToTask } = useApp();
+  const { brief, nextStep, tick, openDept, portalToTask } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
@@ -115,17 +115,11 @@ export default function OverviewSection() {
     total: tasks.length,
     pct: tasks.length ? Math.round((roadmapDone / tasks.length) * 100) : 0,
   };
-  // breadth of progress: how many of the company's departments are underway (non-dormant)
-  const totalAreas = DEPTS.length;
-  const activeDepts = DEPTS.filter((d) => !d.later);
-  const areasBuilding = activeDepts.length;
+  // the one actionable nudge kept on the compact card: tasks that need the founder
   let needsYou = 0;
-  let approve = 0;
   for (const d of DEPTS) {
     for (const t of d.tasks) {
-      if (t.done) continue;
-      if (t.drafted) approve += 1;
-      else if (t.who === 'you') needsYou += 1;
+      if (!t.done && !t.drafted && t.who === 'you') needsYou += 1;
     }
   }
 
@@ -212,46 +206,33 @@ export default function OverviewSection() {
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {/* Overview heading — the roadmap is the tab's main interface, so it carries the title. */}
+          {/* Compact header — the roadmap below is the hero, so the top stays slim. */}
           <div
             style={{
               flex: 'none',
-              padding: '18px 24px 4px',
+              padding: '14px 24px 0',
               display: 'flex',
-              alignItems: 'flex-start',
+              alignItems: 'center',
               justifyContent: 'space-between',
               gap: 16,
             }}
           >
-            <div>
-              <h1
-                style={{
-                  fontSize: 21,
-                  fontWeight: 600,
-                  color: '#1f1b15',
-                  letterSpacing: '-.3px',
-                  margin: 0,
-                }}
-              >
-                Overview
-              </h1>
-              <div
-                style={{
-                  fontSize: 13,
-                  color: 'rgba(31,27,21,.55)',
-                  marginTop: 3,
-                }}
-              >
-                Your whole company as a roadmap — where you are, what byte does next, and how far
-                you’ve come.
-              </div>
-            </div>
+            <h1
+              style={{
+                fontSize: 19,
+                fontWeight: 600,
+                color: '#1f1b15',
+                letterSpacing: '-.3px',
+                margin: 0,
+              }}
+            >
+              Overview
+            </h1>
             {toggle}
           </div>
 
-          {/* Project Progress — a fuller card in the reference's glowing style (light + purple):
-              gradient fill + a blurred clone (.rm-pfill::before) for the bloom. Folds in the proof
-              metrics (shipped + areas) so there's one progress card, not a card AND a strip. */}
+          {/* Project Progress — a compact summary card in the reference's glowing style. Just the
+              essentials (phase · % · glowing bar · next); the roadmap below carries the detail. */}
           <style>{`.rm-pfill::before{content:"";position:absolute;inset:-5px;border-radius:999px;background:inherit;filter:blur(11px);opacity:.5;z-index:-1}`}</style>
           <div
             style={{
@@ -259,19 +240,19 @@ export default function OverviewSection() {
               alignSelf: 'flex-start',
               width: PANEL_W,
               boxSizing: 'border-box',
-              margin: '12px 0 0 24px',
-              padding: '16px 20px 15px',
-              borderRadius: 16,
+              margin: '10px 0 0 24px',
+              padding: '12px 18px 13px',
+              borderRadius: 14,
               background: '#ffffff',
               border: '1px solid rgba(31,27,21,0.08)',
-              boxShadow: '0 8px 26px -16px rgba(31,27,21,0.32)',
+              boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
               <span
                 style={{
                   fontFamily: 'var(--sans)',
-                  fontSize: 15,
+                  fontSize: 13.5,
                   fontWeight: 650,
                   color: 'var(--ink)',
                   letterSpacing: '-0.01em',
@@ -297,7 +278,7 @@ export default function OverviewSection() {
               )}
             </div>
 
-            <div style={{ margin: '7px 0 11px', display: 'flex', alignItems: 'baseline', gap: 11 }}>
+            <div style={{ margin: '5px 0 8px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
               <span
                 style={{
                   fontFamily: 'var(--sans)',
@@ -307,22 +288,20 @@ export default function OverviewSection() {
                   color: 'var(--ink)',
                 }}
               >
-                <span style={{ fontSize: 34, fontVariantNumeric: 'tabular-nums' }}>{prog.pct}</span>
-                <span style={{ fontSize: 20, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                <span style={{ fontSize: 27, fontVariantNumeric: 'tabular-nums' }}>{prog.pct}</span>
+                <span style={{ fontSize: 16, color: 'rgba(31,27,21,0.4)' }}>%</span>
               </span>
-              <span
-                style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'rgba(31,27,21,0.5)' }}
-              >
-                {prog.done}/{prog.total} moves
-                {needsYou > 0 && <span style={{ color: '#2563eb' }}> · needs you {needsYou}</span>}
-                {approve > 0 && <span style={{ color: '#d97706' }}> · approve {approve}</span>}
-              </span>
+              {needsYou > 0 && (
+                <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
+                  needs you {needsYou}
+                </span>
+              )}
             </div>
 
             <div
               style={{
                 position: 'relative',
-                height: 18,
+                height: 15,
                 borderRadius: 999,
                 background: 'rgba(31,27,21,0.07)',
                 display: 'flex',
@@ -335,10 +314,10 @@ export default function OverviewSection() {
                   position: 'relative',
                   height: '100%',
                   width: `${prog.pct}%`,
-                  minWidth: prog.pct > 0 ? 18 : 0,
+                  minWidth: prog.pct > 0 ? 15 : 0,
                   borderRadius: 999,
                   background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                  boxShadow: '0 0 12px 1px rgba(124,58,237,0.5)',
+                  boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
                   transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
                 }}
               />
@@ -346,13 +325,13 @@ export default function OverviewSection() {
                 <span
                   style={{
                     position: 'absolute',
-                    right: 6,
+                    right: 5,
                     fontFamily: 'var(--sans)',
-                    fontSize: 11,
+                    fontSize: 10.5,
                     fontWeight: 600,
                     color: 'var(--accent)',
-                    background: 'rgba(124,58,237,0.1)',
-                    padding: '3px 9px',
+                    background: 'rgba(124,58,237,0.12)',
+                    padding: '2px 8px',
                     borderRadius: 999,
                     whiteSpace: 'nowrap',
                   }}
@@ -360,68 +339,6 @@ export default function OverviewSection() {
                   Next: {nextMilestone}
                 </span>
               )}
-            </div>
-
-            {/* proof + team-of-departments (the reference's "collaborators", as active areas) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 14 }}>
-              <span
-                style={{ fontFamily: 'var(--sans)', fontSize: 12.5, color: 'rgba(31,27,21,0.55)' }}
-              >
-                <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{library.length}</span>{' '}
-                shipped
-              </span>
-              <span style={{ width: 1, height: 13, background: 'rgba(31,27,21,0.12)' }} />
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  fontFamily: 'var(--sans)',
-                  fontSize: 12.5,
-                  color: 'rgba(31,27,21,0.55)',
-                }}
-              >
-                <span>
-                  <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
-                    {areasBuilding}/{totalAreas}
-                  </span>{' '}
-                  areas
-                </span>
-                <span style={{ display: 'inline-flex', gap: 3 }}>
-                  {activeDepts.slice(0, 6).map((d) => (
-                    <span
-                      key={d.k}
-                      title={d.name}
-                      style={{
-                        width: 12,
-                        height: 12,
-                        borderRadius: 4,
-                        background: `var(${DCOL[d.k]})`,
-                        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45)',
-                      }}
-                    />
-                  ))}
-                </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setTab('map')}
-                style={{
-                  marginLeft: 'auto',
-                  fontFamily: 'var(--sans)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--accent)',
-                  background: 'transparent',
-                  border: '1px solid var(--accent-line)',
-                  borderRadius: 999,
-                  padding: '6px 13px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                Second Brain →
-              </button>
             </div>
           </div>
 
