@@ -9,6 +9,7 @@
 //
 // Self-contained inline styles (no globals.css dependency) so it renders standalone in the
 // preview route without touching the concurrently-evolving app shell.
+import { useEffect, useRef } from 'react';
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
 import { ROADMAP_PHASES, DEPT_LABEL, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
@@ -233,8 +234,20 @@ export default function RoadmapView({
   const L = layoutRoadmap(phases, tasks);
   const nonCrit = L.edges.filter((e) => !e.critical);
   const crit = L.edges.filter((e) => e.critical);
+
+  // Open framed on "you are here": scroll so byte's current node sits centered, not at the
+  // far left — the founder shouldn't have to hunt for their next move.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const currentX = L.nodes.find((n) => n.task.state === 'current')?.x ?? null;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el && currentX != null) {
+      el.scrollLeft = Math.max(0, currentX + CARD_W / 2 - el.clientWidth / 2);
+    }
+  }, [currentX]);
+
   return (
-    <div style={{ overflowX: 'auto', padding: '6px 0 4px' }}>
+    <div ref={scrollRef} style={{ overflowX: 'auto', padding: '6px 0 4px' }}>
       <div style={{ position: 'relative', width: L.width, minWidth: L.width }}>
         {/* phase headers */}
         <div style={{ position: 'relative', height: 28, marginBottom: 6 }}>
