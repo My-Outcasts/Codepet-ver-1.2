@@ -45,20 +45,12 @@ export default function OverviewSection() {
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
-  // Live progress: the founder's onboarding stage picks the current phase; byte's next
-  // step (a real dept task) soft-matches a current-phase template task by department to
-  // light "byte is here"; the project name goes on the root node.
   const currentPhase = stageToPhase(brief.stage);
   const phaseTasks = ROADMAP_TEMPLATE.filter((t) => t.phase === currentPhase);
-  const currentTaskId =
-    (nextStep && phaseTasks.find((t) => t.dept === nextStep.deptK)?.id) ||
-    phaseTasks[0]?.id ||
-    null;
-  const tasks = applyProgress(ROADMAP_TEMPLATE, { currentPhase, currentTaskId });
   const projectName = brief.projectName?.trim() || 'Your company';
 
-  // byte's real next move — the actionable one. Prefer /api/next-step; fall back to the
-  // authored golden path so Start always resolves to a REAL department task.
+  // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
+  // the authored golden path so Start always resolves to a REAL department task.
   const fallback = nextAction();
   const move = nextStep
     ? { deptK: nextStep.deptK, title: nextStep.taskTitle }
@@ -68,6 +60,18 @@ export default function OverviewSection() {
   const startMove = () => {
     if (move) portalToTask(move.deptK, move.title);
   };
+
+  // The lit "byte is here" node: take a current-phase slot (prefer one whose department
+  // matches the move) and RELABEL it to byte's real next move — so the map agrees with the
+  // "do this next" hero and clicking that node runs the very same task.
+  const currentTaskId =
+    (move && phaseTasks.find((t) => t.dept === move.deptK)?.id) || phaseTasks[0]?.id || null;
+  let tasks = applyProgress(ROADMAP_TEMPLATE, { currentPhase, currentTaskId });
+  if (move && currentTaskId) {
+    tasks = tasks.map((t) =>
+      t.id === currentTaskId ? { ...t, title: move.title, dept: move.deptK } : t,
+    );
+  }
 
   // Real overall progress + what's on the founder's plate (from live DEPTS, not the template).
   const prog = overviewProgress(DEPTS);
