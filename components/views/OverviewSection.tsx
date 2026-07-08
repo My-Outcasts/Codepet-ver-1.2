@@ -124,6 +124,9 @@ export default function OverviewSection() {
     else openDept(task.dept);
   };
 
+  // The toggle adapts to its surface: light on the Roadmap tab, dark on the Second Brain tab
+  // (which sits on the dark 3D map) so it blends instead of stranding a light bar on black.
+  const onDark = tab === 'map';
   const toggle = (
     <div
       style={{
@@ -131,9 +134,10 @@ export default function OverviewSection() {
         display: 'inline-flex',
         gap: 3,
         padding: 4,
-        background: '#ffffff',
-        border: '1px solid rgba(31,27,21,0.09)',
+        background: onDark ? 'rgba(18,16,28,0.72)' : '#ffffff',
+        border: `1px solid ${onDark ? 'rgba(245,243,255,0.14)' : 'rgba(31,27,21,0.09)'}`,
         borderRadius: 11,
+        backdropFilter: onDark ? 'blur(8px)' : undefined,
       }}
     >
       {(['roadmap', 'map'] as const).map((k) => (
@@ -150,8 +154,20 @@ export default function OverviewSection() {
             borderRadius: 8,
             border: 'none',
             cursor: 'pointer',
-            background: tab === k ? 'rgba(124,58,237,0.13)' : 'transparent',
-            color: tab === k ? CY : 'rgba(31,27,21,0.4)',
+            background:
+              tab === k
+                ? onDark
+                  ? 'rgba(124,58,237,0.32)'
+                  : 'rgba(124,58,237,0.13)'
+                : 'transparent',
+            color:
+              tab === k
+                ? onDark
+                  ? '#c4b5fd'
+                  : CY
+                : onDark
+                  ? 'rgba(245,243,255,0.5)'
+                  : 'rgba(31,27,21,0.4)',
           }}
         >
           {k === 'map' ? 'Second Brain' : 'Roadmap'}
@@ -176,12 +192,12 @@ export default function OverviewSection() {
       }}
     >
       {tab === 'map' ? (
-        <>
-          <div style={{ flex: 'none', padding: '16px 24px 0' }}>{toggle}</div>
-          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <OverviewMap />
-          </div>
-        </>
+        // The map fills the whole tab (its own dark surface); the toggle floats on top so there's
+        // no light strip seam between the toggle and the dark graph.
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <OverviewMap />
+          <div style={{ position: 'absolute', top: 16, left: 24, zIndex: 10 }}>{toggle}</div>
+        </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Overview heading — the roadmap is the tab's main interface, so it carries the title. */}
