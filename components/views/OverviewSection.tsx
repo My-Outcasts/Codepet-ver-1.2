@@ -36,9 +36,6 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 });
 
 const CY = '#7de3ff';
-// The overall content max width — content is left-aligned and capped here so it doesn't
-// stretch edge-to-edge on wide monitors.
-const MAX_W = 1320;
 
 export default function OverviewSection() {
   const { brief, nextStep, library, tracking, tick, openDept, portalToTask } = useApp();
@@ -148,18 +145,7 @@ export default function OverviewSection() {
           </div>
         </>
       ) : (
-        <div
-          style={{
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-            // left-aligned, but capped so content doesn't sprawl edge-to-edge on wide screens
-            width: '100%',
-            maxWidth: MAX_W,
-            alignSelf: 'flex-start',
-          }}
-        >
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* Overview heading — the roadmap is the tab's main interface, so it carries the title. */}
           <div
             style={{
