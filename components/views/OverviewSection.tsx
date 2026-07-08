@@ -145,7 +145,7 @@ export default function OverviewSection() {
             fontFamily: 'var(--sans)',
             fontSize: 12.5,
             fontWeight: 600,
-            textTransform: 'capitalize',
+            whiteSpace: 'nowrap',
             padding: '6px 14px',
             borderRadius: 8,
             border: 'none',
@@ -154,7 +154,7 @@ export default function OverviewSection() {
             color: tab === k ? CY : 'rgba(31,27,21,0.4)',
           }}
         >
-          {k}
+          {k === 'map' ? 'Second Brain' : 'Roadmap'}
         </button>
       ))}
     </div>

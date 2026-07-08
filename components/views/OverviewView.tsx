@@ -822,12 +822,27 @@ export default function OverviewView() {
           pointerEvents: 'none',
         }}
       >
-        <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
-          Overview
+        <h1
+          style={{
+            fontFamily: 'var(--sans)',
+            fontSize: 21,
+            fontWeight: 600,
+            color: '#F5F3FF',
+            letterSpacing: '-.3px',
+          }}
+        >
+          Second Brain
         </h1>
-        <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
-          Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
-          a node to open it.
+        <div
+          style={{
+            fontFamily: 'var(--sans)',
+            fontSize: 13,
+            color: 'rgba(245,243,255,.55)',
+            marginTop: 3,
+          }}
+        >
+          Your whole company as one living map. Drag to orbit · scroll to zoom · click a node to
+          open.
         </div>
       </div>
 
@@ -867,7 +882,7 @@ export default function OverviewView() {
               cursor: 'pointer',
             }}
           >
-            ? how to read this map
+            ? how to read this
           </button>
         )}
       </div>
