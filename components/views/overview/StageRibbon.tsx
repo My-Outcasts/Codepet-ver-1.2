@@ -13,7 +13,7 @@ import { currentStageProgress, stageComplete, nextStageOf } from '@/lib/stages';
 
 const SCRIM = 'linear-gradient(180deg, rgba(7,5,16,0.82) 0%, rgba(7,5,16,0) 100%)';
 
-export default function StageRibbon() {
+export default function StageRibbon({ highlight = false }: { highlight?: boolean }) {
   const { selectStage, advanceStage, brief, tick } = useApp();
   void tick; // re-render on company mutation (progress + watermark are live reads)
   const segs = ribbonSegments();
@@ -33,6 +33,9 @@ export default function StageRibbon() {
         padding: '10px 16px',
         background: SCRIM,
         pointerEvents: 'none',
+        // Glow while the map walkthrough is pointing at the journey strip.
+        boxShadow: highlight ? '0 6px 26px rgba(125,227,255,0.4)' : undefined,
+        transition: 'box-shadow .25s',
       }}
     >
       {/* Full breadcrumb (default; hidden < 640px by CSS) */}

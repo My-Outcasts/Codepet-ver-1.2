@@ -27,7 +27,10 @@ import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud
 import { overviewProgress, deptProgress } from '@/lib/overview/progress';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
+import OverviewTour from '@/components/views/overview/OverviewTour';
 import { introInitialPhase, type IntroPhase } from '@/lib/overviewIntro';
+import { TOUR_STEPS, nextTourStep, isLastStep } from '@/lib/overviewTour';
+import { ribbonSegments } from '@/lib/overview/ribbon';
 
 const HEX: Record<string, string> = {
   '--blue': '#3B82F6',
@@ -201,10 +204,11 @@ export default function OverviewView() {
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
-  // First-run spotlight handoff. OverviewView owns the phase; the account's
-  // introSeen flag (from the store) seeds it, so OverviewIntro / ByteGuide /
-  // the reopen chip remain thin consumers.
+  // First-run guided walkthrough. OverviewView owns the phase; the account's introSeen
+  // flag (from the store) seeds it, so OverviewIntro / OverviewTour / the reopen chip
+  // remain thin consumers. `tourStep` indexes TOUR_STEPS while the phase is 'tour'.
   const [introPhase, setIntroPhase] = useState<IntroPhase>(() => introInitialPhase(introSeen));
+  const [tourStep, setTourStep] = useState(0);
   const wrapRef = useRef<HTMLDivElement>(null);
   const calloutRef = useRef<HTMLDivElement>(null);
   const [beaconFlip, setBeaconFlip] = useState(false);
@@ -377,9 +381,46 @@ export default function OverviewView() {
     () => data.nodes.find((n) => n.id === beaconId) ?? null,
     [data, beaconId],
   );
+
+  // The guided walkthrough resolves each step to a live map node so byte can fly the
+  // camera there and light it while dimming the rest. 'stage' has no node (the strip up
+  // top) → null → frame the whole map + glow the ribbon. The dept/task steps follow the
+  // next move's own department when there is one, so the walk flows toward the lit move.
+  const currentTourStep = introPhase === 'tour' ? TOUR_STEPS[tourStep] : null;
+  const tourTargetId = useMemo<string | null>(() => {
+    if (!currentTourStep) return null;
+    const deptK = here?.dept.k ?? DEPTS.find((d) => !d.later)?.k ?? DEPTS[0]?.k;
+    switch (currentTourStep.target) {
+      case 'project':
+        return 'project';
+      case 'dept':
+        return deptK ? `dept:${deptK}` : null;
+      case 'task':
+        return beaconId ?? (deptK ? `task:${deptK}:0` : null);
+      case 'beacon':
+        return beaconId;
+      case 'stage':
+      default:
+        return null;
+    }
+  }, [currentTourStep, here, beaconId]);
+  // Dim the map to the focused node's neighborhood during a node-targeted step.
+  const tourDim = introPhase === 'tour' && tourTargetId != null;
+  const tourLit = useCallback(
+    (id: string) => id === tourTargetId || !!(tourTargetId && adj.get(tourTargetId)?.has(id)),
+    [tourTargetId, adj],
+  );
+  // The current journey-phase name (Find/Build/Ship/Launch/Run) for the stage step copy.
+  const stageLabel = useMemo(() => {
+    void tick;
+    return ribbonSegments().find((s) => s.state === 'current')?.name;
+  }, [tick]);
+
   // byte's on-map callout shows whenever there's a live next move (not while a
-  // non-current stage drawer has dimmed the map, and not when the stage is done).
-  const showCallout = !!beaconId && !mapDimmed && !stageComplete();
+  // non-current stage drawer has dimmed the map, and not when the stage is done). It's
+  // suppressed during the walkthrough so it doesn't compete with the tour card; it
+  // reappears the moment the tour settles.
+  const showCallout = !!beaconId && !mapDimmed && !stageComplete() && introPhase !== 'tour';
 
   // Tether the callout to the beacon node: project its live 3D position to screen
   // coords each frame and move the HTML callout there. Writes the DOM transform
@@ -650,34 +691,44 @@ export default function OverviewView() {
     typeof window !== 'undefined' &&
     !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-  // CTA in the intro: remember it's seen, then either fly to the lit beacon or
-  // (no live move) recenter the whole map, and enter the spotlight.
+  // CTA in the intro card: remember it's seen and start the step-by-step walk at stop 1.
+  // The camera effect below flies to each stop as `tourStep` advances.
   const handleIntroReveal = () => {
     markIntroSeen();
-    // Only enter the spotlight when the beacon callout will actually render
-    // (ByteGuide is gated by showCallout) — otherwise there's nothing to
-    // illuminate, so just recenter the map and finish.
-    if (showCallout && beaconId) {
-      flyTo(beaconId, introReduceMotion() ? 0 : 900);
-      setIntroPhase('spotlight');
-    } else {
-      fitView();
-      setIntroPhase('done');
-    }
+    setTourStep(0);
+    setIntroPhase('tour');
   };
 
-  // Backdrop click: dismiss without flying, but still mark it seen.
+  // Backdrop click: dismiss without starting the walk, but still mark it seen.
   const handleIntroDismiss = () => {
     markIntroSeen();
     setIntroPhase('done');
   };
 
-  // The spotlight is a light touch, not a second modal — auto-settle after a beat.
+  // Advance the walk: fly happens via the camera effect on the new step. On the last stop
+  // the CTA hands off — settle to the plain map and glide to the lit move so its "Do this
+  // next" callout takes over from here.
+  const handleTourNext = () => {
+    if (isLastStep(tourStep)) {
+      setIntroPhase('done');
+      if (beaconId) flyTo(beaconId, introReduceMotion() ? 0 : 700);
+    } else {
+      setTourStep((s) => nextTourStep(s));
+    }
+  };
+  const handleTourSkip = () => setIntroPhase('done');
+
+  // Drive the camera as the walk advances: fly to the step's node, or frame the whole map
+  // for the stage / no-beacon stops. Reduced motion cuts instantly.
   useEffect(() => {
-    if (introPhase !== 'spotlight') return;
-    const id = setTimeout(() => setIntroPhase('done'), 6000);
-    return () => clearTimeout(id);
-  }, [introPhase]);
+    if (introPhase !== 'tour') return;
+    const ms = introReduceMotion() ? 0 : 700;
+    if (tourTargetId) flyTo(tourTargetId, ms);
+    else fitView();
+    // flyTo/fitView are recreated each render but stable in behavior; the step + target
+    // are the real triggers.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [introPhase, tourStep, tourTargetId]);
 
   // Kick off byte's one-time project analysis as soon as the intro is showing
   // (or about to show), so the briefing card has something to render instead of
@@ -686,21 +737,6 @@ export default function OverviewView() {
   useEffect(() => {
     if (introPhase === 'intro') ensureProjectAnalysis();
   }, [introPhase, ensureProjectAnalysis]);
-
-  // Settle the spotlight the moment the founder actually grabs the map
-  // (deliberate pointer-down or wheel-zoom) — not on mere mouse movement.
-  useEffect(() => {
-    if (introPhase !== 'spotlight') return;
-    const el = wrapRef.current;
-    if (!el) return;
-    const settle = () => setIntroPhase('done');
-    el.addEventListener('pointerdown', settle);
-    el.addEventListener('wheel', settle, { passive: true });
-    return () => {
-      el.removeEventListener('pointerdown', settle);
-      el.removeEventListener('wheel', settle);
-    };
-  }, [introPhase]);
 
   return (
     <section
@@ -715,20 +751,32 @@ export default function OverviewView() {
           onDismiss={handleIntroDismiss}
         />
       )}
-      {introPhase === 'spotlight' && (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            inset: 0,
-            zIndex: 3,
-            pointerEvents: 'none',
-            background:
-              'radial-gradient(closest-side at 50% 50%, rgba(4,3,10,0) 45%, rgba(4,3,10,0.5) 100%)',
-          }}
-        />
+      {introPhase === 'tour' && currentTourStep && (
+        <>
+          {/* Focus vignette behind the walkthrough card so the lit element reads clearly. */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 3,
+              pointerEvents: 'none',
+              background:
+                'radial-gradient(closest-side at 50% 45%, rgba(4,3,10,0) 40%, rgba(4,3,10,0.55) 100%)',
+            }}
+          />
+          <OverviewTour
+            step={currentTourStep}
+            index={tourStep}
+            total={TOUR_STEPS.length}
+            dept={here?.dept.name}
+            stage={stageLabel}
+            onNext={handleTourNext}
+            onSkip={handleTourSkip}
+          />
+        </>
       )}
-      <StageRibbon />
+      <StageRibbon highlight={introPhase === 'tour' && currentTourStep?.target === 'stage'} />
       {revealKeys.size > 0 && (
         <div
           style={{
@@ -881,10 +929,13 @@ export default function OverviewView() {
             controlType="orbit"
             nodeVal={(n) => {
               if (n.id === beaconId) return 2.8 + pulse * 1.0; // the "start here" star
+              if (tourDim && n.id === tourTargetId) return n.val * 2.1; // lift the tour focus
               return hoverId === n.id ? n.val * 1.7 : n.val;
             }}
             nodeColor={(n) => {
               if (n.id === beaconId) return rgba(BEACON_HEX, 0.85 + pulse * 0.15); // byte's guide star
+              // During a node-targeted tour step, only the focus + its neighbors keep color.
+              if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
             nodeOpacity={0.95}
@@ -965,7 +1016,7 @@ export default function OverviewView() {
           >
             <ByteGuide
               here={here}
-              spotlight={introPhase === 'spotlight'}
+              spotlight={false}
               flip={beaconFlip}
               // One shared arrival: byte opens the chat + briefs you, then the
               // portalSignal effect glides the camera to the department AFTER the

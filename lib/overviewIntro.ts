@@ -7,19 +7,19 @@
 // one contextual color the spotlight teaches. Mirrors BEACON_HEX in OverviewView.
 export const GUIDE_HEX = '#7DE3FF';
 
-export type IntroPhase = 'intro' | 'spotlight' | 'done';
+export type IntroPhase = 'intro' | 'tour' | 'done';
 
 // Where a fresh mount starts: show the intro only if the user hasn't seen it.
 export function introInitialPhase(seen: boolean): IntroPhase {
   return seen ? 'done' : 'intro';
 }
 
-// CTA pressed in the intro → frame the next move.
+// CTA pressed in the intro → start the step-by-step walkthrough of the map.
 export function onReveal(): IntroPhase {
-  return 'spotlight';
+  return 'tour';
 }
 
-// Spotlight acknowledged (Start, timeout) → settle back to the plain map.
+// Tour finished, skipped, or the founder grabbed the map → settle to the plain map.
 export function onSettle(): IntroPhase {
   return 'done';
 }
