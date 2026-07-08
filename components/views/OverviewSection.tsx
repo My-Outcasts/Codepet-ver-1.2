@@ -235,7 +235,7 @@ export default function OverviewSection() {
                   lineHeight: 1.45,
                   color: 'rgba(31,27,21,.62)',
                   marginTop: 4,
-                  maxWidth: 640,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 Your whole company as a roadmap — where you are, what byte does next, and how far
@@ -255,7 +255,7 @@ export default function OverviewSection() {
               flexWrap: 'wrap',
               alignItems: 'stretch',
               gap: 14,
-              margin: '12px 0 0 24px',
+              margin: '16px 0 0 24px',
               width: PANEL_W,
             }}
           >
@@ -443,6 +443,7 @@ export default function OverviewSection() {
                     textTransform: 'uppercase',
                     color: 'var(--accent)',
                     flex: 'none',
+                    whiteSpace: 'nowrap',
                   }}
                 >
                   byte · do this next
@@ -495,7 +496,7 @@ export default function OverviewSection() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'flex-start',
-              padding: '18px 24px 8px',
+              padding: '34px 24px 8px',
             }}
           >
             <RoadmapView
