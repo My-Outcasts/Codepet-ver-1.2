@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
-import { DEPTS } from '@/lib/data';
+import { DEPTS, DCOL } from '@/lib/data';
 import { nextAction } from '@/lib/roadmap';
 import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import RoadmapView from './overview/RoadmapView';
@@ -70,6 +70,7 @@ export default function OverviewSection() {
   const phaseTasks = defs.filter((t) => t.phase === currentPhase);
   // the upcoming milestone (the phase after the current one) — the "next" pill on the bar
   const curPhaseIdx = ROADMAP_PHASES.findIndex((p) => p.key === currentPhase);
+  const currentPhaseName = ROADMAP_PHASES[curPhaseIdx]?.name ?? '';
   const nextMilestone =
     ROADMAP_PHASES[curPhaseIdx + 1]?.name ?? ROADMAP_PHASES[ROADMAP_PHASES.length - 1]?.name ?? '';
   // Guard the root label: ignore a placeholder-y project name (empty, single char, or all
@@ -113,7 +114,8 @@ export default function OverviewSection() {
   };
   // breadth of progress: how many of the company's departments are underway (non-dormant)
   const totalAreas = DEPTS.length;
-  const areasBuilding = DEPTS.filter((d) => !d.later).length;
+  const activeDepts = DEPTS.filter((d) => !d.later);
+  const areasBuilding = activeDepts.length;
   let needsYou = 0;
   let approve = 0;
   for (const d of DEPTS) {
@@ -240,85 +242,181 @@ export default function OverviewSection() {
                 Your whole company as a roadmap — where you are, what byte does next, and how far
                 you’ve come.
               </div>
-              {/* progress — a glowing purple bar (the "project progress" card technique: a
-                  gradient fill with a blurred clone behind it for the bloom). Real DEPTS data. */}
-              <style>{`.rm-pfill::before{content:"";position:absolute;inset:-5px;border-radius:999px;background:inherit;filter:blur(11px);opacity:.5;z-index:-1}`}</style>
-              <div style={{ marginTop: 13, maxWidth: 380 }}>
-                <div
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    gap: 10,
-                    marginBottom: 8,
-                    fontFamily: 'var(--sans)',
-                  }}
-                >
-                  <span
-                    style={{
-                      fontSize: 25,
-                      fontWeight: 750,
-                      color: 'var(--ink)',
-                      letterSpacing: '-0.03em',
-                      lineHeight: 1,
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {prog.pct}
-                    <span style={{ fontSize: 15, color: 'rgba(31,27,21,0.4)' }}>%</span>
-                  </span>
-                  <span style={{ fontSize: 12, color: 'rgba(31,27,21,0.5)' }}>
-                    {prog.done}/{prog.total} moves
-                    {needsYou > 0 && (
-                      <span style={{ color: '#2563eb' }}> · needs you {needsYou}</span>
-                    )}
-                    {approve > 0 && <span style={{ color: '#d97706' }}> · approve {approve}</span>}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    position: 'relative',
-                    height: 16,
-                    borderRadius: 999,
-                    background: 'rgba(31,27,21,0.07)',
-                    display: 'flex',
-                    alignItems: 'center',
-                  }}
-                >
-                  <div
-                    className="rm-pfill"
-                    style={{
-                      position: 'relative',
-                      height: '100%',
-                      width: `${prog.pct}%`,
-                      minWidth: prog.pct > 0 ? 16 : 0,
-                      borderRadius: 999,
-                      background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                      boxShadow: '0 0 12px 1px rgba(124,58,237,0.5)',
-                      transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
-                    }}
-                  />
-                  {nextMilestone && (
-                    <span
-                      style={{
-                        position: 'absolute',
-                        right: 5,
-                        fontFamily: 'var(--sans)',
-                        fontSize: 11,
-                        fontWeight: 600,
-                        color: 'var(--accent)',
-                        background: 'rgba(124,58,237,0.1)',
-                        padding: '3px 9px',
-                        borderRadius: 999,
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      Next: {nextMilestone}
-                    </span>
-                  )}
-                </div>
-              </div>
             </div>
             {toggle}
+          </div>
+
+          {/* Project Progress — a fuller card in the reference's glowing style (light + purple):
+              gradient fill + a blurred clone (.rm-pfill::before) for the bloom. Folds in the proof
+              metrics (shipped + areas) so there's one progress card, not a card AND a strip. */}
+          <style>{`.rm-pfill::before{content:"";position:absolute;inset:-5px;border-radius:999px;background:inherit;filter:blur(11px);opacity:.5;z-index:-1}`}</style>
+          <div
+            style={{
+              flex: 'none',
+              margin: '12px 24px 0',
+              padding: '16px 20px 15px',
+              borderRadius: 16,
+              background: '#ffffff',
+              border: '1px solid rgba(31,27,21,0.08)',
+              boxShadow: '0 8px 26px -16px rgba(31,27,21,0.32)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span
+                style={{
+                  fontFamily: 'var(--sans)',
+                  fontSize: 15,
+                  fontWeight: 650,
+                  color: 'var(--ink)',
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                Project Progress
+              </span>
+              {currentPhaseName && (
+                <span
+                  style={{
+                    fontFamily: 'var(--sans)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--accent)',
+                    background: 'var(--accent-tint)',
+                    border: '1px solid var(--accent-line)',
+                    padding: '3px 9px',
+                    borderRadius: 999,
+                  }}
+                >
+                  {currentPhaseName}
+                </span>
+              )}
+            </div>
+
+            <div style={{ margin: '7px 0 11px', display: 'flex', alignItems: 'baseline', gap: 11 }}>
+              <span
+                style={{
+                  fontFamily: 'var(--sans)',
+                  fontWeight: 750,
+                  letterSpacing: '-0.03em',
+                  lineHeight: 1,
+                  color: 'var(--ink)',
+                }}
+              >
+                <span style={{ fontSize: 34, fontVariantNumeric: 'tabular-nums' }}>{prog.pct}</span>
+                <span style={{ fontSize: 20, color: 'rgba(31,27,21,0.4)' }}>%</span>
+              </span>
+              <span
+                style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'rgba(31,27,21,0.5)' }}
+              >
+                {prog.done}/{prog.total} moves
+                {needsYou > 0 && <span style={{ color: '#2563eb' }}> · needs you {needsYou}</span>}
+                {approve > 0 && <span style={{ color: '#d97706' }}> · approve {approve}</span>}
+              </span>
+            </div>
+
+            <div
+              style={{
+                position: 'relative',
+                height: 18,
+                borderRadius: 999,
+                background: 'rgba(31,27,21,0.07)',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <div
+                className="rm-pfill"
+                style={{
+                  position: 'relative',
+                  height: '100%',
+                  width: `${prog.pct}%`,
+                  minWidth: prog.pct > 0 ? 18 : 0,
+                  borderRadius: 999,
+                  background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                  boxShadow: '0 0 12px 1px rgba(124,58,237,0.5)',
+                  transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
+                }}
+              />
+              {nextMilestone && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    right: 6,
+                    fontFamily: 'var(--sans)',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: 'var(--accent)',
+                    background: 'rgba(124,58,237,0.1)',
+                    padding: '3px 9px',
+                    borderRadius: 999,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  Next: {nextMilestone}
+                </span>
+              )}
+            </div>
+
+            {/* proof + team-of-departments (the reference's "collaborators", as active areas) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginTop: 14 }}>
+              <span
+                style={{ fontFamily: 'var(--sans)', fontSize: 12.5, color: 'rgba(31,27,21,0.55)' }}
+              >
+                <span style={{ fontWeight: 700, color: 'var(--ink)' }}>{library.length}</span>{' '}
+                shipped
+              </span>
+              <span style={{ width: 1, height: 13, background: 'rgba(31,27,21,0.12)' }} />
+              <span
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  fontFamily: 'var(--sans)',
+                  fontSize: 12.5,
+                  color: 'rgba(31,27,21,0.55)',
+                }}
+              >
+                <span>
+                  <span style={{ fontWeight: 700, color: 'var(--ink)' }}>
+                    {areasBuilding}/{totalAreas}
+                  </span>{' '}
+                  areas
+                </span>
+                <span style={{ display: 'inline-flex', gap: 3 }}>
+                  {activeDepts.slice(0, 6).map((d) => (
+                    <span
+                      key={d.k}
+                      title={d.name}
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 4,
+                        background: `var(${DCOL[d.k]})`,
+                        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.45)',
+                      }}
+                    />
+                  ))}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setTab('map')}
+                style={{
+                  marginLeft: 'auto',
+                  fontFamily: 'var(--sans)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--accent)',
+                  background: 'transparent',
+                  border: '1px solid var(--accent-line)',
+                  borderRadius: 999,
+                  padding: '6px 13px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                Second Brain →
+              </button>
+            </div>
           </div>
 
           {/* the single actionable next move — Start runs byte on the real task */}
@@ -455,102 +553,8 @@ export default function OverviewSection() {
               onTaskClick={onTaskClick}
             />
           </div>
-          <ProofStrip
-            shipped={library.length}
-            areasBuilding={areasBuilding}
-            totalAreas={totalAreas}
-          />
         </div>
       )}
     </section>
-  );
-}
-
-// Progress at a glance — two glowing stat cards that always carry real numbers (no dead
-// zeros): SHIPPED = byte's approved deliverables (tangible output); AREAS BUILDING = how many
-// of the company's departments are underway (breadth). The headline % + roadmap already own
-// the journey progress, so this strip stays proof-of-work, not a repeat of the percentage.
-function ProofStrip({
-  shipped,
-  areasBuilding,
-  totalAreas,
-}: {
-  shipped: number;
-  areasBuilding: number;
-  totalAreas: number;
-}) {
-  const stats: { accent: string; value: string; label: string }[] = [
-    { accent: '#7c3aed', value: String(shipped), label: 'shipped' },
-    { accent: '#2dd4bf', value: `${areasBuilding}/${totalAreas}`, label: 'areas building' },
-  ];
-  return (
-    <div
-      style={{
-        flex: 'none',
-        display: 'flex',
-        gap: 12,
-        margin: '2px 24px 20px',
-      }}
-    >
-      {stats.map((s) => (
-        <StatCard key={s.label} accent={s.accent} value={s.value} label={s.label} />
-      ))}
-    </div>
-  );
-}
-
-// A concise one-line stat: accent dot · number · label, on a compact white card.
-function StatCard({ accent, value, label }: { accent: string; value: string; label: string }) {
-  return (
-    <div
-      style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '9px 15px',
-        borderRadius: 11,
-        background: '#ffffff',
-        border: '1px solid rgba(31,27,21,0.08)',
-        boxShadow: '0 3px 12px -9px rgba(31,27,21,0.22)',
-      }}
-    >
-      <span
-        aria-hidden
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          flex: 'none',
-          background: accent,
-          boxShadow: `0 0 8px ${accent}99`,
-        }}
-      />
-      <span
-        style={{
-          fontFamily: 'var(--sans)',
-          fontSize: 19,
-          fontWeight: 750,
-          color: 'var(--ink)',
-          fontVariantNumeric: 'tabular-nums',
-          lineHeight: 1,
-          letterSpacing: '-0.01em',
-        }}
-      >
-        {value}
-      </span>
-      <span
-        style={{
-          fontFamily: 'var(--sans)',
-          fontSize: 10.5,
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.09em',
-          color: 'rgba(31,27,21,0.5)',
-        }}
-      >
-        {label}
-      </span>
-    </div>
   );
 }
