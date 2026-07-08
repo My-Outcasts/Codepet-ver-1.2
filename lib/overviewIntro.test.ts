@@ -7,8 +7,8 @@ describe('overview first-run phase machine', () => {
     expect(introInitialPhase(true)).toBe('done');
   });
 
-  it('CTA reveals the spotlight, which settles to done', () => {
-    expect(onReveal()).toBe('spotlight');
+  it('CTA starts the tour, which settles to done', () => {
+    expect(onReveal()).toBe('tour');
     expect(onSettle()).toBe('done');
   });
 
