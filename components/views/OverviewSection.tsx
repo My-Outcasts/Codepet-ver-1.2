@@ -38,7 +38,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 const CY = '#7c3aed';
 // The progress card + the "do this next" bar sit neatly on the left, capped — not stretched
 // edge-to-edge. Shared so the two line up. (calc accounts for the 24px left inset.)
-const PANEL_W = 'min(540px, calc(100% - 48px))';
+const PANEL_W = 'min(460px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
@@ -255,7 +255,7 @@ export default function OverviewSection() {
               width: PANEL_W,
               boxSizing: 'border-box',
               margin: '10px 0 0 24px',
-              padding: '12px 18px 13px',
+              padding: '10px 16px 11px',
               borderRadius: 14,
               background: '#ffffff',
               border: '1px solid rgba(31,27,21,0.08)',
@@ -292,7 +292,7 @@ export default function OverviewSection() {
               )}
             </div>
 
-            <div style={{ margin: '5px 0 8px', display: 'flex', alignItems: 'baseline', gap: 10 }}>
+            <div style={{ margin: '3px 0 6px', display: 'flex', alignItems: 'baseline', gap: 9 }}>
               <span
                 style={{
                   fontFamily: 'var(--sans)',
@@ -302,8 +302,8 @@ export default function OverviewSection() {
                   color: 'var(--ink)',
                 }}
               >
-                <span style={{ fontSize: 27, fontVariantNumeric: 'tabular-nums' }}>{prog.pct}</span>
-                <span style={{ fontSize: 16, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                <span style={{ fontSize: 24, fontVariantNumeric: 'tabular-nums' }}>{prog.pct}</span>
+                <span style={{ fontSize: 15, color: 'rgba(31,27,21,0.4)' }}>%</span>
               </span>
               {needsYou > 0 && (
                 <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
@@ -315,7 +315,7 @@ export default function OverviewSection() {
             <div
               style={{
                 position: 'relative',
-                height: 15,
+                height: 14,
                 borderRadius: 999,
                 background: 'rgba(31,27,21,0.07)',
                 display: 'flex',
@@ -328,7 +328,7 @@ export default function OverviewSection() {
                   position: 'relative',
                   height: '100%',
                   width: `${prog.pct}%`,
-                  minWidth: prog.pct > 0 ? 15 : 0,
+                  minWidth: prog.pct > 0 ? 14 : 0,
                   borderRadius: 999,
                   background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
                   boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
@@ -366,11 +366,11 @@ export default function OverviewSection() {
                 boxSizing: 'border-box',
                 position: 'relative',
                 overflow: 'hidden',
-                margin: '6px 0 0 24px',
+                margin: '8px 0 0 24px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
-                padding: '9px 10px 9px 15px',
+                padding: '8px 10px 8px 14px',
                 borderRadius: 12,
                 background: 'var(--accent-tint)',
                 border: '1px solid var(--accent-line)',
@@ -474,7 +474,8 @@ export default function OverviewSection() {
               </button>
             </div>
           )}
-          {/* roadmap fills the space below the two cards; vertically centered, no empty void */}
+          {/* roadmap — the hero. Sits right under the two cards (top-aligned, no centered dead
+              gap above it) and takes the rest of the height. */}
           <div
             style={{
               flex: 1,
@@ -482,8 +483,8 @@ export default function OverviewSection() {
               overflowX: 'hidden',
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'center',
-              padding: '6px 24px',
+              justifyContent: 'flex-start',
+              padding: '18px 24px 8px',
             }}
           >
             <RoadmapView
