@@ -43,25 +43,27 @@ export default function OverviewSection() {
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
   // byte's real, per-company roadmap once generated; until then the canonical template.
+  // On first Overview load byte builds it once, silently, and persists it (like the scaffold):
+  // load the saved one, and if there isn't one yet, generate it. The route no-ops cheaply when
+  // there's no real brief, and any failure just keeps the template — so it's safe while credits
+  // are out. generateRoadmap() takes no arg: the route reads the founder's brief server-side.
   const [genRoadmap, setGenRoadmap] = useState<RoadmapTaskDef[] | null>(null);
-  const [generating, setGenerating] = useState(false);
   useEffect(() => {
     let live = true;
-    loadSavedRoadmap().then((r) => {
-      if (live && r) setGenRoadmap(r);
+    loadSavedRoadmap().then((saved) => {
+      if (!live) return;
+      if (saved) {
+        setGenRoadmap(saved);
+        return;
+      }
+      generateRoadmap().then((fresh) => {
+        if (live && fresh) setGenRoadmap(fresh);
+      });
     });
     return () => {
       live = false;
     };
   }, []);
-  const onGenerate = () => {
-    setGenerating(true);
-    generateRoadmap(brief)
-      .then((r) => {
-        if (r) setGenRoadmap(r);
-      })
-      .finally(() => setGenerating(false));
-  };
   const defs = genRoadmap ?? ROADMAP_TEMPLATE;
 
   const currentPhase = stageToPhase(brief.stage);
@@ -253,34 +255,7 @@ export default function OverviewSection() {
                 {approve > 0 && <span style={{ color: '#d97706' }}>approve {approve}</span>}
               </div>
             </div>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}
-            >
-              {toggle}
-              <button
-                type="button"
-                onClick={onGenerate}
-                disabled={generating}
-                title="byte generates a roadmap tailored to your company"
-                style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 10.5,
-                  letterSpacing: '0.06em',
-                  color: generating ? 'rgba(31,27,21,0.4)' : CY,
-                  background: 'transparent',
-                  border: '1px solid rgba(124,58,237,0.32)',
-                  borderRadius: 8,
-                  padding: '5px 11px',
-                  cursor: generating ? 'default' : 'pointer',
-                }}
-              >
-                {generating
-                  ? 'byte is planning…'
-                  : genRoadmap
-                    ? '↻ regenerate roadmap'
-                    : '✦ generate my roadmap'}
-              </button>
-            </div>
+            {toggle}
           </div>
 
           {/* the single actionable next move — Start runs byte on the real task */}
