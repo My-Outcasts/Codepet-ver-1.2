@@ -50,6 +50,7 @@ import {
   updateThreadTitle,
   deleteThreadAndMessages,
 } from './firebase/companyData';
+import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
 import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
@@ -1116,9 +1117,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     scaffoldCompany(companyId, updated).then(({ changed }) => {
       if (changed) {
         // Re-plan took — now it's safe to persist the new stage.
-        persistBrief(companyId, updated).catch((err) =>
-          console.error('[store] persistBrief failed', err),
-        );
+        persistWithRetry(() => persistBrief(companyId, updated), {
+          toast,
+          label: 'persistBrief',
+          failMessage: 'Couldn’t save your project details — they may not persist.',
+        });
         bump();
         computeNextStep();
         setChatMessages((prev) =>
@@ -1152,7 +1155,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     });
-  }, [brief, companyId, bump, computeNextStep]);
+  }, [brief, companyId, bump, computeNextStep, toast]);
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
     try {
@@ -1355,9 +1358,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       toast((type === 'build' || type === 'site' ? 'Shipped' : 'Saved') + ' · ' + t.t);
       // Write-through (optimistic — the in-memory update already happened).
       if (companyId) {
-        persistApproval(companyId, d, item, Date.now()).catch((err) => {
-          console.error('[store] persistApproval failed', err);
-          toast('Saved locally — sync failed');
+        const approvedAt = Date.now();
+        persistWithRetry(() => persistApproval(companyId, d, item, approvedAt), {
+          toast,
+          label: 'persistApproval',
+          failMessage: 'Saved here, but syncing failed — it may not persist.',
         });
         // Fire-and-forget: let byte extract any durable decision this deliverable locks
         // in (server-gated by AI_MEMORY_ENABLED; never blocks or surfaces errors).
@@ -1420,11 +1425,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       t.drafted = true;
       bump();
       if (companyId)
-        persistDepartmentTasks(companyId, d).catch((err) =>
-          console.error('[store] persistTaskDraft failed', err),
-        );
+        persistWithRetry(() => persistDepartmentTasks(companyId, d), {
+          toast,
+          label: 'persistTaskDraft',
+          failMessage: 'Couldn’t save this draft — it may be lost if you reload.',
+        });
     },
-    [companyId, bump],
+    [companyId, bump, toast],
   );
 
   // Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
