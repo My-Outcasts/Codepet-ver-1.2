@@ -263,6 +263,8 @@ interface AppState {
   renameThread: (id: string, title: string) => void;
   /** Delete a thread and its messages; falls back to another thread or a new chat. */
   deleteThread: (id: string) => void;
+  /** Delete EVERY thread + its messages and start a fresh chat. */
+  clearAllThreads: () => void;
   /** Open/close the chat-history list. */
   toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
@@ -1658,6 +1660,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, activeThreadId, threads, openThread, newChat],
   );
 
+  // Wipe the whole chat history: every thread + its messages, then land in a
+  // fresh empty chat. The UI double-confirms before calling this.
+  const clearAllThreads = useCallback(() => {
+    if (!companyId) return;
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    const ids = threads.map((t) => t.id);
+    setThreads([]);
+    for (const id of ids) {
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      );
+    }
+    newChat();
+  }, [companyId, threads, newChat]);
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -2258,6 +2276,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllThreads,
       toggleChatHistory,
       retryChat,
       runTaskInChat,
@@ -2361,6 +2380,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllThreads,
       toggleChatHistory,
       retryChat,
       runTaskInChat,

@@ -9909,6 +9909,24 @@ body {
   font-size: 11px;
   opacity: 0.6;
 }
+/* Wipe-everything at the foot of the history panel — quiet until hovered. */
+.cthreads-clear {
+  margin-top: 10px;
+  width: 100%;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--t-3);
+  background: transparent;
+  border: 1px solid var(--hairline, #e8e3f0);
+  border-radius: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.cthreads-clear:hover {
+  color: #cf3d3d;
+  border-color: #cf3d3d;
+}
 .cthreads-rename,
 .cthreads-del {
   font-size: 11px;

@@ -292,7 +292,15 @@ function NotedChip({ m }: { m: ChatMessage }) {
 }
 
 function ThreadList() {
-  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread } = useApp();
+  const {
+    threads,
+    activeThreadId,
+    newChat,
+    openThread,
+    renameThread,
+    deleteThread,
+    clearAllThreads,
+  } = useApp();
   // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
   // render is an impure call the React Compiler lint rejects. The list remounts each
   // time History opens, so the relative times refresh then.
@@ -333,6 +341,21 @@ function ThreadList() {
         ))}
         {rows.length === 0 && <li className="cthreads-empty">No chats yet.</li>}
       </ul>
+      {rows.length > 0 && (
+        <button
+          className="cthreads-clear"
+          onClick={() => {
+            if (
+              window.confirm(
+                `Delete ALL ${rows.length} chat${rows.length === 1 ? '' : 's'}? This can't be undone.`,
+              )
+            )
+              clearAllThreads();
+          }}
+        >
+          🗑 Clear all chats
+        </button>
+      )}
     </div>
   );
 }
