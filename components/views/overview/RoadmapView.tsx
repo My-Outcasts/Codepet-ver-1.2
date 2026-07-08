@@ -55,7 +55,7 @@ const BADGE: Record<RoadmapState, { text: string; fg: string; bg: string; border
     locked: null,
   };
 
-function Node({ node }: { node: PositionedNode }) {
+function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void }) {
   const { task } = node;
   const st = task.state;
   const done = st === 'done';
@@ -64,6 +64,20 @@ function Node({ node }: { node: PositionedNode }) {
   const badge = BADGE[st];
   return (
     <div
+      className={onClick ? 'rm-node' : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={
+        onClick
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onClick();
+              }
+            }
+          : undefined
+      }
       style={{
         position: 'absolute',
         left: node.x,
@@ -226,10 +240,13 @@ export default function RoadmapView({
   phases = ROADMAP_PHASES,
   tasks,
   projectName = 'Your company',
+  onTaskClick,
 }: {
   phases?: RoadmapPhase[];
   tasks: RoadmapTask[];
   projectName?: string;
+  /** Click a task card — the current move starts byte, others open their department. */
+  onTaskClick?: (task: RoadmapTask) => void;
 }) {
   const L = layoutRoadmap(phases, tasks);
   const nonCrit = L.edges.filter((e) => !e.critical);
@@ -258,7 +275,7 @@ export default function RoadmapView({
         msOverflowStyle: 'none',
       }}
     >
-      <style>{`.rm-scroll::-webkit-scrollbar{display:none}`}</style>
+      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #7de3ff;outline-offset:2px}`}</style>
       <div style={{ position: 'relative', width: L.width, minWidth: L.width }}>
         {/* phase headers */}
         <div style={{ position: 'relative', height: 28, marginBottom: 6 }}>
@@ -408,7 +425,11 @@ export default function RoadmapView({
           )}
 
           {L.nodes.map((n) => (
-            <Node key={n.task.id} node={n} />
+            <Node
+              key={n.task.id}
+              node={n}
+              onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
+            />
           ))}
         </div>
       </div>

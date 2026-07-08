@@ -7,9 +7,13 @@
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
+import { DEPTS } from '@/lib/data';
+import { nextAction } from '@/lib/roadmap';
+import { overviewProgress } from '@/lib/overview/progress';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
+import type { RoadmapTask } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
 const OverviewMap = dynamic(() => import('./OverviewView'), {
@@ -34,8 +38,9 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 const CY = '#7de3ff';
 
 export default function OverviewSection() {
-  const { brief, nextStep, library, tracking } = useApp();
+  const { brief, nextStep, library, tracking, tick, openDept, portalToTask } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
+  void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
   // Live progress: the founder's onboarding stage picks the current phase; byte's next
   // step (a real dept task) soft-matches a current-phase template task by department to
@@ -48,6 +53,37 @@ export default function OverviewSection() {
     null;
   const tasks = applyProgress(ROADMAP_TEMPLATE, { currentPhase, currentTaskId });
   const projectName = brief.projectName?.trim() || 'Your company';
+
+  // byte's real next move — the actionable one. Prefer /api/next-step; fall back to the
+  // authored golden path so Start always resolves to a REAL department task.
+  const fallback = nextAction();
+  const move = nextStep
+    ? { deptK: nextStep.deptK, title: nextStep.taskTitle }
+    : fallback
+      ? { deptK: fallback.dept.k, title: fallback.task.t }
+      : null;
+  const startMove = () => {
+    if (move) portalToTask(move.deptK, move.title);
+  };
+
+  // Real overall progress + what's on the founder's plate (from live DEPTS, not the template).
+  const prog = overviewProgress(DEPTS);
+  let needsYou = 0;
+  let approve = 0;
+  for (const d of DEPTS) {
+    for (const t of d.tasks) {
+      if (t.done) continue;
+      if (t.drafted) approve += 1;
+      else if (t.who === 'you') needsYou += 1;
+    }
+  }
+
+  // Click a card: the current move starts byte on the real task; any other card opens its
+  // real department so the founder can act on the actual work there.
+  const onTaskClick = (task: RoadmapTask) => {
+    if (task.state === 'current') startMove();
+    else openDept(task.dept);
+  };
 
   const toggle = (
     <div
@@ -140,9 +176,108 @@ export default function OverviewSection() {
                 Your whole company as a roadmap — where you are, what byte does next, and how far
                 you’ve come.
               </div>
+              {/* real momentum + what's on your plate, from live DEPTS */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginTop: 11,
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: 11.5,
+                  color: 'rgba(245,243,255,0.5)',
+                }}
+              >
+                <span style={{ color: '#f5f3ff', fontWeight: 700 }}>{prog.pct}%</span>
+                <span
+                  style={{
+                    width: 72,
+                    height: 5,
+                    borderRadius: 3,
+                    background: 'rgba(245,243,255,0.1)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <span
+                    style={{
+                      display: 'block',
+                      height: '100%',
+                      width: `${prog.pct}%`,
+                      background: CY,
+                    }}
+                  />
+                </span>
+                <span>
+                  {prog.done}/{prog.total} moves
+                </span>
+                {needsYou > 0 && <span style={{ color: '#3b82f6' }}>needs you {needsYou}</span>}
+                {approve > 0 && <span style={{ color: '#fdb022' }}>approve {approve}</span>}
+              </div>
             </div>
             {toggle}
           </div>
+
+          {/* the single actionable next move — Start runs byte on the real task */}
+          {move && (
+            <div
+              style={{
+                flex: 'none',
+                margin: '4px 24px 0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '10px 12px 10px 15px',
+                borderRadius: 12,
+                background:
+                  'linear-gradient(180deg, rgba(125,227,255,0.10), rgba(125,227,255,0.02))',
+                border: '1px solid rgba(125,227,255,0.4)',
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: 10,
+                  letterSpacing: '0.14em',
+                  textTransform: 'uppercase',
+                  color: CY,
+                  flex: 'none',
+                }}
+              >
+                byte · do this next
+              </span>
+              <span
+                style={{
+                  fontSize: 13.5,
+                  fontWeight: 600,
+                  color: '#f5f3ff',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {move.title}
+              </span>
+              <button
+                type="button"
+                onClick={startMove}
+                style={{
+                  marginLeft: 'auto',
+                  flex: 'none',
+                  fontFamily: 'inherit',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  color: '#04030a',
+                  background: CY,
+                  border: 'none',
+                  borderRadius: 9,
+                  padding: '7px 16px',
+                  cursor: 'pointer',
+                }}
+              >
+                Start →
+              </button>
+            </div>
+          )}
           {/* roadmap fills the space and is vertically centered, so there's no empty void */}
           <div
             style={{
@@ -155,7 +290,12 @@ export default function OverviewSection() {
               padding: '6px 24px',
             }}
           >
-            <RoadmapView tasks={tasks} phases={ROADMAP_PHASES} projectName={projectName} />
+            <RoadmapView
+              tasks={tasks}
+              phases={ROADMAP_PHASES}
+              projectName={projectName}
+              onTaskClick={onTaskClick}
+            />
           </div>
           <ProofStrip
             shipped={library.length}
