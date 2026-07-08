@@ -247,7 +247,18 @@ export default function RoadmapView({
   }, [currentX]);
 
   return (
-    <div ref={scrollRef} style={{ overflowX: 'auto', padding: '6px 0 4px' }}>
+    <div
+      ref={scrollRef}
+      className="rm-scroll"
+      style={{
+        overflowX: 'auto',
+        padding: '6px 0 4px',
+        // Hide the scrollbar but keep scrolling (trackpad / shift-wheel).
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+      }}
+    >
+      <style>{`.rm-scroll::-webkit-scrollbar{display:none}`}</style>
       <div style={{ position: 'relative', width: L.width, minWidth: L.width }}>
         {/* phase headers */}
         <div style={{ position: 'relative', height: 28, marginBottom: 6 }}>
