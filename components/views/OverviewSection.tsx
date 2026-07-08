@@ -153,7 +153,8 @@ export default function OverviewSection() {
               gap: 16,
             }}
           >
-            <div>
+            {toggle}
+            <div style={{ textAlign: 'right' }}>
               <h1
                 style={{
                   fontSize: 21,
@@ -181,6 +182,7 @@ export default function OverviewSection() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'flex-end',
                   gap: 12,
                   marginTop: 11,
                   fontFamily: 'ui-monospace, monospace',
@@ -214,7 +216,6 @@ export default function OverviewSection() {
                 {approve > 0 && <span style={{ color: '#fdb022' }}>approve {approve}</span>}
               </div>
             </div>
-            {toggle}
           </div>
 
           {/* the single actionable next move — Start runs byte on the real task */}
