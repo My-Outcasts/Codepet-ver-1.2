@@ -36,6 +36,9 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 });
 
 const CY = '#7de3ff';
+// The overall content max width — content is left-aligned and capped here so it doesn't
+// stretch edge-to-edge on wide monitors.
+const MAX_W = 1320;
 
 export default function OverviewSection() {
   const { brief, nextStep, library, tracking, tick, openDept, portalToTask } = useApp();
@@ -141,7 +144,18 @@ export default function OverviewSection() {
           </div>
         </>
       ) : (
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            // left-aligned, but capped so content doesn't sprawl edge-to-edge on wide screens
+            width: '100%',
+            maxWidth: MAX_W,
+            alignSelf: 'flex-start',
+          }}
+        >
           {/* Overview heading — the roadmap is the tab's main interface, so it carries the title. */}
           <div
             style={{
@@ -153,8 +167,7 @@ export default function OverviewSection() {
               gap: 16,
             }}
           >
-            {toggle}
-            <div style={{ flex: 1, textAlign: 'right' }}>
+            <div>
               <h1
                 style={{
                   fontSize: 21,
@@ -181,7 +194,6 @@ export default function OverviewSection() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'flex-end',
                   gap: 12,
                   marginTop: 11,
                   fontFamily: 'ui-monospace, monospace',
@@ -215,6 +227,7 @@ export default function OverviewSection() {
                 {approve > 0 && <span style={{ color: '#fdb022' }}>approve {approve}</span>}
               </div>
             </div>
+            {toggle}
           </div>
 
           {/* the single actionable next move — Start runs byte on the real task */}
