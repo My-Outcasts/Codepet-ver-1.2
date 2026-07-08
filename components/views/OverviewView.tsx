@@ -21,7 +21,6 @@ import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
-import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
 import { overviewProgress, deptProgress } from '@/lib/overview/progress';
@@ -191,25 +190,11 @@ export default function OverviewView() {
     projectAnalysis,
     analysisLoading,
     ensureProjectAnalysis,
-    planTailored,
-    scaffoldFailure,
-    regenerateCompany,
-    regenerating,
-    openOnboarding,
     growthSignal,
     clearGrowthSignal,
     introSeen,
     markIntroSeen,
   } = useApp();
-  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
-  // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
-  // Retry re-plans in place; otherwise "Generate my plan" reopens the wizard to collect one.
-  const hasBrief = !!(
-    brief.oneLiner?.trim() ||
-    brief.summary?.trim() ||
-    brief.projectName?.trim() ||
-    brief.notes?.trim()
-  );
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
@@ -844,45 +829,6 @@ export default function OverviewView() {
           Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
           a node to open it.
         </div>
-        {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
-            never let a seeded map pass for a plan tailored to the founder's product. */}
-        {examplePlan && (
-          <div
-            style={{
-              pointerEvents: 'auto',
-              marginTop: 11,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '7px 12px',
-              borderRadius: 8,
-              background: 'rgba(253,176,34,.12)',
-              border: '1px solid rgba(253,176,34,.28)',
-              fontSize: 12.5,
-              color: 'rgba(245,243,255,.82)',
-            }}
-          >
-            <span>{examplePlan.text}</span>
-            <button
-              type="button"
-              onClick={() => (hasBrief ? regenerateCompany() : openOnboarding())}
-              disabled={regenerating}
-              style={{
-                fontFamily: 'inherit',
-                fontSize: 12.5,
-                fontWeight: 600,
-                color: '#FDB022',
-                background: 'transparent',
-                border: 'none',
-                cursor: regenerating ? 'default' : 'pointer',
-                whiteSpace: 'nowrap',
-                opacity: regenerating ? 0.6 : 1,
-              }}
-            >
-              {regenerating ? 'Re-planning…' : examplePlan.cta}
-            </button>
-          </div>
-        )}
       </div>
 
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}

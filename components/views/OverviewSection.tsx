@@ -49,6 +49,42 @@ export default function OverviewSection() {
   const tasks = applyProgress(ROADMAP_TEMPLATE, { currentPhase, currentTaskId });
   const projectName = brief.projectName?.trim() || 'Your company';
 
+  const toggle = (
+    <div
+      style={{
+        flex: 'none',
+        display: 'inline-flex',
+        gap: 3,
+        padding: 4,
+        background: '#0d0b18',
+        border: '1px solid rgba(245,243,255,0.09)',
+        borderRadius: 11,
+      }}
+    >
+      {(['roadmap', 'map'] as const).map((k) => (
+        <button
+          key={k}
+          type="button"
+          onClick={() => setTab(k)}
+          style={{
+            fontFamily: 'inherit',
+            fontSize: 12.5,
+            fontWeight: 600,
+            textTransform: 'capitalize',
+            padding: '6px 14px',
+            borderRadius: 8,
+            border: 'none',
+            cursor: 'pointer',
+            background: tab === k ? 'rgba(125,227,255,0.13)' : 'transparent',
+            color: tab === k ? CY : 'rgba(245,243,255,0.4)',
+          }}
+        >
+          {k}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
     <section
       className="view on"
@@ -61,48 +97,52 @@ export default function OverviewSection() {
         overflow: 'hidden',
       }}
     >
-      {/* sub-tab toggle */}
-      <div style={{ flex: 'none', padding: '16px 24px 0' }}>
-        <div
-          style={{
-            display: 'inline-flex',
-            gap: 3,
-            padding: 4,
-            background: '#0d0b18',
-            border: '1px solid rgba(245,243,255,0.09)',
-            borderRadius: 11,
-          }}
-        >
-          {(['roadmap', 'map'] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setTab(k)}
-              style={{
-                fontFamily: 'inherit',
-                fontSize: 12.5,
-                fontWeight: 600,
-                textTransform: 'capitalize',
-                padding: '6px 14px',
-                borderRadius: 8,
-                border: 'none',
-                cursor: 'pointer',
-                background: tab === k ? 'rgba(125,227,255,0.13)' : 'transparent',
-                color: tab === k ? CY : 'rgba(245,243,255,0.4)',
-              }}
-            >
-              {k}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {tab === 'map' ? (
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <OverviewMap />
-        </div>
+        <>
+          <div style={{ flex: 'none', padding: '16px 24px 0' }}>{toggle}</div>
+          <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <OverviewMap />
+          </div>
+        </>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* Overview heading — the roadmap is the tab's main interface, so it carries the title. */}
+          <div
+            style={{
+              flex: 'none',
+              padding: '18px 24px 4px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 16,
+            }}
+          >
+            <div>
+              <h1
+                style={{
+                  fontSize: 21,
+                  fontWeight: 600,
+                  color: '#F5F3FF',
+                  letterSpacing: '-.3px',
+                  margin: 0,
+                }}
+              >
+                Overview
+              </h1>
+              <div
+                style={{
+                  fontSize: 13,
+                  color: 'rgba(245,243,255,.55)',
+                  marginTop: 3,
+                  maxWidth: '62ch',
+                }}
+              >
+                Your whole company as a roadmap — where you are, what byte does next, and how far
+                you’ve come.
+              </div>
+            </div>
+            {toggle}
+          </div>
           {/* roadmap fills the space and is vertically centered, so there's no empty void */}
           <div
             style={{
@@ -112,7 +152,7 @@ export default function OverviewSection() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'center',
-              padding: '10px 24px',
+              padding: '6px 24px',
             }}
           >
             <RoadmapView tasks={tasks} phases={ROADMAP_PHASES} projectName={projectName} />
