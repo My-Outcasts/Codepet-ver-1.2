@@ -14,20 +14,20 @@ import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overvi
 import { ROADMAP_PHASES, DEPT_LABEL, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
-const CY = '#7de3ff';
+const CY = '#0891b2';
 const VIO = '#8b5cf6';
-const TX = '#f5f3ff';
-const TX3 = 'rgba(245,243,255,0.40)';
-const LINE = 'rgba(245,243,255,0.09)';
-const CARD_BG = '#151222';
+const TX = '#1a1626';
+const TX3 = 'rgba(26,22,38,0.40)';
+const LINE = 'rgba(26,22,38,0.09)';
+const CARD_BG = '#ffffff';
 
 // State → the node's icon-dot color + optional corner badge.
 const DOT: Record<RoadmapState, string> = {
-  done: '#34d399',
+  done: '#16a34a',
   current: CY,
   available: CY,
-  needsYou: '#3b82f6',
-  approve: '#fdb022',
+  needsYou: '#2563eb',
+  approve: '#d97706',
   locked: TX3,
 };
 const BADGE: Record<RoadmapState, { text: string; fg: string; bg: string; border: string } | null> =
@@ -37,20 +37,20 @@ const BADGE: Record<RoadmapState, { text: string; fg: string; bg: string; border
     available: {
       text: 'Available',
       fg: CY,
-      bg: 'rgba(125,227,255,0.14)',
-      border: 'rgba(125,227,255,0.4)',
+      bg: 'rgba(8,145,178,0.14)',
+      border: 'rgba(8,145,178,0.4)',
     },
     needsYou: {
       text: 'Needs you',
-      fg: '#3b82f6',
-      bg: 'rgba(59,130,246,0.16)',
-      border: 'rgba(59,130,246,0.4)',
+      fg: '#2563eb',
+      bg: 'rgba(37,99,235,0.16)',
+      border: 'rgba(37,99,235,0.4)',
     },
     approve: {
       text: 'Approve',
-      fg: '#fdb022',
-      bg: 'rgba(253,176,34,0.16)',
-      border: 'rgba(253,176,34,0.4)',
+      fg: '#d97706',
+      bg: 'rgba(217,119,6,0.16)',
+      border: 'rgba(217,119,6,0.4)',
     },
     locked: null,
   };
@@ -90,13 +90,13 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
         padding: '0 12px',
         borderRadius: 11,
         background: current
-          ? 'linear-gradient(180deg, rgba(125,227,255,0.10), rgba(125,227,255,0.02))'
+          ? 'linear-gradient(180deg, rgba(8,145,178,0.10), rgba(8,145,178,0.02))'
           : done
-            ? 'rgba(52,211,153,0.05)'
+            ? 'rgba(22,163,74,0.05)'
             : CARD_BG,
-        border: `1px solid ${current ? 'rgba(125,227,255,0.6)' : done ? 'rgba(52,211,153,0.22)' : LINE}`,
+        border: `1px solid ${current ? 'rgba(8,145,178,0.6)' : done ? 'rgba(22,163,74,0.22)' : LINE}`,
         boxShadow: current
-          ? '0 0 0 1px rgba(125,227,255,0.2), 0 10px 30px -12px rgba(125,227,255,0.6)'
+          ? '0 0 0 1px rgba(8,145,178,0.2), 0 10px 30px -12px rgba(8,145,178,0.6)'
           : 'none',
         opacity: locked ? 0.62 : 1,
       }}
@@ -110,11 +110,11 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            background: '#0d0b18',
-            border: '1px solid rgba(125,227,255,0.5)',
+            background: '#ffffff',
+            border: '1px solid rgba(8,145,178,0.5)',
             borderRadius: 999,
             padding: '3px 9px 3px 4px',
-            boxShadow: '0 6px 20px -8px rgba(125,227,255,0.6)',
+            boxShadow: '0 6px 20px -8px rgba(8,145,178,0.6)',
           }}
         >
           <span
@@ -181,8 +181,8 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
           flex: 'none',
           display: 'grid',
           placeItems: 'center',
-          background: done ? 'rgba(52,211,153,0.14)' : 'rgba(245,243,255,0.06)',
-          border: `1px solid ${done ? 'rgba(52,211,153,0.3)' : LINE}`,
+          background: done ? 'rgba(22,163,74,0.14)' : 'rgba(26,22,38,0.06)',
+          border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : LINE}`,
         }}
       >
         <span
@@ -218,7 +218,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             gap: 5,
             marginTop: 4,
             fontSize: 10,
-            color: 'rgba(245,243,255,0.64)',
+            color: 'rgba(26,22,38,0.64)',
           }}
         >
           <span
@@ -275,7 +275,7 @@ export default function RoadmapView({
         msOverflowStyle: 'none',
       }}
     >
-      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #7de3ff;outline-offset:2px}`}</style>
+      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #0891b2;outline-offset:2px}`}</style>
       <div style={{ position: 'relative', width: L.width, minWidth: L.width }}>
         {/* phase headers */}
         <div style={{ position: 'relative', height: 28, marginBottom: 6 }}>
@@ -297,8 +297,8 @@ export default function RoadmapView({
                   letterSpacing: '0.14em',
                   textTransform: 'uppercase',
                   color: c.current ? CY : TX3,
-                  background: c.current ? 'rgba(125,227,255,0.08)' : 'rgba(245,243,255,0.05)',
-                  border: `1px solid ${c.current ? 'rgba(125,227,255,0.4)' : LINE}`,
+                  background: c.current ? 'rgba(8,145,178,0.08)' : 'rgba(26,22,38,0.05)',
+                  border: `1px solid ${c.current ? 'rgba(8,145,178,0.4)' : LINE}`,
                   padding: '4px 9px',
                   borderRadius: 7,
                 }}
@@ -335,7 +335,7 @@ export default function RoadmapView({
                 key={`d${i}`}
                 d={e.d}
                 fill="none"
-                stroke="rgba(245,243,255,0.18)"
+                stroke="rgba(26,22,38,0.18)"
                 strokeWidth={1.5}
                 strokeDasharray="3 4"
               />
@@ -374,8 +374,7 @@ export default function RoadmapView({
                 width: L.root.w,
                 height: L.root.h,
                 borderRadius: 16,
-                background:
-                  'linear-gradient(160deg, rgba(139,92,246,0.16), rgba(125,227,255,0.06))',
+                background: 'linear-gradient(160deg, rgba(139,92,246,0.16), rgba(8,145,178,0.06))',
                 border: '1px solid rgba(139,92,246,0.45)',
                 boxShadow:
                   '0 0 0 1px rgba(139,92,246,0.12), 0 16px 44px -16px rgba(139,92,246,0.5)',

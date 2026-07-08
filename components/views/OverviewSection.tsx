@@ -36,7 +36,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
   ),
 });
 
-const CY = '#7de3ff';
+const CY = '#0891b2';
 
 export default function OverviewSection() {
   const { brief, nextStep, library, tracking, tick, openDept, portalToTask } = useApp();
@@ -119,8 +119,8 @@ export default function OverviewSection() {
         display: 'inline-flex',
         gap: 3,
         padding: 4,
-        background: '#0d0b18',
-        border: '1px solid rgba(245,243,255,0.09)',
+        background: '#ffffff',
+        border: '1px solid rgba(26,22,38,0.09)',
         borderRadius: 11,
       }}
     >
@@ -138,8 +138,8 @@ export default function OverviewSection() {
             borderRadius: 8,
             border: 'none',
             cursor: 'pointer',
-            background: tab === k ? 'rgba(125,227,255,0.13)' : 'transparent',
-            color: tab === k ? CY : 'rgba(245,243,255,0.4)',
+            background: tab === k ? 'rgba(8,145,178,0.13)' : 'transparent',
+            color: tab === k ? CY : 'rgba(26,22,38,0.4)',
           }}
         >
           {k}
@@ -154,7 +154,7 @@ export default function OverviewSection() {
       style={{
         position: 'absolute',
         inset: 0,
-        background: '#05040b',
+        background: '#f4f3f8',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -185,7 +185,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 21,
                   fontWeight: 600,
-                  color: '#F5F3FF',
+                  color: '#1a1626',
                   letterSpacing: '-.3px',
                   margin: 0,
                 }}
@@ -195,7 +195,7 @@ export default function OverviewSection() {
               <div
                 style={{
                   fontSize: 13,
-                  color: 'rgba(245,243,255,.55)',
+                  color: 'rgba(26,22,38,.55)',
                   marginTop: 3,
                 }}
               >
@@ -211,16 +211,16 @@ export default function OverviewSection() {
                   marginTop: 11,
                   fontFamily: 'ui-monospace, monospace',
                   fontSize: 11.5,
-                  color: 'rgba(245,243,255,0.5)',
+                  color: 'rgba(26,22,38,0.5)',
                 }}
               >
-                <span style={{ color: '#f5f3ff', fontWeight: 700 }}>{prog.pct}%</span>
+                <span style={{ color: '#1a1626', fontWeight: 700 }}>{prog.pct}%</span>
                 <span
                   style={{
                     width: 72,
                     height: 5,
                     borderRadius: 3,
-                    background: 'rgba(245,243,255,0.1)',
+                    background: 'rgba(26,22,38,0.1)',
                     overflow: 'hidden',
                   }}
                 >
@@ -236,8 +236,8 @@ export default function OverviewSection() {
                 <span>
                   {prog.done}/{prog.total} moves
                 </span>
-                {needsYou > 0 && <span style={{ color: '#3b82f6' }}>needs you {needsYou}</span>}
-                {approve > 0 && <span style={{ color: '#fdb022' }}>approve {approve}</span>}
+                {needsYou > 0 && <span style={{ color: '#2563eb' }}>needs you {needsYou}</span>}
+                {approve > 0 && <span style={{ color: '#d97706' }}>approve {approve}</span>}
               </div>
             </div>
             <div
@@ -253,9 +253,9 @@ export default function OverviewSection() {
                   fontFamily: 'ui-monospace, monospace',
                   fontSize: 10.5,
                   letterSpacing: '0.06em',
-                  color: generating ? 'rgba(245,243,255,0.4)' : CY,
+                  color: generating ? 'rgba(26,22,38,0.4)' : CY,
                   background: 'transparent',
-                  border: '1px solid rgba(125,227,255,0.32)',
+                  border: '1px solid rgba(8,145,178,0.32)',
                   borderRadius: 8,
                   padding: '5px 11px',
                   cursor: generating ? 'default' : 'pointer',
@@ -281,9 +281,8 @@ export default function OverviewSection() {
                 gap: 12,
                 padding: '10px 12px 10px 15px',
                 borderRadius: 12,
-                background:
-                  'linear-gradient(180deg, rgba(125,227,255,0.10), rgba(125,227,255,0.02))',
-                border: '1px solid rgba(125,227,255,0.4)',
+                background: 'linear-gradient(180deg, rgba(8,145,178,0.10), rgba(8,145,178,0.02))',
+                border: '1px solid rgba(8,145,178,0.4)',
               }}
             >
               <span
@@ -302,7 +301,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 13.5,
                   fontWeight: 600,
-                  color: '#f5f3ff',
+                  color: '#1a1626',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -377,10 +376,10 @@ function ProofStrip({
   hours: number;
 }) {
   const stats: { accent: string; value: string; label: string }[] = [
-    { accent: '#7de3ff', value: String(shipped), label: 'shipped' },
+    { accent: '#0891b2', value: String(shipped), label: 'shipped' },
     { accent: '#8b5cf6', value: String(sessions), label: 'sessions' },
-    { accent: '#34d399', value: String(commits), label: 'commits' },
-    { accent: '#fdb022', value: `~${hours}h`, label: 'saved' },
+    { accent: '#16a34a', value: String(commits), label: 'commits' },
+    { accent: '#d97706', value: `~${hours}h`, label: 'saved' },
   ];
   return (
     <div
@@ -407,16 +406,13 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
         overflow: 'hidden',
         borderRadius: 16,
         padding: '14px 18px 15px',
-        // frosted glass: translucent gradient + blur + light rim + inner top highlight
-        background:
-          'linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035) 55%, rgba(255,255,255,0.015))',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255,255,255,0.12)',
-        boxShadow: '0 10px 34px -14px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.18)',
+        // light frosted card: white with a subtle accent-tinted top, soft shadow
+        background: `linear-gradient(145deg, ${accent}12, #ffffff 55%)`,
+        border: '1px solid rgba(26,22,38,0.08)',
+        boxShadow: '0 6px 20px -10px rgba(26,22,38,0.18)',
       }}
     >
-      {/* a soft accent sheen catching the top corner of the glass */}
+      {/* a soft accent sheen catching the top corner */}
       <div
         aria-hidden
         style={{
@@ -426,7 +422,7 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
           width: 92,
           height: 92,
           borderRadius: '50%',
-          background: `radial-gradient(circle, ${accent}33, transparent 68%)`,
+          background: `radial-gradient(circle, ${accent}26, transparent 68%)`,
           pointerEvents: 'none',
         }}
       />
@@ -435,7 +431,7 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
           position: 'relative',
           fontSize: 27,
           fontWeight: 750,
-          color: '#f5f3ff',
+          color: '#1a1626',
           fontVariantNumeric: 'tabular-nums',
           lineHeight: 1,
           letterSpacing: '-0.02em',
@@ -454,7 +450,7 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
           fontSize: 10.5,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          color: 'rgba(245,243,255,0.6)',
+          color: 'rgba(26,22,38,0.6)',
         }}
       >
         <span
