@@ -2190,6 +2190,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildIntakeActive(false);
     setBuildResumed(false);
     buildEndedNudged.current = false;
+    // Leave the build view too — with no session or plan left, staying here
+    // renders an empty "waiting…" DURING screen (mirror of armBuild's setView).
+    setView('overview');
   }, [buildLocal, buildSessionId]);
 
   const value = useMemo<AppState>(
