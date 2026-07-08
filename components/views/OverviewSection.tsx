@@ -38,7 +38,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 const CY = '#7c3aed';
 // The two cards sit side by side, each ~HUD-sized (matching the Second Brain "building your
 // company" card). The row is capped so they stay small.
-const PANEL_W = 'min(580px, calc(100% - 48px))';
+const PANEL_W = 'min(480px, calc(100% - 48px))';
 
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
@@ -220,7 +220,7 @@ export default function OverviewSection() {
             <div>
               <h1
                 style={{
-                  fontSize: 25,
+                  fontSize: 28,
                   fontWeight: 650,
                   color: '#1f1b15',
                   letterSpacing: '-.5px',
@@ -231,7 +231,7 @@ export default function OverviewSection() {
               </h1>
               <div
                 style={{
-                  fontSize: 14.5,
+                  fontSize: 15,
                   lineHeight: 1.45,
                   color: 'rgba(31,27,21,.62)',
                   marginTop: 4,
