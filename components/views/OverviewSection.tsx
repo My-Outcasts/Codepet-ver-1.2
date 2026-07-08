@@ -68,6 +68,10 @@ export default function OverviewSection() {
 
   const currentPhase = stageToPhase(brief.stage);
   const phaseTasks = defs.filter((t) => t.phase === currentPhase);
+  // the upcoming milestone (the phase after the current one) — the "next" pill on the bar
+  const curPhaseIdx = ROADMAP_PHASES.findIndex((p) => p.key === currentPhase);
+  const nextMilestone =
+    ROADMAP_PHASES[curPhaseIdx + 1]?.name ?? ROADMAP_PHASES[ROADMAP_PHASES.length - 1]?.name ?? '';
   // Guard the root label: ignore a placeholder-y project name (empty, single char, or all
   // digits like "1") and fall back to "Your company" rather than showing junk on the hero node.
   const rawName = brief.projectName?.trim() ?? '';
@@ -236,42 +240,82 @@ export default function OverviewSection() {
                 Your whole company as a roadmap — where you are, what byte does next, and how far
                 you’ve come.
               </div>
-              {/* real momentum + what's on your plate, from live DEPTS */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  marginTop: 11,
-                  fontFamily: 'var(--sans)',
-                  fontSize: 11.5,
-                  color: 'rgba(31,27,21,0.5)',
-                }}
-              >
-                <span style={{ color: '#1f1b15', fontWeight: 700 }}>{prog.pct}%</span>
-                <span
+              {/* progress — a glowing purple bar (the "project progress" card technique: a
+                  gradient fill with a blurred clone behind it for the bloom). Real DEPTS data. */}
+              <style>{`.rm-pfill::before{content:"";position:absolute;inset:-5px;border-radius:999px;background:inherit;filter:blur(11px);opacity:.5;z-index:-1}`}</style>
+              <div style={{ marginTop: 13, maxWidth: 380 }}>
+                <div
                   style={{
-                    width: 72,
-                    height: 5,
-                    borderRadius: 3,
-                    background: 'rgba(31,27,21,0.1)',
-                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 10,
+                    marginBottom: 8,
+                    fontFamily: 'var(--sans)',
                   }}
                 >
                   <span
                     style={{
-                      display: 'block',
+                      fontSize: 25,
+                      fontWeight: 750,
+                      color: 'var(--ink)',
+                      letterSpacing: '-0.03em',
+                      lineHeight: 1,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {prog.pct}
+                    <span style={{ fontSize: 15, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                  </span>
+                  <span style={{ fontSize: 12, color: 'rgba(31,27,21,0.5)' }}>
+                    {prog.done}/{prog.total} moves
+                    {needsYou > 0 && (
+                      <span style={{ color: '#2563eb' }}> · needs you {needsYou}</span>
+                    )}
+                    {approve > 0 && <span style={{ color: '#d97706' }}> · approve {approve}</span>}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    position: 'relative',
+                    height: 16,
+                    borderRadius: 999,
+                    background: 'rgba(31,27,21,0.07)',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div
+                    className="rm-pfill"
+                    style={{
+                      position: 'relative',
                       height: '100%',
                       width: `${prog.pct}%`,
-                      background: CY,
+                      minWidth: prog.pct > 0 ? 16 : 0,
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                      boxShadow: '0 0 12px 1px rgba(124,58,237,0.5)',
+                      transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
                     }}
                   />
-                </span>
-                <span>
-                  {prog.done}/{prog.total} moves
-                </span>
-                {needsYou > 0 && <span style={{ color: '#2563eb' }}>needs you {needsYou}</span>}
-                {approve > 0 && <span style={{ color: '#d97706' }}>approve {approve}</span>}
+                  {nextMilestone && (
+                    <span
+                      style={{
+                        position: 'absolute',
+                        right: 5,
+                        fontFamily: 'var(--sans)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: 'var(--accent)',
+                        background: 'rgba(124,58,237,0.1)',
+                        padding: '3px 9px',
+                        borderRadius: 999,
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      Next: {nextMilestone}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
             {toggle}
