@@ -9063,8 +9063,11 @@ body {
   color: var(--t-1);
   letter-spacing: -0.2px;
 }
-.bc-rc .v.ok {
+.bc-rc .v.bc-ok {
   color: var(--teal);
+}
+.bc-rc .v.bc-warn {
+  color: #b98a1d;
 }
 .bc-checklist {
   list-style: none;

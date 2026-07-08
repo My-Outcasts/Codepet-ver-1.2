@@ -306,15 +306,17 @@ function EndStep({
               <label>built</label>
               <div className="v">{built}</div>
             </div>
+            {/* Modifier classes are bc- prefixed: a bare `ok` collides with the
+                global ✓-disc rule (Toast/doneflag) and paints a violet dot here. */}
             <div className="bc-rc">
               <label>spent</label>
-              <div className={`v${underBudget ? ' ok' : ' warn'}`}>
+              <div className={`v${underBudget ? ' bc-ok' : ' bc-warn'}`}>
                 {actions} of {target} planned
               </div>
             </div>
             <div className="bc-rc">
               <label>committed</label>
-              <div className={`v${commits >= 1 ? ' ok' : ''}`}>
+              <div className={`v${commits >= 1 ? ' bc-ok' : ''}`}>
                 {commits >= 1 ? `${commits} ✓` : '—'}
               </div>
             </div>
