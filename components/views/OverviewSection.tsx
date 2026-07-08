@@ -212,23 +212,28 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
         flex: 1,
         position: 'relative',
         overflow: 'hidden',
-        borderRadius: 14,
-        padding: '13px 16px 14px',
-        background: `linear-gradient(150deg, ${accent}24, ${accent}0d 46%, rgba(21,18,34,0.55))`,
-        border: `1px solid ${accent}38`,
+        borderRadius: 16,
+        padding: '14px 18px 15px',
+        // frosted glass: translucent gradient + blur + light rim + inner top highlight
+        background:
+          'linear-gradient(145deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035) 55%, rgba(255,255,255,0.015))',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '0 10px 34px -14px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.18)',
       }}
     >
-      {/* soft accent glow in the corner */}
+      {/* a soft accent sheen catching the top corner of the glass */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
-          top: -26,
-          right: -26,
-          width: 78,
-          height: 78,
+          top: -32,
+          right: -22,
+          width: 92,
+          height: 92,
           borderRadius: '50%',
-          background: `radial-gradient(circle, ${accent}45, transparent 70%)`,
+          background: `radial-gradient(circle, ${accent}33, transparent 68%)`,
           pointerEvents: 'none',
         }}
       />
@@ -248,14 +253,26 @@ function StatCard({ accent, value, label }: { accent: string; value: string; lab
       <div
         style={{
           position: 'relative',
-          marginTop: 7,
+          marginTop: 8,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
           fontFamily: 'ui-monospace, monospace',
           fontSize: 10.5,
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          color: accent,
+          color: 'rgba(245,243,255,0.6)',
         }}
       >
+        <span
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: '50%',
+            background: accent,
+            boxShadow: `0 0 8px ${accent}`,
+          }}
+        />
         {label}
       </div>
     </div>
