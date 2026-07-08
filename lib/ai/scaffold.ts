@@ -7,6 +7,16 @@
 import { authHeader } from './runTask';
 import type { CompanyBrief } from '../firebase/schema';
 import { applyScaffold, persistScaffold, type ScaffoldDept } from '../firebase/companyData';
+import { DEPTS_SEED } from '../data';
+
+// All-or-nothing coverage: only a scaffold that returned an entry for EVERY department is a
+// real tailoring. A partial one would leave some departments on the Codepet seed while the
+// map claims to be tailored — so we reject it (keep the example, offer Retry) rather than
+// mislabel it.
+export function coversAllDepartments(generated: { k?: unknown }[]): boolean {
+  const keys = new Set(generated.map((g) => g.k));
+  return DEPTS_SEED.every((d) => keys.has(d.k));
+}
 
 /**
  * Generate + apply the stage-appropriate company. Returns the number of departments
@@ -27,9 +37,17 @@ export async function scaffoldCompany(
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       return { changed: 0, failure: data.error || 'generation_failed' };
     }
-    const data = (await res.json()) as { scaffold?: { departments?: ScaffoldDept[] } };
+    const data = (await res.json()) as {
+      scaffold?: { departments?: ScaffoldDept[] };
+      noBrief?: boolean;
+    };
+    // No real brief to tailor from → neutral (not a failure): the example seed stands and
+    // the banner invites "Generate my plan".
+    if (data.noBrief) return { changed: 0, failure: null };
     const generated = data.scaffold?.departments ?? [];
     if (!generated.length) return { changed: 0, failure: 'empty' };
+    // All-or-nothing: a partial scaffold would leave Codepet seed in the missing departments.
+    if (!coversAllDepartments(generated)) return { changed: 0, failure: 'incomplete' };
 
     const changed = applyScaffold(generated);
     if (!changed.length) return { changed: 0, failure: 'empty' };
