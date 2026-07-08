@@ -471,7 +471,18 @@ export default function OverviewView() {
     tookControlRef.current = true; // don't let a settle-time auto-fit override this
     noteInteract(); // pause auto-rotate so the framed shot holds
     const aspect = dims.w / Math.max(1, dims.h);
-    const k = 2.7 * Math.max(1, 1.2 / aspect);
+    // Scale the pull-back for narrow viewports so the node stays framed, not filling it.
+    const wide = Math.max(1, 1.2 / aspect);
+    const dist = Math.hypot(n.x, n.y, n.z);
+    // The center node sits at the origin, so `pos * k` collapses to (0,0,0) — the camera
+    // would end up INSIDE the node. Frame it from a fixed distance instead (far enough to
+    // show its branches radiating out), looking straight at it.
+    if (dist < 1) {
+      const D = 360 * wide;
+      fg.cameraPosition({ x: 0, y: 0, z: D }, { x: 0, y: 0, z: 0 }, ms);
+      return;
+    }
+    const k = 2.7 * wide;
     const look = { x: n.x * 0.45, y: n.y * 0.45, z: n.z * 0.45 };
     fg.cameraPosition({ x: n.x * k, y: n.y * k, z: n.z * k }, look, ms);
   };
@@ -929,7 +940,9 @@ export default function OverviewView() {
             controlType="orbit"
             nodeVal={(n) => {
               if (n.id === beaconId) return 2.8 + pulse * 1.0; // the "start here" star
-              if (tourDim && n.id === tourTargetId) return n.val * 2.1; // lift the tour focus
+              // Lift the tour focus so it pops — additive (not a multiplier) so a small task
+              // dot gets noticeably bigger while the already-large center node isn't bloated.
+              if (tourDim && n.id === tourTargetId && n.kind !== 'project') return n.val + 2.5;
               return hoverId === n.id ? n.val * 1.7 : n.val;
             }}
             nodeColor={(n) => {
