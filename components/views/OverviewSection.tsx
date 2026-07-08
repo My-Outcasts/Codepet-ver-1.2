@@ -243,10 +243,11 @@ export default function OverviewSection() {
           <div
             style={{
               flex: 'none',
+              order: 3,
               alignSelf: 'flex-start',
               width: PANEL_W,
               boxSizing: 'border-box',
-              margin: '10px 0 0 24px',
+              margin: '8px 0 18px 24px',
               padding: '12px 18px 13px',
               borderRadius: 14,
               background: '#ffffff',
@@ -353,12 +354,13 @@ export default function OverviewSection() {
             <div
               style={{
                 flex: 'none',
+                order: 2,
                 alignSelf: 'flex-start',
                 width: PANEL_W,
                 boxSizing: 'border-box',
                 position: 'relative',
                 overflow: 'hidden',
-                margin: '6px 0 0 24px',
+                margin: '12px 0 0 24px',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
@@ -466,10 +468,12 @@ export default function OverviewSection() {
               </button>
             </div>
           )}
-          {/* roadmap fills the space and is vertically centered, so there's no empty void */}
+          {/* roadmap sits directly under the header (the hero); the two cards drop below it
+              via flex order — roadmap(1) → do-this-next(2) → project-progress(3). */}
           <div
             style={{
               flex: 1,
+              order: 1,
               overflowY: 'auto',
               overflowX: 'hidden',
               display: 'flex',
