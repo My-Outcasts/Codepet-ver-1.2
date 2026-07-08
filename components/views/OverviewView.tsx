@@ -199,7 +199,14 @@ export default function OverviewView() {
     markIntroSeen,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
-  const hasBrief = !!(brief.oneLiner?.trim() || brief.summary?.trim() || brief.projectName?.trim());
+  // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
+  // Retry re-plans in place; otherwise "Generate my plan" reopens the wizard to collect one.
+  const hasBrief = !!(
+    brief.oneLiner?.trim() ||
+    brief.summary?.trim() ||
+    brief.projectName?.trim() ||
+    brief.notes?.trim()
+  );
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
