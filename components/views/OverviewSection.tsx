@@ -4,16 +4,17 @@
 // lazy-loaded (three.js is only fetched when you actually open it). This wrapper is
 // deliberately thin and leaves OverviewView untouched, so it doesn't conflict with ongoing
 // work on that component — the only app-wide change is one line in AppRoot pointing here.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
 import { nextAction } from '@/lib/roadmap';
 import { overviewProgress } from '@/lib/overview/progress';
+import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
-import type { RoadmapTask } from '@/lib/overview/roadmapModel';
+import type { RoadmapTask, RoadmapTaskDef } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
 const OverviewMap = dynamic(() => import('./OverviewView'), {
@@ -42,8 +43,30 @@ export default function OverviewSection() {
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
+  // byte's real, per-company roadmap once generated; until then the canonical template.
+  const [genRoadmap, setGenRoadmap] = useState<RoadmapTaskDef[] | null>(null);
+  const [generating, setGenerating] = useState(false);
+  useEffect(() => {
+    let live = true;
+    loadSavedRoadmap().then((r) => {
+      if (live && r) setGenRoadmap(r);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+  const onGenerate = () => {
+    setGenerating(true);
+    generateRoadmap(brief)
+      .then((r) => {
+        if (r) setGenRoadmap(r);
+      })
+      .finally(() => setGenerating(false));
+  };
+  const defs = genRoadmap ?? ROADMAP_TEMPLATE;
+
   const currentPhase = stageToPhase(brief.stage);
-  const phaseTasks = ROADMAP_TEMPLATE.filter((t) => t.phase === currentPhase);
+  const phaseTasks = defs.filter((t) => t.phase === currentPhase);
   const projectName = brief.projectName?.trim() || 'Your company';
 
   // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
@@ -63,7 +86,7 @@ export default function OverviewSection() {
   // "do this next" hero and clicking that node runs the very same task.
   const currentTaskId =
     (move && phaseTasks.find((t) => t.dept === move.deptK)?.id) || phaseTasks[0]?.id || null;
-  let tasks = applyProgress(ROADMAP_TEMPLATE, { currentPhase, currentTaskId });
+  let tasks = applyProgress(defs, { currentPhase, currentTaskId });
   if (move && currentTaskId) {
     tasks = tasks.map((t) =>
       t.id === currentTaskId ? { ...t, title: move.title, dept: move.deptK } : t,
@@ -217,7 +240,34 @@ export default function OverviewSection() {
                 {approve > 0 && <span style={{ color: '#fdb022' }}>approve {approve}</span>}
               </div>
             </div>
-            {toggle}
+            <div
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 9 }}
+            >
+              {toggle}
+              <button
+                type="button"
+                onClick={onGenerate}
+                disabled={generating}
+                title="byte generates a roadmap tailored to your company"
+                style={{
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: 10.5,
+                  letterSpacing: '0.06em',
+                  color: generating ? 'rgba(245,243,255,0.4)' : CY,
+                  background: 'transparent',
+                  border: '1px solid rgba(125,227,255,0.32)',
+                  borderRadius: 8,
+                  padding: '5px 11px',
+                  cursor: generating ? 'default' : 'pointer',
+                }}
+              >
+                {generating
+                  ? 'byte is planning…'
+                  : genRoadmap
+                    ? '↻ regenerate roadmap'
+                    : '✦ generate my roadmap'}
+              </button>
+            </div>
           </div>
 
           {/* the single actionable next move — Start runs byte on the real task */}
