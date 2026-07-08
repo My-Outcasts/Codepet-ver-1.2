@@ -38,7 +38,7 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
 const CY = '#7c3aed';
 
 export default function OverviewSection() {
-  const { brief, nextStep, library, tracking, tick, openDept, portalToTask } = useApp();
+  const { brief, nextStep, library, tick, openDept, portalToTask } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
@@ -107,6 +107,9 @@ export default function OverviewSection() {
     total: tasks.length,
     pct: tasks.length ? Math.round((roadmapDone / tasks.length) * 100) : 0,
   };
+  // breadth of progress: how many of the company's departments are underway (non-dormant)
+  const totalAreas = DEPTS.length;
+  const areasBuilding = DEPTS.filter((d) => !d.later).length;
   let needsYou = 0;
   let approve = 0;
   for (const d of DEPTS) {
@@ -410,9 +413,8 @@ export default function OverviewSection() {
           </div>
           <ProofStrip
             shipped={library.length}
-            sessions={tracking.sessions}
-            commits={tracking.commits}
-            hours={tracking.hoursSaved}
+            areasBuilding={areasBuilding}
+            totalAreas={totalAreas}
           />
         </div>
       )}
@@ -420,25 +422,22 @@ export default function OverviewSection() {
   );
 }
 
-// Progress at a glance — a row of colourful glowing stat cards. One accent per metric, a
-// soft corner glow, a big number. Compact (one row, so the roadmap stays the hero) but
-// vivid. Shipped is byte's approved deliverables; the rest is real Claude Code activity.
+// Progress at a glance — two glowing stat cards that always carry real numbers (no dead
+// zeros): SHIPPED = byte's approved deliverables (tangible output); AREAS BUILDING = how many
+// of the company's departments are underway (breadth). The headline % + roadmap already own
+// the journey progress, so this strip stays proof-of-work, not a repeat of the percentage.
 function ProofStrip({
   shipped,
-  sessions,
-  commits,
-  hours,
+  areasBuilding,
+  totalAreas,
 }: {
   shipped: number;
-  sessions: number;
-  commits: number;
-  hours: number;
+  areasBuilding: number;
+  totalAreas: number;
 }) {
   const stats: { accent: string; value: string; label: string }[] = [
     { accent: '#7c3aed', value: String(shipped), label: 'shipped' },
-    { accent: '#9333ea', value: String(sessions), label: 'sessions' },
-    { accent: '#16a34a', value: String(commits), label: 'commits' },
-    { accent: '#d97706', value: `~${hours}h`, label: 'saved' },
+    { accent: '#2dd4bf', value: `${areasBuilding}/${totalAreas}`, label: 'areas building' },
   ];
   return (
     <div
