@@ -190,7 +190,7 @@ export default function OverviewSection() {
         flexDirection: 'column',
         overflow: 'hidden',
         // anchor the app's sans (Google Sans Flex) so all bare text/buttons match the app,
-        // not whatever `body` happens to resolve to; mono labels override with var(--mono)
+        // not whatever `body` happens to resolve to (all labels use Google Sans Flex now)
         fontFamily: 'var(--sans)',
       }}
     >
@@ -243,7 +243,7 @@ export default function OverviewSection() {
                   alignItems: 'center',
                   gap: 12,
                   marginTop: 11,
-                  fontFamily: 'var(--mono)',
+                  fontFamily: 'var(--sans)',
                   fontSize: 11.5,
                   color: 'rgba(31,27,21,0.5)',
                 }}
@@ -345,7 +345,7 @@ export default function OverviewSection() {
               <span
                 style={{
                   position: 'relative',
-                  fontFamily: 'var(--mono)',
+                  fontFamily: 'var(--sans)',
                   fontSize: 10,
                   letterSpacing: '0.13em',
                   textTransform: 'uppercase',
@@ -455,73 +455,58 @@ function ProofStrip({
   );
 }
 
+// A concise one-line stat: accent dot · number · label, on a compact white card.
 function StatCard({ accent, value, label }: { accent: string; value: string; label: string }) {
   return (
     <div
       style={{
         flex: 1,
-        position: 'relative',
-        overflow: 'hidden',
-        borderRadius: 16,
-        padding: '14px 18px 15px',
-        // light frosted card: white with a subtle accent-tinted top, soft shadow
-        background: `linear-gradient(145deg, ${accent}12, #ffffff 55%)`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '9px 15px',
+        borderRadius: 11,
+        background: '#ffffff',
         border: '1px solid rgba(31,27,21,0.08)',
-        boxShadow: '0 6px 20px -10px rgba(31,27,21,0.18)',
+        boxShadow: '0 3px 12px -9px rgba(31,27,21,0.22)',
       }}
     >
-      {/* a soft accent sheen catching the top corner */}
-      <div
+      <span
         aria-hidden
         style={{
-          position: 'absolute',
-          top: -32,
-          right: -22,
-          width: 92,
-          height: 92,
+          width: 7,
+          height: 7,
           borderRadius: '50%',
-          background: `radial-gradient(circle, ${accent}26, transparent 68%)`,
-          pointerEvents: 'none',
+          flex: 'none',
+          background: accent,
+          boxShadow: `0 0 8px ${accent}99`,
         }}
       />
-      <div
+      <span
         style={{
-          position: 'relative',
-          fontSize: 27,
+          fontFamily: 'var(--sans)',
+          fontSize: 19,
           fontWeight: 750,
-          color: '#1f1b15',
+          color: 'var(--ink)',
           fontVariantNumeric: 'tabular-nums',
           lineHeight: 1,
-          letterSpacing: '-0.02em',
+          letterSpacing: '-0.01em',
         }}
       >
         {value}
-      </div>
-      <div
+      </span>
+      <span
         style={{
-          position: 'relative',
-          marginTop: 8,
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          fontFamily: 'var(--mono)',
+          fontFamily: 'var(--sans)',
           fontSize: 10.5,
-          letterSpacing: '0.12em',
+          fontWeight: 600,
           textTransform: 'uppercase',
-          color: 'rgba(31,27,21,0.6)',
+          letterSpacing: '0.09em',
+          color: 'rgba(31,27,21,0.5)',
         }}
       >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: accent,
-            boxShadow: `0 0 8px ${accent}`,
-          }}
-        />
         {label}
-      </div>
+      </span>
     </div>
   );
 }

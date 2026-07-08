@@ -127,7 +127,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
           />
           <span
             style={{
-              fontFamily: 'var(--mono)',
+              fontFamily: 'var(--sans)',
               fontSize: 9.5,
               letterSpacing: '0.06em',
               textTransform: 'uppercase',
@@ -144,7 +144,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             position: 'absolute',
             top: -8,
             right: 10,
-            fontFamily: 'var(--mono)',
+            fontFamily: 'var(--sans)',
             fontSize: 8.5,
             letterSpacing: '0.05em',
             textTransform: 'uppercase',
@@ -293,7 +293,7 @@ export default function RoadmapView({
             >
               <span
                 style={{
-                  fontFamily: 'var(--mono)',
+                  fontFamily: 'var(--sans)',
                   fontSize: 10.5,
                   letterSpacing: '0.14em',
                   textTransform: 'uppercase',
@@ -306,7 +306,7 @@ export default function RoadmapView({
               >
                 {c.name}
               </span>
-              <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: TX3 }}>
+              <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: TX3 }}>
                 {c.done}/{c.total}
               </span>
             </div>
@@ -411,7 +411,7 @@ export default function RoadmapView({
                   style={{
                     display: 'block',
                     marginTop: 5,
-                    fontFamily: 'var(--mono)',
+                    fontFamily: 'var(--sans)',
                     fontSize: 9.5,
                     letterSpacing: '0.14em',
                     textTransform: 'uppercase',
