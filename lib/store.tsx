@@ -1155,7 +1155,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
       }
     });
-  }, [brief, companyId, bump, computeNextStep]);
+  }, [brief, companyId, bump, computeNextStep, toast]);
   const setInstalledFlag = useCallback((value: boolean) => {
     setInstalled(value);
     try {
@@ -1431,7 +1431,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           failMessage: 'Couldn’t save this draft — it may be lost if you reload.',
         });
     },
-    [companyId, bump],
+    [companyId, bump, toast],
   );
 
   // Turn a named toolkit item ON for the founder — byte's "I'll connect it" from chat.
