@@ -14,7 +14,7 @@ import {
 } from './roadmapModel';
 
 // Geometry — one source of truth for card size + spacing.
-export const CARD_W = 186;
+export const CARD_W = 208;
 export const CARD_H = 64;
 export const COL_GAP = 60; // horizontal gap between phase columns
 export const ROW_PITCH = 96; // vertical distance between task rows (card + gap)
@@ -26,6 +26,11 @@ export const ROOT_LEFT = 12;
 export const ROOT_GAP = 48; // gap between the root node and the first phase column
 
 const ROOT_RIGHT = ROOT_LEFT + ROOT_W;
+
+// Canonical department lane order (top → bottom): product first, then growth-facing
+// functions, then the company-shell functions. Departments read as horizontal tracks in
+// this order; any department not listed falls in after these, in first-appearance order.
+const DEPT_LANE_ORDER = ['eng', 'design', 'mkt', 'sales', 'support', 'ops', 'fin', 'legal'];
 
 export interface PositionedNode {
   task: RoadmapTask;
@@ -105,15 +110,72 @@ export function layoutRoadmap(
   hasRoot = true,
 ): RoadmapLayout {
   const colOf = new Map(phases.map((p, i) => [p.key, i]));
-  const rowCounter = new Map<string, number>(); // phase key → next row
+
+  // ── Department lanes ──────────────────────────────────────────────────────────────────
+  // Each department keeps a single horizontal row (a "lane") across the columns it appears
+  // in, so a function reads as a track left-to-right (like the reference tech-tree). Depts
+  // that never share a column pack onto the same lane (compact); a 2nd task in one
+  // (phase, dept) cell spills to the nearest free row in that column only.
+  const deptCols = new Map<string, Set<number>>(); // dept → columns it occupies
+  const deptSeen: string[] = [];
+  for (const t of tasks) {
+    const c = colOf.get(t.phase);
+    if (c === undefined) continue;
+    let cols = deptCols.get(t.dept);
+    if (!cols) {
+      cols = new Set();
+      deptCols.set(t.dept, cols);
+      deptSeen.push(t.dept);
+    }
+    cols.add(c);
+  }
+  const orderedDepts = [
+    ...DEPT_LANE_ORDER.filter((d) => deptCols.has(d)),
+    ...deptSeen.filter((d) => !DEPT_LANE_ORDER.includes(d)),
+  ];
+  // Greedy interval-graph coloring: give each dept the lowest lane whose already-claimed
+  // columns don't clash with the dept's columns.
+  const laneOf = new Map<string, number>();
+  const laneCols: Set<number>[] = [];
+  for (const d of orderedDepts) {
+    const cols = deptCols.get(d)!;
+    let lane = 0;
+    while (laneCols[lane] && [...cols].some((c) => laneCols[lane].has(c))) lane++;
+    laneOf.set(d, lane);
+    if (!laneCols[lane]) laneCols[lane] = new Set();
+    for (const c of cols) laneCols[lane].add(c);
+  }
+  const laneCount = Math.max(1, laneCols.length);
+
+  // Place a task at its dept lane, or the nearest free row in that column if the lane is
+  // already taken there (search down, then up, then extend below all lanes).
+  const occ = new Map<number, Set<number>>(); // column → rows already taken
+  const takeRow = (col: number, lane: number): number => {
+    let used = occ.get(col);
+    if (!used) {
+      used = new Set();
+      occ.set(col, used);
+    }
+    let row = lane;
+    if (used.has(row)) {
+      row = -1;
+      for (let r = lane + 1; r < laneCount && row < 0; r++) if (!used.has(r)) row = r;
+      for (let r = lane - 1; r >= 0 && row < 0; r--) if (!used.has(r)) row = r;
+      if (row < 0) {
+        row = laneCount;
+        while (used.has(row)) row++;
+      }
+    }
+    used.add(row);
+    return row;
+  };
 
   const nodes: PositionedNode[] = [];
   const nodeById = new Map<string, PositionedNode>();
   for (const task of tasks) {
     const col = colOf.get(task.phase);
     if (col === undefined) continue; // task in an unknown phase → skip, don't crash
-    const row = rowCounter.get(task.phase) ?? 0;
-    rowCounter.set(task.phase, row + 1);
+    const row = takeRow(col, laneOf.get(task.dept) ?? 0);
     const node: PositionedNode = {
       task,
       col,
@@ -143,8 +205,8 @@ export function layoutRoadmap(
     })
     .filter((e): e is EdgePath => e !== null);
 
-  // Height is driven by the tallest column.
-  const maxRows = Math.max(1, ...phases.map((p) => rowCounter.get(p.key) ?? 0));
+  // Height is driven by the lowest lane any task lands on.
+  const maxRows = Math.max(1, ...nodes.map((n) => n.row + 1));
   const height = TOP + (maxRows - 1) * ROW_PITCH + CARD_H + BOTTOM_PAD;
 
   const prog = phaseProgress(phases, tasks);

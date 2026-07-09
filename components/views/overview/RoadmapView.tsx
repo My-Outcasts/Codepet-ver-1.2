@@ -171,7 +171,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             whiteSpace: 'nowrap',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
-            maxWidth: 130,
+            maxWidth: 150,
           }}
         >
           {task.title}
