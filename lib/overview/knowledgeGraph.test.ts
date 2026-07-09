@@ -53,4 +53,20 @@ describe('buildKnowledgeGraph', () => {
   it('is a pure function (same input -> equal output)', () => {
     expect(buildKnowledgeGraph(events, depts)).toEqual(buildKnowledgeGraph(events, depts));
   });
+
+  it('never emits an edge whose endpoint is not a node (would crash the force graph)', () => {
+    const mixed: LedgerEvent[] = [
+      ...events,
+      // an event owned by a department that does NOT exist in `depts`
+      { ts: 5, type: 'task_run', actor: 'byte', deptK: 'ghost', refType: 'task', refId: 'g1', title: 'Ghost', summary: 'x' },
+      // a dept-less fact
+      { ts: 6, type: 'fact_remembered', actor: 'byte', refType: 'fact', refId: 'f1', title: 'Fact', summary: 'y' },
+    ];
+    const { nodes, edges } = buildKnowledgeGraph(mixed, depts);
+    const ids = new Set(nodes.map((n) => n.id));
+    for (const e of edges) {
+      expect(ids.has(e.source), `source ${e.source}`).toBe(true);
+      expect(ids.has(e.target), `target ${e.target}`).toBe(true);
+    }
+  });
 });
