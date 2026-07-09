@@ -22,6 +22,7 @@ import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
 import { askSecondBrain, runSecondBrainBackfill, type RecallHit } from '@/lib/ai/recallClient';
 import { filterEvents, relativeTime, type TimelineFilter } from '@/lib/overview/timeline';
 import SecondBrainPanel from '@/components/views/overview/SecondBrainPanel';
+import { Copilot } from '@/components/Copilot';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -952,8 +953,8 @@ export default function OverviewView() {
         style={{
           position: 'absolute',
           top: 58,
-          left: 26,
-          right: 26,
+          left: SECOND_BRAIN_V2 ? 346 : 26,
+          right: SECOND_BRAIN_V2 ? 326 : 26,
           maxWidth: 640,
           zIndex: 5,
           pointerEvents: 'none',
@@ -1268,7 +1269,7 @@ export default function OverviewView() {
         style={{
           position: 'absolute',
           bottom: 20,
-          left: 26,
+          left: SECOND_BRAIN_V2 ? 346 : 26,
           zIndex: 5,
           display: 'flex',
           gap: 16,
@@ -1304,7 +1305,31 @@ export default function OverviewView() {
         )}
       </div>
 
-      <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
+      {/* Second Brain v2: left chat rail (reuses byte's chat inline). The app-shell's right
+          dock is suppressed in this mode (AppRoot), so this is the only chat instance. */}
+      {SECOND_BRAIN_V2 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 320,
+            zIndex: 7,
+            pointerEvents: 'auto',
+          }}
+        >
+          <Copilot inline />
+        </div>
+      )}
+      <div
+        ref={wrapRef}
+        style={
+          SECOND_BRAIN_V2
+            ? { position: 'absolute', top: 0, bottom: 0, left: 320, right: 326 }
+            : { position: 'absolute', inset: 0 }
+        }
+      >
         {mapDimmed && (
           <div
             aria-hidden
@@ -1584,7 +1609,7 @@ function AdvanceCard({ next, onAdvance }: { next: string | null; onAdvance: () =
       style={{
         position: 'absolute',
         top: 126,
-        left: 26,
+        left: SECOND_BRAIN_V2 ? 346 : 26,
         zIndex: 6,
         width: 264,
         padding: '15px 17px 16px',
