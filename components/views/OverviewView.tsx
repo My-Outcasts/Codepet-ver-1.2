@@ -19,6 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
 import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
+import { askSecondBrain, type RecallHit } from '@/lib/ai/recallClient';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -262,6 +263,10 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // "Ask your Second Brain" (P2 recall) — inert unless the server feature is on.
+  const [askQuery, setAskQuery] = useState('');
+  const [askHits, setAskHits] = useState<RecallHit[] | null>(null);
+  const [asking, setAsking] = useState(false);
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
@@ -720,6 +725,23 @@ export default function OverviewView() {
     if (!tookControlRef.current) fitView();
   };
 
+  const runAsk = async () => {
+    const q = askQuery.trim();
+    if (!q || asking) return;
+    setAsking(true);
+    const hits = await askSecondBrain(q);
+    setAskHits(hits);
+    setAsking(false);
+  };
+  // Open a recall hit at its source: a deliverable → its library item; otherwise reframe.
+  const openHit = (h: RecallHit) => {
+    if (h.refType === 'library') {
+      const item = library.find((it) => it.title === h.title);
+      if (item) return openDeliverable(item as LibItem);
+    }
+    fitView();
+  };
+
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
     // Second Brain v2 knowledge dots (deliverable/decision/fact/session/milestone): keep them
@@ -939,6 +961,93 @@ export default function OverviewView() {
           <div style={{ fontSize: 12.5, color: 'rgba(125,227,255,.75)', marginTop: 8 }}>
             Your Second Brain fills in as you and byte work — approve a deliverable or lock a
             decision to see it join the graph.
+          </div>
+        )}
+        {/* Ask your Second Brain (P2 recall). Inert server-side without SECOND_BRAIN_RECALL +
+            VOYAGE_API_KEY — the route returns no hits, so this quietly shows nothing found. */}
+        {SECOND_BRAIN_V2 && (
+          <div style={{ pointerEvents: 'auto', marginTop: 12, maxWidth: 420 }}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void runAsk();
+              }}
+              style={{ display: 'flex', gap: 8 }}
+            >
+              <input
+                value={askQuery}
+                onChange={(e) => setAskQuery(e.target.value)}
+                placeholder="Ask your Second Brain…"
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  padding: '7px 12px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(125,227,255,0.35)',
+                  background: 'rgba(16,14,28,0.85)',
+                  color: '#F5F3FF',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={asking || !askQuery.trim()}
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  padding: '7px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(125,227,255,0.4)',
+                  background: 'rgba(125,227,255,0.12)',
+                  color: '#7DE3FF',
+                  cursor: asking || !askQuery.trim() ? 'default' : 'pointer',
+                  opacity: asking || !askQuery.trim() ? 0.55 : 1,
+                }}
+              >
+                {asking ? '…' : 'Ask'}
+              </button>
+            </form>
+            {askHits !== null && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {askHits.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'rgba(245,243,255,.45)' }}>
+                    Nothing in your Second Brain matched that yet.
+                  </div>
+                ) : (
+                  askHits.map((h, i) => (
+                    <button
+                      key={`${h.refType}:${h.refId}:${i}`}
+                      onClick={() => openHit(h)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '7px 11px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(16,14,28,0.7)',
+                        color: '#F5F3FF',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{h.title}</div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: 'rgba(245,243,255,.5)',
+                          marginTop: 2,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {h.summary}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         )}
         {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
