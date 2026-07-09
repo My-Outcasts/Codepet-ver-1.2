@@ -41,7 +41,15 @@ const STATUS: Record<RoadmapState, string> = {
   locked: 'Needs earlier steps',
 };
 
-function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void }) {
+function Node({
+  node,
+  onClick,
+  pulse,
+}: {
+  node: PositionedNode;
+  onClick?: () => void;
+  pulse?: boolean;
+}) {
   const { task } = node;
   const st = task.state;
   const done = st === 'done';
@@ -49,7 +57,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
   const locked = st === 'locked';
   return (
     <div
-      className={onClick ? 'rm-node' : undefined}
+      className={[onClick && 'rm-node', pulse && 'rm-pulse'].filter(Boolean).join(' ') || undefined}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
       onClick={onClick}
@@ -250,6 +258,34 @@ export default function RoadmapView({
     }
   }, [currentX, scale]);
 
+  // The "advance" moment: when a task improves between renders — a new move becomes `current`,
+  // or a `locked` task unlocks because its prerequisites just completed — pulse it once, so
+  // finishing one step visibly lights up the next. State is encoded as a signature string so
+  // the effect depends only on it (reruns solely when a state actually changes) and reconstructs
+  // the id→state maps from it. The pulse itself respects prefers-reduced-motion (see the CSS).
+  const prevSigRef = useRef<string>('');
+  const [pulseIds, setPulseIds] = useState<Set<string>>(new Set());
+  const stateSig = L.nodes.map((n) => `${n.task.id}:${n.task.state}`).join('|');
+  useEffect(() => {
+    const parse = (sig: string): Map<string, string> =>
+      new Map(sig ? sig.split('|').map((p) => p.split(':') as [string, string]) : []);
+    const now = parse(stateSig);
+    const prev = parse(prevSigRef.current);
+    prevSigRef.current = stateSig;
+    if (prev.size === 0) return; // first render — nothing to celebrate yet
+    const open = (s?: string) => s === 'available' || s === 'needsYou';
+    const fresh = new Set<string>();
+    for (const [id, st] of now) {
+      const was = prev.get(id);
+      if (!was) continue;
+      if ((st === 'current' && was !== 'current') || (open(st) && was === 'locked')) fresh.add(id);
+    }
+    if (fresh.size === 0) return;
+    setPulseIds(fresh);
+    const t = setTimeout(() => setPulseIds(new Set()), 1500);
+    return () => clearTimeout(t);
+  }, [stateSig]);
+
   return (
     <div
       ref={wrapRef}
@@ -261,7 +297,7 @@ export default function RoadmapView({
         fontFamily: 'var(--sans)',
       }}
     >
-      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}`}</style>
+      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}@media (prefers-reduced-motion: no-preference){@keyframes rmPulse{0%{box-shadow:0 0 0 0 rgba(124,58,237,.5),0 10px 30px -12px rgba(124,58,237,.6)}70%{box-shadow:0 0 0 13px rgba(124,58,237,0),0 10px 30px -12px rgba(124,58,237,.6)}100%{box-shadow:0 0 0 0 rgba(124,58,237,0),0 10px 30px -12px rgba(124,58,237,.6)}}.rm-pulse{animation:rmPulse 1.4s ease-out 1}}`}</style>
       <div
         ref={scrollRef}
         className="rm-scroll"
@@ -445,6 +481,7 @@ export default function RoadmapView({
                   key={n.task.id}
                   node={n}
                   onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
+                  pulse={pulseIds.has(n.task.id)}
                 />
               ))}
             </div>
