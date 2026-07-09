@@ -64,12 +64,17 @@ export function applyProgress(defs: RoadmapTaskDef[], input: ProgressInput): Roa
   const byId = new Map(defs.map((d) => [d.id, d]));
   const phaseIdxOf = (d: RoadmapTaskDef) => PHASE_ORDER.indexOf(d.phase);
 
-  // The "complete" region: every task in a phase before the current one, plus the transitive
-  // prerequisites of byte's current move (you can't be on `current` unless they're done).
+  // The "complete" region: every task in a phase before the current one, plus real shipped work
+  // fed in via `overrides` as `done` (so live progress unlocks its dependents), plus the
+  // transitive prerequisites of any done task and of byte's current move (you can't be on
+  // `current`, or have finished a task, unless its prerequisites are done).
   const done = new Set<string>();
   for (const d of defs) {
     const pi = phaseIdxOf(d);
     if (pi >= 0 && curIdx >= 0 && pi < curIdx) done.add(d.id);
+  }
+  for (const [id, st] of Object.entries(overrides)) {
+    if (st === 'done' && byId.has(id)) done.add(id);
   }
   const addPrereqs = (id: string) => {
     const d = byId.get(id);
@@ -82,6 +87,7 @@ export function applyProgress(defs: RoadmapTaskDef[], input: ProgressInput): Roa
     }
   };
   if (input.currentTaskId) addPrereqs(input.currentTaskId);
+  for (const id of Array.from(done)) addPrereqs(id);
 
   const unblocked = (d: RoadmapTaskDef) =>
     d.dependsOn.every((dep) => !byId.has(dep) || done.has(dep));

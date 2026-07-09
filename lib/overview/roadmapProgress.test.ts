@@ -98,4 +98,28 @@ describe('applyProgress — dependency unlock', () => {
     const o = applyProgress(dep, { currentPhase: 'ship', currentTaskId: 'c1' });
     expect(o.find((t) => t.id === 'f1')!.state).toBe('locked'); // launch is ahead of ship
   });
+
+  it('a real (override) done unlocks its dependent', () => {
+    // With no current move, c2 waits on c1.
+    const before = applyProgress(dep, { currentPhase: 'ship', currentTaskId: null });
+    expect(before.find((t) => t.id === 'c2')!.state).toBe('locked');
+    // Marking c1 done via overrides (real shipped work) counts toward the unlock set.
+    const after = applyProgress(dep, {
+      currentPhase: 'ship',
+      currentTaskId: null,
+      overrides: { c1: 'done' },
+    });
+    expect(after.find((t) => t.id === 'c1')!.state).toBe('done');
+    expect(after.find((t) => t.id === 'c2')!.state).toBe('available'); // c1 done → c2 unblocked
+  });
+
+  it('an approve override does NOT unlock its dependent (a draft is not done)', () => {
+    const o = applyProgress(dep, {
+      currentPhase: 'ship',
+      currentTaskId: null,
+      overrides: { c1: 'approve' },
+    });
+    expect(o.find((t) => t.id === 'c1')!.state).toBe('approve');
+    expect(o.find((t) => t.id === 'c2')!.state).toBe('locked'); // c1 not done → c2 stays locked
+  });
 });

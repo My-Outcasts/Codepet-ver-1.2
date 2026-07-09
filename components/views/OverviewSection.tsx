@@ -13,7 +13,7 @@ import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
-import type { RoadmapTask, RoadmapTaskDef } from '@/lib/overview/roadmapModel';
+import type { RoadmapState, RoadmapTask, RoadmapTaskDef } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
 const OverviewMap = dynamic(() => import('./OverviewView'), {
@@ -108,7 +108,33 @@ export default function OverviewSection() {
   // "do this next" hero and clicking that node runs the very same task.
   const currentTaskId =
     (move && phaseTasks.find((t) => t.dept === move.deptK)?.id) || phaseTasks[0]?.id || null;
-  let tasks = applyProgress(defs, { currentPhase, currentTaskId });
+
+  // Real per-task truth from the live DEPTS, matched by (department + normalized title): a
+  // matched task that's shipped shows `done`; one byte has drafted shows `approve` ("Needs
+  // approval"). Only promotes where we can confidently match — otherwise the dependency/position
+  // default stands. (Precise per-node done for every task awaits a roadmap↔task link; that's the
+  // Second Brain event-ledger's job.) byte's current move stays lit as `current`.
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const realByKey = new Map<string, { done?: boolean; drafted?: boolean }>();
+  for (const d of DEPTS) {
+    for (const t of d.tasks) {
+      realByKey.set(`${d.k}::${norm(t.t)}`, { done: t.done, drafted: t.drafted });
+    }
+  }
+  const overrides: Partial<Record<string, RoadmapState>> = {};
+  for (const def of defs) {
+    if (def.id === currentTaskId) continue;
+    const real = realByKey.get(`${def.dept}::${norm(def.title)}`);
+    if (!real) continue;
+    if (real.done) overrides[def.id] = 'done';
+    else if (real.drafted) overrides[def.id] = 'approve';
+  }
+
+  let tasks = applyProgress(defs, { currentPhase, currentTaskId, overrides });
   if (move && currentTaskId) {
     tasks = tasks.map((t) =>
       t.id === currentTaskId ? { ...t, title: move.title, dept: move.deptK } : t,
