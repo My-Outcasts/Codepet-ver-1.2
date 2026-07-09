@@ -338,7 +338,7 @@ function ThreadList() {
   );
 }
 
-export function Copilot() {
+export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   const {
     toggleCopilot,
     brief,
@@ -427,7 +427,7 @@ export function Copilot() {
   const empty = chatMessages.length === 0;
 
   return (
-    <aside className="copilot">
+    <aside className={`copilot${inline ? ' inline' : ''}`}>
       <div className="cop-h">
         <Companion id={companionId} size="s28" />
         <div>

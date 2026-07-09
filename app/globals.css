@@ -3223,6 +3223,13 @@ body {
   flex-direction: column;
   min-height: 0;
 }
+/* Inline mode: embed the chat as a column inside the Second Brain layout (chat on the left)
+   instead of the app-shell's right dock. */
+.copilot.inline {
+  height: 100%;
+  border-left: none;
+  border-right: 1px solid var(--hairline);
+}
 /* "New" jump pill — floats just above the composer when byte adds content while the
    reader is scrolled up. Clicking it smooth-scrolls to the latest and re-pins. */
 .cop-new {
