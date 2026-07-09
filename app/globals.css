@@ -3257,7 +3257,9 @@ body {
 .shell.cop-collapsed {
   grid-template-columns: 212px 1fr 0;
 }
-.shell.cop-collapsed .copilot {
+/* Direct child only — hide the shell's right-dock chat when collapsed, but NOT an inline
+   Copilot embedded deeper in the main view (the Second Brain left rail). */
+.shell.cop-collapsed > .copilot {
   display: none;
 }
 .cop-collapse {

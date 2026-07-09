@@ -1051,7 +1051,11 @@ export default function OverviewView() {
           ✦ {revealKeys.size} {revealKeys.size === 1 ? 'area' : 'areas'} unlocked
         </div>
       )}
-      <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
+      {/* The classic progress HUD lives bottom-left — where the Second Brain chat rail now is —
+          and duplicates the right panel's STATUS/DO-THIS-NEXT, so it's hidden in v2. */}
+      {!SECOND_BRAIN_V2 && (
+        <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
+      )}
 
       <div
         style={{
@@ -1065,11 +1069,12 @@ export default function OverviewView() {
         }}
       >
         <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
-          Overview
+          {SECOND_BRAIN_V2 ? 'Second Brain' : 'Overview'}
         </h1>
         <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
-          Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
-          a node to open it.
+          {SECOND_BRAIN_V2
+            ? 'Everything you and byte have made, connected — ask it anything, or click a star to open it.'
+            : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
         </div>
         {/* Second Brain v2 empty-state: the spine still renders, so this is never a blank screen —
             just an honest invitation for a brand-new account with no ledger events yet. */}
@@ -1405,12 +1410,24 @@ export default function OverviewView() {
           pointerEvents: 'none',
         }}
       >
-        <Legend dot="#F4F1FF" label="Project" />
-        <Legend dot="#8B5CF6" label="byte does" />
-        <Legend dot="#FDB022" label="Needs approval" />
-        <Legend dot="#3B82F6" label="Needs you" />
-        <Legend dot="#34D399" label="Done" />
-        {introPhase === 'done' && (
+        {SECOND_BRAIN_V2 ? (
+          <>
+            <Legend dot="#FFE7A8" label="Company" />
+            <Legend dot="#FDB022" label="Department" />
+            <Legend dot="#F6A23C" label="Deliverable" />
+            <Legend dot="#2DD4BF" label="Decision" />
+            <Legend dot="#FF6B9D" label="Milestone" />
+          </>
+        ) : (
+          <>
+            <Legend dot="#F4F1FF" label="Project" />
+            <Legend dot="#8B5CF6" label="byte does" />
+            <Legend dot="#FDB022" label="Needs approval" />
+            <Legend dot="#3B82F6" label="Needs you" />
+            <Legend dot="#34D399" label="Done" />
+          </>
+        )}
+        {!SECOND_BRAIN_V2 && introPhase === 'done' && (
           <button
             type="button"
             onClick={() => setIntroPhase('intro')}

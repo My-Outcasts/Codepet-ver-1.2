@@ -94,7 +94,7 @@ export default function SecondBrainPanel({
         <Row k="Deliverables" v={counts.deliverables} />
         <Row k="Decisions" v={counts.decisions} />
         <Row k="Milestones" v={counts.milestones} />
-        <Row k="Build sessions" v={counts.sessions} />
+        <Row k="Tasks" v={counts.tasks} />
       </Section>
 
       <Section label="Brain">

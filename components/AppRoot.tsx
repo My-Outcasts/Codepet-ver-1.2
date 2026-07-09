@@ -106,14 +106,17 @@ function Shell() {
         </main>
         {!sbMode && <Copilot />}
       </div>
-      <button
-        className={`cop-open${copilotCollapsed ? ' show' : ''}`}
-        aria-label={`Open ${c.name} chat`}
-        onClick={() => toggleCopilot(false)}
-      >
-        <Companion id={companionId} size="s28" />
-        Ask {c.name}
-      </button>
+      {/* The floating "Ask" launcher is redundant in Second Brain mode (chat is the left rail). */}
+      {!sbMode && (
+        <button
+          className={`cop-open${copilotCollapsed ? ' show' : ''}`}
+          aria-label={`Open ${c.name} chat`}
+          onClick={() => toggleCopilot(false)}
+        >
+          <Companion id={companionId} size="s28" />
+          Ask {c.name}
+        </button>
+      )}
       {buildActive && view !== 'build' && (
         <button className="build-return" onClick={() => show('build')}>
           🔨 Back to your build

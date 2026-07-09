@@ -30,7 +30,7 @@ describe('ledgerCounts', () => {
       deliverables: 2,
       decisions: 1,
       milestones: 1,
-      sessions: 0,
+      tasks: 1,
     });
   });
 });

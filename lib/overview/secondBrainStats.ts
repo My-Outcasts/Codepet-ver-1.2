@@ -6,19 +6,19 @@ export function ledgerCounts(events: LedgerEvent[]): {
   deliverables: number;
   decisions: number;
   milestones: number;
-  sessions: number;
+  tasks: number;
 } {
   let deliverables = 0;
   let decisions = 0;
   let milestones = 0;
-  let sessions = 0;
+  let tasks = 0;
   for (const e of events) {
     if (e.type === 'deliverable_approved') deliverables++;
     else if (e.type === 'decision_made' || e.type === 'fact_remembered') decisions++;
     else if (e.type === 'stage_advanced') milestones++;
-    else if (e.type === 'build_session') sessions++;
+    else if (e.type === 'task_run' || e.type === 'build_session') tasks++;
   }
-  return { deliverables, decisions, milestones, sessions };
+  return { deliverables, decisions, milestones, tasks };
 }
 
 export function topicCounts(
