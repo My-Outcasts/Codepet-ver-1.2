@@ -134,8 +134,16 @@ export default function OverviewSection() {
       ? `${projectName} — ${oneLiner}`
       : 'Your whole company as a roadmap — where you are, what byte does next, and how far you’ve come.';
 
-  // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
-  // the authored golden path so Start resolves to a REAL department task.
+  // Loose title matcher — reused for the live-DEPTS truth and the next-step match below.
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+
+  // byte's live next move, if any — from /api/next-step, else the authored golden path. Used
+  // only to *honor* real guidance when it lands in the founder's current phase; a mismatched or
+  // seeded value (e.g. a Ship task surfaced for a Find-phase founder) is ignored below.
   const fallback = nextAction();
   const realMove = nextStep
     ? { deptK: nextStep.deptK, title: nextStep.taskTitle }
@@ -143,34 +151,11 @@ export default function OverviewSection() {
       ? { deptK: fallback.dept.k, title: fallback.task.t }
       : null;
 
-  // The lit "byte is here" node: take a current-phase slot (prefer one whose department
-  // matches the move) and RELABEL it to byte's real next move — so the map agrees with the
-  // "do this next" hero and clicking that node runs the very same task.
-  const currentTaskId =
-    (realMove && phaseTasks.find((t) => t.dept === realMove.deptK)?.id) ||
-    phaseTasks[0]?.id ||
-    null;
-
-  // Always give the founder a concrete next step. If byte has no live move yet — e.g. a brand-new
-  // account whose earliest stage has no scaffolded task — fall back to the roadmap's own current
-  // node, so the "do this next" beacon is never blank.
-  const currentDef = currentTaskId ? (defs.find((d) => d.id === currentTaskId) ?? null) : null;
-  const move =
-    realMove ?? (currentDef ? { deptK: currentDef.dept, title: currentDef.title } : null);
-  const startMove = () => {
-    if (move) portalToTask(move.deptK, move.title);
-  };
-
   // Real per-task truth from the live DEPTS, matched by (department + normalized title): a
   // matched task that's shipped shows `done`; one byte has drafted shows `approve` ("Needs
-  // approval"). Only promotes where we can confidently match — otherwise the dependency/position
-  // default stands. (Precise per-node done for every task awaits a roadmap↔task link; that's the
-  // Second Brain event-ledger's job.) byte's current move stays lit as `current`.
-  const norm = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
+  // approval"). Only promotes where we can confidently match — otherwise the dependency default
+  // stands. (Precise per-node done for every task awaits a roadmap↔task link — the Second Brain
+  // event-ledger's job.)
   const realByKey = new Map<string, { done?: boolean; drafted?: boolean }>();
   for (const d of DEPTS) {
     for (const t of d.tasks) {
@@ -179,19 +164,39 @@ export default function OverviewSection() {
   }
   const overrides: Partial<Record<string, RoadmapState>> = {};
   for (const def of defs) {
-    if (def.id === currentTaskId) continue;
     const real = realByKey.get(`${def.dept}::${norm(def.title)}`);
     if (!real) continue;
     if (real.done) overrides[def.id] = 'done';
     else if (real.drafted) overrides[def.id] = 'approve';
   }
 
-  let tasks = applyProgress(defs, { currentPhase, currentTaskId, overrides });
-  if (move && currentTaskId) {
-    tasks = tasks.map((t) =>
-      t.id === currentTaskId ? { ...t, title: move.title, dept: move.deptK } : t,
-    );
-  }
+  // The current move must be a REAL task in the founder's current phase, so a brand-new founder
+  // is pointed at their true first step (e.g. "Validate the idea") — never a stale/seeded
+  // next-step from a later phase. Derive it from the roadmap's own dependency unlock: the first
+  // unblocked task in the current phase. A provisional pass (no current move) surfaces that
+  // frontier via the same tested logic the map uses.
+  const provisional = applyProgress(defs, { currentPhase, currentTaskId: null, overrides });
+  const firstActionable = provisional.find(
+    (t) => t.phase === currentPhase && (t.state === 'available' || t.state === 'needsYou'),
+  );
+  // Honor a live next-step only when it genuinely matches a current-phase task (department +
+  // title) — so valid AI guidance still wins, but a mismatched seed can't relabel the map.
+  const matchedNext =
+    realMove &&
+    phaseTasks.find((t) => t.dept === realMove.deptK && norm(t.title) === norm(realMove.title));
+  const currentTaskId = matchedNext?.id ?? firstActionable?.id ?? phaseTasks[0]?.id ?? null;
+  // The current node stays lit as `current`, so it must not be overridden by live-DEPTS truth.
+  if (currentTaskId) delete overrides[currentTaskId];
+
+  // The "do this next" hero and Start always use the current node's OWN canonical title/dept, so
+  // the beacon and the lit map node agree and read correctly for the founder's stage.
+  const currentDef = currentTaskId ? (defs.find((d) => d.id === currentTaskId) ?? null) : null;
+  const move = currentDef ? { deptK: currentDef.dept, title: currentDef.title } : realMove;
+  const startMove = () => {
+    if (move) portalToTask(move.deptK, move.title);
+  };
+
+  const tasks = applyProgress(defs, { currentPhase, currentTaskId, overrides });
 
   // Overall progress derives from the roadmap itself (the single source of truth for this
   // view), so the headline % always agrees with the phase columns instead of contradicting
