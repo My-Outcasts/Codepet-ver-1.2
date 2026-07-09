@@ -811,9 +811,9 @@ export default function OverviewView() {
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
-    // Second Brain v2 knowledge dots (deliverable/decision/fact/session/milestone): clean glowing
-    // spheres. High-weight ones (sbLabel) carry a small persistent label like the reference; the
-    // rest stay hover-only so the galaxy doesn't drown in text.
+    // Second Brain v2 knowledge dots: render each as a soft glowing firefly (a radial glow the
+    // bloom pass amplifies) wrapped around the small bright core, instead of a flat solid sphere.
+    // High-weight ones (sbLabel) also carry a small persistent label like the reference.
     if (
       n.kind === 'deliverable' ||
       n.kind === 'decision' ||
@@ -821,17 +821,22 @@ export default function OverviewView() {
       n.kind === 'session' ||
       n.kind === 'milestone'
     ) {
-      if (!n.sbLabel) return undefined;
-      const lbl = new SpriteText(n.name);
-      lbl.color = 'rgba(245,243,255,0.92)';
-      lbl.textHeight = 3.2;
-      lbl.fontFace = 'Inter, system-ui, sans-serif';
-      lbl.fontWeight = '600';
-      (lbl as any).backgroundColor = 'rgba(7,5,16,0.7)';
-      (lbl as any).padding = 2;
-      (lbl as any).borderRadius = 3;
-      (lbl as any).position.set(0, Math.cbrt(n.val) * 2.2 + 4, 0);
-      return lbl;
+      const radius = Math.cbrt(n.val) * 2.2;
+      const group = new THREE.Group();
+      group.add(makeGlowSprite(n.deptColor ?? '#FDB022', radius * 6));
+      if (n.sbLabel) {
+        const lbl = new SpriteText(n.name);
+        lbl.color = 'rgba(245,243,255,0.92)';
+        lbl.textHeight = 3.2;
+        lbl.fontFace = 'Inter, system-ui, sans-serif';
+        lbl.fontWeight = '600';
+        (lbl as any).backgroundColor = 'rgba(7,5,16,0.7)';
+        (lbl as any).padding = 2;
+        (lbl as any).borderRadius = 3;
+        (lbl as any).position.set(0, radius + 4, 0);
+        group.add(lbl);
+      }
+      return group;
     }
 
     // Label — for departments, append the progress count.
@@ -1456,7 +1461,7 @@ export default function OverviewView() {
               if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
-            nodeOpacity={0.95}
+            nodeOpacity={SECOND_BRAIN_V2 ? 0.6 : 0.95}
             nodeResolution={18}
             nodeRelSize={2.2}
             nodeThreeObjectExtend
