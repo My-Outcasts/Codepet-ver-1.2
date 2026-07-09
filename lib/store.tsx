@@ -90,7 +90,7 @@ export interface ChatMessage {
   /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
-  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
+  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean; done?: boolean };
   /** A one-tap "take me there" chip byte offers when the founder asks where an app
    * function is. Tapping it navigates (never auto-navigates). */
   nav?: NavChip;
@@ -253,6 +253,9 @@ interface AppState {
     nodeId?: string;
     actor?: string;
   }) => void;
+  /** Mark a founder-owned task done from an in-chat chip (the "tell me when it's done" path):
+   *  flips the roadmap node to Done, unlocks its dependents, and offers stage-advance. */
+  markTaskDone: (deptK: string, taskTitle: string) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -1391,11 +1394,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           );
           return;
         }
-        case 'needsYou':
+        case 'needsYou': {
+          // Founder-owned — byte can't run it, but it must be completable so the roadmap can
+          // move past it. Ensure the task exists (linked to the node) and offer a one-tap
+          // "mark it done" chip that flips the node and unlocks what depends on it.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
           brief(
-            `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't act for you here. Tell me when it's done and I'll mark it.`,
+            `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't do it for you, but tap below when it's done and I'll mark it.`,
+            t ? { action: { label: `I've done “${t.t}”`, deptK, taskTitle: t.t, done: true } } : {},
           );
           return;
+        }
         case 'approve': {
           // Resolve (or link) the drafted task; review it in-thread.
           const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
@@ -1522,6 +1531,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return { item, next };
     },
     [companyId, bump, toast, computeNextStep, maybeOfferAdvance],
+  );
+
+  // Founder-owned tasks (incorporate, open a bank account, …) are the founder's to do — byte
+  // can't produce a deliverable for them. This is the completion path that fulfills byte's
+  // "tell me when it's done and I'll mark it" promise: flip the task (and its linked roadmap
+  // node) to Done, unlock its dependents live, and offer to advance if the stage just finished.
+  const markTaskDone = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t || t.done) return;
+      t.done = true;
+      t.drafted = false;
+      d.pend = Math.max(0, (d.pend || 0) - 1);
+      if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] mark task done failed', err),
+        );
+      setChatMessages((prev) => [
+        ...prev.filter((m) => !m.brief),
+        {
+          id: newId(),
+          role: 'byte',
+          text: `Done ✓ — marked “${taskTitle}” complete. Nice work.`,
+          ts: Date.now(),
+        },
+      ]);
+      computeNextStep(); // it's done now — advance the next step
+      maybeOfferAdvance(); // …and if that finished the stage, offer to move up
+    },
+    [companyId, bump, computeNextStep, maybeOfferAdvance],
   );
 
   const toggleEnv = useCallback(
@@ -2339,6 +2381,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       portalSignal,
       portalToTask,
       guideRoadmapTask,
+      markTaskDone,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2449,6 +2492,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       portalSignal,
       portalToTask,
       guideRoadmapTask,
+      markTaskDone,
       runBriefedTask,
       viewItem,
       closeModal,

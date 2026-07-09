@@ -177,10 +177,16 @@ export default function OverviewSection() {
     (t) => t.phase === currentPhase && (t.state === 'available' || t.state === 'needsYou'),
   );
   // Honor a live next-step only when it genuinely matches a current-phase task (department +
-  // title) — so valid AI guidance still wins, but a mismatched seed can't relabel the map.
+  // title) AND that task isn't already done — so valid AI guidance still wins, but a stale seed
+  // can neither relabel the map nor re-light a node the founder just finished.
   const matchedNext =
     realMove &&
-    phaseTasks.find((t) => t.dept === realMove.deptK && norm(t.title) === norm(realMove.title));
+    phaseTasks.find(
+      (t) =>
+        t.dept === realMove.deptK &&
+        norm(t.title) === norm(realMove.title) &&
+        overrides[t.id] !== 'done',
+    );
   const currentTaskId = matchedNext?.id ?? firstActionable?.id ?? phaseTasks[0]?.id ?? null;
   // The current node stays lit as `current`, so it must not be overridden by live-DEPTS truth.
   if (currentTaskId) delete overrides[currentTaskId];
