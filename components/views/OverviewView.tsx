@@ -20,6 +20,7 @@ import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
 import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
 import { askSecondBrain, type RecallHit } from '@/lib/ai/recallClient';
+import { filterEvents, relativeTime, type TimelineFilter } from '@/lib/overview/timeline';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -267,6 +268,9 @@ export default function OverviewView() {
   const [askQuery, setAskQuery] = useState('');
   const [askHits, setAskHits] = useState<RecallHit[] | null>(null);
   const [asking, setAsking] = useState(false);
+  // Timeline panel (P3) — "what changed", filtered by event type.
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all');
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
@@ -741,6 +745,9 @@ export default function OverviewView() {
     }
     fitView();
   };
+  // A timeline row shares the same source-routing as a recall hit.
+  const openEvent = (refType: string | undefined, title: string) =>
+    openHit({ refType, title, refId: undefined, summary: '', score: 0 });
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
@@ -1089,7 +1096,119 @@ export default function OverviewView() {
             </button>
           </div>
         )}
+        {SECOND_BRAIN_V2 && (
+          <button
+            onClick={() => setTimelineOpen((v) => !v)}
+            style={{
+              pointerEvents: 'auto',
+              marginTop: 10,
+              fontSize: 12,
+              fontWeight: 600,
+              padding: '5px 12px',
+              borderRadius: 999,
+              border: '1px solid rgba(255,255,255,0.12)',
+              background: timelineOpen ? 'rgba(125,227,255,0.12)' : 'rgba(16,14,28,0.7)',
+              color: timelineOpen ? '#7DE3FF' : 'rgba(245,243,255,.7)',
+              cursor: 'pointer',
+              display: 'block',
+            }}
+          >
+            {timelineOpen ? 'Hide timeline' : 'Timeline'}
+          </button>
+        )}
       </div>
+
+      {SECOND_BRAIN_V2 && timelineOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 58,
+            right: 26,
+            bottom: 26,
+            width: 320,
+            maxWidth: '42vw',
+            zIndex: 6,
+            pointerEvents: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            background: 'rgba(12,10,22,0.92)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            borderRadius: 14,
+            padding: 12,
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#F5F3FF', marginBottom: 8 }}>
+            What changed
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {(['all', 'deliverable', 'decision', 'milestone', 'task'] as TimelineFilter[]).map(
+              (f) => (
+                <button
+                  key={f}
+                  onClick={() => setTimelineFilter(f)}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: '3px 9px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: timelineFilter === f ? 'rgba(125,227,255,0.16)' : 'transparent',
+                    color: timelineFilter === f ? '#7DE3FF' : 'rgba(245,243,255,.55)',
+                    cursor: 'pointer',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {f}
+                </button>
+              ),
+            )}
+          </div>
+          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {(() => {
+              const rows = filterEvents(events, timelineFilter);
+              const now = Date.now();
+              if (rows.length === 0)
+                return (
+                  <div style={{ fontSize: 12, color: 'rgba(245,243,255,.4)' }}>Nothing here yet.</div>
+                );
+              return rows.map((e, i) => (
+                <button
+                  key={`${e.refType}:${e.refId}:${e.ts}:${i}`}
+                  onClick={() => openEvent(e.refType, e.title)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '7px 10px',
+                    borderRadius: 9,
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    background: 'rgba(255,255,255,0.02)',
+                    color: '#F5F3FF',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      alignItems: 'baseline',
+                    }}
+                  >
+                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>{e.title}</span>
+                    <span style={{ fontSize: 11, color: 'rgba(245,243,255,.4)', flexShrink: 0 }}>
+                      {relativeTime(e.ts, now)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(125,227,255,.6)', marginTop: 2 }}>
+                    {e.type.replace(/_/g, ' ')}
+                  </div>
+                </button>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
 
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
       <div
