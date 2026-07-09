@@ -18,6 +18,7 @@ import { mergeDecisions } from '@/lib/ai/decisions';
 import { REMEMBER_FACT_SCHEMA, coerceMemory, newOrChanged } from '@/lib/ai/chatMemory';
 import { needsFallbackReply, REFUSAL_FALLBACK } from '@/lib/ai/chatFallback';
 import { personaOverride } from '@/lib/companions';
+import { recallBlock } from '@/lib/ai/secondBrainRecall';
 
 export const runtime = 'nodejs';
 
@@ -308,7 +309,9 @@ export async function POST(req: Request): Promise<Response> {
     ? '\n\nMEMORY: When the founder states a durable decision or material fact about their company (a real waitlist/user/revenue number, a goal, a milestone, a pricing/positioning/naming/scope/timeline choice), also call the remember_fact tool to record it — in addition to your normal reply. Capture their real words and numbers exactly; never invent. Do not call it for questions, requests to you, opinions, or small talk.'
     : '';
   const companionId = typeof body.companionId === 'string' ? body.companionId : undefined;
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionId)}`;
+  // P2.1: ground byte in the Second Brain ledger when recall is enabled (best-effort, gated).
+  const secondBrainBlock = await recallBlock(uid, lastFounderMsg);
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionId)}`;
 
   try {
     const mstream = streamMessage({
