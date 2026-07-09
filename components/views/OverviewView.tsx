@@ -275,6 +275,21 @@ export default function OverviewView() {
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
+  // TEMP DIAGNOSTIC (Second Brain v2 debug): print the real JS stack for the "reading 'x'"
+  // crash the terminal forwarder swallows. Remove once the root cause is found.
+  useEffect(() => {
+    const onErr = (e: ErrorEvent) =>
+      console.error('[SB-DEBUG] uncaught:', e.message, '\nSTACK:', e.error?.stack);
+    const onRej = (e: PromiseRejectionEvent) =>
+      console.error('[SB-DEBUG] rejection:', (e.reason as Error)?.stack ?? e.reason);
+    window.addEventListener('error', onErr);
+    window.addEventListener('unhandledrejection', onRej);
+    return () => {
+      window.removeEventListener('error', onErr);
+      window.removeEventListener('unhandledrejection', onRej);
+    };
+  }, []);
+
   // measure container (guarded so we don't churn renders / restart the sim)
   useEffect(() => {
     const el = wrapRef.current;
