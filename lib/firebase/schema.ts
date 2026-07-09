@@ -171,6 +171,7 @@ export interface LedgerEvent {
   refId?: string;
   title: string;
   summary: string;
+  vec?: number[]; // embedding of `summary` (P2 recall); absent until the embed route fills it
 }
 
 export const paths = {
