@@ -40,6 +40,16 @@ const CY = '#7c3aed';
 // company" card). The row is capped so they stay small.
 const PANEL_W = 'min(430px, calc(100% - 48px))';
 
+// The roadmap's state vocabulary — a small key so a first-time user can read the cards. Colors
+// match RoadmapView's DOT map (state → dot color); labels match the plain-language status lines.
+const LEGEND: [string, string][] = [
+  ['#16a34a', 'Done'],
+  ['#7c3aed', 'byte can do this'],
+  ['#2563eb', 'Needs your input'],
+  ['#d97706', 'Needs approval'],
+  ['rgba(31,27,21,0.4)', 'Needs earlier steps'],
+];
+
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
@@ -252,226 +262,285 @@ export default function OverviewSection() {
             style={{
               flex: 'none',
               display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'stretch',
-              gap: 14,
-              margin: '16px 0 0 24px',
-              width: PANEL_W,
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 24,
+              margin: '16px 24px 0 24px',
             }}
           >
             <div
               style={{
-                flex: '1 1 170px',
-                minWidth: 0,
-                boxSizing: 'border-box',
-                padding: '9px 13px 10px',
-                borderRadius: 14,
-                background: '#ffffff',
-                border: '1px solid rgba(31,27,21,0.08)',
-                boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'stretch',
+                gap: 14,
+                width: PANEL_W,
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span
-                  style={{
-                    fontFamily: 'var(--sans)',
-                    fontSize: 12.5,
-                    fontWeight: 650,
-                    color: 'var(--ink)',
-                    letterSpacing: '-0.01em',
-                  }}
-                >
-                  Project Progress
-                </span>
-                {currentPhaseName && (
-                  <span
-                    style={{
-                      fontFamily: 'var(--sans)',
-                      fontSize: 10,
-                      fontWeight: 600,
-                      color: 'var(--accent)',
-                      background: 'var(--accent-tint)',
-                      border: '1px solid var(--accent-line)',
-                      padding: '2px 7px',
-                      borderRadius: 999,
-                    }}
-                  >
-                    {currentPhaseName}
-                  </span>
-                )}
-              </div>
-
-              <div style={{ margin: '3px 0 6px', display: 'flex', alignItems: 'baseline', gap: 9 }}>
-                <span
-                  style={{
-                    fontFamily: 'var(--sans)',
-                    fontWeight: 750,
-                    letterSpacing: '-0.03em',
-                    lineHeight: 1,
-                    color: 'var(--ink)',
-                  }}
-                >
-                  <span style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
-                    {prog.pct}
-                  </span>
-                  <span style={{ fontSize: 13, color: 'rgba(31,27,21,0.4)' }}>%</span>
-                </span>
-                {needsYou > 0 && (
-                  <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
-                    needs you {needsYou}
-                  </span>
-                )}
-              </div>
-
-              <div
-                style={{
-                  position: 'relative',
-                  height: 14,
-                  borderRadius: 999,
-                  background: 'rgba(31,27,21,0.07)',
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                <div
-                  className="rm-pfill"
-                  style={{
-                    position: 'relative',
-                    height: '100%',
-                    width: `${prog.pct}%`,
-                    minWidth: prog.pct > 0 ? 14 : 0,
-                    borderRadius: 999,
-                    background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                    boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
-                    transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
-                  }}
-                />
-                {nextMilestone && (
-                  <span
-                    style={{
-                      position: 'absolute',
-                      right: 5,
-                      fontFamily: 'var(--sans)',
-                      fontSize: 10.5,
-                      fontWeight: 600,
-                      color: 'var(--accent)',
-                      background: 'rgba(124,58,237,0.12)',
-                      padding: '2px 8px',
-                      borderRadius: 999,
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    Next: {nextMilestone}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* the single actionable next move — Start runs byte on the real task */}
-            {move && (
               <div
                 style={{
                   flex: '1 1 170px',
                   minWidth: 0,
                   boxSizing: 'border-box',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  gap: 6,
-                  padding: '9px 13px 11px',
-                  borderRadius: 12,
-                  background: 'var(--accent-tint)',
-                  border: '1px solid var(--accent-line)',
+                  padding: '9px 13px 10px',
+                  borderRadius: 14,
+                  background: '#ffffff',
+                  border: '1px solid rgba(31,27,21,0.08)',
+                  boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
                 }}
               >
-                <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
-                {/* beacon + label on one row, then the title and Start stacked below */}
-                <span
-                  style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span
+                    style={{
+                      fontFamily: 'var(--sans)',
+                      fontSize: 12.5,
+                      fontWeight: 650,
+                      color: 'var(--ink)',
+                      letterSpacing: '-0.01em',
+                    }}
+                  >
+                    Project Progress
+                  </span>
+                  {currentPhaseName && (
+                    <span
+                      style={{
+                        fontFamily: 'var(--sans)',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: 'var(--accent)',
+                        background: 'var(--accent-tint)',
+                        border: '1px solid var(--accent-line)',
+                        padding: '2px 7px',
+                        borderRadius: 999,
+                      }}
+                    >
+                      {currentPhaseName}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{ margin: '3px 0 6px', display: 'flex', alignItems: 'baseline', gap: 9 }}
                 >
                   <span
                     style={{
-                      flex: 'none',
-                      width: 13,
-                      height: 13,
-                      display: 'inline-flex',
+                      fontFamily: 'var(--sans)',
+                      fontWeight: 750,
+                      letterSpacing: '-0.03em',
+                      lineHeight: 1,
+                      color: 'var(--ink)',
                     }}
                   >
+                    <span style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
+                      {prog.pct}
+                    </span>
+                    <span style={{ fontSize: 13, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                  </span>
+                  {needsYou > 0 && (
+                    <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
+                      needs you {needsYou}
+                    </span>
+                  )}
+                </div>
+
+                <div
+                  style={{
+                    position: 'relative',
+                    height: 14,
+                    borderRadius: 999,
+                    background: 'rgba(31,27,21,0.07)',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div
+                    className="rm-pfill"
+                    style={{
+                      position: 'relative',
+                      height: '100%',
+                      width: `${prog.pct}%`,
+                      minWidth: prog.pct > 0 ? 14 : 0,
+                      borderRadius: 999,
+                      background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                      boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
+                      transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
+                    }}
+                  />
+                  {nextMilestone && (
                     <span
-                      aria-hidden
-                      className="rm-beacon-ping"
                       style={{
                         position: 'absolute',
-                        inset: 0,
-                        borderRadius: '50%',
-                        background: 'var(--accent)',
-                        animation: 'beaconPing 2.2s ease-out infinite',
+                        right: 5,
+                        fontFamily: 'var(--sans)',
+                        fontSize: 10.5,
+                        fontWeight: 600,
+                        color: 'var(--accent)',
+                        background: 'rgba(124,58,237,0.12)',
+                        padding: '2px 8px',
+                        borderRadius: 999,
+                        whiteSpace: 'nowrap',
                       }}
-                    />
+                    >
+                      Next: {nextMilestone}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* the single actionable next move — Start runs byte on the real task */}
+              {move && (
+                <div
+                  style={{
+                    flex: '1 1 170px',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    gap: 6,
+                    padding: '9px 13px 11px',
+                    borderRadius: 12,
+                    background: 'var(--accent-tint)',
+                    border: '1px solid var(--accent-line)',
+                  }}
+                >
+                  <style>{`@keyframes beaconPing{0%{transform:scale(1);opacity:.5}70%,100%{transform:scale(2.9);opacity:0}}@media (prefers-reduced-motion:reduce){.rm-beacon-ping{animation:none!important}}`}</style>
+                  {/* beacon + label on one row, then the title and Start stacked below */}
+                  <span
+                    style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}
+                  >
+                    <span
+                      style={{
+                        flex: 'none',
+                        width: 13,
+                        height: 13,
+                        display: 'inline-flex',
+                      }}
+                    >
+                      <span
+                        aria-hidden
+                        className="rm-beacon-ping"
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          borderRadius: '50%',
+                          background: 'var(--accent)',
+                          animation: 'beaconPing 2.2s ease-out infinite',
+                        }}
+                      />
+                      <span
+                        style={{
+                          position: 'relative',
+                          width: 13,
+                          height: 13,
+                          borderRadius: '50%',
+                          background: 'var(--accent)',
+                          boxShadow:
+                            '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                        }}
+                      />
+                    </span>
                     <span
                       style={{
                         position: 'relative',
-                        width: 13,
-                        height: 13,
-                        borderRadius: '50%',
-                        background: 'var(--accent)',
-                        boxShadow:
-                          '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                        fontFamily: 'var(--sans)',
+                        fontSize: 10,
+                        letterSpacing: '0.13em',
+                        textTransform: 'uppercase',
+                        color: 'var(--accent)',
+                        flex: 'none',
+                        whiteSpace: 'nowrap',
                       }}
-                    />
+                    >
+                      byte · do this next
+                    </span>
                   </span>
                   <span
                     style={{
                       position: 'relative',
                       fontFamily: 'var(--sans)',
-                      fontSize: 10,
-                      letterSpacing: '0.13em',
-                      textTransform: 'uppercase',
-                      color: 'var(--accent)',
-                      flex: 'none',
-                      whiteSpace: 'nowrap',
+                      fontSize: 13,
+                      fontWeight: 650,
+                      color: 'var(--ink)',
+                      lineHeight: 1.3,
                     }}
                   >
-                    byte · do this next
+                    {move.title}
                   </span>
-                </span>
+                  <button
+                    type="button"
+                    onClick={startMove}
+                    style={{
+                      position: 'relative',
+                      marginTop: 3,
+                      flex: 'none',
+                      fontFamily: 'var(--sans)',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      color: '#ffffff',
+                      background: 'var(--accent)',
+                      border: 'none',
+                      borderRadius: 9,
+                      padding: '7px 18px',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
+                    }}
+                  >
+                    Start
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* states key — teaches a first-time user what the card colors mean */}
+            <div
+              style={{
+                flex: 'none',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 7,
+                paddingTop: 2,
+                fontFamily: 'var(--sans)',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 650,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  color: 'rgba(31,27,21,0.4)',
+                  marginBottom: 1,
+                }}
+              >
+                Key
+              </span>
+              {LEGEND.map(([color, label]) => (
                 <span
+                  key={label}
                   style={{
-                    position: 'relative',
-                    fontFamily: 'var(--sans)',
-                    fontSize: 13,
-                    fontWeight: 650,
-                    color: 'var(--ink)',
-                    lineHeight: 1.3,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 11.5,
+                    color: 'rgba(31,27,21,0.6)',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {move.title}
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: '50%',
+                      background: color,
+                      flex: 'none',
+                    }}
+                  />
+                  {label}
                 </span>
-                <button
-                  type="button"
-                  onClick={startMove}
-                  style={{
-                    position: 'relative',
-                    marginTop: 3,
-                    flex: 'none',
-                    fontFamily: 'var(--sans)',
-                    fontSize: 12.5,
-                    fontWeight: 700,
-                    color: '#ffffff',
-                    background: 'var(--accent)',
-                    border: 'none',
-                    borderRadius: 9,
-                    padding: '7px 18px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
-                  }}
-                >
-                  Start
-                </button>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
           {/* roadmap — the hero. RoadmapView measures this area and scales the diagram up to
               fill the height (capped), so short roadmaps no longer leave dead space below. */}
