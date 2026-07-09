@@ -1289,12 +1289,67 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [briefDepartment],
   );
 
+  // The spine of the roadmap↔work link: resolve the concrete task a roadmap node realizes —
+  // matching an existing one (by the stable node link, else by title) or CREATING it on demand
+  // in the department — and stamp the reverse link so the Overview tracks it exactly. Returns the
+  // runnable task (its exact title feeds runTaskInChat), or null if the department is unknown.
+  const ensureRoadmapTask = useCallback(
+    (deptK: string, title: string, nodeId: string, actor?: string): Task | null => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      if (!d || !nodeId) return null;
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const existing =
+        d.tasks.find((x) => x.roadmapNodeId === nodeId) ||
+        d.tasks.find((x) => nm(x.t) === nm(title)) ||
+        null;
+      if (existing) {
+        if (existing.roadmapNodeId !== nodeId) {
+          existing.roadmapNodeId = nodeId; // stamp the link so tracking is exact from here on
+          bump();
+          persistDepartmentTasks(companyId, d).catch((err) =>
+            console.error('[store] link roadmap task failed', err),
+          );
+        }
+        return existing;
+      }
+      // Create-on-demand: a real, runnable task so byte can do it in-thread and the node tracks
+      // it. No explicit kind — artType defaults it to a runnable deliverable (doc / prep).
+      const created: Task = {
+        t: title,
+        d: '',
+        who: actor === 'you' ? 'you' : 'does',
+        out: '',
+        done: false,
+        roadmapNodeId: nodeId,
+      };
+      d.tasks.push(created);
+      d.later = false; // the department now has live work
+      bump();
+      persistDepartmentTasks(companyId, d).catch((err) =>
+        console.error('[store] create roadmap task failed', err),
+      );
+      return created;
+    },
+    [companyId, bump],
+  );
+
   // The roadmap as a control surface: clicking a cell routes by its state into the chat, so the
   // founder either completes the task in-thread or is told exactly what's blocking it — never a
   // dead-end. A shipped task opens where it lives; a locked one points at its prerequisite.
   const guideRoadmapTask = useCallback(
-    (input: { deptK: string; title: string; state: string; blockedBy?: string }) => {
-      const { deptK, title, state, blockedBy } = input;
+    (input: {
+      deptK: string;
+      title: string;
+      state: string;
+      blockedBy?: string;
+      nodeId?: string;
+      actor?: string;
+    }) => {
+      const { deptK, title, state, blockedBy, nodeId, actor } = input;
       const nm = (s: string) =>
         s
           .toLowerCase()
@@ -1337,32 +1392,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't act for you here. Tell me when it's done and I'll mark it.`,
           );
           return;
-        case 'approve':
-          brief(
-            realT
-              ? `I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`
-              : `“${title}” is ready for your review${d ? ` in ${dn}` : ''}.`,
-            realT
-              ? { action: { label: `Review: ${realT.t}`, deptK, taskTitle: realT.t, inline: true } }
-              : {},
-          );
+        case 'approve': {
+          // Resolve (or link) the drafted task; review it in-thread.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          brief(`I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`, {
+            action: {
+              label: `Review: ${(t ?? realT)?.t ?? title}`,
+              deptK,
+              taskTitle: (t ?? realT)?.t ?? title,
+              inline: true,
+            },
+          });
           return;
-        default: // available / current — byte can do this
-          // With a scaffolded task, one tap runs it in-thread. Without one, byte still briefs it
-          // in chat and STAYS on the roadmap (no jump to the department) — orientation plus an
-          // open door to keep going in conversation.
-          brief(
-            realT
-              ? `Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`
-              : `“${title}” is your next move${d ? ` in ${dn}` : ''}.${d?.need ? ` ${d.need}` : ''} Ask me anything about it and I'll walk you through it.`,
-            realT
-              ? { action: { label: `Start: ${realT.t}`, deptK, taskTitle: realT.t, inline: true } }
-              : {},
-          );
+        }
+        default: {
+          // available / current — byte can do this. The spine guarantees a runnable task: match
+          // an existing one or create it on demand, so one tap always runs it in-thread (and the
+          // node then tracks that task's real state). Only fall back to a plain brief if there's
+          // no node/department to hang a task on.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          if (t)
+            brief(`Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`, {
+              action: { label: `Start: ${t.t}`, deptK, taskTitle: t.t, inline: true },
+            });
+          else
+            brief(
+              `“${title}” is your next move${d ? ` in ${dn}` : ''}.${d?.need ? ` ${d.need}` : ''} Ask me anything about it and I'll walk you through it.`,
+            );
           return;
+        }
       }
     },
-    [toggleCopilot, openDept],
+    [toggleCopilot, openDept, ensureRoadmapTask],
   );
 
   // Open the run loop for a task named by an in-chat action chip.

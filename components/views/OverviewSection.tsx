@@ -148,15 +148,20 @@ export default function OverviewSection() {
   // approval"). Only promotes where we can confidently match — otherwise the dependency default
   // stands. (Precise per-node done for every task awaits a roadmap↔task link — the Second Brain
   // event-ledger's job.)
+  // Keyed first by the stable roadmap↔task link (exact), falling back to a normalized-title match
+  // for tasks not yet linked. Acting on a cell stamps the link (ensureRoadmapTask), so a node's
+  // Done/approve state becomes exact from that point on instead of a title guess.
   const realByKey = new Map<string, { done?: boolean; drafted?: boolean }>();
+  const realByNode = new Map<string, { done?: boolean; drafted?: boolean }>();
   for (const d of DEPTS) {
     for (const t of d.tasks) {
       realByKey.set(`${d.k}::${norm(t.t)}`, { done: t.done, drafted: t.drafted });
+      if (t.roadmapNodeId) realByNode.set(t.roadmapNodeId, { done: t.done, drafted: t.drafted });
     }
   }
   const overrides: Partial<Record<string, RoadmapState>> = {};
   for (const def of defs) {
-    const real = realByKey.get(`${def.dept}::${norm(def.title)}`);
+    const real = realByNode.get(def.id) ?? realByKey.get(`${def.dept}::${norm(def.title)}`);
     if (!real) continue;
     if (real.done) overrides[def.id] = 'done';
     else if (real.drafted) overrides[def.id] = 'approve';
@@ -185,7 +190,14 @@ export default function OverviewSection() {
   const currentDef = currentTaskId ? (defs.find((d) => d.id === currentTaskId) ?? null) : null;
   const move = currentDef ? { deptK: currentDef.dept, title: currentDef.title } : realMove;
   const startMove = () => {
-    if (move) guideRoadmapTask({ deptK: move.deptK, title: move.title, state: 'current' });
+    if (move)
+      guideRoadmapTask({
+        deptK: move.deptK,
+        title: move.title,
+        state: 'current',
+        nodeId: currentTaskId ?? undefined,
+        actor: currentDef?.actor,
+      });
   };
 
   const tasks = applyProgress(defs, { currentPhase, currentTaskId, overrides });
@@ -217,7 +229,14 @@ export default function OverviewSection() {
       task.state === 'locked'
         ? task.dependsOn.map((id) => byId.get(id)).find((t) => t && t.state !== 'done')?.title
         : undefined;
-    guideRoadmapTask({ deptK: task.dept, title: task.title, state: task.state, blockedBy });
+    guideRoadmapTask({
+      deptK: task.dept,
+      title: task.title,
+      state: task.state,
+      blockedBy,
+      nodeId: task.id,
+      actor: task.actor,
+    });
   };
 
   // The toggle adapts to its surface: light on the Roadmap tab, dark on the Second Brain tab
