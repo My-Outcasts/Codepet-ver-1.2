@@ -110,14 +110,22 @@ export default function OverviewSection() {
   // digits like "1") and fall back to "Your company" rather than showing junk on the hero node.
   const rawName = brief.projectName?.trim() ?? '';
   const projectName = rawName.length >= 2 && !/^\d+$/.test(rawName) ? rawName : 'Your company';
-  // byte's one-line read of the company, for the first-run briefing + header identity. Falls
-  // back through the brief's own fields when the AI analysis hasn't been generated yet.
-  const summary = projectAnalysis?.overall || brief.summary || brief.oneLiner || null;
+  // Guard against placeholder-y junk (empty, too short, or all-digits like "1") so the briefing
+  // never shows garbage — the same spirit as the projectName guard above.
+  const meaningful = (s?: string | null): string | null => {
+    const v = s?.trim();
+    return v && v.length >= 6 && !/^\d+$/.test(v) ? v : null;
+  };
+  // byte's one-line read of the company, for the first-run briefing. Falls back through the
+  // brief's own fields when the AI analysis hasn't been generated yet.
+  const summary =
+    meaningful(projectAnalysis?.overall) || meaningful(brief.summary) || meaningful(brief.oneLiner);
   // Header identity: once we know the company, say whose it is and what it is; otherwise the
   // generic framing. Uses the short one-liner (truncated) so it stays a single tidy line.
+  const oneLiner = meaningful(brief.oneLiner);
   const headerLine =
-    projectName !== 'Your company' && brief.oneLiner
-      ? `${projectName} — ${brief.oneLiner}`
+    projectName !== 'Your company' && oneLiner
+      ? `${projectName} — ${oneLiner}`
       : 'Your whole company as a roadmap — where you are, what byte does next, and how far you’ve come.';
 
   // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
