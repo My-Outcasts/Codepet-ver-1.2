@@ -12,6 +12,21 @@ export interface RecallHit {
   score: number;
 }
 
+/** One-time backfill: project existing deliverables + decisions into the event ledger so the
+ *  map shows history immediately. Idempotent server-side. Returns how many events were written. */
+export async function runSecondBrainBackfill(): Promise<{ backfilled: number; skipped: boolean }> {
+  try {
+    const res = await fetch('/api/second-brain/backfill', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(await authHeader()) },
+    });
+    if (!res.ok) return { backfilled: 0, skipped: false };
+    return (await res.json()) as { backfilled: number; skipped: boolean };
+  } catch {
+    return { backfilled: 0, skipped: false };
+  }
+}
+
 export async function askSecondBrain(query: string): Promise<RecallHit[]> {
   try {
     const res = await fetch('/api/second-brain/recall', {

@@ -19,7 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
 import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
-import { askSecondBrain, type RecallHit } from '@/lib/ai/recallClient';
+import { askSecondBrain, runSecondBrainBackfill, type RecallHit } from '@/lib/ai/recallClient';
 import { filterEvents, relativeTime, type TimelineFilter } from '@/lib/overview/timeline';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
@@ -271,6 +271,7 @@ export default function OverviewView() {
   // Timeline panel (P3) — "what changed", filtered by event type.
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all');
+  const [backfilling, setBackfilling] = useState(false);
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
@@ -965,9 +966,35 @@ export default function OverviewView() {
         {/* Second Brain v2 empty-state: the spine still renders, so this is never a blank screen —
             just an honest invitation for a brand-new account with no ledger events yet. */}
         {SECOND_BRAIN_V2 && events.length === 0 && (
-          <div style={{ fontSize: 12.5, color: 'rgba(125,227,255,.75)', marginTop: 8 }}>
-            Your Second Brain fills in as you and byte work — approve a deliverable or lock a
-            decision to see it join the graph.
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12.5, color: 'rgba(125,227,255,.75)' }}>
+              Your Second Brain fills in as you and byte work — approve a deliverable or lock a
+              decision to see it join the graph.
+            </div>
+            <button
+              onClick={async () => {
+                if (backfilling) return;
+                setBackfilling(true);
+                const r = await runSecondBrainBackfill();
+                if (r.backfilled > 0) window.location.reload();
+                else setBackfilling(false);
+              }}
+              style={{
+                pointerEvents: 'auto',
+                marginTop: 8,
+                fontSize: 12.5,
+                fontWeight: 700,
+                padding: '6px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(125,227,255,0.4)',
+                background: 'rgba(125,227,255,0.12)',
+                color: '#7DE3FF',
+                cursor: backfilling ? 'default' : 'pointer',
+                opacity: backfilling ? 0.6 : 1,
+              }}
+            >
+              {backfilling ? 'Loading your history…' : 'Load my past work'}
+            </button>
           </div>
         )}
         {/* Ask your Second Brain (P2 recall). Inert server-side without SECOND_BRAIN_RECALL +
