@@ -32,14 +32,16 @@ export function eventFromLibItem(item: LibDocLike, deptK?: string): LedgerEvent 
   };
 }
 
-export function eventFromDecision(d: DecisionEntry, index: number): LedgerEvent {
+// Keyed by topic (decisions carry no stable id) so a live emit and the backfill
+// converge on one node when the same topic is decided again.
+export function eventFromDecision(d: DecisionEntry): LedgerEvent {
   const statement = d.statement ?? d.topic ?? 'Decision';
   return {
     ts: d.updatedAt ?? 0,
     type: 'decision_made',
     actor: 'byte',
     refType: 'decision',
-    refId: String(index),
+    refId: d.topic ?? statement,
     title: (d.topic ?? statement).slice(0, 80),
     summary: `Decision${d.topic ? ` on ${d.topic}` : ''}: ${statement}`,
   };
@@ -63,7 +65,11 @@ export function eventFromTaskDone(
   };
 }
 
-export function eventFromStageAdvance(stage: number, stageName: string, ts: number): LedgerEvent {
+export function eventFromStageAdvance(
+  stage: number | string,
+  stageName: string,
+  ts: number,
+): LedgerEvent {
   return {
     ts,
     type: 'stage_advanced',

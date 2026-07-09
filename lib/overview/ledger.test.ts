@@ -27,11 +27,11 @@ describe('eventFromLibItem', () => {
 });
 
 describe('eventFromDecision', () => {
-  it('maps topic/statement/updatedAt and indexes when there is no id', () => {
-    const e = eventFromDecision({ topic: 'Pricing', statement: 'Charge $9/mo', updatedAt: 7 }, 3);
+  it('maps topic/statement/updatedAt and keys by topic', () => {
+    const e = eventFromDecision({ topic: 'Pricing', statement: 'Charge $9/mo', updatedAt: 7 });
     expect(e.type).toBe('decision_made');
     expect(e.ts).toBe(7);
-    expect(e.refId).toBe('3');
+    expect(e.refId).toBe('Pricing');
     expect(e.summary).toContain('Charge $9/mo');
   });
 });
