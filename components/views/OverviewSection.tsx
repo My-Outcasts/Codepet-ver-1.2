@@ -51,16 +51,8 @@ const LEGEND: [string, string][] = [
 ];
 
 export default function OverviewSection() {
-  const {
-    brief,
-    nextStep,
-    tick,
-    openDept,
-    portalToTask,
-    introSeen,
-    markIntroSeen,
-    projectAnalysis,
-  } = useApp();
+  const { brief, nextStep, tick, guideRoadmapTask, introSeen, markIntroSeen, projectAnalysis } =
+    useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
   // has already dismissed it. Non-destructive — no account data is touched.
@@ -193,7 +185,7 @@ export default function OverviewSection() {
   const currentDef = currentTaskId ? (defs.find((d) => d.id === currentTaskId) ?? null) : null;
   const move = currentDef ? { deptK: currentDef.dept, title: currentDef.title } : realMove;
   const startMove = () => {
-    if (move) portalToTask(move.deptK, move.title);
+    if (move) guideRoadmapTask({ deptK: move.deptK, title: move.title, state: 'current' });
   };
 
   const tasks = applyProgress(defs, { currentPhase, currentTaskId, overrides });
@@ -216,11 +208,16 @@ export default function OverviewSection() {
     }
   }
 
-  // Click a card: the current move starts byte on the real task; any other card opens its
-  // real department so the founder can act on the actual work there.
+  // Click a card: route into the chat by the card's state — run/review it in-thread when byte
+  // can, guide the founder when it's theirs, or explain what's blocking a locked step (naming the
+  // unfinished prerequisite so it's never a dead-end). One shared handler, every surface.
+  const byId = new Map(tasks.map((t) => [t.id, t]));
   const onTaskClick = (task: RoadmapTask) => {
-    if (task.state === 'current') startMove();
-    else openDept(task.dept);
+    const blockedBy =
+      task.state === 'locked'
+        ? task.dependsOn.map((id) => byId.get(id)).find((t) => t && t.state !== 'done')?.title
+        : undefined;
+    guideRoadmapTask({ deptK: task.dept, title: task.title, state: task.state, blockedBy });
   };
 
   // The toggle adapts to its surface: light on the Roadmap tab, dark on the Second Brain tab

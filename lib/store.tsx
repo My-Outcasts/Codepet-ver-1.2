@@ -243,6 +243,14 @@ interface AppState {
   portalSignal: { deptK: string; n: number } | null;
   /** Portal into a task from anywhere (e.g. the Roadmap): go to the map, byte arrives in chat, camera flies to its dept. */
   portalToTask: (deptK: string, taskTitle: string) => void;
+  /** Act on a roadmap cell by its state: run/review it inline in chat when byte can, guide the
+   *  founder when it's theirs, explain what's blocking a locked step, or open a finished one. */
+  guideRoadmapTask: (input: {
+    deptK: string;
+    title: string;
+    state: string;
+    blockedBy?: string;
+  }) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -1281,6 +1289,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [briefDepartment],
   );
 
+  // The roadmap as a control surface: clicking a cell routes by its state into the chat, so the
+  // founder either completes the task in-thread or is told exactly what's blocking it — never a
+  // dead-end. A shipped task opens where it lives; a locked one points at its prerequisite.
+  const guideRoadmapTask = useCallback(
+    (input: { deptK: string; title: string; state: string; blockedBy?: string }) => {
+      const { deptK, title, state, blockedBy } = input;
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const d = DEPTS.find((x) => x.k === deptK) || null;
+      // Match the scaffolded task loosely (normalized title) so byte can run it in-thread even
+      // when the roadmap's canonical wording differs slightly from the department's.
+      const realT = d?.tasks.find((x) => nm(x.t) === nm(title)) || null;
+      const dn = d?.name ?? 'its department';
+      const brief = (text: string, extra: Partial<ChatMessage> = {}) => {
+        toggleCopilot(false); // open the chat so the guidance / run is visible
+        setChatMessages((prev) => [
+          ...prev.filter((m) => !m.brief),
+          { id: newId(), role: 'byte', text, ts: Date.now(), brief: true, ...extra },
+        ]);
+      };
+
+      switch (state) {
+        case 'done':
+          // The finished work lives in its department — go there to view or redo it.
+          openDept(deptK);
+          return;
+        case 'locked': {
+          const prereq = blockedBy && d?.tasks.find((x) => nm(x.t) === nm(blockedBy));
+          brief(
+            blockedBy
+              ? `“${title}” unlocks once “${blockedBy}” is done — let's start there.`
+              : `“${title}” needs an earlier step finished first.`,
+            prereq
+              ? {
+                  action: { label: `Start: ${prereq.t}`, deptK, taskTitle: prereq.t, inline: true },
+                }
+              : {},
+          );
+          return;
+        }
+        case 'needsYou':
+          brief(
+            `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't act for you here. Tell me when it's done and I'll mark it.`,
+          );
+          return;
+        case 'approve':
+          if (realT)
+            brief(`I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`, {
+              action: { label: `Review: ${realT.t}`, deptK, taskTitle: realT.t, inline: true },
+            });
+          else openDept(deptK);
+          return;
+        default: // available / current — byte can do this
+          if (realT)
+            brief(`Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`, {
+              action: { label: `Start: ${realT.t}`, deptK, taskTitle: realT.t, inline: true },
+            });
+          else openDept(deptK);
+          return;
+      }
+    },
+    [toggleCopilot, openDept],
+  );
+
   // Open the run loop for a task named by an in-chat action chip.
   const runBriefedTask = useCallback(
     (deptK: string, taskTitle: string) => {
@@ -2189,6 +2264,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       briefDepartment,
       portalSignal,
       portalToTask,
+      guideRoadmapTask,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2298,6 +2374,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       briefDepartment,
       portalSignal,
       portalToTask,
+      guideRoadmapTask,
       runBriefedTask,
       viewItem,
       closeModal,
