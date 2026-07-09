@@ -250,6 +250,8 @@ interface AppState {
     title: string;
     state: string;
     blockedBy?: string;
+    nodeId?: string;
+    actor?: string;
   }) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
