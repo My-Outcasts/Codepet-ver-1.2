@@ -53,6 +53,17 @@ const LEGEND: [string, string][] = [
 export default function OverviewSection() {
   const { brief, nextStep, tick, openDept, portalToTask, introSeen, markIntroSeen } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
+  // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
+  // has already dismissed it. Non-destructive — no account data is touched.
+  const [forceIntro] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('intro'),
+  );
+  const [introDismissed, setIntroDismissed] = useState(false);
+  const showIntro = (!introSeen || forceIntro) && !introDismissed;
+  const dismissIntro = () => {
+    setIntroDismissed(true);
+    markIntroSeen();
+  };
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
   // byte's real, per-company roadmap once generated; until then the canonical template.
@@ -244,7 +255,7 @@ export default function OverviewSection() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {/* First-run: byte introduces the map in its own voice, shown once per account
               (introSeen is account-scoped, persisted to companies/{uid}.introSeenAt). */}
-          {!introSeen && (
+          {showIntro && (
             <div
               role="dialog"
               aria-modal="true"
@@ -356,7 +367,7 @@ export default function OverviewSection() {
                 </div>
                 <button
                   type="button"
-                  onClick={markIntroSeen}
+                  onClick={dismissIntro}
                   style={{
                     width: '100%',
                     fontFamily: 'var(--sans)',
