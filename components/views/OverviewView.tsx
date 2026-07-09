@@ -853,14 +853,18 @@ export default function OverviewView() {
       group.add(makeFireflySprite(glowHex, size));
       if (isRoot || isDept || n.sbLabel) {
         const lbl = new SpriteText(n.name);
-        lbl.color = 'rgba(245,243,255,0.95)';
-        lbl.textHeight = isRoot ? 4.6 : isDept ? 3.9 : 3.2;
+        lbl.color = '#FFFFFF';
+        lbl.textHeight = isRoot ? 5 : isDept ? 4.3 : 3.6;
         lbl.fontFace = 'Inter, system-ui, sans-serif';
-        lbl.fontWeight = '600';
-        (lbl as any).backgroundColor = 'rgba(7,5,16,0.62)';
-        (lbl as any).padding = 2;
-        (lbl as any).borderRadius = 3;
-        (lbl as any).position.set(0, size * 0.45 + 3, 0);
+        lbl.fontWeight = '700';
+        // Solid dark pill + a dark stroke so the text stays legible over the bright additive glow.
+        (lbl as any).backgroundColor = 'rgba(6,5,14,0.9)';
+        (lbl as any).padding = 3;
+        (lbl as any).borderRadius = 4;
+        lbl.strokeColor = 'rgba(0,0,0,0.85)';
+        lbl.strokeWidth = 0.6;
+        // Lift the label clear of the glow so the bloom halo doesn't wash over the text.
+        (lbl as any).position.set(0, size * 0.6 + 5, 0);
         group.add(lbl);
       }
       return group;
