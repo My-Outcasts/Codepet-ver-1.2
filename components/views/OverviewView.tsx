@@ -21,6 +21,7 @@ import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
 import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
 import { askSecondBrain, runSecondBrainBackfill, type RecallHit } from '@/lib/ai/recallClient';
 import { filterEvents, relativeTime, type TimelineFilter } from '@/lib/overview/timeline';
+import SecondBrainPanel from '@/components/views/overview/SecondBrainPanel';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -235,6 +236,8 @@ export default function OverviewView() {
     events,
     library,
     openDeliverable,
+    tracking,
+    companionId,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
@@ -1150,7 +1153,7 @@ export default function OverviewView() {
           style={{
             position: 'absolute',
             top: 58,
-            right: 26,
+            right: 338,
             bottom: 26,
             width: 320,
             maxWidth: '42vw',
@@ -1234,6 +1237,29 @@ export default function OverviewView() {
               ));
             })()}
           </div>
+        </div>
+      )}
+
+      {SECOND_BRAIN_V2 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 58,
+            right: 26,
+            bottom: 26,
+            width: 300,
+            maxWidth: '38vw',
+            zIndex: 6,
+            pointerEvents: 'auto',
+          }}
+        >
+          <SecondBrainPanel
+            events={events}
+            nextStep={nextStep}
+            tracking={tracking}
+            companionId={companionId}
+            onTopic={(k) => flyTo(`dept:${k}`)}
+          />
         </div>
       )}
 
