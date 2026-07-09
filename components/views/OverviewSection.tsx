@@ -51,7 +51,16 @@ const LEGEND: [string, string][] = [
 ];
 
 export default function OverviewSection() {
-  const { brief, nextStep, tick, openDept, portalToTask, introSeen, markIntroSeen } = useApp();
+  const {
+    brief,
+    nextStep,
+    tick,
+    openDept,
+    portalToTask,
+    introSeen,
+    markIntroSeen,
+    projectAnalysis,
+  } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
   // has already dismissed it. Non-destructive — no account data is touched.
@@ -101,6 +110,15 @@ export default function OverviewSection() {
   // digits like "1") and fall back to "Your company" rather than showing junk on the hero node.
   const rawName = brief.projectName?.trim() ?? '';
   const projectName = rawName.length >= 2 && !/^\d+$/.test(rawName) ? rawName : 'Your company';
+  // byte's one-line read of the company, for the first-run briefing + header identity. Falls
+  // back through the brief's own fields when the AI analysis hasn't been generated yet.
+  const summary = projectAnalysis?.overall || brief.summary || brief.oneLiner || null;
+  // Header identity: once we know the company, say whose it is and what it is; otherwise the
+  // generic framing. Uses the short one-liner (truncated) so it stays a single tidy line.
+  const headerLine =
+    projectName !== 'Your company' && brief.oneLiner
+      ? `${projectName} — ${brief.oneLiner}`
+      : 'Your whole company as a roadmap — where you are, what byte does next, and how far you’ve come.';
 
   // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
   // the authored golden path so Start resolves to a REAL department task.
@@ -323,19 +341,58 @@ export default function OverviewSection() {
                         marginTop: 1,
                       }}
                     >
-                      Your company, mapped
+                      {projectName === 'Your company'
+                        ? 'Your company, mapped'
+                        : `${projectName}, mapped`}
                     </div>
                   </div>
                 </div>
+                {summary && (
+                  <div
+                    style={{
+                      fontSize: 14.5,
+                      lineHeight: 1.5,
+                      color: 'rgba(31,27,21,0.72)',
+                      marginBottom: 14,
+                    }}
+                  >
+                    {summary}
+                  </div>
+                )}
                 <div
                   style={{
-                    fontSize: 14.5,
+                    fontSize: 13.5,
                     lineHeight: 1.5,
-                    color: 'rgba(31,27,21,0.72)',
+                    color: 'rgba(31,27,21,0.82)',
+                    background: 'rgba(124,58,237,0.07)',
+                    border: '1px solid rgba(124,58,237,0.16)',
+                    borderRadius: 12,
+                    padding: '11px 13px',
                     marginBottom: 16,
                   }}
                 >
-                  This whole map is your company, one step at a time. Here’s how to read it:
+                  <span style={{ fontWeight: 650, color: '#1f1b15' }}>
+                    You’re in the {currentPhaseName || 'first'} phase
+                  </span>
+                  {nextMilestone ? ` — next milestone: ${nextMilestone}.` : '.'}
+                  {move?.title && (
+                    <>
+                      {' '}
+                      First up: <span style={{ fontWeight: 650, color: CY }}>{move.title}</span>.
+                    </>
+                  )}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 650,
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                    color: 'rgba(31,27,21,0.4)',
+                    marginBottom: 10,
+                  }}
+                >
+                  How to read the map
                 </div>
                 <div
                   style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 22 }}
@@ -426,10 +483,13 @@ export default function OverviewSection() {
                   color: 'rgba(31,27,21,.62)',
                   marginTop: 4,
                   whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: 'min(680px, 58vw)',
                 }}
+                title={headerLine}
               >
-                Your whole company as a roadmap — where you are, what byte does next, and how far
-                you’ve come.
+                {headerLine}
               </div>
             </div>
             {toggle}
