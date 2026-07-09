@@ -1310,9 +1310,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (existing.roadmapNodeId !== nodeId) {
           existing.roadmapNodeId = nodeId; // stamp the link so tracking is exact from here on
           bump();
-          persistDepartmentTasks(companyId, d).catch((err) =>
-            console.error('[store] link roadmap task failed', err),
-          );
+          if (companyId)
+            persistDepartmentTasks(companyId, d).catch((err) =>
+              console.error('[store] link roadmap task failed', err),
+            );
         }
         return existing;
       }
@@ -1329,9 +1330,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       d.tasks.push(created);
       d.later = false; // the department now has live work
       bump();
-      persistDepartmentTasks(companyId, d).catch((err) =>
-        console.error('[store] create roadmap task failed', err),
-      );
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] create roadmap task failed', err),
+        );
       return created;
     },
     [companyId, bump],
