@@ -213,6 +213,36 @@ function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
   return sprite;
 }
 
+// A firefly: hot near-white core → warm color → transparent, additive-blended so overlapping
+// dots add up into bright cluster cores (the Second Brain nebula read from the reference).
+function makeFireflySprite(colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(255,253,245,0.98)');
+  g.addColorStop(0.16, colorHex);
+  g.addColorStop(0.42, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 export default function OverviewView() {
   const {
     openDept,
@@ -810,34 +840,32 @@ export default function OverviewView() {
     openHit({ refType, title, refId: undefined, summary: '', score: 0 });
 
   const nodeThreeObject = (n: GNode): any => {
-    if (n.kind === 'task') return undefined; // default sphere; label on hover
-    // Second Brain v2 knowledge dots: render each as a soft glowing firefly (a radial glow the
-    // bloom pass amplifies) wrapped around the small bright core, instead of a flat solid sphere.
-    // High-weight ones (sbLabel) also carry a small persistent label like the reference.
-    if (
-      n.kind === 'deliverable' ||
-      n.kind === 'decision' ||
-      n.kind === 'fact' ||
-      n.kind === 'session' ||
-      n.kind === 'milestone'
-    ) {
+    // Second Brain v2: render EVERY node as a firefly (hot core + warm glow, additive-blended),
+    // no hard sphere — the nebula read from the reference. Roots/departments are bigger and always
+    // labeled; high-weight knowledge nodes carry a label too, the rest are hover-only.
+    if (SECOND_BRAIN_V2) {
       const radius = Math.cbrt(n.val) * 2.2;
+      const isRoot = n.kind === 'project';
+      const isDept = n.kind === 'dept';
+      const glowHex = isRoot ? '#FFE7A8' : (n.deptColor ?? '#FDB022');
+      const size = radius * (isRoot ? 9 : isDept ? 7 : 5.5);
       const group = new THREE.Group();
-      group.add(makeGlowSprite(n.deptColor ?? '#FDB022', radius * 6));
-      if (n.sbLabel) {
+      group.add(makeFireflySprite(glowHex, size));
+      if (isRoot || isDept || n.sbLabel) {
         const lbl = new SpriteText(n.name);
-        lbl.color = 'rgba(245,243,255,0.92)';
-        lbl.textHeight = 3.2;
+        lbl.color = 'rgba(245,243,255,0.95)';
+        lbl.textHeight = isRoot ? 4.6 : isDept ? 3.9 : 3.2;
         lbl.fontFace = 'Inter, system-ui, sans-serif';
         lbl.fontWeight = '600';
-        (lbl as any).backgroundColor = 'rgba(7,5,16,0.7)';
+        (lbl as any).backgroundColor = 'rgba(7,5,16,0.62)';
         (lbl as any).padding = 2;
         (lbl as any).borderRadius = 3;
-        (lbl as any).position.set(0, radius + 4, 0);
+        (lbl as any).position.set(0, size * 0.45 + 3, 0);
         group.add(lbl);
       }
       return group;
     }
+    if (n.kind === 'task') return undefined; // default sphere; label on hover
 
     // Label — for departments, append the progress count.
     const total = n.total ?? 0;
@@ -1461,7 +1489,7 @@ export default function OverviewView() {
               if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
-            nodeOpacity={SECOND_BRAIN_V2 ? 0.6 : 0.95}
+            nodeOpacity={SECOND_BRAIN_V2 ? 0 : 0.95}
             nodeResolution={18}
             nodeRelSize={2.2}
             nodeThreeObjectExtend
