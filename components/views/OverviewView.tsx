@@ -933,6 +933,14 @@ export default function OverviewView() {
           Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
           a node to open it.
         </div>
+        {/* Second Brain v2 empty-state: the spine still renders, so this is never a blank screen —
+            just an honest invitation for a brand-new account with no ledger events yet. */}
+        {SECOND_BRAIN_V2 && events.length === 0 && (
+          <div style={{ fontSize: 12.5, color: 'rgba(125,227,255,.75)', marginTop: 8 }}>
+            Your Second Brain fills in as you and byte work — approve a deliverable or lock a
+            decision to see it join the graph.
+          </div>
+        )}
         {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
             never let a seeded map pass for a plan tailored to the founder's product. */}
         {examplePlan && (
