@@ -17,7 +17,8 @@ import * as THREE from 'three';
 // @ts-ignore - addons ship without bundled types in some setups
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { useApp } from '@/lib/store';
-import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
+import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
+import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -47,6 +48,15 @@ const STATE_HEX: Record<string, string> = {
   'st-you': '#3B82F6',
   'st-done': '#34D399',
 };
+// Second Brain v2 — per-knowledge-kind glow colors (deliverable/decision/fact/session/milestone).
+const KG_HEX: Record<string, string> = {
+  deliverable: '#8B5CF6',
+  decision: '#7DE3FF',
+  fact: '#34D399',
+  session: '#FDB022',
+  milestone: '#FF6B9D',
+};
+const SECOND_BRAIN_V2 = process.env.NEXT_PUBLIC_SECOND_BRAIN_V2 === '1';
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
 const DIM_NODE = 'rgba(150,150,170,0.09)';
 const DIM_LINK = 'rgba(150,150,170,0.03)';
@@ -69,7 +79,17 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 interface GNode {
   id: string;
   name: string;
-  kind: 'project' | 'dept' | 'task';
+  kind:
+    | 'project'
+    | 'dept'
+    | 'task'
+    | 'milestone'
+    | 'deliverable'
+    | 'decision'
+    | 'fact'
+    | 'session';
+  refType?: string;
+  refId?: string;
   color: string;
   val: number;
   deptColor?: string;
@@ -90,7 +110,17 @@ interface GLink {
   target: string;
   color: string;
   hex: string;
-  kind: 'pd' | 'dt';
+  kind:
+    | 'pd'
+    | 'dt'
+    | 'belongs_to'
+    | 'produced'
+    | 'advances'
+    | 'depends_on'
+    | 'references'
+    | 'supersedes'
+    | 'grounds'
+    | 'spine';
   active?: boolean;
 }
 
@@ -200,6 +230,9 @@ export default function OverviewView() {
     clearGrowthSignal,
     introSeen,
     markIntroSeen,
+    events,
+    library,
+    openDeliverable,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
@@ -248,6 +281,52 @@ export default function OverviewView() {
   }, []);
 
   const { data, adj } = useMemo(() => {
+    if (SECOND_BRAIN_V2) {
+      // P1: render the derived knowledge graph (ledger → typed, cross-linked nodes)
+      // instead of the authored company→dept→task tree. The renderer is untouched;
+      // only the data feeding it changes.
+      const kg = buildKnowledgeGraph(events, DEPTS);
+      const count = Math.max(1, kg.nodes.length - 1);
+      const vnodes: GNode[] = kg.nodes.map((n, i) => {
+        const isRoot = n.kind === 'company';
+        const yy = count > 1 ? 1 - (i / count) * 2 : 0;
+        const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+        const th = GOLDEN * i;
+        const hex = n.kind === 'department' ? HEX['--accent'] : (KG_HEX[n.kind] ?? HEX['--accent']);
+        const gkind: GNode['kind'] =
+          n.kind === 'company' ? 'project' : n.kind === 'department' ? 'dept' : n.kind;
+        return {
+          id: n.id,
+          name: n.name,
+          kind: gkind,
+          refType: n.refType,
+          refId: n.refId,
+          color: rgba(hex, isRoot ? 0.95 : 0.85),
+          val: isRoot ? 12 : 0.7 + Math.min(6, n.weight),
+          deptColor: hex,
+          x: isRoot ? 0 : Math.cos(th) * rr * DEPT_R,
+          y: isRoot ? 0 : yy * DEPT_R,
+          z: isRoot ? 0 : Math.sin(th) * rr * DEPT_R,
+        };
+      });
+      const vlinks: GLink[] = kg.edges.map((e) => ({
+        source: e.source,
+        target: e.target,
+        color: rgba(HEX['--accent'], e.kind === 'spine' ? 0.35 : 0.2),
+        hex: HEX['--accent'],
+        kind: e.kind,
+      }));
+      const vadj = new Map<string, Set<string>>();
+      vlinks.forEach((l) => {
+        const s = linkId(l.source),
+          t = linkId(l.target);
+        if (!vadj.has(s)) vadj.set(s, new Set());
+        if (!vadj.has(t)) vadj.set(t, new Set());
+        vadj.get(s)!.add(t);
+        vadj.get(t)!.add(s);
+      });
+      return { data: { nodes: vnodes, links: vlinks }, adj: vadj };
+    }
     const nodes: GNode[] = [];
     const links: GLink[] = [];
     nodes.push({
@@ -333,7 +412,7 @@ export default function OverviewView() {
       adj.get(l.target)!.add(l.source);
     });
     return { data: { nodes, links }, adj };
-  }, [tick, brief.projectName, revealKeys]);
+  }, [tick, brief.projectName, revealKeys, events]);
 
   const inFocus = useCallback(
     (id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id),
@@ -643,6 +722,16 @@ export default function OverviewView() {
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
+    // Second Brain v2 knowledge dots (deliverable/decision/fact/session/milestone): keep them
+    // as clean glowing spheres with a hover label — the dense-galaxy read from the reference.
+    if (
+      n.kind === 'deliverable' ||
+      n.kind === 'decision' ||
+      n.kind === 'fact' ||
+      n.kind === 'session' ||
+      n.kind === 'milestone'
+    )
+      return undefined;
 
     // Label — for departments, append the progress count.
     const total = n.total ?? 0;
@@ -1016,6 +1105,15 @@ export default function OverviewView() {
             d3VelocityDecay={0.45}
             onEngineStop={onEngineStop}
             onNodeClick={(n) => {
+              if (SECOND_BRAIN_V2) {
+                // Route a knowledge node back to its source record where we have one.
+                if (n.refType === 'library') {
+                  const item = library.find((it) => it.title === n.name);
+                  if (item) return openDeliverable(item as LibItem);
+                }
+                if (n.kind === 'dept') return openDept(n.id.replace(/^dept:/, ''));
+                return fitView();
+              }
               if (n.kind === 'dept' && n.dept) openDept(n.dept.k);
               else if (n.kind === 'task' && n.task && n.dept) {
                 if (n.task.done) openDept(n.dept.k);
