@@ -1338,18 +1338,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           );
           return;
         case 'approve':
-          if (realT)
-            brief(`I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`, {
-              action: { label: `Review: ${realT.t}`, deptK, taskTitle: realT.t, inline: true },
-            });
-          else openDept(deptK);
+          brief(
+            realT
+              ? `I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`
+              : `“${title}” is ready for your review${d ? ` in ${dn}` : ''}.`,
+            realT
+              ? { action: { label: `Review: ${realT.t}`, deptK, taskTitle: realT.t, inline: true } }
+              : {},
+          );
           return;
         default: // available / current — byte can do this
-          if (realT)
-            brief(`Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`, {
-              action: { label: `Start: ${realT.t}`, deptK, taskTitle: realT.t, inline: true },
-            });
-          else openDept(deptK);
+          // With a scaffolded task, one tap runs it in-thread. Without one, byte still briefs it
+          // in chat and STAYS on the roadmap (no jump to the department) — orientation plus an
+          // open door to keep going in conversation.
+          brief(
+            realT
+              ? `Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`
+              : `“${title}” is your next move${d ? ` in ${dn}` : ''}.${d?.need ? ` ${d.need}` : ''} Ask me anything about it and I'll walk you through it.`,
+            realT
+              ? { action: { label: `Start: ${realT.t}`, deptK, taskTitle: realT.t, inline: true } }
+              : {},
+          );
           return;
       }
     },
