@@ -51,7 +51,7 @@ const LEGEND: [string, string][] = [
 ];
 
 export default function OverviewSection() {
-  const { brief, nextStep, tick, openDept, portalToTask } = useApp();
+  const { brief, nextStep, tick, openDept, portalToTask, introSeen, markIntroSeen } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
@@ -216,6 +216,140 @@ export default function OverviewSection() {
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* First-run: byte introduces the map in its own voice, shown once per account
+              (introSeen is account-scoped, persisted to companies/{uid}.introSeenAt). */}
+          {!introSeen && (
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="How the roadmap works"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 30,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 24,
+                background: 'rgba(31,27,21,0.34)',
+                backdropFilter: 'blur(2px)',
+              }}
+            >
+              <div
+                style={{
+                  width: 'min(440px, 100%)',
+                  background: '#ffffff',
+                  border: '1px solid rgba(31,27,21,0.08)',
+                  borderRadius: 20,
+                  boxShadow: '0 30px 80px -30px rgba(31,27,21,0.55)',
+                  padding: '26px 26px 22px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 }}>
+                  <span
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 12,
+                      flex: 'none',
+                      background: 'linear-gradient(160deg, #9333ea, #7c3aed)',
+                      boxShadow: '0 8px 22px -8px rgba(124,58,237,0.7)',
+                    }}
+                  />
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 10.5,
+                        fontWeight: 650,
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        color: CY,
+                      }}
+                    >
+                      byte
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 19,
+                        fontWeight: 680,
+                        color: '#1f1b15',
+                        letterSpacing: '-0.01em',
+                        marginTop: 1,
+                      }}
+                    >
+                      Your company, mapped
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style={{
+                    fontSize: 14.5,
+                    lineHeight: 1.5,
+                    color: 'rgba(31,27,21,0.72)',
+                    marginBottom: 16,
+                  }}
+                >
+                  This whole map is your company, one step at a time. Here’s how to read it:
+                </div>
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 22 }}
+                >
+                  {(
+                    [
+                      ['#16a34a', 'Green is done', 'how far you’ve already come.'],
+                      [
+                        '#7c3aed',
+                        'The glowing card is your next move',
+                        'hit Start and I’ll get to work.',
+                      ],
+                      [
+                        'rgba(31,27,21,0.4)',
+                        'Greyed-out steps are locked',
+                        'they unlock as you finish what they depend on.',
+                      ],
+                    ] as [string, string, string][]
+                  ).map(([c, h, b]) => (
+                    <div key={h} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <span
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: c,
+                          marginTop: 6,
+                          flex: 'none',
+                        }}
+                      />
+                      <div
+                        style={{ fontSize: 13.5, lineHeight: 1.45, color: 'rgba(31,27,21,0.72)' }}
+                      >
+                        <span style={{ fontWeight: 650, color: '#1f1b15' }}>{h}</span> — {b}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={markIntroSeen}
+                  style={{
+                    width: '100%',
+                    fontFamily: 'var(--sans)',
+                    fontSize: 14,
+                    fontWeight: 650,
+                    color: '#ffffff',
+                    background: '#7c3aed',
+                    border: 'none',
+                    borderRadius: 12,
+                    padding: '11px 18px',
+                    cursor: 'pointer',
+                    boxShadow: '0 8px 22px -8px rgba(124,58,237,0.7)',
+                  }}
+                >
+                  Got it — show me
+                </button>
+              </div>
+            </div>
+          )}
           {/* Compact header — the roadmap below is the hero, so the top stays slim. */}
           <div
             style={{
