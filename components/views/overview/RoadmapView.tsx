@@ -234,7 +234,7 @@ export default function RoadmapView({
   }, []);
   const HEADER_BLOCK = 34; // phase-header row (28) + its 6px bottom margin
   const natH = L.height + HEADER_BLOCK;
-  const MAX_SCALE = 1.2; // grow only modestly to trim dead space; center leftover, never balloon
+  const MAX_SCALE = 1.0; // never upscale — keep cards at natural size and center any leftover height
   const scale = avail > 0 ? Math.max(1, Math.min(MAX_SCALE, avail / natH)) : 1;
   const scaledH = natH * scale;
   const padTop = avail > scaledH ? Math.round((avail - scaledH) / 2) : 0;
