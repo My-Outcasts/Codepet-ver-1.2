@@ -11,7 +11,7 @@
 // preview route without touching the concurrently-evolving app shell.
 import { useEffect, useRef, useState } from 'react';
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
-import { ROADMAP_PHASES, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
+import { ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
 const CY = '#7c3aed';
@@ -188,7 +188,6 @@ function Node({
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 5,
             marginTop: 4,
             fontSize: 10,
             fontWeight: 600,
@@ -196,14 +195,6 @@ function Node({
             whiteSpace: 'nowrap',
           }}
         >
-          <span
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: DEPT_COLOR[task.dept] ?? TX3,
-            }}
-          />
           {STATUS[st]}
         </span>
       </span>
