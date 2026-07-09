@@ -103,22 +103,31 @@ export default function OverviewSection() {
   const projectName = rawName.length >= 2 && !/^\d+$/.test(rawName) ? rawName : 'Your company';
 
   // byte's real next move — the single actionable task. Prefer /api/next-step; fall back to
-  // the authored golden path so Start always resolves to a REAL department task.
+  // the authored golden path so Start resolves to a REAL department task.
   const fallback = nextAction();
-  const move = nextStep
+  const realMove = nextStep
     ? { deptK: nextStep.deptK, title: nextStep.taskTitle }
     : fallback
       ? { deptK: fallback.dept.k, title: fallback.task.t }
       : null;
-  const startMove = () => {
-    if (move) portalToTask(move.deptK, move.title);
-  };
 
   // The lit "byte is here" node: take a current-phase slot (prefer one whose department
   // matches the move) and RELABEL it to byte's real next move — so the map agrees with the
   // "do this next" hero and clicking that node runs the very same task.
   const currentTaskId =
-    (move && phaseTasks.find((t) => t.dept === move.deptK)?.id) || phaseTasks[0]?.id || null;
+    (realMove && phaseTasks.find((t) => t.dept === realMove.deptK)?.id) ||
+    phaseTasks[0]?.id ||
+    null;
+
+  // Always give the founder a concrete next step. If byte has no live move yet — e.g. a brand-new
+  // account whose earliest stage has no scaffolded task — fall back to the roadmap's own current
+  // node, so the "do this next" beacon is never blank.
+  const currentDef = currentTaskId ? (defs.find((d) => d.id === currentTaskId) ?? null) : null;
+  const move =
+    realMove ?? (currentDef ? { deptK: currentDef.dept, title: currentDef.title } : null);
+  const startMove = () => {
+    if (move) portalToTask(move.deptK, move.title);
+  };
 
   // Real per-task truth from the live DEPTS, matched by (department + normalized title): a
   // matched task that's shipped shows `done`; one byte has drafted shows `approve` ("Needs
