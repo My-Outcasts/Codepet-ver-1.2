@@ -150,6 +150,29 @@ export interface ThreadMeta {
 }
 
 // ---- Collection / document path helpers (single source of truth) ----
+export type LedgerEventType =
+  | 'deliverable_approved'
+  | 'decision_made'
+  | 'fact_remembered'
+  | 'task_run'
+  | 'build_session'
+  | 'toolkit_used'
+  | 'stage_advanced';
+
+// One append-only entry in the Second Brain event ledger (companies/{cid}/events).
+// The timestamp that done/drafted booleans never carried, plus a pointer back to the
+// source record and a one-sentence `summary` reserved for P2 embedding & recall.
+export interface LedgerEvent {
+  ts: Millis;
+  type: LedgerEventType;
+  actor: 'byte' | 'founder';
+  deptK?: string;
+  refType?: string; // 'library' | 'decision' | 'trackEvent' | 'task' | 'fact' | 'stage'
+  refId?: string;
+  title: string;
+  summary: string;
+}
+
 export const paths = {
   user: (uid: string) => `users/${uid}`,
   users: () => `users`,
@@ -162,6 +185,8 @@ export const paths = {
   trackEvents: (companyId: string) => `companies/${companyId}/trackEvents`,
   trackEvent: (companyId: string, eventId: string) =>
     `companies/${companyId}/trackEvents/${eventId}`,
+  events: (companyId: string) => `companies/${companyId}/events`,
+  event: (companyId: string, eventId: string) => `companies/${companyId}/events/${eventId}`,
   liveBuilds: (companyId: string) => `companies/${companyId}/liveBuilds`,
   liveBuild: (companyId: string, buildSessionId: string) =>
     `companies/${companyId}/liveBuilds/${buildSessionId}`,
