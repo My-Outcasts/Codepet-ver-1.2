@@ -52,13 +52,15 @@ const STATE_HEX: Record<string, string> = {
   'st-you': '#3B82F6',
   'st-done': '#34D399',
 };
-// Second Brain v2 — per-knowledge-kind glow colors (deliverable/decision/fact/session/milestone).
+// Second Brain v2 — warm-nebula palette (mostly amber/gold like the reference, with a couple of
+// cool accents for variety): deliverable/session/fact are the warm field; decision/milestone pop.
 const KG_HEX: Record<string, string> = {
-  deliverable: '#8B5CF6',
-  decision: '#7DE3FF',
-  fact: '#34D399',
-  session: '#FDB022',
+  deliverable: '#F6A23C',
+  decision: '#2DD4BF',
+  fact: '#FFD98A',
+  session: '#FFB454',
   milestone: '#FF6B9D',
+  task: '#FDB022',
 };
 const SECOND_BRAIN_V2 = process.env.NEXT_PUBLIC_SECOND_BRAIN_V2 === '1';
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
@@ -301,37 +303,74 @@ export default function OverviewView() {
       // instead of the authored company→dept→task tree. The renderer is untouched;
       // only the data feeding it changes.
       const kg = buildKnowledgeGraph(events, DEPTS);
-      const count = Math.max(1, kg.nodes.length - 1);
-      const vnodes: GNode[] = kg.nodes.map((n, i) => {
-        const isRoot = n.kind === 'company';
-        const yy = count > 1 ? 1 - (i / count) * 2 : 0;
+      // Organic clusters (not one even sphere): departments anchor on a spread sphere, and each
+      // knowledge node seeds INSIDE its department's cloud. The force sim + the dense references
+      // links then relax each cluster into a nebula blob — the Chitti read.
+      const deptNodes = kg.nodes.filter((n) => n.kind === 'department');
+      const deptPos = new Map<string, { x: number; y: number; z: number }>();
+      deptNodes.forEach((d, di) => {
+        const denom = Math.max(1, deptNodes.length - 1);
+        const yy = deptNodes.length > 1 ? 1 - (di / denom) * 2 : 0;
         const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
-        const th = GOLDEN * i;
-        const hex = n.kind === 'department' ? HEX['--accent'] : (KG_HEX[n.kind] ?? HEX['--accent']);
+        const th = GOLDEN * di;
+        deptPos.set(d.id, {
+          x: Math.cos(th) * rr * DEPT_R,
+          y: yy * DEPT_R * 0.55, // flatten toward a horizontal nebula
+          z: Math.sin(th) * rr * DEPT_R,
+        });
+      });
+      const clusterN = new Map<string, number>();
+      const CLOUD = 66;
+      const vnodes: GNode[] = kg.nodes.map((n) => {
         const gkind: GNode['kind'] =
           n.kind === 'company' ? 'project' : n.kind === 'department' ? 'dept' : n.kind;
-        return {
+        const hex =
+          n.kind === 'department' ? '#FDB022' : (KG_HEX[n.kind] ?? HEX['--accent']);
+        const common = {
           id: n.id,
           name: n.name,
           kind: gkind,
           sbLabel: n.label,
           refType: n.refType,
           refId: n.refId,
-          color: rgba(hex, isRoot ? 0.95 : 0.85),
-          val: isRoot ? 12 : 0.7 + Math.min(6, n.weight),
+          color: rgba(hex, n.kind === 'company' ? 0.95 : 0.85),
+          val: n.kind === 'company' ? 12 : 0.7 + Math.min(6, n.weight),
           deptColor: hex,
-          x: isRoot ? 0 : Math.cos(th) * rr * DEPT_R,
-          y: isRoot ? 0 : yy * DEPT_R,
-          z: isRoot ? 0 : Math.sin(th) * rr * DEPT_R,
+        };
+        if (n.kind === 'company') return { ...common, x: 0, y: 0, z: 0 };
+        if (n.kind === 'department') {
+          const p = deptPos.get(n.id)!;
+          return { ...common, x: p.x, y: p.y, z: p.z };
+        }
+        // Knowledge node: seed inside its department's cloud (decisions with no dept form a
+        // looser central halo). Golden-angle spread within the cloud keeps seeds non-overlapping.
+        const homeId = n.deptK && deptPos.has(`dept:${n.deptK}`) ? `dept:${n.deptK}` : null;
+        const c = homeId ? deptPos.get(homeId)! : { x: 0, y: 0, z: 0 };
+        const key = homeId ?? 'halo';
+        const ci = clusterN.get(key) ?? 0;
+        clusterN.set(key, ci + 1);
+        const R = homeId ? CLOUD : 150;
+        const yy = 1 - ((ci % 7) / 6) * 2;
+        const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+        const th = GOLDEN * (ci + 1);
+        return {
+          ...common,
+          x: c.x + Math.cos(th) * rr * R,
+          y: c.y + yy * R * 0.55,
+          z: c.z + Math.sin(th) * rr * R,
         };
       });
-      const vlinks: GLink[] = kg.edges.map((e) => ({
-        source: e.source,
-        target: e.target,
-        color: rgba(HEX['--accent'], e.kind === 'spine' ? 0.35 : 0.2),
-        hex: HEX['--accent'],
-        kind: e.kind,
-      }));
+      const vlinks: GLink[] = kg.edges.map((e) => {
+        // Warm, faint web; spine a touch brighter, the intra-cluster references threads soft.
+        const lhex = e.kind === 'spine' ? '#FDB022' : '#F6A23C';
+        return {
+          source: e.source,
+          target: e.target,
+          color: rgba(lhex, e.kind === 'spine' ? 0.3 : e.kind === 'references' ? 0.14 : 0.2),
+          hex: lhex,
+          kind: e.kind,
+        };
+      });
       const vadj = new Map<string, Set<string>>();
       vlinks.forEach((l) => {
         const s = linkId(l.source),
@@ -642,10 +681,21 @@ export default function OverviewView() {
     const fg = fgRef.current as any;
     if (!fg) return;
     try {
-      fg.d3Force('charge')?.strength(-90);
-      fg.d3Force('link')
-        ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
-        .strength(0.25);
+      if (SECOND_BRAIN_V2) {
+        // Tight clusters: intra-cluster references pull short so departments condense into
+        // nebula blobs; the spine holds clusters apart; stronger repulsion spreads the field.
+        fg.d3Force('charge')?.strength(-45);
+        fg.d3Force('link')
+          ?.distance((l: GLink) =>
+            l.kind === 'spine' ? 130 : l.kind === 'references' ? 20 : 40,
+          )
+          .strength((l: GLink) => (l.kind === 'references' ? 0.5 : 0.18));
+      } else {
+        fg.d3Force('charge')?.strength(-90);
+        fg.d3Force('link')
+          ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
+          .strength(0.25);
+      }
     } catch {
       /* forces not ready */
     }
@@ -680,7 +730,10 @@ export default function OverviewView() {
     // bloom (not the whole field, which washed the canvas to grey).
     // radius ~0 keeps the glow tight on each node instead of spreading a
     // full-frame haze across the coarse mip (which washed the field to purple).
-    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
+    // Warmer, stronger glow for the Second Brain nebula; the classic tighter bloom otherwise.
+    const bloom = SECOND_BRAIN_V2
+      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.8, 0.35, 0.5)
+      : new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
     composer.addPass(bloom);
     bloomRef.current = bloom;
   }, [dims.w]);
@@ -1142,24 +1195,46 @@ export default function OverviewView() {
           </div>
         )}
         {SECOND_BRAIN_V2 && (
-          <button
-            onClick={() => setTimelineOpen((v) => !v)}
-            style={{
-              pointerEvents: 'auto',
-              marginTop: 10,
-              fontSize: 12,
-              fontWeight: 600,
-              padding: '5px 12px',
-              borderRadius: 999,
-              border: '1px solid rgba(255,255,255,0.12)',
-              background: timelineOpen ? 'rgba(125,227,255,0.12)' : 'rgba(16,14,28,0.7)',
-              color: timelineOpen ? '#7DE3FF' : 'rgba(245,243,255,.7)',
-              cursor: 'pointer',
-              display: 'block',
-            }}
-          >
-            {timelineOpen ? 'Hide timeline' : 'Timeline'}
-          </button>
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, pointerEvents: 'auto' }}>
+            <button
+              onClick={() => setTimelineOpen((v) => !v)}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: timelineOpen ? 'rgba(125,227,255,0.12)' : 'rgba(16,14,28,0.7)',
+                color: timelineOpen ? '#7DE3FF' : 'rgba(245,243,255,.7)',
+                cursor: 'pointer',
+              }}
+            >
+              {timelineOpen ? 'Hide timeline' : 'Timeline'}
+            </button>
+            <button
+              onClick={async () => {
+                if (backfilling) return;
+                setBackfilling(true);
+                const r = await runSecondBrainBackfill();
+                if (r.backfilled > 0) window.location.reload();
+                else setBackfilling(false);
+              }}
+              title="Pull all your deliverables, decisions and completed tasks into the graph"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(16,14,28,0.7)',
+                color: 'rgba(245,243,255,.7)',
+                cursor: backfilling ? 'default' : 'pointer',
+                opacity: backfilling ? 0.6 : 1,
+              }}
+            >
+              {backfilling ? 'Syncing…' : 'Sync history'}
+            </button>
+          </div>
         )}
       </div>
 

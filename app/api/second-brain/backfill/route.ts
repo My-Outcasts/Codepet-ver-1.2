@@ -1,12 +1,17 @@
-// One-time backfill: project the records we already keep (approved deliverables,
-// locked-in decisions) into the append-only Second Brain event ledger, so a founder
-// who has been working for weeks gets a full brain the first time the graph loads.
-// Idempotent via a marker on the company doc. Reads only — never mutates the source
-// collections, and never touches trackEvents / the Build Coach pipeline.
+// Backfill: project the records we already keep (approved deliverables, locked-in decisions,
+// completed tasks) into the append-only Second Brain event ledger, so the founder's graph is
+// dense with real history. Re-runnable — events are keyed by a deterministic refType:refId, so
+// re-running overwrites in place instead of duplicating. Reads only; never touches the Build
+// Coach pipeline.
 import { verifyIdToken, adminDb } from '@/lib/firebase/admin';
 import { paths } from '@/lib/firebase/schema';
-import { eventKey, eventFromLibItem, eventFromDecision } from '@/lib/overview/ledger';
-import type { LedgerEvent } from '@/lib/firebase/schema';
+import {
+  eventKey,
+  eventFromLibItem,
+  eventFromDecision,
+  eventFromTaskDone,
+} from '@/lib/overview/ledger';
+import type { LedgerEvent, Task, DepartmentDoc } from '@/lib/firebase/schema';
 import type { DecisionEntry } from '@/lib/ai/projectModel';
 
 export async function POST(req: Request) {
@@ -25,20 +30,29 @@ export async function POST(req: Request) {
   const companyRef = db.doc(paths.company(uid));
   const companySnap = await companyRef.get();
   if (!companySnap.exists) return Response.json({ error: 'no company' }, { status: 404 });
-  if (companySnap.get('secondBrainBackfilledAt')) {
-    return Response.json({ backfilled: 0, skipped: true });
-  }
 
   const events: LedgerEvent[] = [];
 
+  // Approved deliverables → deliverable nodes.
   const libSnap = await db.collection(paths.library(uid)).get();
   libSnap.forEach((d) => {
     const data = d.data() as { title?: string; k?: string; createdAt?: number };
     events.push(eventFromLibItem({ id: d.id, title: data.title, k: data.k, createdAt: data.createdAt }));
   });
 
+  // Locked-in decisions → decision nodes.
   const decisions = (companySnap.get('decisions') as DecisionEntry[]) ?? [];
   decisions.forEach((dec) => events.push(eventFromDecision(dec)));
+
+  // Completed tasks across every department → task nodes (the bulk of the galaxy's density).
+  const deptSnap = await db.collection(paths.departments(uid)).get();
+  let taskTs = Date.now();
+  deptSnap.forEach((d) => {
+    const dept = d.data() as DepartmentDoc;
+    for (const task of (dept.tasks ?? []) as Task[]) {
+      if (task.done) events.push(eventFromTaskDone(dept.k, dept.name, task, taskTs--));
+    }
+  });
 
   const batch = db.batch();
   for (const ev of events) {

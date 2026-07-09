@@ -130,9 +130,12 @@ export function buildKnowledgeGraph(
     byDept.set(n.deptK, g);
   }
   for (const group of byDept.values()) {
-    for (let i = 0; i + 1 < group.length && i < group.length; i++) {
-      if (i >= REFERENCES_CAP * group.length) break; // defensive; chain is naturally capped
-      edges.push({ source: group[i].id, target: group[i + 1].id, kind: 'references' });
+    for (let i = 0; i < group.length; i++) {
+      // Connect each node to its next REFERENCES_CAP siblings → a small web per cluster
+      // (not a single chain), so departments read as connected constellations.
+      for (let j = 1; j <= REFERENCES_CAP && i + j < group.length; j++) {
+        edges.push({ source: group[i].id, target: group[i + j].id, kind: 'references' });
+      }
     }
   }
 
