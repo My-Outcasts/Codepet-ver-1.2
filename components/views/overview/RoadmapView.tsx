@@ -11,7 +11,7 @@
 // preview route without touching the concurrently-evolving app shell.
 import { useEffect, useRef, useState } from 'react';
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
-import { ROADMAP_PHASES, DEPT_LABEL, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
+import { ROADMAP_PHASES, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
 const CY = '#7c3aed';
@@ -21,7 +21,7 @@ const TX3 = 'rgba(31,27,21,0.40)';
 const LINE = 'rgba(31,27,21,0.09)';
 const CARD_BG = '#ffffff';
 
-// State → the node's icon-dot color + optional corner badge.
+// State → the node's icon-dot color.
 const DOT: Record<RoadmapState, string> = {
   done: '#16a34a',
   current: CY,
@@ -30,30 +30,16 @@ const DOT: Record<RoadmapState, string> = {
   approve: '#d97706',
   locked: TX3,
 };
-const BADGE: Record<RoadmapState, { text: string; fg: string; bg: string; border: string } | null> =
-  {
-    done: null,
-    current: null, // byte-is-here pill already marks it; a badge would be redundant
-    available: {
-      text: 'Available',
-      fg: CY,
-      bg: 'rgba(124,58,237,0.14)',
-      border: 'rgba(124,58,237,0.4)',
-    },
-    needsYou: {
-      text: 'Needs you',
-      fg: '#2563eb',
-      bg: 'rgba(37,99,235,0.16)',
-      border: 'rgba(37,99,235,0.4)',
-    },
-    approve: {
-      text: 'Approve',
-      fg: '#d97706',
-      bg: 'rgba(217,119,6,0.16)',
-      border: 'rgba(217,119,6,0.4)',
-    },
-    locked: null,
-  };
+// State → a plain-language status line under the task title (cofounder-style): the actor +
+// what's needed, so the founder reads intent directly instead of decoding a corner badge.
+const STATUS: Record<RoadmapState, string> = {
+  done: 'Done',
+  current: 'Up next',
+  available: 'byte can do this',
+  needsYou: 'Needs your input',
+  approve: 'Needs approval',
+  locked: 'Needs earlier steps',
+};
 
 function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void }) {
   const { task } = node;
@@ -61,7 +47,6 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
   const done = st === 'done';
   const current = st === 'current';
   const locked = st === 'locked';
-  const badge = BADGE[st];
   return (
     <div
       className={onClick ? 'rm-node' : undefined}
@@ -138,26 +123,6 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
           </span>
         </span>
       )}
-      {badge && (
-        <span
-          style={{
-            position: 'absolute',
-            top: -8,
-            right: 10,
-            fontFamily: 'var(--sans)',
-            fontSize: 8.5,
-            letterSpacing: '0.05em',
-            textTransform: 'uppercase',
-            padding: '2px 7px',
-            borderRadius: 6,
-            color: badge.fg,
-            background: badge.bg,
-            border: badge.border === badge.bg ? 'none' : `1px solid ${badge.border}`,
-          }}
-        >
-          {badge.text}
-        </span>
-      )}
       {locked && (
         <span
           style={{
@@ -218,7 +183,9 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
             gap: 5,
             marginTop: 4,
             fontSize: 10,
-            color: 'rgba(31,27,21,0.64)',
+            fontWeight: 600,
+            color: DOT[st],
+            whiteSpace: 'nowrap',
           }}
         >
           <span
@@ -229,7 +196,7 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
               background: DEPT_COLOR[task.dept] ?? TX3,
             }}
           />
-          {DEPT_LABEL[task.dept] ?? task.dept}
+          {STATUS[st]}
         </span>
       </span>
     </div>
