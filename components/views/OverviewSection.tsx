@@ -68,8 +68,14 @@ export default function OverviewSection() {
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('intro'),
   );
   const [introDismissed, setIntroDismissed] = useState(false);
-  const showIntro = (!introSeen || forceIntro) && !introDismissed;
+  // Persistent re-open: the first-run briefing auto-shows once per account, but "How to read this
+  // map" (always in the header) can reopen it any time — so the instructions are never lost after
+  // the one-time dismissal, on any account or visit.
+  const [introReopened, setIntroReopened] = useState(false);
+  const showIntro = introReopened || ((!introSeen || forceIntro) && !introDismissed);
+  const openIntro = () => setIntroReopened(true);
   const dismissIntro = () => {
+    setIntroReopened(false);
     setIntroDismissed(true);
     markIntroSeen();
   };
@@ -295,6 +301,7 @@ export default function OverviewSection() {
               role="dialog"
               aria-modal="true"
               aria-label="How the roadmap works"
+              onClick={dismissIntro}
               style={{
                 position: 'absolute',
                 inset: 0,
@@ -308,6 +315,7 @@ export default function OverviewSection() {
               }}
             >
               <div
+                onClick={(e) => e.stopPropagation()}
                 style={{
                   width: 'min(440px, 100%)',
                   background: '#ffffff',
@@ -500,7 +508,49 @@ export default function OverviewSection() {
                 {headerLine}
               </div>
             </div>
-            {toggle}
+            <div style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+              <button
+                type="button"
+                onClick={openIntro}
+                title="How to read this map"
+                style={{
+                  fontFamily: 'var(--sans)',
+                  fontSize: 12.5,
+                  fontWeight: 600,
+                  whiteSpace: 'nowrap',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 7,
+                  padding: '7px 13px',
+                  borderRadius: 10,
+                  cursor: 'pointer',
+                  color: CY,
+                  background: 'rgba(124,58,237,0.08)',
+                  border: '1px solid rgba(124,58,237,0.2)',
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    width: 15,
+                    height: 15,
+                    flex: 'none',
+                    borderRadius: '50%',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: '#fff',
+                    background: CY,
+                  }}
+                >
+                  ?
+                </span>
+                How to read this map
+              </button>
+              {toggle}
+            </div>
           </div>
 
           {/* Project Progress + Do This Next side by side — one compact top strip so the roadmap
