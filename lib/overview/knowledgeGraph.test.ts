@@ -54,6 +54,28 @@ describe('buildKnowledgeGraph', () => {
     expect(buildKnowledgeGraph(events, depts)).toEqual(buildKnowledgeGraph(events, depts));
   });
 
+  it('chains same-department knowledge nodes with references edges (density)', () => {
+    const eng: LedgerEvent[] = [
+      { ts: 3, type: 'deliverable_approved', actor: 'byte', deptK: 'eng', refType: 'library', refId: 'L1', title: 'A', summary: 'a' },
+      { ts: 2, type: 'deliverable_approved', actor: 'byte', deptK: 'eng', refType: 'library', refId: 'L2', title: 'B', summary: 'b' },
+      { ts: 1, type: 'deliverable_approved', actor: 'byte', deptK: 'mkt', refType: 'library', refId: 'L3', title: 'C', summary: 'c' },
+    ];
+    const { nodes, edges } = buildKnowledgeGraph(eng, depts);
+    const refs = edges.filter((e) => e.kind === 'references');
+    expect(refs.length).toBeGreaterThan(0);
+    const deptOf = new Map(nodes.map((n) => [n.id, n.deptK]));
+    for (const e of refs) {
+      expect(deptOf.get(e.source)).toBe(deptOf.get(e.target)); // same-dept only
+    }
+  });
+
+  it('marks the highest-weight knowledge nodes with a persistent label', () => {
+    const { nodes } = buildKnowledgeGraph(events, depts);
+    const labeled = nodes.filter((n) => n.label);
+    expect(labeled.length).toBeGreaterThan(0);
+    expect(labeled.every((n) => n.kind !== 'company' && n.kind !== 'department')).toBe(true);
+  });
+
   it('never emits an edge whose endpoint is not a node (would crash the force graph)', () => {
     const mixed: LedgerEvent[] = [
       ...events,

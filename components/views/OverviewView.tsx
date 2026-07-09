@@ -94,6 +94,7 @@ interface GNode {
     | 'session';
   refType?: string;
   refId?: string;
+  sbLabel?: boolean;
   color: string;
   val: number;
   deptColor?: string;
@@ -313,6 +314,7 @@ export default function OverviewView() {
           id: n.id,
           name: n.name,
           kind: gkind,
+          sbLabel: n.label,
           refType: n.refType,
           refId: n.refId,
           color: rgba(hex, isRoot ? 0.95 : 0.85),
@@ -756,16 +758,28 @@ export default function OverviewView() {
 
   const nodeThreeObject = (n: GNode): any => {
     if (n.kind === 'task') return undefined; // default sphere; label on hover
-    // Second Brain v2 knowledge dots (deliverable/decision/fact/session/milestone): keep them
-    // as clean glowing spheres with a hover label — the dense-galaxy read from the reference.
+    // Second Brain v2 knowledge dots (deliverable/decision/fact/session/milestone): clean glowing
+    // spheres. High-weight ones (sbLabel) carry a small persistent label like the reference; the
+    // rest stay hover-only so the galaxy doesn't drown in text.
     if (
       n.kind === 'deliverable' ||
       n.kind === 'decision' ||
       n.kind === 'fact' ||
       n.kind === 'session' ||
       n.kind === 'milestone'
-    )
-      return undefined;
+    ) {
+      if (!n.sbLabel) return undefined;
+      const lbl = new SpriteText(n.name);
+      lbl.color = 'rgba(245,243,255,0.92)';
+      lbl.textHeight = 3.2;
+      lbl.fontFace = 'Inter, system-ui, sans-serif';
+      lbl.fontWeight = '600';
+      (lbl as any).backgroundColor = 'rgba(7,5,16,0.7)';
+      (lbl as any).padding = 2;
+      (lbl as any).borderRadius = 3;
+      (lbl as any).position.set(0, Math.cbrt(n.val) * 2.2 + 4, 0);
+      return lbl;
+    }
 
     // Label — for departments, append the progress count.
     const total = n.total ?? 0;

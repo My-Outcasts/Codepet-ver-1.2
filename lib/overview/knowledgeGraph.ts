@@ -24,7 +24,14 @@ export interface KGNode {
   refType?: string;
   refId?: string;
   ts?: number;
+  /** Show a persistent label (the high-weight nodes) vs. hover-only for the rest. */
+  label?: boolean;
 }
+
+/** How many same-department knowledge nodes to chain with `references` edges (density), and how
+ *  many top-weight nodes get a persistent label. Kept small so the graph reads as a web, not a mesh. */
+const REFERENCES_CAP = 2;
+const LABEL_TOP_N = 8;
 
 export type KGEdgeKind =
   | 'belongs_to'
@@ -111,6 +118,31 @@ export function buildKnowledgeGraph(
   // Fold reference count into weight — this is what makes the galaxy uneven: often-referenced
   // and recent nodes shine brighter than dormant ones.
   for (const n of nodes) n.weight += inDegree.get(n.id) ?? 0;
+
+  // Density: chain same-department knowledge nodes with `references` edges so each cluster reads
+  // as a connected web, not stars on a stalk. A simple chain caps each node at REFERENCES_CAP.
+  const knowledge = nodes.filter((n) => n.kind !== 'company' && n.kind !== 'department');
+  const byDept = new Map<string, KGNode[]>();
+  for (const n of knowledge) {
+    if (!n.deptK) continue;
+    const g = byDept.get(n.deptK) ?? [];
+    g.push(n);
+    byDept.set(n.deptK, g);
+  }
+  for (const group of byDept.values()) {
+    for (let i = 0; i + 1 < group.length && i < group.length; i++) {
+      if (i >= REFERENCES_CAP * group.length) break; // defensive; chain is naturally capped
+      edges.push({ source: group[i].id, target: group[i + 1].id, kind: 'references' });
+    }
+  }
+
+  // Persistent labels for the highest-weight knowledge nodes; the rest stay hover-only.
+  [...knowledge]
+    .sort((a, b) => b.weight - a.weight)
+    .slice(0, LABEL_TOP_N)
+    .forEach((n) => {
+      n.label = true;
+    });
 
   return { nodes, edges };
 }
