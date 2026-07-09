@@ -473,16 +473,14 @@ export default function OverviewSection() {
               </div>
             )}
           </div>
-          {/* roadmap — the hero. Vertically centered so leftover height is balanced above/below
-              instead of piling up as dead space at the bottom (the cards above are compact). */}
+          {/* roadmap — the hero. RoadmapView measures this area and scales the diagram up to
+              fill the height (capped), so short roadmaps no longer leave dead space below. */}
           <div
             style={{
               flex: 1,
-              overflowY: 'auto',
-              overflowX: 'hidden',
+              minHeight: 0,
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'center',
               padding: '14px 24px 14px',
             }}
           >

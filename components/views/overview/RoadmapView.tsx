@@ -9,7 +9,7 @@
 //
 // Self-contained inline styles (no globals.css dependency) so it renders standalone in the
 // preview route without touching the concurrently-evolving app shell.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
 import { ROADMAP_PHASES, DEPT_LABEL, DEPT_COLOR } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
@@ -252,6 +252,26 @@ export default function RoadmapView({
   const nonCrit = L.edges.filter((e) => !e.critical);
   const crit = L.edges.filter((e) => e.critical);
 
+  // Measure the available height and scale the whole diagram up to fill it (capped), so a
+  // short roadmap doesn't leave dead space below. The pure layout stays at natural size —
+  // we only apply a visual transform on top of it.
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [avail, setAvail] = useState(0);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setAvail(el.clientHeight));
+    ro.observe(el);
+    setAvail(el.clientHeight);
+    return () => ro.disconnect();
+  }, []);
+  const HEADER_BLOCK = 34; // phase-header row (28) + its 6px bottom margin
+  const natH = L.height + HEADER_BLOCK;
+  const MAX_SCALE = 1.6;
+  const scale = avail > 0 ? Math.max(1, Math.min(MAX_SCALE, avail / natH)) : 1;
+  const scaledH = natH * scale;
+  const padTop = avail > scaledH ? Math.round((avail - scaledH) / 2) : 0;
+
   // Open framed on "you are here": scroll so byte's current node sits centered, not at the
   // far left — the founder shouldn't have to hunt for their next move.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -259,178 +279,209 @@ export default function RoadmapView({
   useEffect(() => {
     const el = scrollRef.current;
     if (el && currentX != null) {
-      el.scrollLeft = Math.max(0, currentX + CARD_W / 2 - el.clientWidth / 2);
+      el.scrollLeft = Math.max(0, currentX * scale + (CARD_W * scale) / 2 - el.clientWidth / 2);
     }
-  }, [currentX]);
+  }, [currentX, scale]);
 
   return (
     <div
-      ref={scrollRef}
-      className="rm-scroll"
+      ref={wrapRef}
       style={{
-        overflowX: 'auto',
-        padding: '6px 0 4px',
+        height: '100%',
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
         fontFamily: 'var(--sans)',
-        // Hide the scrollbar but keep scrolling (trackpad / shift-wheel).
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
       }}
     >
       <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}`}</style>
-      <div style={{ position: 'relative', width: L.width, minWidth: L.width }}>
-        {/* phase headers */}
-        <div style={{ position: 'relative', height: 28, marginBottom: 6 }}>
-          {L.columns.map((c) => (
-            <div
-              key={c.key}
-              style={{
-                position: 'absolute',
-                left: c.x,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-              }}
-            >
-              <span
-                style={{
-                  fontFamily: 'var(--sans)',
-                  fontSize: 10.5,
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  color: c.current ? CY : TX3,
-                  background: c.current ? 'rgba(124,58,237,0.08)' : 'rgba(31,27,21,0.05)',
-                  border: `1px solid ${c.current ? 'rgba(124,58,237,0.4)' : LINE}`,
-                  padding: '4px 9px',
-                  borderRadius: 7,
-                }}
-              >
-                {c.name}
-              </span>
-              <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: TX3 }}>
-                {c.done}/{c.total}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* diagram */}
-        <div style={{ position: 'relative', width: L.width, height: L.height }}>
-          <svg
-            width={L.width}
-            height={L.height}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
-            aria-hidden="true"
+      <div
+        ref={scrollRef}
+        className="rm-scroll"
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'auto',
+          // Hide the scrollbar but keep scrolling (trackpad / shift-wheel).
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        {/* scaled box: its layout size matches the transformed visual so nothing clips */}
+        <div
+          style={{
+            position: 'relative',
+            width: L.width * scale,
+            height: scaledH,
+            marginTop: padTop,
+          }}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: L.width,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
           >
-            {L.rootEdges.map((e, i) => (
-              <path
-                key={`r${i}`}
-                d={e.d}
-                fill="none"
-                stroke="rgba(139,92,246,0.4)"
-                strokeWidth={1.5}
-                strokeLinejoin="round"
-              />
-            ))}
-            {nonCrit.map((e, i) => (
-              <path
-                key={`d${i}`}
-                d={e.d}
-                fill="none"
-                stroke="rgba(31,27,21,0.18)"
-                strokeWidth={1.5}
-                strokeDasharray="3 4"
-              />
-            ))}
-            {crit.map((e, i) => (
-              <path
-                key={`g${i}`}
-                d={e.d}
-                fill="none"
-                stroke={CY}
-                strokeWidth={7}
-                opacity={0.16}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            ))}
-            {crit.map((e, i) => (
-              <path
-                key={`c${i}`}
-                d={e.d}
-                fill="none"
-                stroke={CY}
-                strokeWidth={2.4}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            ))}
-          </svg>
-
-          {L.root && (
-            <div
-              style={{
-                position: 'absolute',
-                left: L.root.x,
-                top: L.root.y,
-                width: L.root.w,
-                height: L.root.h,
-                borderRadius: 16,
-                background: 'linear-gradient(160deg, rgba(139,92,246,0.16), rgba(124,58,237,0.06))',
-                border: '1px solid rgba(139,92,246,0.45)',
-                boxShadow:
-                  '0 0 0 1px rgba(139,92,246,0.12), 0 16px 44px -16px rgba(139,92,246,0.5)',
-                padding: 15,
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                gap: 11,
-              }}
-            >
-              <span
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: 10,
-                  background: `linear-gradient(160deg, ${VIO}, ${CY})`,
-                }}
-              />
-              <span>
-                <span
+            {/* phase headers */}
+            <div style={{ position: 'relative', height: 28, marginBottom: 6 }}>
+              {L.columns.map((c) => (
+                <div
+                  key={c.key}
                   style={{
-                    display: 'block',
-                    fontFamily: 'var(--sans)',
-                    fontSize: 19,
-                    fontWeight: 600,
-                    color: TX,
-                    lineHeight: 1,
+                    position: 'absolute',
+                    left: c.x,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 10,
                   }}
                 >
-                  {projectName}
-                </span>
-                <span
-                  style={{
-                    display: 'block',
-                    marginTop: 5,
-                    fontFamily: 'var(--sans)',
-                    fontSize: 9.5,
-                    letterSpacing: '0.14em',
-                    textTransform: 'uppercase',
-                    color: VIO,
-                  }}
-                >
-                  your company
-                </span>
-              </span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--sans)',
+                      fontSize: 10.5,
+                      letterSpacing: '0.14em',
+                      textTransform: 'uppercase',
+                      color: c.current ? CY : TX3,
+                      background: c.current ? 'rgba(124,58,237,0.08)' : 'rgba(31,27,21,0.05)',
+                      border: `1px solid ${c.current ? 'rgba(124,58,237,0.4)' : LINE}`,
+                      padding: '4px 9px',
+                      borderRadius: 7,
+                    }}
+                  >
+                    {c.name}
+                  </span>
+                  <span style={{ fontFamily: 'var(--sans)', fontSize: 11, color: TX3 }}>
+                    {c.done}/{c.total}
+                  </span>
+                </div>
+              ))}
             </div>
-          )}
 
-          {L.nodes.map((n) => (
-            <Node
-              key={n.task.id}
-              node={n}
-              onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
-            />
-          ))}
+            {/* diagram */}
+            <div style={{ position: 'relative', width: L.width, height: L.height }}>
+              <svg
+                width={L.width}
+                height={L.height}
+                style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+                aria-hidden="true"
+              >
+                {L.rootEdges.map((e, i) => (
+                  <path
+                    key={`r${i}`}
+                    d={e.d}
+                    fill="none"
+                    stroke="rgba(139,92,246,0.4)"
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                  />
+                ))}
+                {nonCrit.map((e, i) => (
+                  <path
+                    key={`d${i}`}
+                    d={e.d}
+                    fill="none"
+                    stroke="rgba(31,27,21,0.18)"
+                    strokeWidth={1.5}
+                    strokeDasharray="3 4"
+                  />
+                ))}
+                {crit.map((e, i) => (
+                  <path
+                    key={`g${i}`}
+                    d={e.d}
+                    fill="none"
+                    stroke={CY}
+                    strokeWidth={7}
+                    opacity={0.16}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {crit.map((e, i) => (
+                  <path
+                    key={`c${i}`}
+                    d={e.d}
+                    fill="none"
+                    stroke={CY}
+                    strokeWidth={2.4}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                ))}
+              </svg>
+
+              {L.root && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: L.root.x,
+                    top: L.root.y,
+                    width: L.root.w,
+                    height: L.root.h,
+                    borderRadius: 16,
+                    background:
+                      'linear-gradient(160deg, rgba(139,92,246,0.16), rgba(124,58,237,0.06))',
+                    border: '1px solid rgba(139,92,246,0.45)',
+                    boxShadow:
+                      '0 0 0 1px rgba(139,92,246,0.12), 0 16px 44px -16px rgba(139,92,246,0.5)',
+                    padding: 15,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    gap: 11,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 34,
+                      height: 34,
+                      borderRadius: 10,
+                      background: `linear-gradient(160deg, ${VIO}, ${CY})`,
+                    }}
+                  />
+                  <span>
+                    <span
+                      style={{
+                        display: 'block',
+                        fontFamily: 'var(--sans)',
+                        fontSize: 19,
+                        fontWeight: 600,
+                        color: TX,
+                        lineHeight: 1,
+                      }}
+                    >
+                      {projectName}
+                    </span>
+                    <span
+                      style={{
+                        display: 'block',
+                        marginTop: 5,
+                        fontFamily: 'var(--sans)',
+                        fontSize: 9.5,
+                        letterSpacing: '0.14em',
+                        textTransform: 'uppercase',
+                        color: VIO,
+                      }}
+                    >
+                      your company
+                    </span>
+                  </span>
+                </div>
+              )}
+
+              {L.nodes.map((n) => (
+                <Node
+                  key={n.task.id}
+                  node={n}
+                  onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
+                />
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
