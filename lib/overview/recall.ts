@@ -33,3 +33,11 @@ export function topK(
     .sort((a, b) => b.score - a.score)
     .slice(0, k);
 }
+
+/** Format retrieved hits into a chat system-prompt block (empty when there are none).
+ *  Pure + server-import-free so it lives here (recall's server wrapper reuses it). */
+export function formatRecallBlock(hits: { title: string; summary: string }[]): string {
+  if (!hits.length) return '';
+  const lines = hits.map((h) => `- ${h.title}: ${h.summary}`).join('\n');
+  return `\n\nRelevant history from the founder's Second Brain (reference when useful):\n${lines}`;
+}

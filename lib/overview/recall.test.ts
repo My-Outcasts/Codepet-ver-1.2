@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cosine, topK } from './recall';
+import { cosine, topK, formatRecallBlock } from './recall';
 
 describe('cosine', () => {
   it('is 1 for identical, ~0 for orthogonal', () => {
@@ -26,5 +26,19 @@ describe('topK', () => {
   it('skips items without a vector', () => {
     const hits = topK([1, 0], items, 10);
     expect(hits.find((h) => h.title === 'd')).toBeUndefined();
+  });
+});
+
+describe('formatRecallBlock', () => {
+  it('is empty when there are no hits', () => {
+    expect(formatRecallBlock([])).toBe('');
+  });
+  it('lists title: summary lines under a labeled header', () => {
+    const block = formatRecallBlock([
+      { title: 'Pricing', summary: 'Charge $9/mo.' },
+      { title: 'API v1', summary: 'Shipped the API.' },
+    ]);
+    expect(block).toContain('Second Brain');
+    expect(block).toContain('- Pricing: Charge $9/mo.');
   });
 });

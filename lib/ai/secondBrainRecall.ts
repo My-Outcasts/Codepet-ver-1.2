@@ -2,18 +2,11 @@
 // events most relevant to the founder's latest message and hand them to byte as prompt context,
 // so answers are grounded in what actually happened. Best-effort — any failure yields an empty
 // block and chat proceeds unchanged. This is the safe alternative to a streaming tool round-trip.
-import { adminDb } from '@/lib/firebase/admin';
-import { paths } from '@/lib/firebase/schema';
-import type { LedgerEvent } from '@/lib/firebase/schema';
+import { adminDb } from '../firebase/admin';
+import { paths } from '../firebase/schema';
+import type { LedgerEvent } from '../firebase/schema';
 import { isEmbedEnabled, embedTexts } from './embed';
-import { topK, type RecallItem } from '@/lib/overview/recall';
-
-/** Pure: format retrieved hits into a system-prompt block (empty when there are none). */
-export function formatRecallBlock(hits: { title: string; summary: string }[]): string {
-  if (!hits.length) return '';
-  const lines = hits.map((h) => `- ${h.title}: ${h.summary}`).join('\n');
-  return `\n\nRelevant history from the founder's Second Brain (reference when useful):\n${lines}`;
-}
+import { topK, formatRecallBlock, type RecallItem } from '../overview/recall';
 
 export async function recallBlock(uid: string, query: string): Promise<string> {
   if (!isEmbedEnabled() || !query.trim()) return '';
