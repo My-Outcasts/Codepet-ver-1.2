@@ -163,14 +163,14 @@ function Node({ node, onClick }: { node: PositionedNode; onClick?: () => void })
       <span style={{ minWidth: 0 }}>
         <span
           style={{
-            display: 'block',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
             fontSize: 12.5,
             fontWeight: 600,
             color: TX,
             lineHeight: 1.2,
-            whiteSpace: 'nowrap',
             overflow: 'hidden',
-            textOverflow: 'ellipsis',
             maxWidth: 150,
           }}
         >
