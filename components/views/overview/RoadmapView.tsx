@@ -260,38 +260,34 @@ export default function RoadmapView({
 
   // The "advance" moment: when a task improves between renders — a new move becomes `current`,
   // or a `locked` task unlocks because its prerequisites just completed — pulse it once, so
-  // finishing one step visibly lights up the next. Detected DURING render (comparing a state-
-  // signature string to the previous one via a ref) — the sanctioned "adjust state on change"
-  // pattern, which avoids setting state synchronously inside an effect. The pulse itself
-  // respects prefers-reduced-motion (see the CSS).
+  // finishing one step visibly lights up the next. Detection runs in an effect (the ref is read
+  // there, never during render), and the setState is deferred to the next frame so it is never a
+  // *synchronous* set-state-in-effect. The pulse itself respects prefers-reduced-motion (see CSS).
   const prevSigRef = useRef<string>('');
   const [pulseIds, setPulseIds] = useState<Set<string>>(new Set());
   const stateSig = L.nodes.map((n) => `${n.task.id}:${n.task.state}`).join('|');
-  if (prevSigRef.current !== stateSig) {
+  useEffect(() => {
     const parse = (sig: string): Map<string, string> =>
       new Map(sig ? sig.split('|').map((p) => p.split(':') as [string, string]) : []);
     const prev = parse(prevSigRef.current);
     const now = parse(stateSig);
     prevSigRef.current = stateSig;
-    if (prev.size > 0) {
-      const open = (s?: string) => s === 'available' || s === 'needsYou';
-      const fresh = new Set<string>();
-      for (const [id, st] of now) {
-        const was = prev.get(id);
-        if (!was) continue;
-        if ((st === 'current' && was !== 'current') || (open(st) && was === 'locked'))
-          fresh.add(id);
-      }
-      if (fresh.size > 0) setPulseIds(fresh);
+    if (prev.size === 0) return; // first render — nothing to celebrate yet
+    const open = (s?: string) => s === 'available' || s === 'needsYou';
+    const fresh = new Set<string>();
+    for (const [id, st] of now) {
+      const was = prev.get(id);
+      if (!was) continue;
+      if ((st === 'current' && was !== 'current') || (open(st) && was === 'locked')) fresh.add(id);
     }
-  }
-  // Clear the pulse shortly after it fires — the state update lives inside a timer, so it's
-  // never a synchronous set-state-in-effect.
-  useEffect(() => {
-    if (pulseIds.size === 0) return;
-    const t = setTimeout(() => setPulseIds(new Set()), 1400);
-    return () => clearTimeout(t);
-  }, [pulseIds]);
+    if (fresh.size === 0) return;
+    const raf = requestAnimationFrame(() => setPulseIds(fresh));
+    const clear = setTimeout(() => setPulseIds(new Set()), 1500);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(clear);
+    };
+  }, [stateSig]);
 
   return (
     <div
