@@ -61,3 +61,41 @@ describe('applyProgress', () => {
     expect(o.some((t) => t.state === 'current')).toBe(false);
   });
 });
+
+describe('applyProgress — dependency unlock', () => {
+  // x1(build) → c1(ship) → c2(ship); y1(ship, founder-only) depends on x1; f1(launch) is a
+  // no-dependency task in a future phase.
+  const dep: RoadmapTaskDef[] = [
+    { id: 'x1', phase: 'build', dept: 'eng', title: 'X1', dependsOn: [] },
+    { id: 'c1', phase: 'ship', dept: 'eng', title: 'C1', dependsOn: ['x1'] },
+    { id: 'c2', phase: 'ship', dept: 'eng', title: 'C2', dependsOn: ['c1'] },
+    { id: 'y1', phase: 'ship', dept: 'legal', title: 'Y1', actor: 'you', dependsOn: ['x1'] },
+    { id: 'f1', phase: 'launch', dept: 'mkt', title: 'F1', dependsOn: [] },
+  ];
+
+  it('locks a current-phase task whose prerequisite is not done yet', () => {
+    const o = applyProgress(dep, { currentPhase: 'ship', currentTaskId: 'c1' });
+    const st = (id: string) => o.find((t) => t.id === id)!.state;
+    expect(st('c1')).toBe('current'); // the next move
+    expect(st('c2')).toBe('locked'); // waits on c1 (still current, not done)
+    expect(st('x1')).toBe('done'); // passed phase
+  });
+
+  it('marks an unblocked founder-only task as needsYou', () => {
+    const o = applyProgress(dep, { currentPhase: 'ship', currentTaskId: 'c1' });
+    // y1's only prerequisite (x1) is done → unblocked; actor 'you' → needsYou
+    expect(o.find((t) => t.id === 'y1')!.state).toBe('needsYou');
+  });
+
+  it('treats the current move’s prerequisites as done', () => {
+    const o = applyProgress(dep, { currentPhase: 'ship', currentTaskId: 'c2' });
+    const st = (id: string) => o.find((t) => t.id === id)!.state;
+    expect(st('c1')).toBe('done'); // prerequisite of the current move → complete
+    expect(st('c2')).toBe('current');
+  });
+
+  it('keeps a future-phase task locked even with no unmet dependencies', () => {
+    const o = applyProgress(dep, { currentPhase: 'ship', currentTaskId: 'c1' });
+    expect(o.find((t) => t.id === 'f1')!.state).toBe('locked'); // launch is ahead of ship
+  });
+});

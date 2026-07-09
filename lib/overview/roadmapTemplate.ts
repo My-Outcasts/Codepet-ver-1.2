@@ -43,6 +43,7 @@ export const ROADMAP_TEMPLATE: RoadmapTaskDef[] = [
     phase: 'foundation',
     dept: 'legal',
     title: 'Incorporate LLC',
+    actor: 'you', // only the founder can sign the incorporation
     dependsOn: ['find-validate'],
   },
   {
@@ -50,6 +51,7 @@ export const ROADMAP_TEMPLATE: RoadmapTaskDef[] = [
     phase: 'foundation',
     dept: 'fin',
     title: 'Business bank account',
+    actor: 'you', // only the founder can open the bank account
     dependsOn: ['found-incorporate'],
   },
   {
