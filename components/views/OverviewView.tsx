@@ -211,6 +211,37 @@ function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
   return sprite;
 }
 
+// A wide, soft aura sprite that sits behind a firefly so each node radiates outward
+// (the "tỏa" halo) instead of ending abruptly. Low alpha + early falloff so many
+// overlapping auras add into a warm nebula glow without washing to grey.
+function makeAuraSprite(colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, colorHex);
+  g.addColorStop(0.22, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.globalAlpha = 0.34;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 // A firefly: hot near-white core → warm color → transparent, additive-blended so overlapping
 // dots add up into bright cluster cores (the Second Brain nebula read from the reference).
 function makeFireflySprite(colorHex: string, size: number): THREE.Sprite {
@@ -766,7 +797,7 @@ export default function OverviewView() {
     // full-frame haze across the coarse mip (which washed the field to purple).
     // Warmer, stronger glow for the Second Brain nebula; the classic tighter bloom otherwise.
     const bloom = SECOND_BRAIN_V2
-      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.8, 0.35, 0.5)
+      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 1.1, 0.55, 0.42)
       : new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
     composer.addPass(bloom);
     bloomRef.current = bloom;
@@ -834,6 +865,8 @@ export default function OverviewView() {
       const glowHex = isRoot ? '#FFE7A8' : (n.deptColor ?? '#FDB022');
       const size = radius * (isRoot ? 9 : isDept ? 7 : 5.5);
       const group = new THREE.Group();
+      // Soft wide aura first (radiates outward), then the hot firefly core on top.
+      group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.4 : 2.0)));
       group.add(makeFireflySprite(glowHex, size));
       if (isRoot || isDept || n.sbLabel) {
         const lbl = new SpriteText(n.name);
@@ -1325,7 +1358,10 @@ export default function OverviewView() {
                   t = linkId(l.target);
                 return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
               }
-              return pathLinkIds.has(key) ? rgba(BEACON_HEX, 0.9) : l.color;
+              if (pathLinkIds.has(key)) return rgba(BEACON_HEX, 0.9);
+              // v2: brighter warm filaments than the faint classic default, so the
+              // connective tissue reads as glowing lines the bloom can pick up.
+              return SECOND_BRAIN_V2 ? rgba(l.hex, l.kind === 'spine' ? 0.6 : 0.34) : l.color;
             }}
             linkWidth={(l) => {
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
@@ -1333,6 +1369,7 @@ export default function OverviewView() {
                 t = linkId(l.target);
               if (hoverId && (s === hoverId || t === hoverId)) return 2.4;
               if (pathLinkIds.has(key)) return 2;
+              if (SECOND_BRAIN_V2) return l.kind === 'spine' ? 1.5 : 0.9;
               return l.kind === 'pd' ? 1.1 : 0.4;
             }}
             linkDirectionalParticles={(l) => {
