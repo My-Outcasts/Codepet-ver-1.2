@@ -2005,11 +2005,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
       ).join('\n');
       const focusDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : undefined;
+      // Lead with the single agreed next step so it survives the route's length cap — the
+      // department lines below can be long and would otherwise push this grounding past the
+      // slice, leaving byte to invent a different "first step" than the map beacon shows.
       const focus =
         nextStep && focusDept
-          ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
+          ? `CURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do or focus on — first, next, or right now — name THIS exact task and department as your headline answer; you may add sequencing or detail, but never lead with a different task.\n\n`
           : '';
-      const deptSummary = deptLines + focus;
+      const deptSummary = focus + deptLines;
       const openTasks = DEPTS.flatMap((d) =>
         d.tasks
           .filter((t) => !t.done && liveKind(artType(t)) !== null)
