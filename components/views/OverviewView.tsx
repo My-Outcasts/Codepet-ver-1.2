@@ -19,10 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
 import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
-import { askSecondBrain, runSecondBrainBackfill, type RecallHit } from '@/lib/ai/recallClient';
-import { filterEvents, relativeTime, type TimelineFilter } from '@/lib/overview/timeline';
-import SecondBrainPanel from '@/components/views/overview/SecondBrainPanel';
-import { Copilot } from '@/components/Copilot';
+import { runSecondBrainBackfill } from '@/lib/ai/recallClient';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -270,8 +267,6 @@ export default function OverviewView() {
     events,
     library,
     openDeliverable,
-    tracking,
-    companionId,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
@@ -301,13 +296,6 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
-  // "Ask your Second Brain" (P2 recall) — inert unless the server feature is on.
-  const [askQuery, setAskQuery] = useState('');
-  const [askHits, setAskHits] = useState<RecallHit[] | null>(null);
-  const [asking, setAsking] = useState(false);
-  // Timeline panel (P3) — "what changed", filtered by event type.
-  const [timelineOpen, setTimelineOpen] = useState(false);
-  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all');
   const [backfilling, setBackfilling] = useState(false);
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
@@ -819,26 +807,6 @@ export default function OverviewView() {
     if (!tookControlRef.current) fitView();
   };
 
-  const runAsk = async () => {
-    const q = askQuery.trim();
-    if (!q || asking) return;
-    setAsking(true);
-    const hits = await askSecondBrain(q);
-    setAskHits(hits);
-    setAsking(false);
-  };
-  // Open a recall hit at its source: a deliverable → its library item; otherwise reframe.
-  const openHit = (h: RecallHit) => {
-    if (h.refType === 'library') {
-      const item = library.find((it) => it.title === h.title);
-      if (item) return openDeliverable(item as LibItem);
-    }
-    fitView();
-  };
-  // A timeline row shares the same source-routing as a recall hit.
-  const openEvent = (refType: string | undefined, title: string) =>
-    openHit({ refType, title, refId: undefined, summary: '', score: 0 });
-
   const nodeThreeObject = (n: GNode): any => {
     // Second Brain v2: render EVERY node as a firefly (hot core + warm glow, additive-blended),
     // no hard sphere — the nebula read from the reference. Roots/departments are bigger and always
@@ -1061,8 +1029,8 @@ export default function OverviewView() {
         style={{
           position: 'absolute',
           top: 58,
-          left: SECOND_BRAIN_V2 ? 346 : 26,
-          right: SECOND_BRAIN_V2 ? 326 : 26,
+          left: 26,
+          right: 26,
           maxWidth: 640,
           zIndex: 5,
           pointerEvents: 'none',
@@ -1110,93 +1078,6 @@ export default function OverviewView() {
             </button>
           </div>
         )}
-        {/* Ask your Second Brain (P2 recall). Inert server-side without SECOND_BRAIN_RECALL +
-            VOYAGE_API_KEY — the route returns no hits, so this quietly shows nothing found. */}
-        {SECOND_BRAIN_V2 && (
-          <div style={{ pointerEvents: 'auto', marginTop: 12, maxWidth: 420 }}>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void runAsk();
-              }}
-              style={{ display: 'flex', gap: 8 }}
-            >
-              <input
-                value={askQuery}
-                onChange={(e) => setAskQuery(e.target.value)}
-                placeholder="Ask your Second Brain…"
-                style={{
-                  flex: 1,
-                  fontSize: 13,
-                  padding: '7px 12px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(125,227,255,0.35)',
-                  background: 'rgba(16,14,28,0.85)',
-                  color: '#F5F3FF',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
-              />
-              <button
-                type="submit"
-                disabled={asking || !askQuery.trim()}
-                style={{
-                  fontSize: 12.5,
-                  fontWeight: 700,
-                  padding: '7px 14px',
-                  borderRadius: 999,
-                  border: '1px solid rgba(125,227,255,0.4)',
-                  background: 'rgba(125,227,255,0.12)',
-                  color: '#7DE3FF',
-                  cursor: asking || !askQuery.trim() ? 'default' : 'pointer',
-                  opacity: asking || !askQuery.trim() ? 0.55 : 1,
-                }}
-              >
-                {asking ? '…' : 'Ask'}
-              </button>
-            </form>
-            {askHits !== null && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {askHits.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'rgba(245,243,255,.45)' }}>
-                    Nothing in your Second Brain matched that yet.
-                  </div>
-                ) : (
-                  askHits.map((h, i) => (
-                    <button
-                      key={`${h.refType}:${h.refId}:${i}`}
-                      onClick={() => openHit(h)}
-                      style={{
-                        textAlign: 'left',
-                        padding: '7px 11px',
-                        borderRadius: 10,
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        background: 'rgba(16,14,28,0.7)',
-                        color: '#F5F3FF',
-                        cursor: 'pointer',
-                        fontFamily: 'inherit',
-                      }}
-                    >
-                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{h.title}</div>
-                      <div
-                        style={{
-                          fontSize: 11.5,
-                          color: 'rgba(245,243,255,.5)',
-                          marginTop: 2,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {h.summary}
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
         {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
             never let a seeded map pass for a plan tailored to the founder's product. */}
         {examplePlan && (
@@ -1236,23 +1117,8 @@ export default function OverviewView() {
             </button>
           </div>
         )}
-        {SECOND_BRAIN_V2 && (
+        {SECOND_BRAIN_V2 && events.length > 0 && (
           <div style={{ marginTop: 10, display: 'flex', gap: 8, pointerEvents: 'auto' }}>
-            <button
-              onClick={() => setTimelineOpen((v) => !v)}
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                padding: '5px 12px',
-                borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: timelineOpen ? 'rgba(125,227,255,0.12)' : 'rgba(16,14,28,0.7)',
-                color: timelineOpen ? '#7DE3FF' : 'rgba(245,243,255,.7)',
-                cursor: 'pointer',
-              }}
-            >
-              {timelineOpen ? 'Hide timeline' : 'Timeline'}
-            </button>
             <button
               onClick={async () => {
                 if (backfilling) return;
@@ -1280,198 +1146,52 @@ export default function OverviewView() {
         )}
       </div>
 
-      {SECOND_BRAIN_V2 && timelineOpen && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 58,
-            right: 338,
-            bottom: 26,
-            width: 320,
-            maxWidth: '42vw',
-            zIndex: 6,
-            pointerEvents: 'auto',
-            display: 'flex',
-            flexDirection: 'column',
-            background: 'rgba(12,10,22,0.92)',
-            border: '1px solid rgba(255,255,255,0.09)',
-            borderRadius: 14,
-            padding: 12,
-            backdropFilter: 'blur(6px)',
-          }}
-        >
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#F5F3FF', marginBottom: 8 }}>
-            What changed
-          </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-            {(['all', 'deliverable', 'decision', 'milestone', 'task'] as TimelineFilter[]).map(
-              (f) => (
-                <button
-                  key={f}
-                  onClick={() => setTimelineFilter(f)}
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    padding: '3px 9px',
-                    borderRadius: 999,
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    background: timelineFilter === f ? 'rgba(125,227,255,0.16)' : 'transparent',
-                    color: timelineFilter === f ? '#7DE3FF' : 'rgba(245,243,255,.55)',
-                    cursor: 'pointer',
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {f}
-                </button>
-              ),
-            )}
-          </div>
-          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {(() => {
-              const rows = filterEvents(events, timelineFilter);
-              const now = Date.now();
-              if (rows.length === 0)
-                return (
-                  <div style={{ fontSize: 12, color: 'rgba(245,243,255,.4)' }}>Nothing here yet.</div>
-                );
-              return rows.map((e, i) => (
-                <button
-                  key={`${e.refType}:${e.refId}:${e.ts}:${i}`}
-                  onClick={() => openEvent(e.refType, e.title)}
-                  style={{
-                    textAlign: 'left',
-                    padding: '7px 10px',
-                    borderRadius: 9,
-                    border: '1px solid rgba(255,255,255,0.06)',
-                    background: 'rgba(255,255,255,0.02)',
-                    color: '#F5F3FF',
-                    cursor: 'pointer',
-                    fontFamily: 'inherit',
-                  }}
-                >
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      gap: 8,
-                      alignItems: 'baseline',
-                    }}
-                  >
-                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>{e.title}</span>
-                    <span style={{ fontSize: 11, color: 'rgba(245,243,255,.4)', flexShrink: 0 }}>
-                      {relativeTime(e.ts, now)}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 11, color: 'rgba(125,227,255,.6)', marginTop: 2 }}>
-                    {e.type.replace(/_/g, ' ')}
-                  </div>
-                </button>
-              ));
-            })()}
-          </div>
-        </div>
-      )}
-
-      {SECOND_BRAIN_V2 && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 58,
-            right: 26,
-            bottom: 26,
-            width: 300,
-            maxWidth: '38vw',
-            zIndex: 6,
-            pointerEvents: 'auto',
-          }}
-        >
-          <SecondBrainPanel
-            events={events}
-            nextStep={nextStep}
-            tracking={tracking}
-            companionId={companionId}
-            onTopic={(k) => flyTo(`dept:${k}`)}
-          />
-        </div>
-      )}
-
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 20,
-          left: SECOND_BRAIN_V2 ? 346 : 26,
-          zIndex: 5,
-          display: 'flex',
-          gap: 16,
-          flexWrap: 'wrap',
-          fontSize: 11.5,
-          color: 'rgba(245,243,255,.7)',
-          pointerEvents: 'none',
-        }}
-      >
-        {SECOND_BRAIN_V2 ? (
-          <>
-            <Legend dot="#FFE7A8" label="Company" />
-            <Legend dot="#FDB022" label="Department" />
-            <Legend dot="#F6A23C" label="Deliverable" />
-            <Legend dot="#2DD4BF" label="Decision" />
-            <Legend dot="#FF6B9D" label="Milestone" />
-          </>
-        ) : (
-          <>
-            <Legend dot="#F4F1FF" label="Project" />
-            <Legend dot="#8B5CF6" label="byte does" />
-            <Legend dot="#FDB022" label="Needs approval" />
-            <Legend dot="#3B82F6" label="Needs you" />
-            <Legend dot="#34D399" label="Done" />
-          </>
-        )}
-        {!SECOND_BRAIN_V2 && introPhase === 'done' && (
-          <button
-            type="button"
-            onClick={() => setIntroPhase('intro')}
-            style={{
-              pointerEvents: 'auto',
-              fontFamily: 'inherit',
-              fontSize: 11.5,
-              color: 'rgba(245,243,255,.55)',
-              background: 'transparent',
-              border: 'none',
-              borderLeft: '1px solid rgba(245,243,255,.15)',
-              paddingLeft: 16,
-              cursor: 'pointer',
-            }}
-          >
-            ? how to read this map
-          </button>
-        )}
-      </div>
-
-      {/* Second Brain v2: left chat rail (reuses byte's chat inline). The app-shell's right
-          dock is suppressed in this mode (AppRoot), so this is the only chat instance. */}
-      {SECOND_BRAIN_V2 && (
+      {!SECOND_BRAIN_V2 && (
         <div
           style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            bottom: 0,
-            width: 320,
-            zIndex: 7,
-            pointerEvents: 'auto',
+            bottom: 20,
+            left: 26,
+            zIndex: 5,
+            display: 'flex',
+            gap: 16,
+            flexWrap: 'wrap',
+            fontSize: 11.5,
+            color: 'rgba(245,243,255,.7)',
+            pointerEvents: 'none',
           }}
         >
-          <Copilot inline />
+          <Legend dot="#F4F1FF" label="Project" />
+          <Legend dot="#8B5CF6" label="byte does" />
+          <Legend dot="#FDB022" label="Needs approval" />
+          <Legend dot="#3B82F6" label="Needs you" />
+          <Legend dot="#34D399" label="Done" />
+          {introPhase === 'done' && (
+            <button
+              type="button"
+              onClick={() => setIntroPhase('intro')}
+              style={{
+                pointerEvents: 'auto',
+                fontFamily: 'inherit',
+                fontSize: 11.5,
+                color: 'rgba(245,243,255,.55)',
+                background: 'transparent',
+                border: 'none',
+                borderLeft: '1px solid rgba(245,243,255,.15)',
+                paddingLeft: 16,
+                cursor: 'pointer',
+              }}
+            >
+              ? how to read this map
+            </button>
+          )}
         </div>
       )}
+
       <div
         ref={wrapRef}
-        style={
-          SECOND_BRAIN_V2
-            ? { position: 'absolute', top: 0, bottom: 0, left: 320, right: 326 }
-            : { position: 'absolute', inset: 0 }
-        }
+        style={{ position: 'absolute', inset: 0 }}
       >
         {mapDimmed && (
           <div
