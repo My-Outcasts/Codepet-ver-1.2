@@ -1056,7 +1056,7 @@ export default function OverviewView() {
         </h1>
         <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
           {SECOND_BRAIN_V2
-            ? 'Mọi thứ bạn và byte đã tạo, kết nối lại — bấm một ngôi sao để mở.'
+            ? 'Everything you and byte have made, connected — tap a star to open it.'
             : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
         </div>
         {SECOND_BRAIN_V2 && events.length > 0 && (sbMetricsShown.length > 0 || nextStep) && (
@@ -1091,7 +1091,7 @@ export default function OverviewView() {
                   cursor: 'pointer',
                 }}
               >
-                <span style={{ color: '#7DE3FF', fontWeight: 700 }}>▸ Việc tiếp theo:</span>{' '}
+                <span style={{ color: '#7DE3FF', fontWeight: 700 }}>▸ Do this next:</span>{' '}
                 {nextStep.taskTitle}
                 {nextStepDept && (
                   <span style={{ color: 'rgba(245,243,255,.45)' }}>{`  ·  ${nextStepDept}`}</span>
