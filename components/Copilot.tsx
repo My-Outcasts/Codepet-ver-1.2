@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { track } from '@/lib/analytics';
 import { DEPTS, ENV, ENV_META } from '@/lib/data';
+import { cleanCompanyName } from '@/lib/companyName';
 import { resolveEnvIndex } from '@/lib/ai/envSetup';
 import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
 import { Companion } from './Companion';
@@ -372,7 +373,7 @@ export function Copilot() {
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
-  const company = brief.projectName?.trim() || 'your company';
+  const company = cleanCompanyName(brief.projectName) ?? 'your company';
   const c = companionById(companionId);
 
   const [draft, setDraft] = useState('');

@@ -19,6 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
+import { cleanCompanyName } from '@/lib/companyName';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
 import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
@@ -236,7 +237,7 @@ export default function OverviewView() {
     const links: GLink[] = [];
     nodes.push({
       id: 'project',
-      name: brief.projectName?.trim() || 'Your company',
+      name: cleanCompanyName(brief.projectName) ?? 'Your company',
       kind: 'project',
       color: '#D8D2F5',
       val: 12,

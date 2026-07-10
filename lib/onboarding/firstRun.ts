@@ -4,6 +4,7 @@
 import type { Dept } from '../data';
 import type { NextStep } from '../ai/nextStep';
 import type { CompanyBrief } from '../firebase/schema';
+import { cleanCompanyName } from '../companyName';
 
 export interface RevealSummary {
   /** True when the real scaffold produced a company (vs. the seed fallback). */
@@ -44,7 +45,7 @@ export function buildFirstRunGreeting(
   nextStep: NextStep | null,
 ): FirstRunGreeting {
   const who = brief.founderName?.trim();
-  const proj = brief.projectName?.trim() || 'your product';
+  const proj = cleanCompanyName(brief.projectName) ?? 'your product';
   const lead = who
     ? `${who}, your company for ${proj} is ready.`
     : `Your company for ${proj} is ready.`;
