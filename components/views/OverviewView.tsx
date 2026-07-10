@@ -27,6 +27,7 @@ import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
 import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
 import { overviewProgress, deptProgress } from '@/lib/overview/progress';
+import { ledgerCounts } from '@/lib/overview/secondBrainStats';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
 import OverviewTour from '@/components/views/overview/OverviewTour';
@@ -267,6 +268,7 @@ export default function OverviewView() {
     events,
     library,
     openDeliverable,
+    tracking,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
@@ -957,6 +959,18 @@ export default function OverviewView() {
     if (introPhase === 'intro') ensureProjectAnalysis();
   }, [introPhase, ensureProjectAnalysis]);
 
+  // Second Brain value strip: three "what you've made" numbers + the next move.
+  const sbCounts = SECOND_BRAIN_V2 ? ledgerCounts(events) : null;
+  const sbMetrics: [string, number][] = sbCounts
+    ? [
+        ['deliverables', sbCounts.deliverables],
+        ['decisions', sbCounts.decisions],
+        ['h saved', Math.round(tracking.hoursSaved)],
+      ]
+    : [];
+  const sbMetricsShown = sbMetrics.filter(([, v]) => v > 0);
+  const nextStepDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : null;
+
   return (
     <section
       className="view on"
@@ -1041,9 +1055,50 @@ export default function OverviewView() {
         </h1>
         <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
           {SECOND_BRAIN_V2
-            ? 'Everything you and byte have made, connected — ask it anything, or click a star to open it.'
+            ? 'Mọi thứ bạn và byte đã tạo, kết nối lại — bấm một ngôi sao để mở.'
             : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
         </div>
+        {SECOND_BRAIN_V2 && events.length > 0 && (
+          <div style={{ marginTop: 12, pointerEvents: 'auto' }}>
+            {sbMetricsShown.length > 0 && (
+              <div style={{ fontSize: 13, color: 'rgba(245,243,255,.75)' }}>
+                {sbMetricsShown.map(([label, v], i) => (
+                  <span key={label}>
+                    {i > 0 && <span style={{ opacity: 0.4 }}>{'  ·  '}</span>}
+                    <span style={{ color: '#7DE3FF', fontWeight: 700 }}>
+                      {label === 'h saved' ? `~${v}h` : v}
+                    </span>{' '}
+                    {label === 'h saved' ? 'saved' : label}
+                  </span>
+                ))}
+              </div>
+            )}
+            {nextStep && (
+              <button
+                onClick={() => flyTo(`dept:${nextStep.deptK}`)}
+                style={{
+                  display: 'block',
+                  marginTop: 8,
+                  textAlign: 'left',
+                  fontSize: 12.5,
+                  fontFamily: 'inherit',
+                  color: '#F5F3FF',
+                  background: 'rgba(125,227,255,0.08)',
+                  border: '1px solid rgba(125,227,255,0.3)',
+                  borderRadius: 9,
+                  padding: '7px 11px',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ color: '#7DE3FF', fontWeight: 700 }}>▸ Việc tiếp theo:</span>{' '}
+                {nextStep.taskTitle}
+                {nextStepDept && (
+                  <span style={{ color: 'rgba(245,243,255,.45)' }}>{`  ·  ${nextStepDept}`}</span>
+                )}
+              </button>
+            )}
+          </div>
+        )}
         {/* Second Brain v2 empty-state: the spine still renders, so this is never a blank screen —
             just an honest invitation for a brand-new account with no ledger events yet. */}
         {SECOND_BRAIN_V2 && events.length === 0 && (
