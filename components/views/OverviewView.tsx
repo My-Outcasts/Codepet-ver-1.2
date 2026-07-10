@@ -214,7 +214,7 @@ function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
 // A wide, soft aura sprite that sits behind a firefly so each node radiates outward
 // (the "tỏa" halo) instead of ending abruptly. Low alpha + early falloff so many
 // overlapping auras add into a warm nebula glow without washing to grey.
-function makeAuraSprite(colorHex: string, size: number): THREE.Sprite {
+function makeAuraSprite(colorHex: string, size: number, alpha = 0.34): THREE.Sprite {
   const S = 128;
   const canvas = document.createElement('canvas');
   canvas.width = S;
@@ -225,7 +225,7 @@ function makeAuraSprite(colorHex: string, size: number): THREE.Sprite {
   g.addColorStop(0.22, colorHex);
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
-  ctx.globalAlpha = 0.34;
+  ctx.globalAlpha = alpha;
   ctx.beginPath();
   ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
   ctx.fill();
@@ -389,8 +389,16 @@ export default function OverviewView() {
       const vnodes: GNode[] = kg.nodes.map((n) => {
         const gkind: GNode['kind'] =
           n.kind === 'company' ? 'project' : n.kind === 'department' ? 'dept' : n.kind;
+        // Color by CLUSTER, not by type: each department (and every knowledge node
+        // inside it) takes that department's palette color, so clusters read as
+        // distinct colored nebulae (blue / orange / teal / gold / violet / rose)
+        // like the reference. Dept-less halo nodes fall back to their type color.
+        const dk = n.kind === 'department' ? n.id.replace(/^dept:/, '') : n.deptK;
+        const deptHex = dk ? HEX[DCOL[dk]] : undefined;
         const hex =
-          n.kind === 'department' ? '#FDB022' : (KG_HEX[n.kind] ?? HEX['--accent']);
+          n.kind === 'department'
+            ? (deptHex ?? '#FDB022')
+            : (deptHex ?? KG_HEX[n.kind] ?? HEX['--accent']);
         const common = {
           id: n.id,
           name: n.name,
@@ -803,6 +811,40 @@ export default function OverviewView() {
     bloomRef.current = bloom;
   }, [dims.w]);
 
+  // Starfield (added once, v2 only) — a shell of faint distant points around the
+  // graph so the dark field reads as deep space and parallaxes as the camera orbits.
+  const starsRef = useRef<any>(null);
+  useEffect(() => {
+    if (!SECOND_BRAIN_V2 || !dims.w || starsRef.current) return;
+    const scene = (fgRef.current as any)?.scene?.();
+    if (!scene) return;
+    const N = 1500;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const r = 700 + Math.random() * 1600;
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+      pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
+      pos[i * 3 + 2] = r * Math.cos(ph);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const stars = new THREE.Points(
+      geo,
+      new THREE.PointsMaterial({
+        color: 0xaebcdf,
+        size: 2.1,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false,
+      }),
+    );
+    scene.add(stars);
+    starsRef.current = stars;
+  }, [dims.w]);
+
   // idle auto-rotate (pauses on interaction, resumes after ~3.5s idle)
   const noteInteract = useCallback(() => {
     tookControlRef.current = true;
@@ -865,7 +907,10 @@ export default function OverviewView() {
       const glowHex = isRoot ? '#FFE7A8' : (n.deptColor ?? '#FDB022');
       const size = radius * (isRoot ? 9 : isDept ? 7 : 5.5);
       const group = new THREE.Group();
-      // Soft wide aura first (radiates outward), then the hot firefly core on top.
+      // Cluster hubs (company + departments) sit inside a big, very dim colored cloud
+      // — the nebula haze behind each cluster in the reference.
+      if (isRoot || isDept) group.add(makeAuraSprite(glowHex, size * (isRoot ? 6 : 4.6), 0.1));
+      // Soft wide aura (radiates outward), then the hot firefly core on top.
       group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.4 : 2.0)));
       group.add(makeFireflySprite(glowHex, size));
       if (isRoot || isDept || n.sbLabel) {
@@ -874,12 +919,13 @@ export default function OverviewView() {
         lbl.textHeight = isRoot ? 5 : isDept ? 4.3 : 3.6;
         lbl.fontFace = 'Inter, system-ui, sans-serif';
         lbl.fontWeight = '700';
-        // Solid dark pill + a dark stroke so the text stays legible over the bright additive glow.
-        (lbl as any).backgroundColor = 'rgba(6,5,14,0.9)';
-        (lbl as any).padding = 3;
-        (lbl as any).borderRadius = 4;
-        lbl.strokeColor = 'rgba(0,0,0,0.85)';
-        lbl.strokeWidth = 0.6;
+        // Reference labels read as clean light text, not chips: drop the solid pill for a
+        // barely-there scrim and lean on a soft dark stroke to stay legible over the glow.
+        (lbl as any).backgroundColor = 'rgba(7,9,20,0.32)';
+        (lbl as any).padding = 2;
+        (lbl as any).borderRadius = 3;
+        lbl.strokeColor = 'rgba(3,4,12,0.9)';
+        lbl.strokeWidth = 1;
         // Lift the label clear of the glow so the bloom halo doesn't wash over the text.
         (lbl as any).position.set(0, size * 0.6 + 5, 0);
         group.add(lbl);
@@ -1321,9 +1367,9 @@ export default function OverviewView() {
             width={dims.w}
             height={dims.h}
             graphData={data}
-            // pure black so the composer's linear->sRGB output stays black
-            // (any non-zero dark value gets lifted to a visible purple-navy)
-            backgroundColor="#000000"
+            // v2: a dark navy that the bloom composer lifts into a soft purple-navy
+            // nebula field (the reference background). Classic mode stays pure black.
+            backgroundColor={SECOND_BRAIN_V2 ? '#070912' : '#000000'}
             showNavInfo={false}
             controlType="orbit"
             nodeVal={(n) => {
@@ -1359,9 +1405,9 @@ export default function OverviewView() {
                 return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
               }
               if (pathLinkIds.has(key)) return rgba(BEACON_HEX, 0.9);
-              // v2: brighter warm filaments than the faint classic default, so the
-              // connective tissue reads as glowing lines the bloom can pick up.
-              return SECOND_BRAIN_V2 ? rgba(l.hex, l.kind === 'spine' ? 0.6 : 0.34) : l.color;
+              // v2: thin, faint cool-gray filaments so the glowing nodes carry the
+              // image and the web reads as quiet connective tissue (the reference look).
+              return SECOND_BRAIN_V2 ? rgba('#AEBCDF', l.kind === 'spine' ? 0.16 : 0.09) : l.color;
             }}
             linkWidth={(l) => {
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
@@ -1369,7 +1415,7 @@ export default function OverviewView() {
                 t = linkId(l.target);
               if (hoverId && (s === hoverId || t === hoverId)) return 2.4;
               if (pathLinkIds.has(key)) return 2;
-              if (SECOND_BRAIN_V2) return l.kind === 'spine' ? 1.5 : 0.9;
+              if (SECOND_BRAIN_V2) return l.kind === 'spine' ? 0.6 : 0.35;
               return l.kind === 'pd' ? 1.1 : 0.4;
             }}
             linkDirectionalParticles={(l) => {
