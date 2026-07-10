@@ -1376,10 +1376,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
 
       switch (state) {
-        case 'done':
-          // The finished work lives in its department — go there to view or redo it.
-          openDept(deptK);
+        case 'done': {
+          // Open the finished deliverable to view/reopen — the runtime item if it's still in
+          // memory, else the saved one from the library (matched by dept + title). Fall back to
+          // the department when there's no artifact (e.g. a founder task the founder marked done).
+          const dt =
+            (nodeId ? d?.tasks.find((x) => x.roadmapNodeId === nodeId) : undefined) ||
+            d?.tasks.find((x) => nm(x.t) === nm(title)) ||
+            null;
+          const item =
+            dt?._item ||
+            (dt && library.find((li) => li.k === deptK && nm(li.title) === nm(dt.t))) ||
+            library.find((li) => li.k === deptK && nm(li.title) === nm(title));
+          if (item) viewItem(item);
+          else openDept(deptK);
           return;
+        }
         case 'locked': {
           const prereq = blockedBy && d?.tasks.find((x) => nm(x.t) === nm(blockedBy));
           brief(
@@ -1436,7 +1448,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [toggleCopilot, openDept, ensureRoadmapTask],
+    [toggleCopilot, openDept, ensureRoadmapTask, library, viewItem],
   );
 
   // Open the run loop for a task named by an in-chat action chip.
