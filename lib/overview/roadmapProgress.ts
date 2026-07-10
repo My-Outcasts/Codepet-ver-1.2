@@ -71,26 +71,40 @@ export function applyProgress(defs: RoadmapTaskDef[], input: ProgressInput): Roa
   const done = new Set<string>();
   for (const d of defs) {
     const pi = phaseIdxOf(d);
-    if (pi >= 0 && curIdx >= 0 && pi < curIdx) done.add(d.id);
+    // Byte-doable tasks in passed phases are assumed complete; founder-owned (actor 'you') tasks
+    // are NOT — the founder actually has to do them, so they stay actionable (`needsYou`) until
+    // marked done, surfacing as real gates instead of being silently skipped by phase passage.
+    if (pi >= 0 && curIdx >= 0 && pi < curIdx && d.actor !== 'you') done.add(d.id);
   }
   for (const [id, st] of Object.entries(overrides)) {
     if (st === 'done' && byId.has(id)) done.add(id);
   }
+  // Complete the transitive prerequisites of done tasks / the current move — but never a
+  // founder-owned prerequisite: reaching a later task doesn't prove the founder did their part,
+  // so those can't be assumed and must surface for them to actually do.
   const addPrereqs = (id: string) => {
     const d = byId.get(id);
     if (!d) return;
     for (const dep of d.dependsOn) {
-      if (byId.has(dep) && !done.has(dep)) {
-        done.add(dep);
-        addPrereqs(dep);
-      }
+      const depDef = byId.get(dep);
+      if (!depDef || depDef.actor === 'you' || done.has(dep)) continue;
+      done.add(dep);
+      addPrereqs(dep);
     }
   };
   if (input.currentTaskId) addPrereqs(input.currentTaskId);
   for (const id of Array.from(done)) addPrereqs(id);
 
+  // A task is unblocked when its prerequisites are met. Founder-owned prerequisites are SOFT
+  // gates: they don't block byte's parallel work (byte can build while you incorporate), but they
+  // DO sequence other founder-owned tasks (open a bank account only after incorporating).
   const unblocked = (d: RoadmapTaskDef) =>
-    d.dependsOn.every((dep) => !byId.has(dep) || done.has(dep));
+    d.dependsOn.every((dep) => {
+      const depDef = byId.get(dep);
+      if (!depDef) return true;
+      if (depDef.actor === 'you' && d.actor !== 'you') return true;
+      return done.has(dep);
+    });
 
   return defs.map((def) => {
     const forced = overrides[def.id];

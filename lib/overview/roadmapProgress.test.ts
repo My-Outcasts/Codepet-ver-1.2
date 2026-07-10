@@ -123,3 +123,61 @@ describe('applyProgress — dependency unlock', () => {
     expect(o.find((t) => t.id === 'c2')!.state).toBe('locked'); // c1 not done → c2 stays locked
   });
 });
+
+describe('applyProgress — founder-owned tasks are real, reachable gates', () => {
+  // fv(byte,find) → inc(you,foundation) → bank(you,foundation); core(byte,build) also needs inc.
+  const fdefs: RoadmapTaskDef[] = [
+    { id: 'fv', phase: 'find', dept: 'mkt', title: 'Validate', dependsOn: [] },
+    {
+      id: 'inc',
+      phase: 'foundation',
+      dept: 'legal',
+      title: 'Incorporate',
+      actor: 'you',
+      dependsOn: ['fv'],
+    },
+    {
+      id: 'bank',
+      phase: 'foundation',
+      dept: 'fin',
+      title: 'Bank account',
+      actor: 'you',
+      dependsOn: ['inc'],
+    },
+    { id: 'core', phase: 'build', dept: 'eng', title: 'Core product', dependsOn: ['inc'] },
+  ];
+  const st = (o: ReturnType<typeof applyProgress>, id: string) => o.find((t) => t.id === id)!.state;
+
+  it('does not auto-complete a founder task in a passed phase — it surfaces as needsYou', () => {
+    const o = applyProgress(fdefs, { currentPhase: 'build', currentTaskId: null });
+    expect(st(o, 'fv')).toBe('done'); // byte task in a passed phase → assumed done
+    expect(st(o, 'inc')).toBe('needsYou'); // founder task NOT auto-done → actionable
+  });
+
+  it('a founder prerequisite is a SOFT gate — it does not block byte parallel work', () => {
+    const o = applyProgress(fdefs, { currentPhase: 'build', currentTaskId: null });
+    expect(st(o, 'core')).toBe('available'); // byte can build while you incorporate
+    expect(st(o, 'inc')).toBe('needsYou');
+  });
+
+  it('founder tasks are sequenced by their founder prerequisites', () => {
+    const o = applyProgress(fdefs, { currentPhase: 'build', currentTaskId: null });
+    expect(st(o, 'bank')).toBe('locked'); // a bank account waits for incorporation
+  });
+
+  it('marking a founder task done unlocks the next founder task', () => {
+    const o = applyProgress(fdefs, {
+      currentPhase: 'build',
+      currentTaskId: null,
+      overrides: { inc: 'done' },
+    });
+    expect(st(o, 'inc')).toBe('done');
+    expect(st(o, 'bank')).toBe('needsYou'); // incorporate done → bank is now the founder's move
+  });
+
+  it('being on the current move does not assume a founder prerequisite is done', () => {
+    const o = applyProgress(fdefs, { currentPhase: 'build', currentTaskId: 'core' });
+    expect(st(o, 'core')).toBe('current');
+    expect(st(o, 'inc')).toBe('needsYou'); // reaching `core` doesn't prove you incorporated
+  });
+});
