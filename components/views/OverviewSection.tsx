@@ -9,11 +9,11 @@ import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
 import { cleanCompanyName } from '@/lib/companyName';
-import { nextAction } from '@/lib/roadmap';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
-import { applyProgress, stageToPhase, effectivePhase } from '@/lib/overview/roadmapProgress';
-import type { RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
+import { stageToPhase } from '@/lib/overview/roadmapProgress';
+import { selectRoadmap } from '@/lib/overview/roadmapSelector';
+import type { RoadmapTask } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
 const OverviewMap = dynamic(() => import('./OverviewView'), {
@@ -53,7 +53,6 @@ const LEGEND: [string, string][] = [
 export default function OverviewSection() {
   const {
     brief,
-    nextStep,
     tick,
     guideRoadmapTask,
     introSeen,
@@ -111,105 +110,29 @@ export default function OverviewSection() {
       ? `${projectName} — ${oneLiner}`
       : 'Your whole company as a roadmap — where you are, what byte does next, and how far you’ve come.';
 
-  // Loose title matcher — reused for the live-DEPTS truth and the next-step match below.
-  const norm = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
+  // ONE roadmap projection: the beacon + lit map node here, and — via the store — the chat's
+  // next-step, the first-run greeting, and the after-completion nudge all read from this single
+  // selector, so no two surfaces can disagree about the phase, the next move, its department, or
+  // how far along the founder is. All the derivation lives in selectRoadmap (pure + tested).
+  const {
+    move,
+    tasks,
+    phaseName: currentPhaseName,
+    nextMilestone,
+    progress: prog,
+  } = selectRoadmap(defs, stagePhase, DEPTS);
 
-  // byte's live next move, if any — from /api/next-step, else the authored golden path. Used
-  // only to *honor* real guidance when it lands in the founder's current phase; a mismatched or
-  // seeded value (e.g. a Ship task surfaced for a Find-phase founder) is ignored below.
-  const fallback = nextAction();
-  const realMove = nextStep
-    ? { deptK: nextStep.deptK, title: nextStep.taskTitle }
-    : fallback
-      ? { deptK: fallback.dept.k, title: fallback.task.t }
-      : null;
-
-  // Real per-task truth from the live DEPTS, matched by (department + normalized title): a
-  // matched task that's shipped shows `done`; one byte has drafted shows `approve` ("Needs
-  // approval"). Only promotes where we can confidently match — otherwise the dependency default
-  // stands. (Precise per-node done for every task awaits a roadmap↔task link — the Second Brain
-  // event-ledger's job.)
-  // Keyed first by the stable roadmap↔task link (exact), falling back to a normalized-title match
-  // for tasks not yet linked. Acting on a cell stamps the link (ensureRoadmapTask), so a node's
-  // Done/approve state becomes exact from that point on instead of a title guess.
-  const realByKey = new Map<string, { done?: boolean; drafted?: boolean }>();
-  const realByNode = new Map<string, { done?: boolean; drafted?: boolean }>();
-  for (const d of DEPTS) {
-    for (const t of d.tasks) {
-      realByKey.set(`${d.k}::${norm(t.t)}`, { done: t.done, drafted: t.drafted });
-      if (t.roadmapNodeId) realByNode.set(t.roadmapNodeId, { done: t.done, drafted: t.drafted });
-    }
-  }
-  const overrides: Partial<Record<string, RoadmapState>> = {};
-  for (const def of defs) {
-    const real = realByNode.get(def.id) ?? realByKey.get(`${def.dept}::${norm(def.title)}`);
-    if (!real) continue;
-    if (real.done) overrides[def.id] = 'done';
-    else if (real.drafted) overrides[def.id] = 'approve';
-  }
-
-  // The founder's current phase advances as they finish work (floored at their declared stage),
-  // so completing a phase moves the beacon to the next real step instead of stalling on a done
-  // task. Pure + unit-tested (effectivePhase).
-  const currentPhase = effectivePhase(defs, stagePhase, overrides);
-  const curPhaseIdx = ROADMAP_PHASES.findIndex((p) => p.key === currentPhase);
-  const currentPhaseName = ROADMAP_PHASES[curPhaseIdx]?.name ?? '';
-  const nextMilestone =
-    ROADMAP_PHASES[curPhaseIdx + 1]?.name ?? ROADMAP_PHASES[ROADMAP_PHASES.length - 1]?.name ?? '';
-  const phaseTasks = defs.filter((t) => t.phase === currentPhase);
-
-  // The current move is the roadmap's own next actionable task in this phase — preferring a
-  // byte-doable one (available) for the "byte does this next" beacon, then a founder gate
-  // (needsYou). Derived from a provisional pass via the same tested unlock logic the map uses.
-  const provisional = applyProgress(defs, { currentPhase, currentTaskId: null, overrides });
-  const firstActionable =
-    provisional.find((t) => t.phase === currentPhase && t.state === 'available') ??
-    provisional.find((t) => t.phase === currentPhase && t.state === 'needsYou');
-  // Honor a live next-step only when it genuinely matches a current-phase task (department +
-  // title) AND that task isn't already done — so valid AI guidance still wins, but a stale seed
-  // can neither relabel the map nor re-light a node the founder just finished.
-  const matchedNext =
-    realMove &&
-    phaseTasks.find(
-      (t) =>
-        t.dept === realMove.deptK &&
-        norm(t.title) === norm(realMove.title) &&
-        overrides[t.id] !== 'done',
-    );
-  const currentTaskId = matchedNext?.id ?? firstActionable?.id ?? phaseTasks[0]?.id ?? null;
-  // The current node stays lit as `current`, so it must not be overridden by live-DEPTS truth.
-  if (currentTaskId) delete overrides[currentTaskId];
-
-  // The "do this next" hero and Start always use the current node's OWN canonical title/dept, so
-  // the beacon and the lit map node agree and read correctly for the founder's stage.
-  const currentDef = currentTaskId ? (defs.find((d) => d.id === currentTaskId) ?? null) : null;
-  const move = currentDef ? { deptK: currentDef.dept, title: currentDef.title } : realMove;
+  // Start runs byte on the current move's real task, in its own canonical dept/title so the
+  // beacon, the lit map node, and the chat all name the same thing.
   const startMove = () => {
     if (move)
       guideRoadmapTask({
         deptK: move.deptK,
         title: move.title,
         state: 'current',
-        nodeId: currentTaskId ?? undefined,
-        actor: currentDef?.actor,
+        nodeId: move.id,
+        actor: move.actor,
       });
-  };
-
-  const tasks = applyProgress(defs, { currentPhase, currentTaskId, overrides });
-
-  // Overall progress derives from the roadmap itself (the single source of truth for this
-  // view), so the headline % always agrees with the phase columns instead of contradicting
-  // them. "needs you / approve" stay from live DEPTS — real, actionable nudges that measure a
-  // different thing (work on your plate now) and don't contradict the journey %.
-  const roadmapDone = tasks.filter((t) => t.state === 'done').length;
-  const prog = {
-    done: roadmapDone,
-    total: tasks.length,
-    pct: tasks.length ? Math.round((roadmapDone / tasks.length) * 100) : 0,
   };
   // the one actionable nudge kept on the compact card: tasks that need the founder
   let needsYou = 0;
