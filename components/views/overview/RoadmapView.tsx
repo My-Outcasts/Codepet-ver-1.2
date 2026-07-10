@@ -440,8 +440,9 @@ export default function RoadmapView({
                       background: `linear-gradient(160deg, ${VIO}, ${CY})`,
                     }}
                   />
-                  <span>
+                  <span style={{ display: 'block', minWidth: 0, maxWidth: '100%' }}>
                     <span
+                      title={projectName}
                       style={{
                         display: 'block',
                         fontFamily: 'var(--sans)',
@@ -449,6 +450,13 @@ export default function RoadmapView({
                         fontWeight: 600,
                         color: TX,
                         lineHeight: 1,
+                        // Keep the name inside the fixed-width card: clip a long token (e.g. a
+                        // long company name) to one line with an ellipsis instead of spilling
+                        // out the right edge.
+                        maxWidth: '100%',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
                       {projectName}
