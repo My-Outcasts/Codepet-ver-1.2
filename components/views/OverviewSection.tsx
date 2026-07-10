@@ -13,7 +13,7 @@ import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import { isDemoMode } from '@/lib/ai/demoMode';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
-import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
+import { applyProgress, stageToPhase, effectivePhase } from '@/lib/overview/roadmapProgress';
 import type { RoadmapState, RoadmapTask, RoadmapTaskDef } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
@@ -101,13 +101,9 @@ export default function OverviewSection() {
   }, []);
   const defs = genRoadmap ?? ROADMAP_TEMPLATE;
 
-  const currentPhase = stageToPhase(brief.stage);
-  const phaseTasks = defs.filter((t) => t.phase === currentPhase);
-  // the upcoming milestone (the phase after the current one) — the "next" pill on the bar
-  const curPhaseIdx = ROADMAP_PHASES.findIndex((p) => p.key === currentPhase);
-  const currentPhaseName = ROADMAP_PHASES[curPhaseIdx]?.name ?? '';
-  const nextMilestone =
-    ROADMAP_PHASES[curPhaseIdx + 1]?.name ?? ROADMAP_PHASES[ROADMAP_PHASES.length - 1]?.name ?? '';
+  // The founder's phase floors at their declared stage; it ADVANCES below (after overrides are
+  // known) as they finish work, so completing a phase moves the beacon to the next real step.
+  const stagePhase = stageToPhase(brief.stage);
   // Guard the root label: ignore a placeholder-y project name (empty, single char, or all
   // digits like "1") and fall back to "Your company" rather than showing junk on the hero node.
   const rawName = brief.projectName?.trim() ?? '';
@@ -171,15 +167,23 @@ export default function OverviewSection() {
     else if (real.drafted) overrides[def.id] = 'approve';
   }
 
-  // The current move must be a REAL task in the founder's current phase, so a brand-new founder
-  // is pointed at their true first step (e.g. "Validate the idea") — never a stale/seeded
-  // next-step from a later phase. Derive it from the roadmap's own dependency unlock: the first
-  // unblocked task in the current phase. A provisional pass (no current move) surfaces that
-  // frontier via the same tested logic the map uses.
+  // The founder's current phase advances as they finish work (floored at their declared stage),
+  // so completing a phase moves the beacon to the next real step instead of stalling on a done
+  // task. Pure + unit-tested (effectivePhase).
+  const currentPhase = effectivePhase(defs, stagePhase, overrides);
+  const curPhaseIdx = ROADMAP_PHASES.findIndex((p) => p.key === currentPhase);
+  const currentPhaseName = ROADMAP_PHASES[curPhaseIdx]?.name ?? '';
+  const nextMilestone =
+    ROADMAP_PHASES[curPhaseIdx + 1]?.name ?? ROADMAP_PHASES[ROADMAP_PHASES.length - 1]?.name ?? '';
+  const phaseTasks = defs.filter((t) => t.phase === currentPhase);
+
+  // The current move is the roadmap's own next actionable task in this phase — preferring a
+  // byte-doable one (available) for the "byte does this next" beacon, then a founder gate
+  // (needsYou). Derived from a provisional pass via the same tested unlock logic the map uses.
   const provisional = applyProgress(defs, { currentPhase, currentTaskId: null, overrides });
-  const firstActionable = provisional.find(
-    (t) => t.phase === currentPhase && (t.state === 'available' || t.state === 'needsYou'),
-  );
+  const firstActionable =
+    provisional.find((t) => t.phase === currentPhase && t.state === 'available') ??
+    provisional.find((t) => t.phase === currentPhase && t.state === 'needsYou');
   // Honor a live next-step only when it genuinely matches a current-phase task (department +
   // title) AND that task isn't already done — so valid AI guidance still wins, but a stale seed
   // can neither relabel the map nor re-light a node the founder just finished.

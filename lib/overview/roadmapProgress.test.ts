@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stageToPhase, applyProgress } from './roadmapProgress';
+import { stageToPhase, applyProgress, effectivePhase } from './roadmapProgress';
 import type { RoadmapTaskDef } from './roadmapModel';
 
 describe('stageToPhase', () => {
@@ -179,5 +179,39 @@ describe('applyProgress — founder-owned tasks are real, reachable gates', () =
     const o = applyProgress(fdefs, { currentPhase: 'build', currentTaskId: 'core' });
     expect(st(o, 'core')).toBe('current');
     expect(st(o, 'inc')).toBe('needsYou'); // reaching `core` doesn't prove you incorporated
+  });
+});
+
+describe('effectivePhase — advances as work completes, floored at the stage', () => {
+  // one task per phase; `o` (foundation) is founder-owned.
+  const pdefs: RoadmapTaskDef[] = [
+    { id: 'f', phase: 'find', dept: 'mkt', title: 'F', dependsOn: [] },
+    { id: 'o', phase: 'foundation', dept: 'legal', title: 'O', actor: 'you', dependsOn: ['f'] },
+    { id: 'b', phase: 'build', dept: 'eng', title: 'B', dependsOn: ['f'] },
+    { id: 's', phase: 'ship', dept: 'fin', title: 'S', dependsOn: ['b'] },
+    { id: 'l', phase: 'launch', dept: 'mkt', title: 'L', dependsOn: ['s'] },
+    { id: 'g', phase: 'grow', dept: 'ops', title: 'G', dependsOn: ['l'] },
+  ];
+
+  it('stays in the stage phase while it still has work', () => {
+    expect(effectivePhase(pdefs, 'find', {})).toBe('find');
+  });
+
+  it('advances to the next phase with work once the phase is complete', () => {
+    // find done → foundation still has the (founder) gate, so we land there.
+    expect(effectivePhase(pdefs, 'find', { f: 'done' })).toBe('foundation');
+  });
+
+  it('completing a founder gate advances past its phase', () => {
+    expect(effectivePhase(pdefs, 'find', { f: 'done', o: 'done' })).toBe('build');
+  });
+
+  it('never regresses below the declared stage', () => {
+    expect(effectivePhase(pdefs, 'ship', {})).toBe('ship');
+  });
+
+  it('lands on the final phase when everything is done', () => {
+    const done = { f: 'done', o: 'done', b: 'done', s: 'done', l: 'done', g: 'done' } as const;
+    expect(effectivePhase(pdefs, 'find', done)).toBe('grow');
   });
 });

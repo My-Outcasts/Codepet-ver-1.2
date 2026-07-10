@@ -125,3 +125,25 @@ export function applyProgress(defs: RoadmapTaskDef[], input: ProgressInput): Roa
     return { ...def, state };
   });
 }
+
+/**
+ * The phase the founder is actively working in. Floors at their declared stage, then advances
+ * past any earlier phase whose every task is already done — so finishing a phase moves the
+ * roadmap forward (and the "do this next" beacon to the next real step) instead of stalling on a
+ * completed task. Pure; reuses the same applyProgress unlock the map renders.
+ */
+export function effectivePhase(
+  defs: RoadmapTaskDef[],
+  stagePhase: string,
+  overrides: Partial<Record<string, RoadmapState>> = {},
+): string {
+  let idx = Math.max(0, PHASE_ORDER.indexOf(stagePhase));
+  for (let guard = 0; guard < PHASE_ORDER.length; guard++) {
+    const key = PHASE_ORDER[idx];
+    const pass = applyProgress(defs, { currentPhase: key, currentTaskId: null, overrides });
+    const hasWork = pass.some((t) => t.phase === key && t.state !== 'done');
+    if (hasWork || idx === PHASE_ORDER.length - 1) break;
+    idx += 1;
+  }
+  return PHASE_ORDER[idx];
+}
