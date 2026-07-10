@@ -1499,6 +1499,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleCopilot(false);
   }, [brief, toggleCopilot]);
 
+  // After a task is completed but the stage isn't finished, byte speaks up in the chat —
+  // acknowledges it and points to (and offers to run) the next move — so finishing a task never
+  // leaves the founder staring at a silent panel. The stage-complete moment is handled instead by
+  // maybeOfferAdvance's advance prompt, so we skip this then to avoid two messages at once.
+  const guideAfterCompletion = useCallback(
+    (completedTitle: string) => {
+      if (stageComplete()) return;
+      const next = nextAction();
+      const runnable = !!next && !next.task.done && liveKind(artType(next.task)) !== null;
+      toggleCopilot(false); // keep the chat open so the nudge is seen
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          text: next
+            ? `Nice — “${completedTitle}” is done.${next.dept ? ` Next up: “${next.task.t}” in ${next.dept.name}` : ` Next up: “${next.task.t}”`}${runnable ? ' — want me to take it on?' : '.'}`
+            : `Nice — “${completedTitle}” is done. Check the roadmap for your next move.`,
+          ts: Date.now(),
+          action:
+            runnable && next
+              ? {
+                  label: `Start: ${next.task.t}`,
+                  deptK: next.dept.k,
+                  taskTitle: next.task.t,
+                  inline: true,
+                }
+              : undefined,
+        },
+      ]);
+    },
+    [toggleCopilot],
+  );
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
       t.done = true;
@@ -1549,9 +1583,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       computeNextStep(); // this task is done now — advance the next step
       maybeOfferAdvance(); // …and if that was the last one, offer to move up a stage
+      guideAfterCompletion(t.t); // …otherwise byte acknowledges it + nudges the next move in chat
       return { item, next };
     },
-    [companyId, bump, toast, computeNextStep, maybeOfferAdvance],
+    [companyId, bump, toast, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
   );
 
   // Founder-owned tasks (incorporate, open a bank account, …) are the founder's to do — byte
@@ -1572,19 +1607,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         persistDepartmentTasks(companyId, d).catch((err) =>
           console.error('[store] mark task done failed', err),
         );
-      setChatMessages((prev) => [
-        ...prev.filter((m) => !m.brief),
-        {
-          id: newId(),
-          role: 'byte',
-          text: `Done ✓ — marked “${taskTitle}” complete. Nice work.`,
-          ts: Date.now(),
-        },
-      ]);
+      setChatMessages((prev) => prev.filter((m) => !m.brief));
       computeNextStep(); // it's done now — advance the next step
       maybeOfferAdvance(); // …and if that finished the stage, offer to move up
+      guideAfterCompletion(taskTitle); // …otherwise acknowledge it + nudge the next move in chat
     },
-    [companyId, bump, computeNextStep, maybeOfferAdvance],
+    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
   );
 
   const toggleEnv = useCallback(
