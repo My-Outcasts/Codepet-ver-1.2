@@ -8,7 +8,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
-import { cleanCompanyName } from '@/lib/companyName';
+import { cleanCompanyName, meaningfulText } from '@/lib/companyName';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { stageToPhase } from '@/lib/overview/roadmapProgress';
@@ -92,19 +92,17 @@ export default function OverviewSection() {
   // like "1", or a raw signup email) and fall back to "Your company" rather than showing junk
   // on the hero node.
   const projectName = cleanCompanyName(brief.projectName) ?? 'Your company';
-  // Guard against placeholder-y junk (empty, too short, or all-digits like "1") so the briefing
-  // never shows garbage — the same spirit as the projectName guard above.
-  const meaningful = (s?: string | null): string | null => {
-    const v = s?.trim();
-    return v && v.length >= 6 && !/^\d+$/.test(v) ? v : null;
-  };
   // byte's one-line read of the company, for the first-run briefing. Falls back through the
-  // brief's own fields when the AI analysis hasn't been generated yet.
+  // brief's own fields when the AI analysis hasn't been generated yet. `meaningfulText` (shared
+  // with the brief-normalization boundary) drops placeholder-y junk so the briefing never shows
+  // garbage.
   const summary =
-    meaningful(projectAnalysis?.overall) || meaningful(brief.summary) || meaningful(brief.oneLiner);
+    meaningfulText(projectAnalysis?.overall) ||
+    meaningfulText(brief.summary) ||
+    meaningfulText(brief.oneLiner);
   // Header identity: once we know the company, say whose it is and what it is; otherwise the
   // generic framing. Uses the short one-liner (truncated) so it stays a single tidy line.
-  const oneLiner = meaningful(brief.oneLiner);
+  const oneLiner = meaningfulText(brief.oneLiner);
   const headerLine =
     projectName !== 'Your company' && oneLiner
       ? `${projectName} — ${oneLiner}`

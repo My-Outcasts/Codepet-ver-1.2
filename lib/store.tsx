@@ -51,7 +51,7 @@ import {
   deleteThreadAndMessages,
 } from './firebase/companyData';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
-import { cleanCompanyName } from '@/lib/companyName';
+import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
 import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
@@ -672,7 +672,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }) => {
           if (cancelled) return;
           setLibrary(lib);
-          setBrief(b);
+          setBrief(normalizeBrief(b)); // clean the persisted brief once, at the store boundary
           setDecisions(dec);
           setCompanionId(cId ?? DEFAULT_COMPANION_ID);
           setIntroSeen(Boolean(introSeenAt));
@@ -950,7 +950,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           askInterviewGap(st.gaps[next]);
         } else {
           interviewRef.current = null;
-          setBrief(brief); // the enriched brief now grounds every run + chat
+          setBrief(normalizeBrief(brief)); // the enriched brief now grounds every run + chat
           seedBestFirstMove(brief);
         }
       };
@@ -1004,7 +1004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
       if (briefData) {
-        setBrief(briefData);
+        setBrief(normalizeBrief(briefData));
         setStageWatermark(roadmapWatermarkFor(briefData.stage));
       }
       // Stamp completion (and brief, if any) so onboarding never shows again —
@@ -1148,7 +1148,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const company = cleanCompanyName(brief.projectName) ?? 'your company';
     const updated = { ...brief, stage: next };
     const noteId = newId();
-    setBrief(updated);
+    setBrief(normalizeBrief(updated));
     setStageWatermark(roadmapWatermarkFor(next));
     bump(); // move the map now (overlay phase + roadmap "you are here")
     // Clear the advance prompt(s), then post a "re-planning…" note (updated on settle).
@@ -1188,7 +1188,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Re-plan failed and nothing was persisted — roll the stage back so the founder
         // stays consistent (current stage + current tasks), and offer a retry.
-        setBrief(prevBrief);
+        setBrief(normalizeBrief(prevBrief));
         setStageWatermark(roadmapWatermarkFor(prevBrief.stage));
         bump();
         setChatMessages((prev) =>
