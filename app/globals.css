@@ -17,6 +17,9 @@
   --accent-deep: #5b27b0;
   --accent-tint: #eee6fd;
   --accent-line: #d9c9f7;
+  /* Readable text/icon colour to sit ON an accent fill (buttons). White works on the brand
+     violet; lib/theme swaps it to dark for light companion accents (gold/teal) and per theme. */
+  --on-accent: #ffffff;
   --gold: #fdb022;
   --gold-tint: #fef0d6;
   --gold-line: #f6dda6;
@@ -43,6 +46,61 @@
   --sh-m: 0 2px 5px rgba(31, 27, 21, 0.05), 0 10px 26px rgba(31, 27, 21, 0.06);
   --sh-l: 0 8px 20px rgba(31, 27, 21, 0.09), 0 30px 60px rgba(31, 27, 21, 0.09);
 }
+
+/* ===== Dark mode =====================================================================
+   A warm charcoal (not a cold black) so Codepet keeps its cream-lit character after dark.
+   Toggled by data-theme="dark" on <html> (set pre-paint by the no-FOUC script in layout.tsx
+   and maintained by lib/theme's ThemeProvider). Only the token values change here — every
+   surface reads these variables, so the whole app re-skins from this one block. The active
+   companion's accent is layered on top imperatively (lib/theme applyCompanionAccent). */
+[data-theme='dark'] {
+  --page: #16130f;
+  --canvas: #1b1712;
+  --surface: #221d17;
+  --surface-2: #1b1712;
+  --well: #26211a;
+  --hairline: #2f2820;
+  --hair-2: #26211a;
+  --ink: #f4f1ea;
+  --t-1: #f4f1ea;
+  --t-2: #d8d2c7;
+  --t-3: #9e9789;
+  --t-4: #6f685c;
+  --accent: #9d6bf5; /* brand violet, lifted for the dark ground */
+  --accent-deep: #7c3aed;
+  --accent-tint: #271f3a;
+  --accent-line: #43356b;
+  --on-accent: #ffffff;
+  /* Semantic hues: each lifted for contrast on charcoal, with dark tint/line pairs. */
+  --gold: #fdc352;
+  --gold-tint: #332816;
+  --gold-line: #5c4620;
+  --gold-deep: #fdb022;
+  --clay: #ff9b5e;
+  --clay-tint: #38230f;
+  --clay-line: #5e3a1e;
+  --teal: #3fe0cb;
+  --teal-tint: #123330;
+  --teal-line: #1e5a54;
+  --violet: #b57bf5;
+  --violet-tint: #2a2140;
+  --violet-line: #463869;
+  --blue: #7fb0ff;
+  --blue-tint: #182742;
+  --blue-line: #274069;
+  --rose: #ff85ac;
+  --rose-tint: #3a1a26;
+  --rose-line: #63304a;
+  /* Shadows go to true black and deepen — coloured shadows read as haze on a dark ground. */
+  --sh-s: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --sh-m: 0 2px 5px rgba(0, 0, 0, 0.4), 0 10px 26px rgba(0, 0, 0, 0.5);
+  --sh-l: 0 8px 20px rgba(0, 0, 0, 0.55), 0 30px 60px rgba(0, 0, 0, 0.6);
+}
+/* Default the browser's own chrome (form controls, scrollbars) to match. */
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
 /* Pixel brand font — used only on the splash wordmark (the rest stays Google Sans). */
 @font-face {
   font-family: 'Codepet Pixel';
@@ -77,7 +135,7 @@ body {
   height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d8d2c6;
+  background: var(--t-4);
   border-radius: 9px;
   border: 2px solid transparent;
   background-clip: padding-box;
@@ -203,7 +261,7 @@ body {
   height: 24px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--violet));
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -262,6 +320,48 @@ body {
   height: 1px;
   background: var(--hairline);
   margin: 6px 0;
+}
+/* Appearance control — light / dark / auto segmented switch. */
+.tb-menu .tb-theme {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 4px 6px 12px;
+}
+.tb-menu .tb-theme-lbl {
+  font-size: 12.5px;
+  color: var(--t-3);
+}
+.tb-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 9px;
+  background: var(--well);
+  border: 1px solid var(--hairline);
+}
+.tb-seg-opt {
+  border: 0;
+  background: transparent;
+  color: var(--t-3);
+  font-family: var(--sans);
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.tb-seg-opt:hover {
+  color: var(--t-1);
+}
+.tb-seg-opt.on {
+  background: var(--surface);
+  color: var(--t-1);
+  box-shadow: var(--sh-s);
 }
 .tb-menu a {
   display: block;
@@ -936,7 +1036,7 @@ body {
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 650;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: none;
   border-radius: 13px;
@@ -1153,7 +1253,7 @@ body {
   font-family: var(--sans);
   font-size: 9px;
   letter-spacing: 0.6px;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border-radius: 99px;
   padding: 3px 10px;
@@ -1590,7 +1690,7 @@ body {
 .eb:hover {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .eb.on {
   display: inline-flex;
@@ -1611,7 +1711,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -1674,7 +1774,7 @@ body {
 .stg.done .snode {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .stg.now .snode {
   border-color: var(--gold);
@@ -2352,7 +2452,7 @@ body {
   flex: none;
 }
 .who.does {
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
 }
 .who.draft {
@@ -2405,8 +2505,8 @@ body {
   border-color: var(--blue-line);
 }
 .kb-col--done {
-  background: #e7f6ee;
-  border-color: #c4e9d5;
+  background: var(--teal-tint);
+  border-color: var(--teal-line);
 }
 .kb-colhead {
   flex: none;
@@ -3124,7 +3224,7 @@ body {
   border-radius: 9px;
   padding: 8px 14px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-family: var(--sans);
 }
 .btn:hover {
@@ -3211,7 +3311,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -3283,7 +3383,7 @@ body {
   align-items: center;
   gap: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 99px;
   padding: 7px 15px 7px 8px;
@@ -3315,7 +3415,7 @@ body {
   align-items: center;
   gap: 6px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   border-radius: 99px;
   padding: 9px 18px;
@@ -3484,13 +3584,13 @@ body {
   color: var(--t-1);
 }
 .cres-b.primary {
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border-color: var(--accent);
 }
 .cres-b.primary:hover {
   background: var(--accent-deep);
-  color: #fff;
+  color: var(--on-accent);
 }
 .cres-saved {
   font-size: 12px;
@@ -3583,7 +3683,7 @@ body {
   flex: none;
   width: 30px;
   height: 30px;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: 0;
   border-radius: 8px;
@@ -3690,7 +3790,7 @@ body {
   height: 28px;
   border-radius: 8px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   cursor: pointer;
   display: grid;
@@ -3851,7 +3951,7 @@ body {
 }
 .cop-auto-opt.on {
   background: var(--accent, #7c3aed);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* ===== onboarding overlay ===== */
@@ -4311,7 +4411,7 @@ body {
 .ob-steps .ps.done .pd {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .ob-steps .ps.now {
   color: var(--t-1);
@@ -4549,7 +4649,7 @@ body {
   height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -4602,7 +4702,7 @@ body {
   border-radius: 10px;
   padding: 11px 22px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-family: var(--sans);
   transition: 0.15s;
 }
@@ -5159,7 +5259,7 @@ body {
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 650;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: 0;
   border-radius: 8px;
@@ -5189,7 +5289,7 @@ body {
   margin-top: 1px;
   display: grid;
   place-items: center;
-  color: #fff;
+  color: var(--on-accent);
 }
 .jd-a.done .b {
   background: var(--accent);
@@ -5367,7 +5467,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 11px;
@@ -5493,7 +5593,7 @@ body {
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 600;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: 0;
   border-radius: 8px;
@@ -5534,7 +5634,7 @@ body {
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 650;
-  color: #fff;
+  color: var(--on-accent);
   background: var(--accent);
   border: 0;
   border-radius: 8px;
@@ -5633,7 +5733,7 @@ body {
   height: 16px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -5817,7 +5917,7 @@ body {
   height: 22px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 12px;
@@ -5963,12 +6063,12 @@ body {
 }
 .copybtn:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .copybtn.ok {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 .out-byte {
@@ -6125,7 +6225,7 @@ body {
   display: inline-block;
   margin-top: 4px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
   font-size: 13px;
   border-radius: 9px;
@@ -6240,7 +6340,7 @@ body {
   padding: 24px 26px;
   max-height: 330px;
   overflow: auto;
-  background: #fff;
+  background: var(--surface);
 }
 .lg-title {
   font-size: 18px;
@@ -6299,7 +6399,7 @@ body {
   padding: 24px 26px;
   max-height: 330px;
   overflow: auto;
-  background: #fff;
+  background: var(--surface);
 }
 .doc-title {
   margin-bottom: 14px;
@@ -6714,7 +6814,7 @@ body {
   border: none;
   border-radius: 11px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 14.5px;
   font-weight: 600;
   font-family: var(--sans);
@@ -6887,7 +6987,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -7020,7 +7120,7 @@ body {
 .ins-cmd-copy:hover {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* execute → deliver phases */
@@ -7059,7 +7159,7 @@ body {
 .phx .ph.on .pn,
 .phx .ph.done .pn {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 .phx .ph.done {
   color: var(--t-3);
@@ -7154,7 +7254,7 @@ body {
   height: 18px;
   border-radius: 50%;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   display: grid;
   place-items: center;
   font-size: 10px;
@@ -7264,7 +7364,7 @@ body {
   cursor: pointer;
 }
 .st-tab.on {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--accent-line);
 }
 .site-file {
@@ -7282,7 +7382,7 @@ body {
   padding: 4px 10px;
   border-radius: 8px;
   border: 1px solid var(--accent-line);
-  background: #fff;
+  background: var(--surface);
   color: var(--accent-deep);
   cursor: pointer;
 }
@@ -7465,7 +7565,7 @@ body {
   display: block;
   text-align: center;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
   font-size: 13.5px;
   padding: 12px;
@@ -8047,7 +8147,7 @@ body {
   border-radius: 12px;
   border: none;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-family: var(--sans);
   font-size: 14px;
   font-weight: 600;
@@ -8165,7 +8265,7 @@ body {
 .so-confirm {
   background: var(--accent);
   border: 1px solid var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 6px 18px rgba(124, 58, 237, 0.32);
 }
 .so-confirm:hover {
@@ -8689,7 +8789,7 @@ body {
 }
 .bc-gen.primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border-color: var(--accent-deep);
   box-shadow: var(--sh-s);
 }
@@ -9092,7 +9192,7 @@ body {
   background: #b83232;
 }
 .bc-rewind-no {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--hairline, #e8e3f0);
   color: #6a6379;
 }
@@ -9131,7 +9231,7 @@ body {
   background: #a2781a;
 }
 .bc-wrap-no {
-  background: #fff;
+  background: var(--surface);
   border-color: var(--hairline, #e8e3f0);
   color: #6a6379;
 }
@@ -9159,7 +9259,7 @@ body {
 }
 .bc-next {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: 1px solid var(--accent-deep);
   box-shadow: var(--sh-s);
 }
@@ -9269,11 +9369,11 @@ body {
   max-width: 85%;
 }
 .lc-msg.assistant {
-  background: #fff;
+  background: var(--surface);
   align-self: flex-start;
 }
 .lc-msg.user {
-  background: #efe6ff;
+  background: var(--violet-tint);
   align-self: flex-end;
 }
 .lc-tool {
@@ -9317,13 +9417,13 @@ body {
   gap: 5px;
   padding: 3px 4px 3px 9px;
   border-radius: 999px;
-  background: #efe6ff;
-  color: #4a4458;
+  background: var(--violet-tint);
+  color: var(--t-2);
 }
 .lc-queue-item button {
   border: none;
   background: transparent;
-  color: #8b8398;
+  color: var(--t-3);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
@@ -9364,22 +9464,22 @@ body {
 .lc-perm {
   margin-top: 8px;
   padding: 12px 14px;
-  border: 1.5px solid #e0b3ff;
-  background: #faf0ff;
+  border: 1.5px solid var(--violet-line);
+  background: var(--violet-tint);
   border-radius: 12px;
 }
 /* Card color follows the risk of the action (safe = calm, risky = stop-and-look). */
 .lc-perm.risk-safe {
-  border-color: #bfe3c9;
-  background: #f2faf4;
+  border-color: var(--teal-line);
+  background: var(--teal-tint);
 }
 .lc-perm.risk-careful {
-  border-color: #f2d9a8;
-  background: #fdf7ec;
+  border-color: var(--gold-line);
+  background: var(--gold-tint);
 }
 .lc-perm.risk-risky {
-  border-color: #f0b8b8;
-  background: #fdf1f1;
+  border-color: var(--rose-line);
+  background: var(--rose-tint);
 }
 .lc-perm-top {
   display: flex;
@@ -9431,7 +9531,7 @@ body {
 .lc-perm-in {
   max-height: 120px;
   overflow: auto;
-  background: #fff;
+  background: var(--surface);
   border-radius: 8px;
   padding: 8px;
   font-size: 12px;
@@ -9506,7 +9606,7 @@ body {
   border-radius: 8px;
   border: 0;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
   font-size: 12.5px;
   cursor: pointer;
@@ -9568,7 +9668,7 @@ body {
   border-radius: 8px;
   border: 0;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
   font-size: 12.5px;
   cursor: pointer;

@@ -2,11 +2,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth';
 import { useApp } from '@/lib/store';
+import { useTheme, type ThemePref } from '@/lib/theme';
 import { SupportModal } from './SupportModal';
+
+const THEME_OPTS: { value: ThemePref; label: string }[] = [
+  { value: 'system', label: 'Auto' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
 
 export function Topbar() {
   const { user, signOutUser } = useAuth();
   const { show, installed, openInstallPrompt } = useApp();
+  const { pref, setPref } = useTheme();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -108,6 +116,23 @@ export function Topbar() {
             >
               Support
             </a>
+            <div className="tb-sep" />
+            <div className="tb-theme">
+              <span className="tb-theme-lbl">Appearance</span>
+              <div className="tb-seg" role="group" aria-label="Appearance">
+                {THEME_OPTS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`tb-seg-opt${pref === opt.value ? ' on' : ''}`}
+                    aria-pressed={pref === opt.value}
+                    onClick={() => setPref(opt.value)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="tb-sep" />
             <a onClick={askSignOut}>Log out</a>
           </div>

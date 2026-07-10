@@ -12,6 +12,7 @@ import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
 import { Companion } from './Companion';
 import { companionById } from '@/lib/companions';
+import { ThemeProvider, useTheme, applyCompanionAccent } from '@/lib/theme';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
@@ -47,6 +48,14 @@ function Shell() {
     if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [view]);
   const c = companionById(companionId);
+
+  // Sync the app's accent to the active companion (in whichever theme). Cleared on unmount so
+  // the signed-out splash returns to byte's brand violet.
+  const { resolved } = useTheme();
+  useEffect(() => {
+    applyCompanionAccent(c.accent, resolved);
+    return () => applyCompanionAccent(null, resolved);
+  }, [c.accent, resolved]);
 
   const ActiveView =
     view === 'summary' ? (
@@ -136,8 +145,10 @@ function Gate() {
 
 export default function AppRoot() {
   return (
-    <AuthProvider>
-      <Gate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
