@@ -8,6 +8,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
+import { cleanCompanyName } from '@/lib/companyName';
 import { nextAction } from '@/lib/roadmap';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
@@ -88,10 +89,10 @@ export default function OverviewSection() {
   // The founder's phase floors at their declared stage; it ADVANCES below (after overrides are
   // known) as they finish work, so completing a phase moves the beacon to the next real step.
   const stagePhase = stageToPhase(brief.stage);
-  // Guard the root label: ignore a placeholder-y project name (empty, single char, or all
-  // digits like "1") and fall back to "Your company" rather than showing junk on the hero node.
-  const rawName = brief.projectName?.trim() ?? '';
-  const projectName = rawName.length >= 2 && !/^\d+$/.test(rawName) ? rawName : 'Your company';
+  // Guard the root label: ignore a placeholder-y project name (empty, single char, all digits
+  // like "1", or a raw signup email) and fall back to "Your company" rather than showing junk
+  // on the hero node.
+  const projectName = cleanCompanyName(brief.projectName) ?? 'Your company';
   // Guard against placeholder-y junk (empty, too short, or all-digits like "1") so the briefing
   // never shows garbage — the same spirit as the projectName guard above.
   const meaningful = (s?: string | null): string | null => {

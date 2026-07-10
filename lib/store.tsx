@@ -51,6 +51,7 @@ import {
   deleteThreadAndMessages,
 } from './firebase/companyData';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
+import { cleanCompanyName } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
 import type { ThreadMeta } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
@@ -918,7 +919,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       interviewRef.current = { gaps, idx: 0, brief: briefData };
       const who = briefData.founderName?.trim();
-      const proj = briefData.projectName?.trim() || 'your product';
+      const proj = cleanCompanyName(briefData.projectName) ?? 'your product';
       const lead =
         `${who ? `${who}, your` : 'Your'} company for ${proj} is ready. ` +
         `A couple quick questions first, so I plan the right moves — not generic ones.`;
@@ -1142,7 +1143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const next = nextStageOf(brief.stage);
     if (!next) return;
     const prevBrief = brief;
-    const company = brief.projectName?.trim() || 'your company';
+    const company = cleanCompanyName(brief.projectName) ?? 'your company';
     const updated = { ...brief, stage: next };
     const noteId = newId();
     setBrief(updated);
@@ -1506,7 +1507,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!stageComplete()) return;
     const next = nextStageOf(brief.stage);
     const stageName = brief.stage?.trim();
-    const company = brief.projectName?.trim() || 'your company';
+    const company = cleanCompanyName(brief.projectName) ?? 'your company';
     setChatMessages((prev) => {
       if (prev.some((m) => m.advance)) return prev; // one prompt at a time
       const text = next
