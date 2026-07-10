@@ -48,6 +48,12 @@ const ROADMAP_SCHEMA = {
             type: 'string',
             description: 'Short, concrete task title specific to this company (unique).',
           },
+          actor: {
+            type: 'string',
+            enum: ['byte', 'you'],
+            description:
+              "Who does the work: 'you' when it needs the FOUNDER themselves — their judgment, identity, decisions, or presence (defining the core problem, talking to real users, deciding positioning/pricing, incorporating, signing anything); 'byte' when byte can produce it autonomously (drafting docs/copy/plans, research summaries, setup).",
+          },
           deps: {
             type: 'array',
             items: { type: 'string' },
@@ -55,7 +61,7 @@ const ROADMAP_SCHEMA = {
               'Titles of tasks that MUST be done before this one (exact matches). Use these to draw the critical path; leave empty for an entry point.',
           },
         },
-        required: ['phase', 'dept', 'title', 'deps'],
+        required: ['phase', 'dept', 'actor', 'title', 'deps'],
       },
     },
   },
@@ -126,7 +132,24 @@ The founder's current stage: ${stage}.
 Lay out their whole company as a roadmap across these phases (use only these keys): ${PHASE_NAMES}.
 Foundation is the company shell — incorporate, bank account, bookkeeping, brand — built in parallel with early product work.
 
-For each phase write 2-4 concrete tasks specific to THIS company, each owned by ONE department (eng, mkt, ops, fin, legal, design, sales, support). Every phase should recruit a spread of departments, not just product — this builds a COMPANY, not only a product. For each task list \`deps\`: the exact titles of tasks that must come first (so the critical path can be drawn); leave \`deps\` empty for a phase's entry points. Keep titles short, specific, and unique.`;
+Departments and what each OWNS — put every task in its correct home:
+- eng — building the product itself
+- design — UX, product visuals, brand design
+- mkt — customers, problem validation, positioning, messaging, content, growth. There is NO separate "product" team, so customer discovery and validating the idea live here — never in ops.
+- sales — outreach, pipeline, closing
+- support — onboarding, helping users, docs
+- ops — internal process, tooling, logistics, data
+- fin — pricing, money, accounting
+- legal — incorporation, contracts, compliance
+
+For each phase write 2-4 concrete tasks specific to THIS company. Each task:
+- is owned by ONE department (its correct home from the list above);
+- has an \`actor\`: "you" when it needs the FOUNDER themselves (their judgment, identity, or presence — defining the core problem, talking to real users, deciding positioning or pricing, incorporating, signing anything), or "byte" when byte can produce it autonomously (drafting docs/copy/plans, research summaries, setup);
+- lists \`deps\`: the exact titles of tasks that must come first (draws the critical path); leave empty for a phase's entry points.
+
+Sequencing: for an early-stage founder (an idea or a prototype), the Find phase MUST lead with customer discovery and validation — talk to real users and confirm the problem and willingness to pay BEFORE internal setup or building. Order \`deps\` so validation comes first.
+
+Every phase should recruit a spread of departments, not just product — this builds a COMPANY, not only a product. Keep titles short, specific, and unique.`;
 
   let gen: GeneratedRoadmap;
   try {
