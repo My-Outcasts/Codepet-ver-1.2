@@ -9,7 +9,6 @@ import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
 import { nextAction } from '@/lib/roadmap';
-import { isDemoMode } from '@/lib/ai/demoMode';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { applyProgress, stageToPhase, effectivePhase } from '@/lib/overview/roadmapProgress';
@@ -68,9 +67,6 @@ export default function OverviewSection() {
   const [forceIntro] = useState(
     () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('intro'),
   );
-  // Demo mode (?demo=1): byte's AI output is canned so the whole flow can be walked without
-  // credits. Computed once on mount (client-only), shown as a header badge for honesty.
-  const [demoOn] = useState(() => isDemoMode());
   const [introDismissed, setIntroDismissed] = useState(false);
   // Persistent re-open: the first-run briefing auto-shows once per account, but "How to read this
   // map" (always in the header) can reopen it any time — so the instructions are never lost after
@@ -567,25 +563,6 @@ export default function OverviewSection() {
               </div>
             </div>
             <div style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-              {demoOn && (
-                <span
-                  title="Demo mode — byte's output is canned; no AI credits are used."
-                  style={{
-                    fontFamily: 'var(--sans)',
-                    fontSize: 10.5,
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    color: '#b45309',
-                    background: 'rgba(217,119,6,0.12)',
-                    border: '1px solid rgba(217,119,6,0.3)',
-                    borderRadius: 999,
-                    padding: '4px 9px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  DEMO MODE
-                </span>
-              )}
               <button
                 type="button"
                 onClick={openIntro}
