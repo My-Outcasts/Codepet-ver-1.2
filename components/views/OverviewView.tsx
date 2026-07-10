@@ -969,7 +969,8 @@ export default function OverviewView() {
       ]
     : [];
   const sbMetricsShown = sbMetrics.filter(([, v]) => v > 0);
-  const nextStepDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : null;
+  const nextStepDept =
+    SECOND_BRAIN_V2 && nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : null;
 
   return (
     <section
@@ -1058,7 +1059,7 @@ export default function OverviewView() {
             ? 'Mọi thứ bạn và byte đã tạo, kết nối lại — bấm một ngôi sao để mở.'
             : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
         </div>
-        {SECOND_BRAIN_V2 && events.length > 0 && (
+        {SECOND_BRAIN_V2 && events.length > 0 && (sbMetricsShown.length > 0 || nextStep) && (
           <div style={{ marginTop: 12, pointerEvents: 'auto' }}>
             {sbMetricsShown.length > 0 && (
               <div style={{ fontSize: 13, color: 'rgba(245,243,255,.75)' }}>
