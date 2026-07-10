@@ -25,6 +25,9 @@ export interface GeneratedTask {
   phase: string;
   dept: string;
   title: string;
+  /** Who does the work: `you` = it needs the founder themselves (their judgment, identity, or
+   *  presence); `byte` = byte can produce it autonomously. Absent/invalid defaults to `byte`. */
+  actor?: 'byte' | 'you';
   /** Titles of prerequisite tasks that must come first — resolved to `dependsOn` ids here. */
   deps: string[];
 }
@@ -72,6 +75,9 @@ export function roadmapFromGenerated(gen: GeneratedRoadmap | null | undefined): 
     phase: row.phase,
     dept: row.dept,
     title: row.title.trim(),
+    // Founder-owned tasks (row.actor === 'you') surface as `needsYou` and gate other founder
+    // work; everything else is byte-doable. Absent/invalid actor defaults to byte.
+    actor: row.actor === 'you' ? ('you' as const) : ('byte' as const),
     dependsOn: (row.deps ?? [])
       .map((d) => idByTitle.get(typeof d === 'string' ? d.trim() : ''))
       .filter((x): x is string => Boolean(x)),

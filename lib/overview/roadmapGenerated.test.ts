@@ -55,4 +55,27 @@ describe('roadmapFromGenerated', () => {
     expect(roadmapFromGenerated({ tasks: [] })).toEqual([]);
     expect(roadmapFromGenerated(null)).toEqual([]);
   });
+
+  it('carries the founder/byte actor through, defaulting to byte', () => {
+    const out = roadmapFromGenerated({
+      tasks: [
+        { phase: 'find', dept: 'mkt', title: 'Define the core problem', actor: 'you', deps: [] },
+        { phase: 'find', dept: 'mkt', title: 'Draft the outreach', actor: 'byte', deps: [] },
+        { phase: 'build', dept: 'eng', title: 'Build the MVP', deps: [] }, // actor omitted
+        // an invalid actor value falls back to byte rather than leaking through
+        {
+          phase: 'ship',
+          dept: 'fin',
+          title: 'Set pricing',
+          actor: 'nonsense' as unknown as 'you',
+          deps: [],
+        },
+      ],
+    });
+    const actor = (t: string) => out.find((x) => x.title === t)!.actor;
+    expect(actor('Define the core problem')).toBe('you'); // founder-owned → needsYou gate
+    expect(actor('Draft the outreach')).toBe('byte');
+    expect(actor('Build the MVP')).toBe('byte'); // omitted → default
+    expect(actor('Set pricing')).toBe('byte'); // invalid → default
+  });
 });
