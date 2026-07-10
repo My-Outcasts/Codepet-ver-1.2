@@ -915,23 +915,7 @@ export default function OverviewView() {
       // Soft wide aura (radiates outward), then the hot firefly core on top.
       group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.2 : 1.9), 0.26));
       group.add(makeFireflySprite(glowHex, size));
-      if (isRoot || isDept || n.sbLabel) {
-        const lbl = new SpriteText(n.name);
-        lbl.color = '#FFFFFF';
-        lbl.textHeight = isRoot ? 5 : isDept ? 4.3 : 3.6;
-        lbl.fontFace = 'Inter, system-ui, sans-serif';
-        lbl.fontWeight = '700';
-        // Reference labels read as clean light text, not chips: a light scrim + soft dark
-        // stroke keep them legible over the glow without a heavy solid pill.
-        (lbl as any).backgroundColor = 'rgba(7,9,20,0.5)';
-        (lbl as any).padding = 2.5;
-        (lbl as any).borderRadius = 3;
-        lbl.strokeColor = 'rgba(3,4,12,0.95)';
-        lbl.strokeWidth = 1;
-        // Lift the label well clear of the glow so the bloom halo doesn't wash over the text.
-        (lbl as any).position.set(0, size * 0.9 + 7, 0);
-        group.add(lbl);
-      }
+      // No in-scene text: names show only on hover, via the built-in nodeLabel tooltip.
       return group;
     }
     if (n.kind === 'task') return undefined; // default sphere; label on hover
