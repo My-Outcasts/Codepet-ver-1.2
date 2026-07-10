@@ -91,6 +91,14 @@ export default function OverviewSection() {
         setGenRoadmap(saved);
         return;
       }
+      // No saved roadmap yet. Generating a fresh one now would produce a different plan whose
+      // node ids wouldn't match the completions the founder already made — orphaning their
+      // progress. So only generate when there's no such progress; otherwise keep the current
+      // (template) roadmap, which is a stable constant, so their progress survives. (Normal flow:
+      // generation succeeds on the first visit — before any progress — and is saved, so this
+      // guard only trips after a generation outage where the founder worked off the template.)
+      const hasProgress = DEPTS.some((d) => d.tasks.some((t) => t.roadmapNodeId));
+      if (hasProgress) return;
       generateRoadmap().then((fresh) => {
         if (live && fresh) setGenRoadmap(fresh);
       });
