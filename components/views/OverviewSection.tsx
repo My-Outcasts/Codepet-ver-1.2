@@ -553,10 +553,13 @@ export default function OverviewSection() {
                   lineHeight: 1.45,
                   color: 'rgba(31,27,21,.62)',
                   marginTop: 4,
-                  whiteSpace: 'nowrap',
+                  // Wrap to at most two lines so the full subtitle shows instead of being
+                  // cut off mid-word — while still bounding a long dynamic company one-liner.
+                  display: '-webkit-box',
+                  WebkitBoxOrient: 'vertical',
+                  WebkitLineClamp: 2,
                   overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  maxWidth: 'min(680px, 58vw)',
+                  maxWidth: 'min(760px, 62vw)',
                 }}
                 title={headerLine}
               >
