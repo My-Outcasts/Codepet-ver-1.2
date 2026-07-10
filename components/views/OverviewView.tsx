@@ -1472,7 +1472,7 @@ function AdvanceCard({ next, onAdvance }: { next: string | null; onAdvance: () =
       style={{
         position: 'absolute',
         top: 126,
-        left: SECOND_BRAIN_V2 ? 346 : 26,
+        left: 26,
         zIndex: 6,
         width: 264,
         padding: '15px 17px 16px',
