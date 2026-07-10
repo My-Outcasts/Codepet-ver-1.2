@@ -251,9 +251,11 @@ function makeFireflySprite(colorHex: string, size: number): THREE.Sprite {
   canvas.height = S;
   const ctx = canvas.getContext('2d')!;
   const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
-  g.addColorStop(0, 'rgba(255,253,245,0.98)');
-  g.addColorStop(0.16, colorHex);
-  g.addColorStop(0.42, colorHex);
+  // Smaller, softer white core so the cluster color reads instead of blowing out to
+  // pure white under bloom — a warm-tinted hot center, then the color, then fade.
+  g.addColorStop(0, 'rgba(255,250,238,0.82)');
+  g.addColorStop(0.12, colorHex);
+  g.addColorStop(0.46, colorHex);
   g.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = g;
   ctx.beginPath();
@@ -805,7 +807,7 @@ export default function OverviewView() {
     // full-frame haze across the coarse mip (which washed the field to purple).
     // Warmer, stronger glow for the Second Brain nebula; the classic tighter bloom otherwise.
     const bloom = SECOND_BRAIN_V2
-      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 1.1, 0.55, 0.42)
+      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.72, 0.5, 0.5)
       : new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
     composer.addPass(bloom);
     bloomRef.current = bloom;
@@ -905,13 +907,13 @@ export default function OverviewView() {
       const isRoot = n.kind === 'project';
       const isDept = n.kind === 'dept';
       const glowHex = isRoot ? '#FFE7A8' : (n.deptColor ?? '#FDB022');
-      const size = radius * (isRoot ? 9 : isDept ? 7 : 5.5);
+      const size = radius * (isRoot ? 5.5 : isDept ? 5 : 4.2);
       const group = new THREE.Group();
       // Cluster hubs (company + departments) sit inside a big, very dim colored cloud
       // — the nebula haze behind each cluster in the reference.
-      if (isRoot || isDept) group.add(makeAuraSprite(glowHex, size * (isRoot ? 6 : 4.6), 0.1));
+      if (isRoot || isDept) group.add(makeAuraSprite(glowHex, size * (isRoot ? 6 : 4.6), 0.08));
       // Soft wide aura (radiates outward), then the hot firefly core on top.
-      group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.4 : 2.0)));
+      group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.2 : 1.9), 0.26));
       group.add(makeFireflySprite(glowHex, size));
       if (isRoot || isDept || n.sbLabel) {
         const lbl = new SpriteText(n.name);
@@ -919,15 +921,15 @@ export default function OverviewView() {
         lbl.textHeight = isRoot ? 5 : isDept ? 4.3 : 3.6;
         lbl.fontFace = 'Inter, system-ui, sans-serif';
         lbl.fontWeight = '700';
-        // Reference labels read as clean light text, not chips: drop the solid pill for a
-        // barely-there scrim and lean on a soft dark stroke to stay legible over the glow.
-        (lbl as any).backgroundColor = 'rgba(7,9,20,0.32)';
-        (lbl as any).padding = 2;
+        // Reference labels read as clean light text, not chips: a light scrim + soft dark
+        // stroke keep them legible over the glow without a heavy solid pill.
+        (lbl as any).backgroundColor = 'rgba(7,9,20,0.5)';
+        (lbl as any).padding = 2.5;
         (lbl as any).borderRadius = 3;
-        lbl.strokeColor = 'rgba(3,4,12,0.9)';
+        lbl.strokeColor = 'rgba(3,4,12,0.95)';
         lbl.strokeWidth = 1;
-        // Lift the label clear of the glow so the bloom halo doesn't wash over the text.
-        (lbl as any).position.set(0, size * 0.6 + 5, 0);
+        // Lift the label well clear of the glow so the bloom halo doesn't wash over the text.
+        (lbl as any).position.set(0, size * 0.9 + 7, 0);
         group.add(lbl);
       }
       return group;
