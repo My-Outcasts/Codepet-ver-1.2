@@ -1516,7 +1516,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           role: 'byte',
           text: next
             ? `Nice — “${completedTitle}” is done.${next.dept ? ` Next up: “${next.task.t}” in ${next.dept.name}` : ` Next up: “${next.task.t}”`}${runnable ? ' — want me to take it on?' : '.'}`
-            : `Nice — “${completedTitle}” is done. Check the roadmap for your next move.`,
+            : `Nice — “${completedTitle}” is done. Your next move is lit on the roadmap — hit Start when you're ready, or tell me here and I'll take it on.`,
           ts: Date.now(),
           action:
             runnable && next
