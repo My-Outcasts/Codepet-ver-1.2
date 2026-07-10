@@ -35,7 +35,9 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
   ),
 });
 
-const CY = '#7c3aed';
+// Accent for byte's labels/CTAs here — the live token, so it brightens on the dark ground and
+// follows the active companion. Used only in DOM styles (not SVG attributes), so var() is safe.
+const CY = 'var(--accent)';
 // The two cards sit side by side, each ~HUD-sized (matching the Second Brain "building your
 // company" card). The row is capped so they stay small.
 const PANEL_W = 'min(430px, calc(100% - 48px))';
@@ -47,7 +49,7 @@ const LEGEND: [string, string][] = [
   ['#7c3aed', 'byte can do this'],
   ['#2563eb', 'Needs your input'],
   ['#d97706', 'Needs approval'],
-  ['rgba(31,27,21,0.4)', 'Needs earlier steps'],
+  ['var(--t-3)', 'Needs earlier steps'],
 ];
 
 export default function OverviewSection() {
@@ -169,8 +171,8 @@ export default function OverviewSection() {
         display: 'inline-flex',
         gap: 3,
         padding: 4,
-        background: onDark ? 'rgba(18,16,28,0.72)' : '#ffffff',
-        border: `1px solid ${onDark ? 'rgba(245,243,255,0.14)' : 'rgba(31,27,21,0.09)'}`,
+        background: onDark ? 'rgba(18,16,28,0.72)' : 'var(--surface)',
+        border: `1px solid ${onDark ? 'rgba(245,243,255,0.14)' : 'var(--hairline)'}`,
         borderRadius: 11,
         backdropFilter: onDark ? 'blur(8px)' : undefined,
       }}
@@ -202,7 +204,7 @@ export default function OverviewSection() {
                   : CY
                 : onDark
                   ? 'rgba(245,243,255,0.5)'
-                  : 'rgba(31,27,21,0.4)',
+                  : 'var(--t-3)',
           }}
         >
           {k === 'map' ? 'Second Brain' : 'Roadmap'}
@@ -217,7 +219,7 @@ export default function OverviewSection() {
       style={{
         position: 'absolute',
         inset: 0,
-        background: '#f8f7f3',
+        background: 'var(--page)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -241,7 +243,7 @@ export default function OverviewSection() {
             borderBottom: '1px solid rgba(217,119,6,0.22)',
             fontFamily: 'var(--sans)',
             fontSize: 13,
-            color: '#92400e',
+            color: 'var(--gold-deep)',
           }}
         >
           <span
@@ -294,8 +296,8 @@ export default function OverviewSection() {
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   width: 'min(440px, 100%)',
-                  background: '#ffffff',
-                  border: '1px solid rgba(31,27,21,0.08)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--hairline)',
                   borderRadius: 20,
                   boxShadow: '0 30px 80px -30px rgba(31,27,21,0.55)',
                   padding: '26px 26px 22px',
@@ -328,7 +330,7 @@ export default function OverviewSection() {
                       style={{
                         fontSize: 19,
                         fontWeight: 680,
-                        color: '#1f1b15',
+                        color: 'var(--t-1)',
                         letterSpacing: '-0.01em',
                         marginTop: 1,
                       }}
@@ -344,7 +346,7 @@ export default function OverviewSection() {
                     style={{
                       fontSize: 14.5,
                       lineHeight: 1.5,
-                      color: 'rgba(31,27,21,0.72)',
+                      color: 'var(--t-2)',
                       marginBottom: 14,
                     }}
                   >
@@ -355,7 +357,7 @@ export default function OverviewSection() {
                   style={{
                     fontSize: 13.5,
                     lineHeight: 1.5,
-                    color: 'rgba(31,27,21,0.82)',
+                    color: 'var(--t-2)',
                     background: 'rgba(124,58,237,0.07)',
                     border: '1px solid rgba(124,58,237,0.16)',
                     borderRadius: 12,
@@ -363,7 +365,7 @@ export default function OverviewSection() {
                     marginBottom: 16,
                   }}
                 >
-                  <span style={{ fontWeight: 650, color: '#1f1b15' }}>
+                  <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>
                     You’re in the {currentPhaseName || 'first'} phase
                   </span>
                   {nextMilestone ? ` — next milestone: ${nextMilestone}.` : '.'}
@@ -380,7 +382,7 @@ export default function OverviewSection() {
                     fontWeight: 650,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: 'rgba(31,27,21,0.4)',
+                    color: 'var(--t-3)',
                     marginBottom: 10,
                   }}
                 >
@@ -398,7 +400,7 @@ export default function OverviewSection() {
                         'hit Start and I’ll get to work.',
                       ],
                       [
-                        'rgba(31,27,21,0.4)',
+                        'var(--t-3)',
                         'Greyed-out steps are locked',
                         'they unlock as you finish what they depend on.',
                       ],
@@ -415,10 +417,8 @@ export default function OverviewSection() {
                           flex: 'none',
                         }}
                       />
-                      <div
-                        style={{ fontSize: 13.5, lineHeight: 1.45, color: 'rgba(31,27,21,0.72)' }}
-                      >
-                        <span style={{ fontWeight: 650, color: '#1f1b15' }}>{h}</span> — {b}
+                      <div style={{ fontSize: 13.5, lineHeight: 1.45, color: 'var(--t-2)' }}>
+                        <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>{h}</span> — {b}
                       </div>
                     </div>
                   ))}
@@ -431,7 +431,7 @@ export default function OverviewSection() {
                     fontFamily: 'var(--sans)',
                     fontSize: 14,
                     fontWeight: 650,
-                    color: '#ffffff',
+                    color: 'var(--on-accent)',
                     background: '#7c3aed',
                     border: 'none',
                     borderRadius: 12,
@@ -461,7 +461,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 28,
                   fontWeight: 650,
-                  color: '#1f1b15',
+                  color: 'var(--t-1)',
                   letterSpacing: '-.5px',
                   margin: 0,
                 }}
@@ -472,7 +472,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 15,
                   lineHeight: 1.45,
-                  color: 'rgba(31,27,21,.62)',
+                  color: 'var(--t-3)',
                   marginTop: 4,
                   // Wrap to at most two lines so the full subtitle shows instead of being
                   // cut off mid-word — while still bounding a long dynamic company one-liner.
@@ -520,7 +520,7 @@ export default function OverviewSection() {
                     justifyContent: 'center',
                     fontSize: 10,
                     fontWeight: 700,
-                    color: '#fff',
+                    color: 'var(--on-accent)',
                     background: CY,
                   }}
                 >
@@ -561,8 +561,8 @@ export default function OverviewSection() {
                   boxSizing: 'border-box',
                   padding: '9px 13px 10px',
                   borderRadius: 14,
-                  background: '#ffffff',
-                  border: '1px solid rgba(31,27,21,0.08)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--hairline)',
                   boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
                 }}
               >
@@ -611,10 +611,10 @@ export default function OverviewSection() {
                     <span style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
                       {prog.pct}
                     </span>
-                    <span style={{ fontSize: 13, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                    <span style={{ fontSize: 13, color: 'var(--t-3)' }}>%</span>
                   </span>
                   {needsYou > 0 && (
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
+                    <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--blue)' }}>
                       needs you {needsYou}
                     </span>
                   )}
@@ -625,7 +625,7 @@ export default function OverviewSection() {
                     position: 'relative',
                     height: 14,
                     borderRadius: 999,
-                    background: 'rgba(31,27,21,0.07)',
+                    background: 'var(--well)',
                     display: 'flex',
                     alignItems: 'center',
                   }}
@@ -756,7 +756,7 @@ export default function OverviewSection() {
                       fontFamily: 'var(--sans)',
                       fontSize: 12.5,
                       fontWeight: 700,
-                      color: '#ffffff',
+                      color: 'var(--on-accent)',
                       background: 'var(--accent)',
                       border: 'none',
                       borderRadius: 9,
@@ -787,7 +787,7 @@ export default function OverviewSection() {
                   fontWeight: 650,
                   letterSpacing: '0.12em',
                   textTransform: 'uppercase',
-                  color: 'rgba(31,27,21,0.4)',
+                  color: 'var(--t-3)',
                   marginBottom: 1,
                 }}
               >
@@ -801,7 +801,7 @@ export default function OverviewSection() {
                     alignItems: 'center',
                     gap: 8,
                     fontSize: 11.5,
-                    color: 'rgba(31,27,21,0.6)',
+                    color: 'var(--t-3)',
                     whiteSpace: 'nowrap',
                   }}
                 >

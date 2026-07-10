@@ -14,12 +14,15 @@ import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overvi
 import { ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
+// Theme-driven where it matters (surfaces, text, hairlines follow light/dark + companion accent);
+// CY/VIO stay literal because they're also used as SVG `stroke`/`fill` attributes, where var()
+// isn't parsed. The brand violet reads on both grounds.
 const CY = '#7c3aed';
 const VIO = '#9333ea';
-const TX = '#1f1b15';
-const TX3 = 'rgba(31,27,21,0.40)';
-const LINE = 'rgba(31,27,21,0.09)';
-const CARD_BG = '#ffffff';
+const TX = 'var(--t-1)';
+const TX3 = 'var(--t-3)';
+const LINE = 'var(--hairline)';
+const CARD_BG = 'var(--surface)';
 
 // State → the node's icon-dot color.
 const DOT: Record<RoadmapState, string> = {
@@ -103,7 +106,7 @@ function Node({
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            background: '#ffffff',
+            background: 'var(--surface)',
             border: '1px solid rgba(124,58,237,0.5)',
             borderRadius: 999,
             padding: '3px 9px 3px 4px',
@@ -154,7 +157,7 @@ function Node({
           flex: 'none',
           display: 'grid',
           placeItems: 'center',
-          background: done ? 'rgba(22,163,74,0.14)' : 'rgba(31,27,21,0.06)',
+          background: done ? 'rgba(22,163,74,0.14)' : 'var(--well)',
           border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : LINE}`,
         }}
       >
@@ -343,7 +346,7 @@ export default function RoadmapView({
                       letterSpacing: '0.14em',
                       textTransform: 'uppercase',
                       color: c.current ? CY : TX3,
-                      background: c.current ? 'rgba(124,58,237,0.08)' : 'rgba(31,27,21,0.05)',
+                      background: c.current ? 'rgba(124,58,237,0.08)' : 'var(--well)',
                       border: `1px solid ${c.current ? 'rgba(124,58,237,0.4)' : LINE}`,
                       padding: '4px 9px',
                       borderRadius: 7,
@@ -381,7 +384,9 @@ export default function RoadmapView({
                     key={`d${i}`}
                     d={e.d}
                     fill="none"
-                    stroke="rgba(31,27,21,0.18)"
+                    // var() isn't valid in the `stroke` attribute — set it via style so the faint
+                    // dependency line stays visible on both the cream and charcoal grounds.
+                    style={{ stroke: 'var(--t-4)' }}
                     strokeWidth={1.5}
                     strokeDasharray="3 4"
                   />
