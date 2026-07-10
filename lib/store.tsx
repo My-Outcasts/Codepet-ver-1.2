@@ -62,9 +62,13 @@ import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, ChatError } from './ai/chat';
 import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
 import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
-import { fetchNextStep, type NextStep } from './ai/nextStep';
-import { nextAction, setStageWatermark } from './roadmap';
+import { type NextStep } from './ai/nextStep';
+import { setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
+import { loadSavedRoadmap, generateRoadmap } from './ai/generateRoadmap';
+import { ROADMAP_TEMPLATE } from './overview/roadmapTemplate';
+import { stageToPhase, roadmapOverrides, nextRoadmapMove } from './overview/roadmapProgress';
+import type { RoadmapTaskDef } from './overview/roadmapModel';
 import {
   appendBrief,
   stepForLive,
@@ -91,7 +95,7 @@ export interface ChatMessage {
   /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
-  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
+  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean; done?: boolean };
   /** A one-tap "take me there" chip byte offers when the founder asks where an app
    * function is. Tapping it navigates (never auto-navigates). */
   nav?: NavChip;
@@ -201,6 +205,10 @@ interface AppState {
    *  (e.g. 'refused', 'rate_limited', 'network'); null when nothing failed, so the
    *  example-plan banner can name the actual cause rather than just "not generated yet". */
   scaffoldFailure: string | null;
+  /** byte's model availability — the failure code ('ai_unavailable' = out of credits,
+   *  'rate_limited' = daily cap) when a chat/run last failed that way, else null. Drives the
+   *  hub's single honest "byte is offline" banner. */
+  aiOffline: { code: string; at: number } | null;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
@@ -244,6 +252,19 @@ interface AppState {
   portalSignal: { deptK: string; n: number } | null;
   /** Portal into a task from anywhere (e.g. the Roadmap): go to the map, byte arrives in chat, camera flies to its dept. */
   portalToTask: (deptK: string, taskTitle: string) => void;
+  /** Act on a roadmap cell by its state: run/review it inline in chat when byte can, guide the
+   *  founder when it's theirs, explain what's blocking a locked step, or open a finished one. */
+  guideRoadmapTask: (input: {
+    deptK: string;
+    title: string;
+    state: string;
+    blockedBy?: string;
+    nodeId?: string;
+    actor?: string;
+  }) => void;
+  /** Mark a founder-owned task done from an in-chat chip (the "tell me when it's done" path):
+   *  flips the roadmap node to Done, unlocks its dependents, and offers stage-advance. */
+  markTaskDone: (deptK: string, taskTitle: string) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -300,6 +321,9 @@ interface AppState {
   persistTaskDraft: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
+  /** byte's per-company roadmap (generated once, else null → consumers use the template). Owned
+   *  here so the beacon, chat, and nudge derive "what's next" from the same source. */
+  roadmapDefs: RoadmapTaskDef[] | null;
   toastMsg: string;
   toast: (msg: string) => void;
   /** "Let's build" flow — lifted from BuildCoachView so the chat panel drives START
@@ -430,6 +454,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Durable decisions byte maintains (hydrated from Firestore; founder-curatable).
   const [decisions, setDecisions] = useState<DecisionEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  // byte's per-company roadmap (generated once, else the canonical template). Owned here so the
+  // beacon, the chat's next-step, and the after-completion nudge all derive "what's next" from the
+  // SAME roadmap — one source of truth, no drift.
+  const [roadmapDefs, setRoadmapDefs] = useState<RoadmapTaskDef[] | null>(null);
 
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -580,6 +608,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
   // on hydrate and after every approval. On failure the authored fallback stands.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  // byte's model availability, so the hub can show ONE honest "offline" state up front instead
+  // of per-message "temporarily unavailable" confusion. Set to the failure code (e.g.
+  // 'ai_unavailable' = out of credits, 'rate_limited' = daily cap) when a chat/run call fails
+  // that way; cleared the moment any AI call succeeds again.
+  const [aiOffline, setAiOffline] = useState<{ code: string; at: number } | null>(null);
   // Whether the map reflects a plan byte generated from THIS founder's product, vs. the
   // built-in example seed. Set from the persisted `scaffoldedAt` on hydrate, flipped true
   // the moment a scaffold succeeds. `scaffoldFailure` carries *why* a scaffold attempt
@@ -591,19 +624,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Cleared on both success and failure (.finally), never left stuck on.
   const [regenerating, setRegenerating] = useState(false);
   const regenInFlightRef = useRef(false);
+  // The roadmap's own next move, derived live from the current roadmap + department state — THE
+  // one source of "what's next" so the beacon (via nextStep), the chat, and the after-completion
+  // nudge never disagree. Reads live DEPTS, so it's correct the instant after a task completes.
+  const computeRoadmapNext = useCallback(() => {
+    const defs = roadmapDefs ?? ROADMAP_TEMPLATE;
+    return nextRoadmapMove(defs, stageToPhase(brief.stage), roadmapOverrides(defs, DEPTS));
+  }, [roadmapDefs, brief.stage]);
   const computeNextStep = useCallback(() => {
-    const fb = nextAction();
-    const fallback: NextStep | null = fb
-      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
-      : null;
-    setNextStep(fallback);
-    if (!fallback) return; // nothing open
-    fetchNextStep()
-      .then((pick) => {
-        if (pick) setNextStep(pick);
-      })
-      .catch((err) => console.error('[store] next-step failed — keeping authored fallback', err));
-  }, []);
+    const move = computeRoadmapNext();
+    setNextStep(move ? { deptK: move.deptK, taskTitle: move.title, why: '' } : null);
+  }, [computeRoadmapNext]);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstApproveTracked = useRef(false);
@@ -705,6 +736,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [companyId, bump, computeNextStep]);
 
+  // Load byte's per-company roadmap once, after hydration: use the saved one if present; else
+  // generate a fresh one — unless the founder already has progress (a mismatched fresh plan would
+  // orphan it), in which case keep the template, a stable constant.
+  useEffect(() => {
+    if (!hydrated) return;
+    let live = true;
+    loadSavedRoadmap().then((saved) => {
+      if (!live) return;
+      if (saved) {
+        setRoadmapDefs(saved);
+        return;
+      }
+      const hasProgress = DEPTS.some((d) => d.tasks.some((t) => t.roadmapNodeId));
+      if (hasProgress) return;
+      generateRoadmap().then((fresh) => {
+        if (live && fresh) setRoadmapDefs(fresh);
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [hydrated]);
+
   const show = useCallback((v: View) => {
     setView(v);
   }, []);
@@ -798,49 +852,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // from the authored fallback, then upgrades to byte's own pick when /api/next-step
   // resolves — the greeting message updates in place (stable id). Runs AFTER the first-run
   // enrichment interview, or immediately when the brief already has every plan-shaping field.
-  const seedBestFirstMove = useCallback((briefData: CompanyBrief) => {
-    const gid = newId();
-    // Fire firstrun.action_offered at most once — when an action first appears,
-    // whether it came from the synchronous authored fallback or the async byte pick.
-    let offered = false;
-    const seed = (ns: NextStep | null) => {
-      const g = buildFirstRunGreeting(briefData, ns);
-      setChatMessages((prev) => {
-        const msg: ChatMessage = {
-          id: gid,
-          role: 'byte',
-          text: g.text,
-          ts: Date.now(),
-          action: g.action,
-        };
-        const i = prev.findIndex((m) => m.id === gid);
-        return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
-      });
-      if (g.action && !offered) {
-        offered = true;
-        track('firstrun.action_offered', { dept: g.action.deptK });
-      }
-    };
-    const fb = nextAction();
-    const fallback: NextStep | null = fb
-      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
-      : null;
-    setNextStep(fallback);
-    seed(fallback);
-    // Always ask byte for the best first move — even when the synchronous authored
-    // fallback is momentarily null (e.g. the roadmap isn't settled the instant
-    // onboarding finishes). Recovering the action here keeps the greeting's
-    // "Do it with me" — the whole B→C bridge — from silently vanishing.
-    // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
-    fetchNextStep()
-      .then((pick) => {
-        if (pick) {
-          setNextStep(pick);
-          seed(pick);
+  const seedBestFirstMove = useCallback(
+    (briefData: CompanyBrief) => {
+      const gid = newId();
+      // Fire firstrun.action_offered at most once — when an action first appears,
+      // whether it came from the synchronous authored fallback or the async byte pick.
+      let offered = false;
+      const seed = (ns: NextStep | null) => {
+        const g = buildFirstRunGreeting(briefData, ns);
+        setChatMessages((prev) => {
+          const msg: ChatMessage = {
+            id: gid,
+            role: 'byte',
+            text: g.text,
+            ts: Date.now(),
+            action: g.action,
+          };
+          const i = prev.findIndex((m) => m.id === gid);
+          return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+        });
+        if (g.action && !offered) {
+          offered = true;
+          track('firstrun.action_offered', { dept: g.action.deptK });
         }
-      })
-      .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
-  }, []);
+      };
+      // The first move comes from the roadmap itself, so the greeting's "Do it with me" points at
+      // the same next step the beacon shows (one source of truth for "what's next").
+      const move = computeRoadmapNext();
+      const next: NextStep | null = move
+        ? { deptK: move.deptK, taskTitle: move.title, why: '' }
+        : null;
+      setNextStep(next);
+      seed(next);
+    },
+    [computeRoadmapNext],
+  );
 
   // Progress of the first-run enrichment interview: the empty gaps to ask, which one we're
   // on, and the brief accumulating byte's distilled answers. Null when no interview is active.
@@ -1284,6 +1330,163 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [briefDepartment],
   );
 
+  // The spine of the roadmap↔work link: resolve the concrete task a roadmap node realizes —
+  // matching an existing one (by the stable node link, else by title) or CREATING it on demand
+  // in the department — and stamp the reverse link so the Overview tracks it exactly. Returns the
+  // runnable task (its exact title feeds runTaskInChat), or null if the department is unknown.
+  const ensureRoadmapTask = useCallback(
+    (deptK: string, title: string, nodeId: string, actor?: string): Task | null => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      if (!d || !nodeId) return null;
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const existing =
+        d.tasks.find((x) => x.roadmapNodeId === nodeId) ||
+        d.tasks.find((x) => nm(x.t) === nm(title)) ||
+        null;
+      if (existing) {
+        if (existing.roadmapNodeId !== nodeId) {
+          existing.roadmapNodeId = nodeId; // stamp the link so tracking is exact from here on
+          bump();
+          if (companyId)
+            persistDepartmentTasks(companyId, d).catch((err) =>
+              console.error('[store] link roadmap task failed', err),
+            );
+        }
+        return existing;
+      }
+      // Create-on-demand: a real, runnable task so byte can do it in-thread and the node tracks
+      // it. No explicit kind — artType defaults it to a runnable deliverable (doc / prep).
+      const created: Task = {
+        t: title,
+        d: '',
+        who: actor === 'you' ? 'you' : 'does',
+        out: '',
+        done: false,
+        roadmapNodeId: nodeId,
+      };
+      d.tasks.push(created);
+      d.later = false; // the department now has live work
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] create roadmap task failed', err),
+        );
+      return created;
+    },
+    [companyId, bump],
+  );
+
+  // The roadmap as a control surface: clicking a cell routes by its state into the chat, so the
+  // founder either completes the task in-thread or is told exactly what's blocking it — never a
+  // dead-end. A shipped task opens where it lives; a locked one points at its prerequisite.
+  const guideRoadmapTask = useCallback(
+    (input: {
+      deptK: string;
+      title: string;
+      state: string;
+      blockedBy?: string;
+      nodeId?: string;
+      actor?: string;
+    }) => {
+      const { deptK, title, state, blockedBy, nodeId, actor } = input;
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const d = DEPTS.find((x) => x.k === deptK) || null;
+      // Match the scaffolded task loosely (normalized title) so byte can run it in-thread even
+      // when the roadmap's canonical wording differs slightly from the department's.
+      const realT = d?.tasks.find((x) => nm(x.t) === nm(title)) || null;
+      const dn = d?.name ?? 'its department';
+      const brief = (text: string, extra: Partial<ChatMessage> = {}) => {
+        toggleCopilot(false); // open the chat so the guidance / run is visible
+        setChatMessages((prev) => [
+          ...prev.filter((m) => !m.brief),
+          { id: newId(), role: 'byte', text, ts: Date.now(), brief: true, ...extra },
+        ]);
+      };
+
+      switch (state) {
+        case 'done': {
+          // Open the finished deliverable to view/reopen — the runtime item if it's still in
+          // memory, else the saved one from the library (matched by dept + title). Fall back to
+          // the department when there's no artifact (e.g. a founder task the founder marked done).
+          const dt =
+            (nodeId ? d?.tasks.find((x) => x.roadmapNodeId === nodeId) : undefined) ||
+            d?.tasks.find((x) => nm(x.t) === nm(title)) ||
+            null;
+          const item =
+            dt?._item ||
+            (dt && library.find((li) => li.k === deptK && nm(li.title) === nm(dt.t))) ||
+            library.find((li) => li.k === deptK && nm(li.title) === nm(title));
+          if (item) viewItem(item);
+          else openDept(deptK);
+          return;
+        }
+        case 'locked': {
+          const prereq = blockedBy && d?.tasks.find((x) => nm(x.t) === nm(blockedBy));
+          brief(
+            blockedBy
+              ? `“${title}” unlocks once “${blockedBy}” is done — let's start there.`
+              : `“${title}” needs an earlier step finished first.`,
+            prereq
+              ? {
+                  action: { label: `Start: ${prereq.t}`, deptK, taskTitle: prereq.t, inline: true },
+                }
+              : {},
+          );
+          return;
+        }
+        case 'needsYou': {
+          // Founder-owned — byte can't run it, but it must be completable so the roadmap can
+          // move past it. Ensure the task exists (linked to the node) and offer a one-tap
+          // "mark it done" chip that flips the node and unlocks what depends on it.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          brief(
+            `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't do it for you, but tap below when it's done and I'll mark it.`,
+            t ? { action: { label: `I've done “${t.t}”`, deptK, taskTitle: t.t, done: true } } : {},
+          );
+          return;
+        }
+        case 'approve': {
+          // Resolve (or link) the drafted task; review it in-thread.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          brief(`I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`, {
+            action: {
+              label: `Review: ${(t ?? realT)?.t ?? title}`,
+              deptK,
+              taskTitle: (t ?? realT)?.t ?? title,
+              inline: true,
+            },
+          });
+          return;
+        }
+        default: {
+          // available / current — byte can do this. The spine guarantees a runnable task: match
+          // an existing one or create it on demand, so one tap always runs it in-thread (and the
+          // node then tracks that task's real state). Only fall back to a plain brief if there's
+          // no node/department to hang a task on.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          if (t)
+            brief(`Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`, {
+              action: { label: `Start: ${t.t}`, deptK, taskTitle: t.t, inline: true },
+            });
+          else
+            brief(
+              `“${title}” is your next move${d ? ` in ${dn}` : ''}.${d?.need ? ` ${d.need}` : ''} Ask me anything about it and I'll walk you through it.`,
+            );
+          return;
+        }
+      }
+    },
+    [toggleCopilot, openDept, ensureRoadmapTask, library, viewItem],
+  );
+
   // Open the run loop for a task named by an in-chat action chip.
   const runBriefedTask = useCallback(
     (deptK: string, taskTitle: string) => {
@@ -1322,6 +1525,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
     toggleCopilot(false);
   }, [brief, toggleCopilot]);
+
+  // After a task is completed but the stage isn't finished, byte speaks up in the chat —
+  // acknowledges it and points to (and offers to run) the next move — so finishing a task never
+  // leaves the founder staring at a silent panel. The stage-complete moment is handled instead by
+  // maybeOfferAdvance's advance prompt, so we skip this then to avoid two messages at once.
+  const guideAfterCompletion = useCallback(
+    (completedTitle: string) => {
+      if (stageComplete()) return;
+      // The SAME next move the beacon shows — so byte's nudge and the roadmap always agree.
+      const move = computeRoadmapNext();
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const d = move ? DEPTS.find((x) => x.k === move.deptK) : null;
+      const realT = move && d ? d.tasks.find((x) => nm(x.t) === nm(move.title)) : null;
+      const runnable = !!realT && !realT.done && liveKind(artType(realT)) !== null;
+      toggleCopilot(false); // keep the chat open so the nudge is seen
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          text: move
+            ? `Nice — “${completedTitle}” is done. Next up: “${move.title}”${d ? ` in ${d.name}` : ''}${runnable ? ' — want me to take it on?' : ' — it’s lit on the roadmap; hit Start when you’re ready.'}`
+            : `Nice — “${completedTitle}” is done. That’s this phase wrapped — check the roadmap for what’s next.`,
+          ts: Date.now(),
+          action:
+            runnable && realT && d
+              ? { label: `Start: ${realT.t}`, deptK: d.k, taskTitle: realT.t, inline: true }
+              : undefined,
+        },
+      ]);
+    },
+    [toggleCopilot, computeRoadmapNext],
+  );
 
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
@@ -1375,9 +1615,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       computeNextStep(); // this task is done now — advance the next step
       maybeOfferAdvance(); // …and if that was the last one, offer to move up a stage
+      guideAfterCompletion(t.t); // …otherwise byte acknowledges it + nudges the next move in chat
       return { item, next };
     },
-    [companyId, bump, toast, computeNextStep, maybeOfferAdvance],
+    [companyId, bump, toast, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
+  );
+
+  // Founder-owned tasks (incorporate, open a bank account, …) are the founder's to do — byte
+  // can't produce a deliverable for them. This is the completion path that fulfills byte's
+  // "tell me when it's done and I'll mark it" promise: flip the task (and its linked roadmap
+  // node) to Done, unlock its dependents live, and offer to advance if the stage just finished.
+  const markTaskDone = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t || t.done) return;
+      t.done = true;
+      t.drafted = false;
+      d.pend = Math.max(0, (d.pend || 0) - 1);
+      if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] mark task done failed', err),
+        );
+      setChatMessages((prev) => prev.filter((m) => !m.brief));
+      computeNextStep(); // it's done now — advance the next step
+      maybeOfferAdvance(); // …and if that finished the stage, offer to move up
+      guideAfterCompletion(taskTitle); // …otherwise acknowledge it + nudge the next move in chat
+    },
+    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
   );
 
   const toggleEnv = useCallback(
@@ -1506,10 +1773,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         bump();
         persistTaskDraft(d.k, t.t);
         track('chat.run_task', { dept: d.k, type });
+        setAiOffline(null); // a successful run means byte is reachable again
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
         const code = err instanceof GenerateError ? err.code : '';
         const limited = code === 'rate_limited' || code === 'http_429';
+        if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
         const msg = limited
           ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this up then.'
           : 'I hit a snag producing that — want me to try again?';
@@ -1822,6 +2091,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           failed = true;
           errCode = err instanceof ChatError ? err.code : 'network';
         }
+        // Track byte's availability globally so the hub shows one honest offline state: a
+        // credit/quota failure marks it offline; any success clears it.
+        if (!failed) setAiOffline(null);
+        else if (errCode === 'ai_unavailable' || errCode === 'rate_limited')
+          setAiOffline({ code: errCode, at: Date.now() });
         const fallback =
           errCode === 'rate_limited'
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
@@ -2169,6 +2443,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerating,
       planTailored,
       scaffoldFailure,
+      aiOffline,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
@@ -2196,6 +2471,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       briefDepartment,
       portalSignal,
       portalToTask,
+      guideRoadmapTask,
+      markTaskDone,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2225,6 +2502,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       undoNoted,
       persistTaskDraft,
       nextStep,
+      roadmapDefs,
       toastMsg,
       toast,
       buildStep,
@@ -2278,6 +2556,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerating,
       planTailored,
       scaffoldFailure,
+      aiOffline,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
@@ -2305,6 +2584,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       briefDepartment,
       portalSignal,
       portalToTask,
+      guideRoadmapTask,
+      markTaskDone,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2334,6 +2615,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       undoNoted,
       persistTaskDraft,
       nextStep,
+      roadmapDefs,
       toastMsg,
       toast,
       buildStep,

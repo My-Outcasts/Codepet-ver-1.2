@@ -34,6 +34,10 @@ export interface Task {
   doc?: { title?: string; call: string; sections: { h: string; p: string }[]; next?: string[] };
   dms?: any[];
   checklist?: any[];
+  // Stable link back to the Overview roadmap node this task realizes (RoadmapTaskDef.id).
+  // Set when a roadmap cell is acted on (matched to an existing task, or created on demand),
+  // so the Overview reports Done and unlocks dependents from real task state — not a title guess.
+  roadmapNodeId?: string;
   // runtime annotations:
   _item?: LibItem;
   _rev?: string;

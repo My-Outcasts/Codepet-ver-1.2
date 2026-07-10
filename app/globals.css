@@ -621,15 +621,17 @@ body {
   padding: 22px 26px 0;
 }
 .vhead h1 {
-  font-size: 21px;
-  font-weight: 600;
+  font-size: 28px;
+  font-weight: 650;
   color: var(--t-1);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
 }
 .vhead .sub {
-  font-size: 13px;
+  font-size: 15px;
+  line-height: 1.45;
   color: var(--t-3);
-  margin-top: 3px;
+  margin-top: 4px;
+  white-space: nowrap;
 }
 
 /* ---- Summary view — playful recap of Byte's activity ---- */
@@ -2504,15 +2506,15 @@ body {
   gap: 0;
 }
 .lib-mast h1 {
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1;
+  font-size: 28px;
+  font-weight: 650;
+  letter-spacing: -0.5px;
+  line-height: 1.05;
 }
 /* description sits directly under the heading, then the count index */
 .lib-say {
-  max-width: 52ch;
-  margin-top: 9px;
+  margin-top: 6px;
+  white-space: nowrap;
 }
 .lib-idx {
   font-family: var(--sans);

@@ -348,6 +348,7 @@ export function Copilot() {
     retryChat,
     runBriefedTask,
     runTaskInChat,
+    markTaskDone,
     dismissChatAction,
     advanceStage,
     buildIntakeActive,
@@ -663,7 +664,10 @@ export function Copilot() {
                     <button
                       className="bub-act"
                       onClick={() => {
-                        if (m.action!.inline) {
+                        if (m.action!.done) {
+                          markTaskDone(m.action!.deptK, m.action!.taskTitle);
+                          dismissChatAction(m.id);
+                        } else if (m.action!.inline) {
                           track('firstrun.action_clicked', { dept: m.action!.deptK });
                           runTaskInChat(m.action!.deptK, m.action!.taskTitle);
                           dismissChatAction(m.id);

@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { AppProvider, useApp } from '@/lib/store';
 import { AuthProvider, useAuth } from '@/lib/firebase/auth';
 import { SignIn } from './auth/SignIn';
@@ -25,26 +24,10 @@ import { SettingsView } from './views/SettingsView';
 import { BillingView } from './views/BillingView';
 import { BuildCoachView } from './views/BuildCoachView';
 
-// 3D graph view — client-only (three.js / WebGL), lazy-loaded so three.js
-// is fetched only when the Overview tab is opened.
-const OverviewView = dynamic(() => import('./views/OverviewView'), {
-  ssr: false,
-  loading: () => (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: '#0c0a17',
-        display: 'grid',
-        placeItems: 'center',
-        color: 'rgba(245,243,255,.5)',
-        fontSize: 13,
-      }}
-    >
-      Building your company map…
-    </div>
-  ),
-});
+// Overview tab — the roadmap (default) with the 3D force-graph behind a "Map" sub-tab.
+// OverviewSection lazy-loads the three.js map internally, so WebGL is fetched only when
+// the map is opened.
+import OverviewSection from './views/OverviewSection';
 
 function Shell() {
   const {
@@ -69,7 +52,7 @@ function Shell() {
     view === 'summary' ? (
       <SummaryView />
     ) : view === 'overview' ? (
-      <OverviewView />
+      <OverviewSection />
     ) : view === 'home' ? (
       <CompanyView />
     ) : view === 'dept' ? (

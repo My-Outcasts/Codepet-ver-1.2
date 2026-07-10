@@ -21,8 +21,6 @@ import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
-import { examplePlanBanner } from '@/lib/examplePlan';
-import StageRibbon from '@/components/views/overview/StageRibbon';
 import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
 import { overviewProgress, deptProgress } from '@/lib/overview/progress';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
@@ -38,11 +36,11 @@ const HEX: Record<string, string> = {
   '--teal': '#2DD4BF',
   '--gold': '#FDB022',
   '--violet': '#A855F7',
-  '--accent': '#8B5CF6',
+  '--accent': '#9333ea',
   '--rose': '#FF6B9D',
 };
 const STATE_HEX: Record<string, string> = {
-  'st-does': '#8B5CF6',
+  'st-does': '#9333ea',
   'st-draft': '#FDB022',
   'st-you': '#3B82F6',
   'st-done': '#34D399',
@@ -52,7 +50,7 @@ const DIM_NODE = 'rgba(150,150,170,0.09)';
 const DIM_LINK = 'rgba(150,150,170,0.03)';
 // byte's "do this next" guide color — deliberately outside the state palette
 // (purple/gold/blue/green) so the beacon + its trail pop from the field.
-const BEACON_HEX = '#7DE3FF';
+const BEACON_HEX = '#7c3aed';
 
 function rgba(hex: string, a: number) {
   const h = hex.replace('#', '');
@@ -191,25 +189,11 @@ export default function OverviewView() {
     projectAnalysis,
     analysisLoading,
     ensureProjectAnalysis,
-    planTailored,
-    scaffoldFailure,
-    regenerateCompany,
-    regenerating,
-    openOnboarding,
     growthSignal,
     clearGrowthSignal,
     introSeen,
     markIntroSeen,
   } = useApp();
-  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
-  // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
-  // Retry re-plans in place; otherwise "Generate my plan" reopens the wizard to collect one.
-  const hasBrief = !!(
-    brief.oneLiner?.trim() ||
-    brief.summary?.trim() ||
-    brief.projectName?.trim() ||
-    brief.notes?.trim()
-  );
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
@@ -689,7 +673,7 @@ export default function OverviewView() {
       sub.textHeight = 2.6;
       sub.fontFace = 'Inter, system-ui, sans-serif';
       (sub as any).position.set(0, radius + 1.5, 0);
-      const parkedRing = makeRingSprite(0, n.deptColor ?? '#8B5CF6', radius * 3.4, true);
+      const parkedRing = makeRingSprite(0, n.deptColor ?? '#9333ea', radius * 3.4, true);
       const group = new THREE.Group();
       group.add(parkedRing);
       group.add(label);
@@ -698,13 +682,13 @@ export default function OverviewView() {
     }
 
     // Department node: label + progress ring around the node.
-    const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#8B5CF6');
+    const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#9333ea');
     const ring = makeRingSprite(n.pct ?? 0, ringColor, radius * 3.4); // tune multiplier on preview
     const group = new THREE.Group();
     group.add(ring);
     group.add(s);
     if (n.reveal) {
-      const halo = makeGlowSprite(n.deptColor ?? '#7DE3FF', radius * 5.5);
+      const halo = makeGlowSprite(n.deptColor ?? '#7c3aed', radius * 5.5);
       group.add(halo);
     }
     return group;
@@ -800,7 +784,6 @@ export default function OverviewView() {
           />
         </>
       )}
-      <StageRibbon highlight={introPhase === 'tour' && currentTourStep?.target === 'stage'} />
       {revealKeys.size > 0 && (
         <div
           style={{
@@ -814,7 +797,7 @@ export default function OverviewView() {
             borderRadius: 999,
             background: 'rgba(16,14,28,0.92)',
             border: '1px solid rgba(125,227,255,0.4)',
-            color: '#7DE3FF',
+            color: '#7c3aed',
             fontSize: 12,
             fontWeight: 700,
             fontFamily: 'inherit',
@@ -826,64 +809,8 @@ export default function OverviewView() {
       )}
       <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
 
-      <div
-        style={{
-          position: 'absolute',
-          top: 58,
-          left: 26,
-          right: 26,
-          maxWidth: 640,
-          zIndex: 5,
-          pointerEvents: 'none',
-        }}
-      >
-        <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
-          Overview
-        </h1>
-        <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
-          Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
-          a node to open it.
-        </div>
-        {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
-            never let a seeded map pass for a plan tailored to the founder's product. */}
-        {examplePlan && (
-          <div
-            style={{
-              pointerEvents: 'auto',
-              marginTop: 11,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '7px 12px',
-              borderRadius: 8,
-              background: 'rgba(253,176,34,.12)',
-              border: '1px solid rgba(253,176,34,.28)',
-              fontSize: 12.5,
-              color: 'rgba(245,243,255,.82)',
-            }}
-          >
-            <span>{examplePlan.text}</span>
-            <button
-              type="button"
-              onClick={() => (hasBrief ? regenerateCompany() : openOnboarding())}
-              disabled={regenerating}
-              style={{
-                fontFamily: 'inherit',
-                fontSize: 12.5,
-                fontWeight: 600,
-                color: '#FDB022',
-                background: 'transparent',
-                border: 'none',
-                cursor: regenerating ? 'default' : 'pointer',
-                whiteSpace: 'nowrap',
-                opacity: regenerating ? 0.6 : 1,
-              }}
-            >
-              {regenerating ? 'Re-planning…' : examplePlan.cta}
-            </button>
-          </div>
-        )}
-      </div>
+      {/* heading + description removed for a cleaner, fuller canvas — the Roadmap ⁄ Second Brain
+          toggle already labels the tab. */}
 
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
       <div
@@ -901,7 +828,7 @@ export default function OverviewView() {
         }}
       >
         <Legend dot="#F4F1FF" label="Project" />
-        <Legend dot="#8B5CF6" label="byte does" />
+        <Legend dot="#9333ea" label="byte does" />
         <Legend dot="#FDB022" label="Needs approval" />
         <Legend dot="#3B82F6" label="Needs you" />
         <Legend dot="#34D399" label="Done" />
@@ -921,7 +848,7 @@ export default function OverviewView() {
               cursor: 'pointer',
             }}
           >
-            ? how to read this map
+            ? how to read this
           </button>
         )}
       </div>
@@ -1161,7 +1088,7 @@ function ByteGuide({
               color: 'rgba(125,227,255,.9)',
             }}
           >
-            The bright cyan star is always your next move.
+            The glowing beacon is always your next move.
           </div>
         )}
         <button

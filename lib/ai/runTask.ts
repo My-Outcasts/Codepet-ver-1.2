@@ -5,6 +5,7 @@
 // user's Firebase ID token so the route can authenticate the caller.
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
 import type { CompanyBrief } from '../firebase/schema';
+import { isDemoMode, demoDelay, demoRunResult } from './demoMode';
 
 export async function authHeader(): Promise<Record<string, string>> {
   if (!isFirebaseConfigured) return {};
@@ -55,6 +56,12 @@ export class GenerateError extends Error {
 }
 
 export async function runByteTask(args: RunArgs): Promise<RunResult> {
+  // Demo mode: stand in with a canned deliverable so the full run → approve → done loop works
+  // without a live model / credits. No-op in production (demo mode is off unless opted in).
+  if (isDemoMode()) {
+    await demoDelay();
+    return demoRunResult(args);
+  }
   const res = await fetch('/api/run-task', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
