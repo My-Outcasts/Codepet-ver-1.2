@@ -299,6 +299,20 @@ export default function OverviewView() {
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
   const [backfilling, setBackfilling] = useState(false);
+  // When the founder last synced their history into the graph. Persisted so the
+  // "✓ Synced" state survives the reload a successful sync triggers. Read lazily
+  // from localStorage — the Sync pill only renders after client state hydrates
+  // (events > 0), so there is no server HTML to mismatch against.
+  const [syncedAt, setSyncedAt] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const v = window.localStorage.getItem('sb:syncedAt');
+    return v ? Number(v) : null;
+  });
+  const markSynced = () => {
+    const now = Date.now();
+    window.localStorage.setItem('sb:syncedAt', String(now));
+    setSyncedAt(now);
+  };
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
@@ -1113,6 +1127,7 @@ export default function OverviewView() {
                 if (backfilling) return;
                 setBackfilling(true);
                 const r = await runSecondBrainBackfill();
+                markSynced();
                 if (r.backfilled > 0) window.location.reload();
                 else setBackfilling(false);
               }}
@@ -1180,23 +1195,28 @@ export default function OverviewView() {
                 if (backfilling) return;
                 setBackfilling(true);
                 const r = await runSecondBrainBackfill();
+                markSynced();
                 if (r.backfilled > 0) window.location.reload();
                 else setBackfilling(false);
               }}
-              title="Pull all your deliverables, decisions and completed tasks into the graph"
+              title={
+                syncedAt
+                  ? `Last synced ${new Date(syncedAt).toLocaleString()} — click to pull any newer history`
+                  : 'Pull all your deliverables, decisions and completed tasks into the graph'
+              }
               style={{
                 fontSize: 12,
                 fontWeight: 600,
                 padding: '5px 12px',
                 borderRadius: 999,
-                border: '1px solid rgba(255,255,255,0.12)',
-                background: 'rgba(16,14,28,0.7)',
-                color: 'rgba(245,243,255,.7)',
+                border: `1px solid ${syncedAt ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.12)'}`,
+                background: syncedAt ? 'rgba(52,211,153,0.08)' : 'rgba(16,14,28,0.7)',
+                color: syncedAt ? 'rgba(52,211,153,0.85)' : 'rgba(245,243,255,.7)',
                 cursor: backfilling ? 'default' : 'pointer',
                 opacity: backfilling ? 0.6 : 1,
               }}
             >
-              {backfilling ? 'Syncing…' : 'Sync history'}
+              {backfilling ? 'Syncing…' : syncedAt ? '✓ Synced' : 'Sync history'}
             </button>
           </div>
         )}
