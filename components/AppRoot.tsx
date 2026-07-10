@@ -59,9 +59,6 @@ function Shell() {
   // A build session is live once armed (until Start over). Keep its view mounted across
   // navigation so switching tabs doesn't tear down (and kill) the running session.
   const buildActive = buildSessionId != null;
-  // Second Brain 3-column mode owns its own inline chat (left rail), so the app-shell's right
-  // dock is suppressed and its column collapsed while the Overview map runs in v2.
-  const sbMode = process.env.NEXT_PUBLIC_SECOND_BRAIN_V2 === '1' && view === 'overview';
   const mainRef = useRef<HTMLElement>(null);
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = 0;
@@ -93,7 +90,7 @@ function Shell() {
     <div className="app">
       <Topbar />
       <div
-        className={`shell${copilotCollapsed || sbMode ? ' cop-collapsed' : ''}${sideCollapsed ? ' side-collapsed' : ''}`}
+        className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}${sideCollapsed ? ' side-collapsed' : ''}`}
       >
         <Sidebar />
         <main className="main" id="main" ref={mainRef}>
@@ -104,19 +101,17 @@ function Shell() {
             </div>
           )}
         </main>
-        {!sbMode && <Copilot />}
+        <Copilot />
       </div>
-      {/* The floating "Ask" launcher is redundant in Second Brain mode (chat is the left rail). */}
-      {!sbMode && (
-        <button
-          className={`cop-open${copilotCollapsed ? ' show' : ''}`}
-          aria-label={`Open ${c.name} chat`}
-          onClick={() => toggleCopilot(false)}
-        >
-          <Companion id={companionId} size="s28" />
-          Ask {c.name}
-        </button>
-      )}
+      {/* The floating "Ask" launcher opens byte's chat on demand. */}
+      <button
+        className={`cop-open${copilotCollapsed ? ' show' : ''}`}
+        aria-label={`Open ${c.name} chat`}
+        onClick={() => toggleCopilot(false)}
+      >
+        <Companion id={companionId} size="s28" />
+        Ask {c.name}
+      </button>
       {buildActive && view !== 'build' && (
         <button className="build-return" onClick={() => show('build')}>
           🔨 Back to your build
