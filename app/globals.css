@@ -9806,8 +9806,13 @@ body {
   padding: 12px;
   overflow-y: auto;
 }
+.cthreads-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
 .cthreads-new {
-  align-self: stretch;
+  flex: 1;
   padding: 10px;
   border-radius: 10px;
   border: 1px dashed var(--hairline, rgba(255, 255, 255, 0.2));
@@ -9815,6 +9820,20 @@ body {
   color: inherit;
   cursor: pointer;
   font-weight: 500;
+}
+.cthreads-clear {
+  flex: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: transparent;
+  color: rgba(248, 113, 113, 0.9);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.cthreads-clear:hover {
+  background: rgba(248, 113, 113, 0.12);
 }
 .cthreads-list {
   list-style: none;

@@ -281,6 +281,8 @@ interface AppState {
   renameThread: (id: string, title: string) => void;
   /** Delete a thread and its messages; falls back to another thread or a new chat. */
   deleteThread: (id: string) => void;
+  /** Delete every thread and its messages, then drop into a fresh empty chat. */
+  clearAllChats: () => void;
   /** Open/close the chat-history list. */
   toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
@@ -1733,6 +1735,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, activeThreadId, threads, openThread, newChat],
   );
 
+  const clearAllChats = useCallback(() => {
+    if (!companyId) return;
+    // Cancel any in-flight stream first — same reason as deleteThread: a stream-end
+    // persistMsg could otherwise re-create a just-deleted thread.
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    const ids = threads.map((t) => t.id);
+    setThreads([]);
+    ids.forEach((id) =>
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      ),
+    );
+    // Drop into a fresh empty chat (also closes the history list).
+    newChat();
+  }, [companyId, threads, newChat]);
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -2244,6 +2263,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
       runTaskInChat,
@@ -2354,6 +2374,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
       runTaskInChat,
