@@ -6,6 +6,7 @@
 import { authHeader } from './runTask';
 import type { ChatTurn } from './chatMessages';
 import type { SetupItem } from './envSetup';
+import { isDemoMode, demoDelay, demoChatReply } from './demoMode';
 
 const ACTION_MARK = String.fromCharCode(0x1e);
 const BUILD_MARK = String.fromCharCode(0x1d);
@@ -52,6 +53,16 @@ export async function* streamByteChat(
   companionId?: string,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
+  // Demo mode: yield a short canned reply so chat "works" without a live model / credits.
+  // No-op in production (demo mode is off unless opted in).
+  if (isDemoMode()) {
+    const reply = demoChatReply(history);
+    for (const word of reply.split(' ')) {
+      await demoDelay(28);
+      yield { type: 'text', text: word + ' ' };
+    }
+    return;
+  }
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
