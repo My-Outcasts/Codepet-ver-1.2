@@ -200,6 +200,10 @@ interface AppState {
    *  (e.g. 'refused', 'rate_limited', 'network'); null when nothing failed, so the
    *  example-plan banner can name the actual cause rather than just "not generated yet". */
   scaffoldFailure: string | null;
+  /** byte's model availability — the failure code ('ai_unavailable' = out of credits,
+   *  'rate_limited' = daily cap) when a chat/run last failed that way, else null. Drives the
+   *  hub's single honest "byte is offline" banner. */
+  aiOffline: { code: string; at: number } | null;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
@@ -592,6 +596,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
   // on hydrate and after every approval. On failure the authored fallback stands.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  // byte's model availability, so the hub can show ONE honest "offline" state up front instead
+  // of per-message "temporarily unavailable" confusion. Set to the failure code (e.g.
+  // 'ai_unavailable' = out of credits, 'rate_limited' = daily cap) when a chat/run call fails
+  // that way; cleared the moment any AI call succeeds again.
+  const [aiOffline, setAiOffline] = useState<{ code: string; at: number } | null>(null);
   // Whether the map reflects a plan byte generated from THIS founder's product, vs. the
   // built-in example seed. Set from the persisted `scaffoldedAt` on hydrate, flipped true
   // the moment a scaffold succeeds. `scaffoldFailure` carries *why* a scaffold attempt
@@ -1702,10 +1711,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         bump();
         persistTaskDraft(d.k, t.t);
         track('chat.run_task', { dept: d.k, type });
+        setAiOffline(null); // a successful run means byte is reachable again
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
         const code = err instanceof GenerateError ? err.code : '';
         const limited = code === 'rate_limited' || code === 'http_429';
+        if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
         const msg = limited
           ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this up then.'
           : 'I hit a snag producing that — want me to try again?';
@@ -2018,6 +2029,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           failed = true;
           errCode = err instanceof ChatError ? err.code : 'network';
         }
+        // Track byte's availability globally so the hub shows one honest offline state: a
+        // credit/quota failure marks it offline; any success clears it.
+        if (!failed) setAiOffline(null);
+        else if (errCode === 'ai_unavailable' || errCode === 'rate_limited')
+          setAiOffline({ code: errCode, at: Date.now() });
         const fallback =
           errCode === 'rate_limited'
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
@@ -2365,6 +2381,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerating,
       planTailored,
       scaffoldFailure,
+      aiOffline,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
@@ -2476,6 +2493,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerating,
       planTailored,
       scaffoldFailure,
+      aiOffline,
       advanceStage,
       growthSignal,
       clearGrowthSignal,

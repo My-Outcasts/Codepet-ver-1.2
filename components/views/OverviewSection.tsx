@@ -52,8 +52,16 @@ const LEGEND: [string, string][] = [
 ];
 
 export default function OverviewSection() {
-  const { brief, nextStep, tick, guideRoadmapTask, introSeen, markIntroSeen, projectAnalysis } =
-    useApp();
+  const {
+    brief,
+    nextStep,
+    tick,
+    guideRoadmapTask,
+    introSeen,
+    markIntroSeen,
+    projectAnalysis,
+    aiOffline,
+  } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
   // has already dismissed it. Non-destructive — no account data is touched.
@@ -328,6 +336,41 @@ export default function OverviewSection() {
         fontFamily: 'var(--sans)',
       }}
     >
+      {/* One honest, up-front offline state — so a founder knows byte is paused before trying a
+          run or chat, instead of hitting a per-message "temporarily unavailable". */}
+      {aiOffline && (
+        <div
+          role="status"
+          style={{
+            flex: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '9px 24px',
+            background: 'rgba(217,119,6,0.1)',
+            borderBottom: '1px solid rgba(217,119,6,0.22)',
+            fontFamily: 'var(--sans)',
+            fontSize: 13,
+            color: '#92400e',
+          }}
+        >
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: '#d97706',
+              flex: 'none',
+            }}
+          />
+          <span>
+            <strong style={{ fontWeight: 650 }}>byte is paused.</strong>{' '}
+            {aiOffline.code === 'rate_limited'
+              ? 'Today’s usage limit is reached — it resets tomorrow. Runs and chat are on hold until then.'
+              : 'The workspace is out of AI credits — top it up in the Anthropic console and byte picks right back up. Runs and chat are on hold until then.'}
+          </span>
+        </div>
+      )}
       {tab === 'map' ? (
         // The map fills the whole tab (its own dark surface); the toggle floats on top so there's
         // no light strip seam between the toggle and the dark graph.
