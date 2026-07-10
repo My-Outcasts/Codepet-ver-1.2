@@ -68,7 +68,8 @@ import { setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
 import { loadSavedRoadmap, generateRoadmap } from './ai/generateRoadmap';
 import { ROADMAP_TEMPLATE } from './overview/roadmapTemplate';
-import { stageToPhase, roadmapOverrides, nextRoadmapMove } from './overview/roadmapProgress';
+import { stageToPhase } from './overview/roadmapProgress';
+import { selectRoadmap } from './overview/roadmapSelector';
 import type { RoadmapTaskDef } from './overview/roadmapModel';
 import {
   appendBrief,
@@ -630,7 +631,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // nudge never disagree. Reads live DEPTS, so it's correct the instant after a task completes.
   const computeRoadmapNext = useCallback(() => {
     const defs = roadmapDefs ?? ROADMAP_TEMPLATE;
-    return nextRoadmapMove(defs, stageToPhase(brief.stage), roadmapOverrides(defs, DEPTS));
+    // Same selector the Overview beacon renders from → chat, greeting, and nudge can't disagree.
+    return selectRoadmap(defs, stageToPhase(brief.stage), DEPTS).move;
   }, [roadmapDefs, brief.stage]);
   const computeNextStep = useCallback(() => {
     const move = computeRoadmapNext();
