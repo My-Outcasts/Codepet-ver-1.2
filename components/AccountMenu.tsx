@@ -76,7 +76,9 @@ export function AccountMenu() {
           className="acct"
           aria-haspopup="menu"
           aria-expanded={open}
-          title={name}
+          // Only tooltip the name when the rail is collapsed to an avatar; otherwise the name is
+          // already visible and the native tooltip just overlaps the row on hover.
+          title={sideCollapsed ? name : undefined}
           onClick={() => setOpen((o) => !o)}
         >
           <span className="av">{initial}</span>
