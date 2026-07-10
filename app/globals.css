@@ -180,23 +180,51 @@ body {
 .traffic .g {
   background: #61c554;
 }
-.proj {
+/* Brand lockup — moved into the topbar so it stays visible when the sidebar collapses. */
+.tb-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: 6px;
-  font-size: 13px;
-  font-weight: 600;
+  gap: 9px;
+  margin-left: 4px;
+}
+.tb-brand .logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: url('/codepet-logo.svg') center / cover no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+}
+.tb-brand .nm {
+  font-family: 'Codepet Pixel', var(--sans);
+  font-size: 15px;
+  letter-spacing: 0.5px;
   color: var(--t-1);
 }
-.proj .badge {
-  font-family: var(--sans);
-  font-size: 9px;
-  color: var(--accent-deep);
-  background: var(--accent-tint);
-  border: 1px solid var(--accent-line);
-  border-radius: 6px;
-  padding: 2px 6px;
+/* Sidebar collapse toggle — sits just after the brand. */
+.brand-toggle {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border: 0;
+  border-radius: 7px;
+  color: var(--t-3);
+  background: transparent;
+  cursor: pointer;
+  transition: 0.15s;
+}
+.brand-toggle:hover {
+  background: var(--well);
+  color: var(--t-1);
+}
+.brand-toggle svg {
+  width: 15px;
+  height: 15px;
+  transition: transform 0.2s;
+}
+.brand-toggle.collapsed svg {
+  transform: rotate(180deg);
 }
 .topbar .right {
   margin-left: auto;
@@ -237,41 +265,7 @@ body {
   border-radius: 999px;
   background: #e0653d;
 }
-/* header user profile + controls (from the strategy-dashboard template) */
-.tb-prof {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: 8px;
-  padding: 4px 10px 4px 4px;
-  border: 1px solid var(--hairline);
-  border-radius: 99px;
-  background: var(--surface);
-  cursor: pointer;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--t-1);
-}
-.tb-prof:hover {
-  background: var(--well);
-}
-.tb-prof .av {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), var(--violet));
-  color: var(--on-accent);
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-weight: 700;
-}
-.tb-prof .cv {
-  width: 13px;
-  height: 13px;
-  color: var(--t-3);
-}
+/* Shared account dropdown — anchored to the account row in the sidebar (see .acct / AccountMenu). */
 .tb-menu {
   position: absolute;
   top: 38px;
@@ -284,9 +278,6 @@ body {
   padding: 6px;
   display: none;
   z-index: 80;
-}
-.tb-prof.open .tb-menu {
-  display: block;
 }
 .tb-menu .who {
   padding: 8px 10px 9px;
@@ -434,67 +425,81 @@ body {
   flex-direction: column;
   gap: 3px;
 }
-.side .brand {
+/* Account control at the sidebar top (avatar + name + dropdown). See AccountMenu. */
+.acct-wrap {
+  position: relative;
+}
+.acct {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 4px 8px 14px;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--t-1);
+  font-family: var(--sans);
+  text-align: left;
 }
-.side .brand .logo {
+.acct:hover {
+  background: var(--well);
+}
+.acct .av {
   width: 26px;
   height: 26px;
+  flex: none;
   border-radius: 50%;
-  background: url('/codepet-logo.svg') center / cover no-repeat;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
-}
-.side .brand .nm {
-  font-family: 'Codepet Pixel', var(--sans);
-  font-size: 15px;
-  letter-spacing: 0.5px;
-  color: var(--t-1);
-}
-.side-toggle {
-  margin-left: auto;
+  background: linear-gradient(135deg, var(--accent), var(--violet));
+  color: var(--on-accent);
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.acct-nm {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.acct .cv {
   flex: none;
-  border: 0;
-  border-radius: 7px;
+  width: 13px;
+  height: 13px;
   color: var(--t-3);
-  background: transparent;
-  cursor: pointer;
-  transition: 0.15s;
 }
-.side-toggle:hover {
-  background: var(--well);
-  color: var(--t-1);
+.acct-wrap.open .tb-menu {
+  display: block;
 }
-.side-toggle svg {
-  width: 15px;
-  height: 15px;
-  transition: transform 0.2s;
+/* Reposition the shared dropdown to hang below the sidebar row, spanning its width. */
+.acct-menu {
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
 }
-.shell.side-collapsed .side-toggle svg {
-  transform: rotate(180deg);
+.side-sep {
+  height: 1px;
+  background: var(--hairline);
+  margin: 8px 4px 4px;
 }
 
 /* ===== collapsed icon-rail treatment (toggled) ===== */
 .shell.side-collapsed .side {
   padding: 16px 8px;
 }
-.shell.side-collapsed .side .brand {
-  flex-direction: column;
-  gap: 10px;
-  padding: 4px 0 12px;
+.shell.side-collapsed .acct {
   justify-content: center;
+  padding: 6px 0;
 }
-.shell.side-collapsed .side .brand .nm {
-  display: none;
-}
-.shell.side-collapsed .side-toggle {
-  margin-left: 0;
+/* In the narrow rail the dropdown keeps its own width and spills over the main area. */
+.shell.side-collapsed .acct-menu {
+  right: auto;
+  min-width: 172px;
 }
 .shell.side-collapsed .nav {
   position: relative;
