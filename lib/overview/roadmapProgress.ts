@@ -147,3 +147,53 @@ export function effectivePhase(
   }
   return PHASE_ORDER[idx];
 }
+
+/** Build the per-node `done`/`approve` overrides from the live department tasks, matched first by
+ *  the stable roadmap↔task link and then by normalized title. The single source of truth so the
+ *  map, the beacon, the chat, and the after-completion nudge all agree on what's done. */
+export function roadmapOverrides(
+  defs: RoadmapTaskDef[],
+  depts: {
+    k: string;
+    tasks: { t: string; done?: boolean; drafted?: boolean; roadmapNodeId?: string }[];
+  }[],
+): Partial<Record<string, RoadmapState>> {
+  const nm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+  const byNode = new Map<string, { done?: boolean; drafted?: boolean }>();
+  const byKey = new Map<string, { done?: boolean; drafted?: boolean }>();
+  for (const d of depts) {
+    for (const t of d.tasks) {
+      byKey.set(`${d.k}::${nm(t.t)}`, { done: t.done, drafted: t.drafted });
+      if (t.roadmapNodeId) byNode.set(t.roadmapNodeId, { done: t.done, drafted: t.drafted });
+    }
+  }
+  const out: Partial<Record<string, RoadmapState>> = {};
+  for (const def of defs) {
+    const real = byNode.get(def.id) ?? byKey.get(`${def.dept}::${nm(def.title)}`);
+    if (!real) continue;
+    if (real.done) out[def.id] = 'done';
+    else if (real.drafted) out[def.id] = 'approve';
+  }
+  return out;
+}
+
+/** The roadmap's own next move: the first actionable task in the founder's effective phase —
+ *  preferring a byte-doable one (`available`) for "byte does this next", else a founder gate
+ *  (`needsYou`). THE single source of "what's next", so the beacon, chat, and nudge never disagree.
+ */
+export function nextRoadmapMove(
+  defs: RoadmapTaskDef[],
+  stagePhase: string,
+  overrides: Partial<Record<string, RoadmapState>> = {},
+): { deptK: string; title: string; id: string } | null {
+  const phase = effectivePhase(defs, stagePhase, overrides);
+  const pass = applyProgress(defs, { currentPhase: phase, currentTaskId: null, overrides });
+  const t =
+    pass.find((x) => x.phase === phase && x.state === 'available') ??
+    pass.find((x) => x.phase === phase && x.state === 'needsYou');
+  return t ? { deptK: t.dept, title: t.title, id: t.id } : null;
+}

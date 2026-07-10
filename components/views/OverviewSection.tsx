@@ -4,17 +4,16 @@
 // lazy-loaded (three.js is only fetched when you actually open it). This wrapper is
 // deliberately thin and leaves OverviewView untouched, so it doesn't conflict with ongoing
 // work on that component — the only app-wide change is one line in AppRoot pointing here.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
 import { nextAction } from '@/lib/roadmap';
-import { generateRoadmap, loadSavedRoadmap } from '@/lib/ai/generateRoadmap';
 import { isDemoMode } from '@/lib/ai/demoMode';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { applyProgress, stageToPhase, effectivePhase } from '@/lib/overview/roadmapProgress';
-import type { RoadmapState, RoadmapTask, RoadmapTaskDef } from '@/lib/overview/roadmapModel';
+import type { RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
 const OverviewMap = dynamic(() => import('./OverviewView'), {
@@ -61,6 +60,7 @@ export default function OverviewSection() {
     markIntroSeen,
     projectAnalysis,
     aiOffline,
+    roadmapDefs,
   } = useApp();
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
@@ -85,37 +85,9 @@ export default function OverviewSection() {
   };
   void tick; // re-read the live DEPTS (progress + load) after a task mutation
 
-  // byte's real, per-company roadmap once generated; until then the canonical template.
-  // On first Overview load byte builds it once, silently, and persists it (like the scaffold):
-  // load the saved one, and if there isn't one yet, generate it. The route no-ops cheaply when
-  // there's no real brief, and any failure just keeps the template — so it's safe while credits
-  // are out. generateRoadmap() takes no arg: the route reads the founder's brief server-side.
-  const [genRoadmap, setGenRoadmap] = useState<RoadmapTaskDef[] | null>(null);
-  useEffect(() => {
-    let live = true;
-    loadSavedRoadmap().then((saved) => {
-      if (!live) return;
-      if (saved) {
-        setGenRoadmap(saved);
-        return;
-      }
-      // No saved roadmap yet. Generating a fresh one now would produce a different plan whose
-      // node ids wouldn't match the completions the founder already made — orphaning their
-      // progress. So only generate when there's no such progress; otherwise keep the current
-      // (template) roadmap, which is a stable constant, so their progress survives. (Normal flow:
-      // generation succeeds on the first visit — before any progress — and is saved, so this
-      // guard only trips after a generation outage where the founder worked off the template.)
-      const hasProgress = DEPTS.some((d) => d.tasks.some((t) => t.roadmapNodeId));
-      if (hasProgress) return;
-      generateRoadmap().then((fresh) => {
-        if (live && fresh) setGenRoadmap(fresh);
-      });
-    });
-    return () => {
-      live = false;
-    };
-  }, []);
-  const defs = genRoadmap ?? ROADMAP_TEMPLATE;
+  // byte's real, per-company roadmap — owned by the store (loaded/generated once there), so the
+  // beacon here and the chat's next-step derive from the SAME source. Falls back to the template.
+  const defs = roadmapDefs ?? ROADMAP_TEMPLATE;
 
   // The founder's phase floors at their declared stage; it ADVANCES below (after overrides are
   // known) as they finish work, so completing a phase moves the beacon to the next real step.

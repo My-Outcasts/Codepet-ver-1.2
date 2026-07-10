@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { stageToPhase, applyProgress, effectivePhase } from './roadmapProgress';
+import {
+  stageToPhase,
+  applyProgress,
+  effectivePhase,
+  nextRoadmapMove,
+  roadmapOverrides,
+} from './roadmapProgress';
 import type { RoadmapTaskDef } from './roadmapModel';
 
 describe('stageToPhase', () => {
@@ -213,5 +219,44 @@ describe('effectivePhase — advances as work completes, floored at the stage', 
   it('lands on the final phase when everything is done', () => {
     const done = { f: 'done', o: 'done', b: 'done', s: 'done', l: 'done', g: 'done' } as const;
     expect(effectivePhase(pdefs, 'find', done)).toBe('grow');
+  });
+});
+
+describe('nextRoadmapMove + roadmapOverrides — the shared “what’s next” source', () => {
+  const rdefs: RoadmapTaskDef[] = [
+    { id: 'f', phase: 'find', dept: 'mkt', title: 'Find task', dependsOn: [] },
+    { id: 'a', phase: 'build', dept: 'eng', title: 'Build it', dependsOn: [] },
+    { id: 'y', phase: 'build', dept: 'legal', title: 'You do it', actor: 'you', dependsOn: [] },
+  ];
+
+  it('returns the first actionable task in the effective phase', () => {
+    expect(nextRoadmapMove(rdefs, 'find', {})).toMatchObject({
+      id: 'f',
+      deptK: 'mkt',
+      title: 'Find task',
+    });
+  });
+
+  it('prefers a byte-doable task over a founder gate', () => {
+    expect(nextRoadmapMove(rdefs, 'build', {})?.id).toBe('a');
+  });
+
+  it('advances past a completed phase', () => {
+    expect(nextRoadmapMove(rdefs, 'find', { f: 'done' })?.id).toBe('a');
+  });
+
+  it('returns null when nothing is actionable', () => {
+    expect(nextRoadmapMove(rdefs, 'find', { f: 'done', a: 'done', y: 'done' })).toBeNull();
+  });
+
+  it('roadmapOverrides links tasks by node id, then by title', () => {
+    const depts = [
+      { k: 'mkt', tasks: [{ t: 'wholly different wording', done: true, roadmapNodeId: 'f' }] },
+      { k: 'eng', tasks: [{ t: 'Build it', drafted: true }] },
+    ];
+    const o = roadmapOverrides(rdefs, depts);
+    expect(o.f).toBe('done'); // matched by the stable node link despite a different title
+    expect(o.a).toBe('approve'); // matched by normalized title
+    expect(o.y).toBeUndefined();
   });
 });
