@@ -22,7 +22,13 @@ const VIO = '#9333ea';
 const TX = 'var(--t-1)';
 const TX3 = 'var(--t-3)';
 const LINE = 'var(--hairline)';
-const CARD_BG = 'var(--surface)';
+// Card surface/border/locked-fade come from roadmap-local tokens (globals.css): on the cream
+// ground they resolve to the default surface + hairline; dark overrides them so the cards keep a
+// visible edge and locked cards don't fade into the near-black page. Driven by data-theme, so it
+// also renders correctly in the standalone preview route.
+const CARD_BG = 'var(--rm-card-bg)';
+const CARD_BORDER = 'var(--rm-card-border)';
+const LOCKED_OP = 'var(--rm-locked-op)';
 
 // State → the node's icon-dot color.
 const DOT: Record<RoadmapState, string> = {
@@ -90,11 +96,11 @@ function Node({
           : done
             ? 'rgba(22,163,74,0.05)'
             : CARD_BG,
-        border: `1px solid ${current ? 'rgba(124,58,237,0.6)' : done ? 'rgba(22,163,74,0.22)' : LINE}`,
+        border: `1px solid ${current ? 'rgba(124,58,237,0.6)' : done ? 'rgba(22,163,74,0.22)' : CARD_BORDER}`,
         boxShadow: current
           ? '0 0 0 1px rgba(124,58,237,0.2), 0 10px 30px -12px rgba(124,58,237,0.6)'
           : 'none',
-        opacity: locked ? 0.62 : 1,
+        opacity: locked ? LOCKED_OP : 1,
       }}
     >
       {current && (

@@ -45,6 +45,13 @@
   --sh-s: 0 1px 2px rgba(31, 27, 21, 0.05);
   --sh-m: 0 2px 5px rgba(31, 27, 21, 0.05), 0 10px 26px rgba(31, 27, 21, 0.06);
   --sh-l: 0 8px 20px rgba(31, 27, 21, 0.09), 0 30px 60px rgba(31, 27, 21, 0.09);
+  /* Overview roadmap card surface — its own fill/border/locked-fade so the node cards read as
+     distinct planes on whatever ground the map sits on. On the cream ground the default surface +
+     hairline is enough; dark overrides these (below) because a white-tuned border and a
+     fade-to-white opacity both disappear against the charcoal page. */
+  --rm-card-bg: var(--surface);
+  --rm-card-border: var(--hairline);
+  --rm-locked-op: 0.62;
 }
 
 /* ===== Dark mode =====================================================================
@@ -61,6 +68,11 @@
   --well: #26211a;
   --hairline: #2f2820;
   --hair-2: #26211a;
+  /* Roadmap cards on the near-black page: lift the fill a step above --surface, give a warm
+     visible edge, and stop fading locked cards toward the page (they'd vanish). */
+  --rm-card-bg: #2a241c;
+  --rm-card-border: #3c352b;
+  --rm-locked-op: 0.9;
   --ink: #f4f1ea;
   --t-1: #f4f1ea;
   --t-2: #d8d2c7;
