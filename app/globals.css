@@ -1128,9 +1128,24 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* Top accent glow follows the companion; the cream→sage wash is the light-mode ground. Dark
+     overrides the wash below (it would otherwise stay a light band under the dark dept cards). */
   background:
-    radial-gradient(160% 120% at 50% 0%, rgba(124, 58, 237, 0.06), transparent 50%),
+    radial-gradient(
+      160% 120% at 50% 0%,
+      color-mix(in srgb, var(--accent) 6%, transparent),
+      transparent 50%
+    ),
     linear-gradient(180deg, #f8f6ef 0%, #f1f2e7 30%, #ebefe0 100%);
+}
+[data-theme='dark'] #v-home.on {
+  background:
+    radial-gradient(
+      160% 120% at 50% 0%,
+      color-mix(in srgb, var(--accent) 14%, transparent),
+      transparent 50%
+    ),
+    linear-gradient(180deg, var(--canvas) 0%, var(--page) 60%, var(--page) 100%);
 }
 #v-home .vhead {
   flex: none;
@@ -5602,8 +5617,8 @@ body {
   font-size: 12.5px;
   font-weight: 500;
   color: var(--t-2);
-  background: var(--card);
-  border: 1px solid var(--line);
+  background: var(--surface);
+  border: 1px solid var(--hairline);
   border-radius: 9px;
   padding: 8px 14px;
   cursor: pointer;
