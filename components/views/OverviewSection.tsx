@@ -46,7 +46,7 @@ const PANEL_W = 'min(430px, calc(100% - 48px))';
 // match RoadmapView's DOT map (state → dot color); labels match the plain-language status lines.
 const LEGEND: [string, string][] = [
   ['#16a34a', 'Done'],
-  ['#7c3aed', 'byte can do this'],
+  ['var(--accent)', 'byte can do this'],
   ['#2563eb', 'Needs your input'],
   ['#d97706', 'Needs approval'],
   ['var(--t-3)', 'Needs earlier steps'],
@@ -194,17 +194,10 @@ export default function OverviewSection() {
             background:
               tab === k
                 ? onDark
-                  ? 'rgba(124,58,237,0.32)'
-                  : 'rgba(124,58,237,0.13)'
+                  ? 'color-mix(in srgb, var(--accent) 30%, transparent)'
+                  : 'var(--accent-tint)'
                 : 'transparent',
-            color:
-              tab === k
-                ? onDark
-                  ? '#c4b5fd'
-                  : CY
-                : onDark
-                  ? 'rgba(245,243,255,0.5)'
-                  : 'var(--t-3)',
+            color: tab === k ? 'var(--accent)' : onDark ? 'rgba(245,243,255,0.5)' : 'var(--t-3)',
           }}
         >
           {k === 'map' ? 'Second Brain' : 'Roadmap'}
@@ -310,8 +303,9 @@ export default function OverviewSection() {
                       height: 40,
                       borderRadius: 12,
                       flex: 'none',
-                      background: 'linear-gradient(160deg, #9333ea, #7c3aed)',
-                      boxShadow: '0 8px 22px -8px rgba(124,58,237,0.7)',
+                      background: 'linear-gradient(160deg, var(--accent-deep), var(--accent))',
+                      boxShadow:
+                        '0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
                     }}
                   />
                   <div>
@@ -358,8 +352,8 @@ export default function OverviewSection() {
                     fontSize: 13.5,
                     lineHeight: 1.5,
                     color: 'var(--t-2)',
-                    background: 'rgba(124,58,237,0.07)',
-                    border: '1px solid rgba(124,58,237,0.16)',
+                    background: 'var(--accent-tint)',
+                    border: '1px solid var(--accent-line)',
                     borderRadius: 12,
                     padding: '11px 13px',
                     marginBottom: 16,
@@ -395,7 +389,7 @@ export default function OverviewSection() {
                     [
                       ['#16a34a', 'Green is done', 'how far you’ve already come.'],
                       [
-                        '#7c3aed',
+                        'var(--accent)',
                         'The glowing card is your next move',
                         'hit Start and I’ll get to work.',
                       ],
@@ -432,12 +426,12 @@ export default function OverviewSection() {
                     fontSize: 14,
                     fontWeight: 650,
                     color: 'var(--on-accent)',
-                    background: '#7c3aed',
+                    background: 'var(--accent)',
                     border: 'none',
                     borderRadius: 12,
                     padding: '11px 18px',
                     cursor: 'pointer',
-                    boxShadow: '0 8px 22px -8px rgba(124,58,237,0.7)',
+                    boxShadow: '0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
                   }}
                 >
                   Got it — show me
@@ -504,8 +498,8 @@ export default function OverviewSection() {
                   borderRadius: 10,
                   cursor: 'pointer',
                   color: CY,
-                  background: 'rgba(124,58,237,0.08)',
-                  border: '1px solid rgba(124,58,237,0.2)',
+                  background: 'var(--accent-tint)',
+                  border: '1px solid var(--accent-line)',
                 }}
               >
                 <span
@@ -638,8 +632,8 @@ export default function OverviewSection() {
                       width: `${prog.pct}%`,
                       minWidth: prog.pct > 0 ? 14 : 0,
                       borderRadius: 999,
-                      background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                      boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
+                      background: 'linear-gradient(90deg, var(--accent-deep), var(--accent))',
+                      boxShadow: '0 0 11px 1px color-mix(in srgb, var(--accent) 50%, transparent)',
                       transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
                     }}
                   />
@@ -652,7 +646,7 @@ export default function OverviewSection() {
                         fontSize: 10.5,
                         fontWeight: 600,
                         color: 'var(--accent)',
-                        background: 'rgba(124,58,237,0.12)',
+                        background: 'var(--accent-tint)',
                         padding: '2px 8px',
                         borderRadius: 999,
                         whiteSpace: 'nowrap',
@@ -715,7 +709,7 @@ export default function OverviewSection() {
                           borderRadius: '50%',
                           background: 'var(--accent)',
                           boxShadow:
-                            '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                            '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 12px 2px color-mix(in srgb, var(--accent) 60%, transparent)',
                         }}
                       />
                     </span>
@@ -762,7 +756,8 @@ export default function OverviewSection() {
                       borderRadius: 9,
                       padding: '7px 18px',
                       cursor: 'pointer',
-                      boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
+                      boxShadow:
+                        '0 4px 14px -5px color-mix(in srgb, var(--accent) 60%, transparent)',
                     }}
                   >
                     Start
