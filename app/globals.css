@@ -2256,11 +2256,23 @@ body {
   box-shadow: var(--sh-m);
   border-color: color-mix(in srgb, var(--rc) 50%, var(--hairline));
 }
-/* On the near-black page the surface fill + hairline edge are too close to the ground, so the
-   card melts into the background. Lift the fill a step above --surface and give it a warm, visible
-   edge (the black --sh-s shadow can't separate a dark card from a dark page — the border does). */
-[data-theme='dark'] .deptrow {
+/* Dark raised-card (shared). Cards that sit on the near-black page share var(--surface) + a
+   hairline edge — both too close to the ground, so the card melts in (a black box-shadow can't
+   lift a dark card off a dark page; only the border can). Lift the fill above --surface and give a
+   warm visible edge. Covers every top-level card class. :not(:hover) on the border keeps
+   .deptrow's coloured hover edge (the only card that recolours its border on hover). */
+[data-theme='dark'] .deptrow,
+[data-theme='dark'] .kb-card,
+[data-theme='dark'] .lib-tile,
+[data-theme='dark'] .env-card,
+[data-theme='dark'] .taskcard {
   background: #26201a;
+}
+[data-theme='dark'] .deptrow:not(:hover),
+[data-theme='dark'] .kb-card,
+[data-theme='dark'] .lib-tile,
+[data-theme='dark'] .env-card,
+[data-theme='dark'] .taskcard {
   border-color: #3c352b;
 }
 /* image panel — 40% of the card, full height */
@@ -3911,7 +3923,7 @@ body {
 .cop-step-x {
   border: none;
   background: transparent;
-  color: var(--muted, #8b8398);
+  color: var(--t-3);
   font-size: 17px;
   line-height: 26px;
   cursor: pointer;
@@ -3961,7 +3973,7 @@ body {
   font-size: 12px;
 }
 .cop-proj > span {
-  color: var(--muted, #6b7280);
+  color: var(--t-3);
 }
 .cop-proj select,
 .cop-proj input {
@@ -3981,7 +3993,7 @@ body {
   font-size: 12px;
 }
 .cop-auto > span {
-  color: var(--muted, #6b7280);
+  color: var(--t-3);
 }
 .cop-auto-opts {
   display: flex;
@@ -4000,7 +4012,7 @@ body {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted, #6b7280);
+  color: var(--t-3);
   cursor: pointer;
 }
 .cop-auto-opt.on {
@@ -6830,7 +6842,7 @@ body {
    no icon — informational, not alarming (see DelivNote in viewers.tsx). */
 .deliv-note {
   padding: 10px 16px;
-  border-top: 1px solid var(--border-1, rgba(255, 255, 255, 0.06));
+  border-top: 1px solid var(--hairline);
   font-size: 11px;
   line-height: 1.5;
   color: var(--t-3);
@@ -9416,7 +9428,7 @@ body {
   max-height: 340px;
   overflow-y: auto;
   padding: 10px;
-  background: var(--panel, #faf7ff);
+  background: var(--well);
   border-radius: 12px;
 }
 .lc-msg {
@@ -9828,7 +9840,7 @@ body {
   align-items: center;
   gap: 6px;
   padding: 14px 10px;
-  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  border: 1px solid var(--hairline);
   border-radius: 12px;
   background: transparent;
   cursor: pointer;
@@ -9877,7 +9889,7 @@ body {
   max-height: min(58vh, 440px);
   overflow-y: auto;
   padding: 10px;
-  border: 1px solid var(--line, rgba(0, 0, 0, 0.12));
+  border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--surface, #fff);
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
