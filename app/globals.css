@@ -1726,7 +1726,9 @@ body {
   font-weight: 600;
   border: 1px solid var(--accent-line);
   background: var(--surface);
-  color: var(--accent-deep);
+  /* --accent (not --accent-deep): on the dark surface the deep accent is ~2.5:1 for dark-accent
+     companions (byte violet, Luna blue); the lifted accent stays readable in both themes. */
+  color: var(--accent);
   border-radius: 8px;
   padding: 6px 15px;
   cursor: pointer;
