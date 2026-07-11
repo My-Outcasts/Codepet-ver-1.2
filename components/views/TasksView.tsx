@@ -16,7 +16,7 @@ const COLS: Array<{ key: string; label: string; dot: string; test: (x: Row) => b
   {
     key: 'upnext',
     label: 'Up next',
-    dot: 'var(--accent)',
+    dot: 'var(--violet)',
     test: (x) => taskState(x.t, true).cls === 'st-does',
   },
   {

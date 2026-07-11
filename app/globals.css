@@ -2559,8 +2559,11 @@ body {
    rather than a wall of white. Light pastel tints keep the white cards popping
    and the text legible. */
 .kb-col--upnext {
-  background: var(--accent-tint);
-  border-color: var(--accent-line);
+  /* Fixed violet (byte's signature hue) — NOT the companion accent, so the four lanes stay four
+     distinct colours in both themes; using --accent made this lane collide with the gold AWAITING
+     lane whenever the companion was gold/clay (e.g. Nova). */
+  background: var(--violet-tint);
+  border-color: var(--violet-line);
 }
 .kb-col--awaiting {
   background: var(--gold-tint);
