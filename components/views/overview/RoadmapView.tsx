@@ -43,7 +43,8 @@ const DOT: Record<RoadmapState, string> = {
   locked: TX3,
 };
 // State → a plain-language status line under the task title (cofounder-style): the actor +
-// what's needed, so the founder reads intent directly instead of decoding a corner badge.
+// what's needed, so the founder reads intent directly instead of decoding a corner badge. The
+// `available` label names the active companion, so it's built per-render (see statusFor).
 const STATUS: Record<RoadmapState, string> = {
   done: 'Done',
   current: 'Up next',
@@ -52,15 +53,19 @@ const STATUS: Record<RoadmapState, string> = {
   approve: 'Needs approval',
   locked: 'Needs earlier steps',
 };
+const statusFor = (st: RoadmapState, companionName: string): string =>
+  st === 'available' ? `${companionName} can do this` : STATUS[st];
 
 function Node({
   node,
   onClick,
   pulse,
+  companionName,
 }: {
   node: PositionedNode;
   onClick?: () => void;
   pulse?: boolean;
+  companionName: string;
 }) {
   const { task } = node;
   const st = task.state;
@@ -139,7 +144,7 @@ function Node({
               color: CY,
             }}
           >
-            byte is here
+            {companionName} is here
           </span>
         </span>
       )}
@@ -207,7 +212,7 @@ function Node({
             whiteSpace: 'nowrap',
           }}
         >
-          {STATUS[st]}
+          {statusFor(st, companionName)}
         </span>
       </span>
     </div>
@@ -218,11 +223,14 @@ export default function RoadmapView({
   phases = ROADMAP_PHASES,
   tasks,
   projectName = 'Your company',
+  companionName = 'byte',
   onTaskClick,
 }: {
   phases?: RoadmapPhase[];
   tasks: RoadmapTask[];
   projectName?: string;
+  /** The active companion's name — labels the beacon and the "… can do this" status line. */
+  companionName?: string;
   /** Click a task card — the current move starts byte, others open their department. */
   onTaskClick?: (task: RoadmapTask) => void;
 }) {
@@ -499,6 +507,7 @@ export default function RoadmapView({
                   node={n}
                   onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
                   pulse={pulseIds.has(n.task.id)}
+                  companionName={companionName}
                 />
               ))}
             </div>

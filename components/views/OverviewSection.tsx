@@ -8,6 +8,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
+import { companionById } from '@/lib/companions';
 import { cleanCompanyName, meaningfulText } from '@/lib/companyName';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
@@ -44,9 +45,10 @@ const PANEL_W = 'min(430px, calc(100% - 48px))';
 
 // The roadmap's state vocabulary — a small key so a first-time user can read the cards. Colors
 // match RoadmapView's DOT map (state → dot color); labels match the plain-language status lines.
-const LEGEND: [string, string][] = [
+// `name` is the active companion's name so the key says e.g. "Nova can do this", not always "byte".
+const legendFor = (name: string): [string, string][] => [
   ['#16a34a', 'Done'],
-  ['var(--accent)', 'byte can do this'],
+  ['var(--accent)', `${name} can do this`],
   ['#2563eb', 'Needs your input'],
   ['#d97706', 'Needs approval'],
   ['var(--t-3)', 'Needs earlier steps'],
@@ -62,7 +64,12 @@ export default function OverviewSection() {
     projectAnalysis,
     aiOffline,
     roadmapDefs,
+    companionId,
   } = useApp();
+  // The active companion's name drives every "byte"-labelled surface here, so picking Nova (etc.)
+  // renames "byte · do this next", the "byte is here" beacon, and the key — not just the accent.
+  const companionName = companionById(companionId).name;
+  const LEGEND = legendFor(companionName);
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
   // has already dismissed it. Non-destructive — no account data is touched.
@@ -108,7 +115,7 @@ export default function OverviewSection() {
   const headerLine =
     projectName !== 'Your company' && oneLiner
       ? `${projectName} — ${oneLiner}`
-      : 'Your whole company as a roadmap — where you are, what byte does next, and how far you’ve come.';
+      : `Your whole company as a roadmap — where you are, what ${companionName} does next, and how far you’ve come.`;
 
   // ONE roadmap projection: the beacon + lit map node here, and — via the store — the chat's
   // next-step, the first-run greeting, and the after-completion nudge all read from this single
@@ -318,7 +325,7 @@ export default function OverviewSection() {
                         color: CY,
                       }}
                     >
-                      byte
+                      {companionName}
                     </div>
                     <div
                       style={{
@@ -725,7 +732,7 @@ export default function OverviewSection() {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      byte · do this next
+                      {companionName} · do this next
                     </span>
                   </span>
                   <span
@@ -829,6 +836,7 @@ export default function OverviewSection() {
               tasks={tasks}
               phases={ROADMAP_PHASES}
               projectName={projectName}
+              companionName={companionName}
               onTaskClick={onTaskClick}
             />
           </div>
