@@ -1281,9 +1281,11 @@ export const LIB_TC: Record<string, string> = {
 };
 /* per-type preview skin — light hue tint + same-hue border + readable label ink */
 export const LIB_SKIN: Record<string, { tint: string; line: string; ink: string }> = {
-  // tint = var(--surface): white in light (the intended paper-white site preview), dark in dark —
-  // was hardcoded #fff, which left a stark white block on the dark Library list.
-  site: { tint: 'var(--surface)', line: 'var(--hairline)', ink: 'var(--accent-deep)' },
+  // Accent-tinted panel (like sheet/dms) so the browser-chrome mock inside — which stays
+  // var(--surface) — pops as a lighter "window" on a coloured ground, matching every other preview.
+  // Was hardcoded '#fff' (stark white block in dark); a plain var(--surface) then made it a flat
+  // panel the same colour as its own mock, with nothing to pop against.
+  site: { tint: 'var(--accent-tint)', line: 'var(--accent-line)', ink: 'var(--accent-deep)' },
   screens: { tint: 'var(--violet-tint)', line: 'var(--violet-line)', ink: '#7A23C0' },
   sheet: { tint: 'var(--accent-tint)', line: 'var(--accent-line)', ink: 'var(--accent-deep)' },
   plan: { tint: 'var(--blue-tint)', line: 'var(--blue-line)', ink: '#1D4ED8' },
