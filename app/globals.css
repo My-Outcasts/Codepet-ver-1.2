@@ -52,6 +52,11 @@
   --rm-card-bg: var(--surface);
   --rm-card-border: var(--hairline);
   --rm-locked-op: 0.62;
+  /* The little status chip that holds each node's state dot. On white it's a slightly recessed
+     well; dark overrides it (below) because --well there is the same colour as the card, so the
+     chip disappears. */
+  --rm-chip-bg: var(--well);
+  --rm-chip-border: var(--hairline);
 }
 
 /* ===== Dark mode =====================================================================
@@ -73,6 +78,9 @@
   --rm-card-bg: #2a241c;
   --rm-card-border: #3c352b;
   --rm-locked-op: 0.9;
+  /* Lift the chip above the card so the state dot sits on a readable raised tile, not a smudge. */
+  --rm-chip-bg: #342d23;
+  --rm-chip-border: #473e31;
   --ink: #f4f1ea;
   --t-1: #f4f1ea;
   --t-2: #d8d2c7;

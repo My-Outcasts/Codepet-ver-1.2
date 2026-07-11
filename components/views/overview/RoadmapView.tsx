@@ -29,6 +29,8 @@ const LINE = 'var(--hairline)';
 const CARD_BG = 'var(--rm-card-bg)';
 const CARD_BORDER = 'var(--rm-card-border)';
 const LOCKED_OP = 'var(--rm-locked-op)';
+const CHIP_BG = 'var(--rm-chip-bg)';
+const CHIP_BORDER = 'var(--rm-chip-border)';
 
 // State → the node's icon-dot color.
 const DOT: Record<RoadmapState, string> = {
@@ -151,7 +153,7 @@ function Node({
             border: `1.5px solid ${TX3}`,
             borderBottomWidth: 4.5,
             borderRadius: 3,
-            opacity: 0.7,
+            opacity: 0.9,
           }}
         />
       )}
@@ -163,8 +165,8 @@ function Node({
           flex: 'none',
           display: 'grid',
           placeItems: 'center',
-          background: done ? 'rgba(22,163,74,0.14)' : 'var(--well)',
-          border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : LINE}`,
+          background: done ? 'rgba(22,163,74,0.14)' : CHIP_BG,
+          border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : CHIP_BORDER}`,
         }}
       >
         <span
