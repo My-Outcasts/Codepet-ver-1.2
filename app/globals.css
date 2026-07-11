@@ -2256,6 +2256,13 @@ body {
   box-shadow: var(--sh-m);
   border-color: color-mix(in srgb, var(--rc) 50%, var(--hairline));
 }
+/* On the near-black page the surface fill + hairline edge are too close to the ground, so the
+   card melts into the background. Lift the fill a step above --surface and give it a warm, visible
+   edge (the black --sh-s shadow can't separate a dark card from a dark page — the border does). */
+[data-theme='dark'] .deptrow {
+  background: #26201a;
+  border-color: #3c352b;
+}
 /* image panel — 40% of the card, full height */
 .dr-img {
   flex: 0 0 40%;
@@ -5629,6 +5636,10 @@ body {
 }
 .deptrow.later {
   opacity: 0.5;
+}
+/* A fade-to-white 0.5 recedes a card on the cream ground but sinks it into the dark page; dim less. */
+[data-theme='dark'] .deptrow.later {
+  opacity: 0.72;
 }
 .deptrow.later:hover {
   opacity: 0.72;
