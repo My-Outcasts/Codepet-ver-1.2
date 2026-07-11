@@ -2750,7 +2750,9 @@ body {
   border-color: var(--hairline);
 }
 .lib-chip.on {
-  color: #fff;
+  /* Inverted pill: ink fill + page-colour text, so it's dark-on-light in light mode and
+     light-on-dark in dark. Was color:#fff, which vanished on the near-white --t-1 fill in dark. */
+  color: var(--page);
   background: var(--t-1);
   border-color: var(--t-1);
 }
@@ -4979,7 +4981,9 @@ body {
   transform: translateX(-50%) translateY(20px);
   z-index: 40;
   background: var(--t-1);
-  color: #fff;
+  /* Inverted surface: page-colour text so it reads in both themes (was #fff, invisible on the
+     near-white --t-1 fill in dark). */
+  color: var(--page);
   font-size: 13px;
   font-weight: 500;
   padding: 11px 16px;
