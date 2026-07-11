@@ -255,7 +255,10 @@ body {
 .upg {
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  /* Inverted solid button: fill is the ink colour, text is the page colour — so it stays a
+     high-contrast dark-on-light in light mode and light-on-dark in dark mode (was hardcoded
+     white, which turned invisible on the near-white --t-1 fill after dark). */
+  color: var(--page);
   background: var(--t-1);
   border: none;
   border-radius: 8px;
@@ -270,7 +273,7 @@ body {
   font-size: 12px;
   font-weight: 600;
   color: var(--accent, #7c3aed);
-  background: var(--accent-soft, #efe7fc);
+  background: var(--accent-tint);
   border: 1px solid transparent;
   border-radius: 8px;
   padding: 6px 12px;
@@ -3759,7 +3762,7 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--accent, #7c3aed);
-  background: var(--accent-soft, #efe7fc);
+  background: var(--accent-tint);
   border: 1px solid transparent;
   border-radius: 10px;
   cursor: pointer;
