@@ -8,6 +8,7 @@ import { track } from '@/lib/analytics';
 import { useParallax } from '@/lib/ui/useParallax';
 import { Starfield } from '@/components/ui/Starfield';
 import { CompanionPicker } from './CompanionPicker';
+import { companionById } from '@/lib/companions';
 
 interface ObData {
   name: string;
@@ -170,6 +171,8 @@ export function Onboarding() {
   const [reveal, setReveal] = useState<RevealSummary | null>(null);
   const [slow, setSlow] = useState(false);
   const [pick, setPick] = useState(companionId);
+  // Use the live pick so the analyzing screen already greets by the just-chosen companion's name.
+  const companionName = companionById(pick).name;
   const nameRef = useRef<HTMLInputElement>(null);
   const coldRef = useRef<HTMLDivElement>(null);
   useParallax(coldRef);
@@ -483,7 +486,9 @@ export function Onboarding() {
   } else if (step === 6) {
     body = (
       <>
-        <h2>byte is reading {data.projName || 'your project'}…</h2>
+        <h2>
+          {companionName} is reading {data.projName || 'your project'}…
+        </h2>
         <p>Turning what you told me into a full company plan.</p>
         <div className="ob-an">
           {AN_LINES.slice(0, anShown).map((t, i) => {

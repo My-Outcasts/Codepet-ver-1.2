@@ -1,6 +1,7 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { useApp } from '@/lib/store';
+import { companionById } from '@/lib/companions';
 import { fmt } from '@/lib/helpers';
 import { computeSheetModel } from '@/lib/ai/sheetModel';
 
@@ -118,6 +119,8 @@ export function ScreensViewer({
   screens: any[];
 }) {
   const [i, setI] = useState(0);
+  const { companionId } = useApp();
+  const companionName = companionById(companionId).name;
   const S = screens;
   const art = (s: any) => {
     if (s.art === 'connect')
@@ -157,7 +160,7 @@ export function ScreensViewer({
     return (
       <div className="sa-mid">
         <div className="sa-card">
-          <h4>byte · recap</h4>
+          <h4>{companionName} · recap</h4>
           <p>You wired OAuth into the login flow and refactored the session store.</p>
           <div className="sa-term">
             <span>OAuth</span>

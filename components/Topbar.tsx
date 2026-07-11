@@ -1,11 +1,13 @@
 'use client';
 import { useApp } from '@/lib/store';
+import { companionById } from '@/lib/companions';
 
 // The topbar now carries the Codepet brand (logo + wordmark) and the sidebar collapse toggle on
 // the left, plus the install/upgrade actions on the right. Identity moved to the sidebar top
 // (see AccountMenu), so the brand no longer disappears when the sidebar is collapsed.
 export function Topbar() {
-  const { installed, openInstallPrompt, show, sideCollapsed, toggleSide } = useApp();
+  const { installed, openInstallPrompt, show, sideCollapsed, toggleSide, companionId } = useApp();
+  const companionName = companionById(companionId).name;
 
   return (
     <div className="topbar">
@@ -39,7 +41,7 @@ export function Topbar() {
               openInstallPrompt();
             }}
           >
-            <span className="tb-install-dot" />⚡ Wake byte up
+            <span className="tb-install-dot" />⚡ Wake {companionName} up
           </button>
         )}
         <button className="upg" onClick={() => show('billing')}>

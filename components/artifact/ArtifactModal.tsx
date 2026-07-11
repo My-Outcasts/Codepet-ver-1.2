@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { companionById } from '@/lib/companions';
 import { DEPTS, reviseText, type Task, type Dept, type LibItem } from '@/lib/data';
 import { artType, artMeta, buildLog, RICH_META, type LogStep } from '@/lib/helpers';
 import { runByteTask, GenerateError, type RunResult } from '@/lib/ai/runTask';
@@ -142,6 +143,7 @@ export function ArtifactModal() {
     creditToolkitUse,
     companionId,
   } = useApp();
+  const companionName = companionById(companionId).name;
   const [stage, setStage] = useState<Stage>('exec');
   // Run mode docks as a right-hand panel so the map stays visible as context;
   // "Expand" swaps to a full centered card for the rich deliverables that need room.
@@ -376,7 +378,7 @@ export function ArtifactModal() {
       : genError === 'refused'
         ? 'byte held back on this one — try rephrasing the task or adding a bit more detail.'
         : genError === 'ai_unavailable'
-          ? 'byte is temporarily unavailable — try again shortly.'
+          ? `${companionName} is temporarily unavailable — try again shortly.`
           : 'Couldn’t reach byte just now.';
   const liveErrorMsg = `${liveErrorReason} Showing the saved draft.`;
 
@@ -419,7 +421,7 @@ export function ArtifactModal() {
             <p style={{ margin: 0, color: 'var(--t-1)', lineHeight: 1.55 }}>{d.need}</p>
           </div>
           <div>
-            <div style={olLabel}>What byte will make</div>
+            <div style={olLabel}>What {companionName} will make</div>
             <p style={{ margin: 0, color: 'var(--t-1)', lineHeight: 1.55 }}>
               {t.d || planFor(type)}
             </p>
@@ -436,7 +438,13 @@ export function ArtifactModal() {
           // too — so name items off `type` to keep the mention and the receipt in sync.
           runLogWithToolkit(buildLog(t, logType, d), toolkitUsedFor(ENV, type));
     const title =
-      execKind === 'revise' ? <>byte is revising — “{rev}”</> : 'byte is doing the work…';
+      execKind === 'revise' ? (
+        <>
+          {companionName} is revising — “{rev}”
+        </>
+      ) : (
+        `${companionName} is doing the work…`
+      );
     bodyContent = (
       <>
         <Phx a={1} />
@@ -486,7 +494,7 @@ export function ArtifactModal() {
             <div className="art-body" style={{ whiteSpace: 'pre-wrap' }}>
               {LIVE_TYPES.has(type) && genStatus === 'loading' ? (
                 <span style={{ color: 'var(--t-3)' }}>
-                  byte is writing this live with Claude…
+                  {companionName} is writing this live with Claude…
                   <span className="cursor" />
                 </span>
               ) : (
@@ -514,7 +522,7 @@ export function ArtifactModal() {
           <div className="artifact">
             <div className="art-body" style={{ whiteSpace: 'pre-wrap' }}>
               <span style={{ color: 'var(--t-3)' }}>
-                byte is writing this live with Claude…
+                {companionName} is writing this live with Claude…
                 <span className="cursor" />
               </span>
             </div>
