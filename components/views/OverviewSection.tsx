@@ -8,6 +8,7 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useApp } from '@/lib/store';
 import { DEPTS } from '@/lib/data';
+import { companionById } from '@/lib/companions';
 import { cleanCompanyName, meaningfulText } from '@/lib/companyName';
 import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
@@ -35,19 +36,22 @@ const OverviewMap = dynamic(() => import('./OverviewView'), {
   ),
 });
 
-const CY = '#7c3aed';
+// Accent for byte's labels/CTAs here — the live token, so it brightens on the dark ground and
+// follows the active companion. Used only in DOM styles (not SVG attributes), so var() is safe.
+const CY = 'var(--accent)';
 // The two cards sit side by side, each ~HUD-sized (matching the Second Brain "building your
 // company" card). The row is capped so they stay small.
 const PANEL_W = 'min(430px, calc(100% - 48px))';
 
 // The roadmap's state vocabulary — a small key so a first-time user can read the cards. Colors
 // match RoadmapView's DOT map (state → dot color); labels match the plain-language status lines.
-const LEGEND: [string, string][] = [
+// `name` is the active companion's name so the key says e.g. "Nova can do this", not always "byte".
+const legendFor = (name: string): [string, string][] => [
   ['#16a34a', 'Done'],
-  ['#7c3aed', 'byte can do this'],
+  ['var(--accent)', `${name} can do this`],
   ['#2563eb', 'Needs your input'],
   ['#d97706', 'Needs approval'],
-  ['rgba(31,27,21,0.4)', 'Needs earlier steps'],
+  ['var(--t-3)', 'Needs earlier steps'],
 ];
 
 export default function OverviewSection() {
@@ -60,7 +64,12 @@ export default function OverviewSection() {
     projectAnalysis,
     aiOffline,
     roadmapDefs,
+    companionId,
   } = useApp();
+  // The active companion's name drives every "byte"-labelled surface here, so picking Nova (etc.)
+  // renames "byte · do this next", the "byte is here" beacon, and the key — not just the accent.
+  const companionName = companionById(companionId).name;
+  const LEGEND = legendFor(companionName);
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
   // has already dismissed it. Non-destructive — no account data is touched.
@@ -106,7 +115,7 @@ export default function OverviewSection() {
   const headerLine =
     projectName !== 'Your company' && oneLiner
       ? `${projectName} — ${oneLiner}`
-      : 'Your whole company as a roadmap — where you are, what byte does next, and how far you’ve come.';
+      : `Your whole company as a roadmap — where you are, what ${companionName} does next, and how far you’ve come.`;
 
   // ONE roadmap projection: the beacon + lit map node here, and — via the store — the chat's
   // next-step, the first-run greeting, and the after-completion nudge all read from this single
@@ -169,8 +178,8 @@ export default function OverviewSection() {
         display: 'inline-flex',
         gap: 3,
         padding: 4,
-        background: onDark ? 'rgba(18,16,28,0.72)' : '#ffffff',
-        border: `1px solid ${onDark ? 'rgba(245,243,255,0.14)' : 'rgba(31,27,21,0.09)'}`,
+        background: onDark ? 'rgba(18,16,28,0.72)' : 'var(--surface)',
+        border: `1px solid ${onDark ? 'rgba(245,243,255,0.14)' : 'var(--hairline)'}`,
         borderRadius: 11,
         backdropFilter: onDark ? 'blur(8px)' : undefined,
       }}
@@ -192,17 +201,10 @@ export default function OverviewSection() {
             background:
               tab === k
                 ? onDark
-                  ? 'rgba(124,58,237,0.32)'
-                  : 'rgba(124,58,237,0.13)'
+                  ? 'color-mix(in srgb, var(--accent) 30%, transparent)'
+                  : 'var(--accent-tint)'
                 : 'transparent',
-            color:
-              tab === k
-                ? onDark
-                  ? '#c4b5fd'
-                  : CY
-                : onDark
-                  ? 'rgba(245,243,255,0.5)'
-                  : 'rgba(31,27,21,0.4)',
+            color: tab === k ? 'var(--accent)' : onDark ? 'rgba(245,243,255,0.5)' : 'var(--t-3)',
           }}
         >
           {k === 'map' ? 'Second Brain' : 'Roadmap'}
@@ -217,7 +219,7 @@ export default function OverviewSection() {
       style={{
         position: 'absolute',
         inset: 0,
-        background: '#f8f7f3',
+        background: 'var(--page)',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -241,7 +243,7 @@ export default function OverviewSection() {
             borderBottom: '1px solid rgba(217,119,6,0.22)',
             fontFamily: 'var(--sans)',
             fontSize: 13,
-            color: '#92400e',
+            color: 'var(--gold-deep)',
           }}
         >
           <span
@@ -294,8 +296,8 @@ export default function OverviewSection() {
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   width: 'min(440px, 100%)',
-                  background: '#ffffff',
-                  border: '1px solid rgba(31,27,21,0.08)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--hairline)',
                   borderRadius: 20,
                   boxShadow: '0 30px 80px -30px rgba(31,27,21,0.55)',
                   padding: '26px 26px 22px',
@@ -308,8 +310,9 @@ export default function OverviewSection() {
                       height: 40,
                       borderRadius: 12,
                       flex: 'none',
-                      background: 'linear-gradient(160deg, #9333ea, #7c3aed)',
-                      boxShadow: '0 8px 22px -8px rgba(124,58,237,0.7)',
+                      background: 'linear-gradient(160deg, var(--accent-deep), var(--accent))',
+                      boxShadow:
+                        '0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
                     }}
                   />
                   <div>
@@ -322,13 +325,13 @@ export default function OverviewSection() {
                         color: CY,
                       }}
                     >
-                      byte
+                      {companionName}
                     </div>
                     <div
                       style={{
                         fontSize: 19,
                         fontWeight: 680,
-                        color: '#1f1b15',
+                        color: 'var(--t-1)',
                         letterSpacing: '-0.01em',
                         marginTop: 1,
                       }}
@@ -344,7 +347,7 @@ export default function OverviewSection() {
                     style={{
                       fontSize: 14.5,
                       lineHeight: 1.5,
-                      color: 'rgba(31,27,21,0.72)',
+                      color: 'var(--t-2)',
                       marginBottom: 14,
                     }}
                   >
@@ -355,15 +358,15 @@ export default function OverviewSection() {
                   style={{
                     fontSize: 13.5,
                     lineHeight: 1.5,
-                    color: 'rgba(31,27,21,0.82)',
-                    background: 'rgba(124,58,237,0.07)',
-                    border: '1px solid rgba(124,58,237,0.16)',
+                    color: 'var(--t-2)',
+                    background: 'var(--accent-tint)',
+                    border: '1px solid var(--accent-line)',
                     borderRadius: 12,
                     padding: '11px 13px',
                     marginBottom: 16,
                   }}
                 >
-                  <span style={{ fontWeight: 650, color: '#1f1b15' }}>
+                  <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>
                     You’re in the {currentPhaseName || 'first'} phase
                   </span>
                   {nextMilestone ? ` — next milestone: ${nextMilestone}.` : '.'}
@@ -380,7 +383,7 @@ export default function OverviewSection() {
                     fontWeight: 650,
                     letterSpacing: '0.06em',
                     textTransform: 'uppercase',
-                    color: 'rgba(31,27,21,0.4)',
+                    color: 'var(--t-3)',
                     marginBottom: 10,
                   }}
                 >
@@ -393,12 +396,12 @@ export default function OverviewSection() {
                     [
                       ['#16a34a', 'Green is done', 'how far you’ve already come.'],
                       [
-                        '#7c3aed',
+                        'var(--accent)',
                         'The glowing card is your next move',
                         'hit Start and I’ll get to work.',
                       ],
                       [
-                        'rgba(31,27,21,0.4)',
+                        'var(--t-3)',
                         'Greyed-out steps are locked',
                         'they unlock as you finish what they depend on.',
                       ],
@@ -415,10 +418,8 @@ export default function OverviewSection() {
                           flex: 'none',
                         }}
                       />
-                      <div
-                        style={{ fontSize: 13.5, lineHeight: 1.45, color: 'rgba(31,27,21,0.72)' }}
-                      >
-                        <span style={{ fontWeight: 650, color: '#1f1b15' }}>{h}</span> — {b}
+                      <div style={{ fontSize: 13.5, lineHeight: 1.45, color: 'var(--t-2)' }}>
+                        <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>{h}</span> — {b}
                       </div>
                     </div>
                   ))}
@@ -431,13 +432,13 @@ export default function OverviewSection() {
                     fontFamily: 'var(--sans)',
                     fontSize: 14,
                     fontWeight: 650,
-                    color: '#ffffff',
-                    background: '#7c3aed',
+                    color: 'var(--on-accent)',
+                    background: 'var(--accent)',
                     border: 'none',
                     borderRadius: 12,
                     padding: '11px 18px',
                     cursor: 'pointer',
-                    boxShadow: '0 8px 22px -8px rgba(124,58,237,0.7)',
+                    boxShadow: '0 8px 22px -8px color-mix(in srgb, var(--accent) 70%, transparent)',
                   }}
                 >
                   Got it — show me
@@ -461,7 +462,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 28,
                   fontWeight: 650,
-                  color: '#1f1b15',
+                  color: 'var(--t-1)',
                   letterSpacing: '-.5px',
                   margin: 0,
                 }}
@@ -472,7 +473,7 @@ export default function OverviewSection() {
                 style={{
                   fontSize: 15,
                   lineHeight: 1.45,
-                  color: 'rgba(31,27,21,.62)',
+                  color: 'var(--t-3)',
                   marginTop: 4,
                   // Wrap to at most two lines so the full subtitle shows instead of being
                   // cut off mid-word — while still bounding a long dynamic company one-liner.
@@ -504,8 +505,8 @@ export default function OverviewSection() {
                   borderRadius: 10,
                   cursor: 'pointer',
                   color: CY,
-                  background: 'rgba(124,58,237,0.08)',
-                  border: '1px solid rgba(124,58,237,0.2)',
+                  background: 'var(--accent-tint)',
+                  border: '1px solid var(--accent-line)',
                 }}
               >
                 <span
@@ -520,7 +521,7 @@ export default function OverviewSection() {
                     justifyContent: 'center',
                     fontSize: 10,
                     fontWeight: 700,
-                    color: '#fff',
+                    color: 'var(--on-accent)',
                     background: CY,
                   }}
                 >
@@ -561,8 +562,8 @@ export default function OverviewSection() {
                   boxSizing: 'border-box',
                   padding: '9px 13px 10px',
                   borderRadius: 14,
-                  background: '#ffffff',
-                  border: '1px solid rgba(31,27,21,0.08)',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--hairline)',
                   boxShadow: '0 6px 20px -14px rgba(31,27,21,0.3)',
                 }}
               >
@@ -611,10 +612,10 @@ export default function OverviewSection() {
                     <span style={{ fontSize: 22, fontVariantNumeric: 'tabular-nums' }}>
                       {prog.pct}
                     </span>
-                    <span style={{ fontSize: 13, color: 'rgba(31,27,21,0.4)' }}>%</span>
+                    <span style={{ fontSize: 13, color: 'var(--t-3)' }}>%</span>
                   </span>
                   {needsYou > 0 && (
-                    <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: '#2563eb' }}>
+                    <span style={{ fontFamily: 'var(--sans)', fontSize: 12, color: 'var(--blue)' }}>
                       needs you {needsYou}
                     </span>
                   )}
@@ -625,7 +626,7 @@ export default function OverviewSection() {
                     position: 'relative',
                     height: 14,
                     borderRadius: 999,
-                    background: 'rgba(31,27,21,0.07)',
+                    background: 'var(--well)',
                     display: 'flex',
                     alignItems: 'center',
                   }}
@@ -638,8 +639,8 @@ export default function OverviewSection() {
                       width: `${prog.pct}%`,
                       minWidth: prog.pct > 0 ? 14 : 0,
                       borderRadius: 999,
-                      background: 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                      boxShadow: '0 0 11px 1px rgba(124,58,237,0.5)',
+                      background: 'linear-gradient(90deg, var(--accent-deep), var(--accent))',
+                      boxShadow: '0 0 11px 1px color-mix(in srgb, var(--accent) 50%, transparent)',
                       transition: 'width .8s cubic-bezier(.2,.8,.2,1)',
                     }}
                   />
@@ -652,7 +653,7 @@ export default function OverviewSection() {
                         fontSize: 10.5,
                         fontWeight: 600,
                         color: 'var(--accent)',
-                        background: 'rgba(124,58,237,0.12)',
+                        background: 'var(--accent-tint)',
                         padding: '2px 8px',
                         borderRadius: 999,
                         whiteSpace: 'nowrap',
@@ -715,7 +716,7 @@ export default function OverviewSection() {
                           borderRadius: '50%',
                           background: 'var(--accent)',
                           boxShadow:
-                            '0 0 0 3px rgba(124,58,237,0.16), 0 0 12px 2px rgba(124,58,237,0.6)',
+                            '0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent), 0 0 12px 2px color-mix(in srgb, var(--accent) 60%, transparent)',
                         }}
                       />
                     </span>
@@ -731,7 +732,7 @@ export default function OverviewSection() {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      byte · do this next
+                      {companionName} · do this next
                     </span>
                   </span>
                   <span
@@ -756,13 +757,14 @@ export default function OverviewSection() {
                       fontFamily: 'var(--sans)',
                       fontSize: 12.5,
                       fontWeight: 700,
-                      color: '#ffffff',
+                      color: 'var(--on-accent)',
                       background: 'var(--accent)',
                       border: 'none',
                       borderRadius: 9,
                       padding: '7px 18px',
                       cursor: 'pointer',
-                      boxShadow: '0 4px 14px -5px rgba(124,58,237,0.6)',
+                      boxShadow:
+                        '0 4px 14px -5px color-mix(in srgb, var(--accent) 60%, transparent)',
                     }}
                   >
                     Start
@@ -787,7 +789,7 @@ export default function OverviewSection() {
                   fontWeight: 650,
                   letterSpacing: '0.12em',
                   textTransform: 'uppercase',
-                  color: 'rgba(31,27,21,0.4)',
+                  color: 'var(--t-3)',
                   marginBottom: 1,
                 }}
               >
@@ -801,7 +803,7 @@ export default function OverviewSection() {
                     alignItems: 'center',
                     gap: 8,
                     fontSize: 11.5,
-                    color: 'rgba(31,27,21,0.6)',
+                    color: 'var(--t-3)',
                     whiteSpace: 'nowrap',
                   }}
                 >
@@ -834,6 +836,7 @@ export default function OverviewSection() {
               tasks={tasks}
               phases={ROADMAP_PHASES}
               projectName={projectName}
+              companionName={companionName}
               onTaskClick={onTaskClick}
             />
           </div>

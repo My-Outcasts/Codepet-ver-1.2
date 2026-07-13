@@ -14,12 +14,24 @@ import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overvi
 import { ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
-const CY = '#7c3aed';
-const VIO = '#9333ea';
-const TX = '#1f1b15';
-const TX3 = 'rgba(31,27,21,0.40)';
-const LINE = 'rgba(31,27,21,0.09)';
-const CARD_BG = '#ffffff';
+// Everything accent-driven follows the companion (byte violet, Nova gold, …) + light/dark, via
+// the accent tokens. CY/VIO are used only in inline styles here; the SVG critical-path/edge lines
+// set `stroke` through the `style` prop (not the attribute), where var() IS parsed — so the whole
+// map re-tints with the chosen companion, not just the chrome around it.
+const CY = 'var(--accent)';
+const VIO = 'var(--accent-deep)';
+const TX = 'var(--t-1)';
+const TX3 = 'var(--t-3)';
+const LINE = 'var(--hairline)';
+// Card surface/border/locked-fade come from roadmap-local tokens (globals.css): on the cream
+// ground they resolve to the default surface + hairline; dark overrides them so the cards keep a
+// visible edge and locked cards don't fade into the near-black page. Driven by data-theme, so it
+// also renders correctly in the standalone preview route.
+const CARD_BG = 'var(--rm-card-bg)';
+const CARD_BORDER = 'var(--rm-card-border)';
+const LOCKED_OP = 'var(--rm-locked-op)';
+const CHIP_BG = 'var(--rm-chip-bg)';
+const CHIP_BORDER = 'var(--rm-chip-border)';
 
 // State → the node's icon-dot color.
 const DOT: Record<RoadmapState, string> = {
@@ -31,7 +43,8 @@ const DOT: Record<RoadmapState, string> = {
   locked: TX3,
 };
 // State → a plain-language status line under the task title (cofounder-style): the actor +
-// what's needed, so the founder reads intent directly instead of decoding a corner badge.
+// what's needed, so the founder reads intent directly instead of decoding a corner badge. The
+// `available` label names the active companion, so it's built per-render (see statusFor).
 const STATUS: Record<RoadmapState, string> = {
   done: 'Done',
   current: 'Up next',
@@ -40,15 +53,19 @@ const STATUS: Record<RoadmapState, string> = {
   approve: 'Needs approval',
   locked: 'Needs earlier steps',
 };
+const statusFor = (st: RoadmapState, companionName: string): string =>
+  st === 'available' ? `${companionName} can do this` : STATUS[st];
 
 function Node({
   node,
   onClick,
   pulse,
+  companionName,
 }: {
   node: PositionedNode;
   onClick?: () => void;
   pulse?: boolean;
+  companionName: string;
 }) {
   const { task } = node;
   const st = task.state;
@@ -83,15 +100,15 @@ function Node({
         padding: '0 12px',
         borderRadius: 11,
         background: current
-          ? 'linear-gradient(180deg, rgba(124,58,237,0.10), rgba(124,58,237,0.02))'
+          ? 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, transparent), color-mix(in srgb, var(--accent) 2%, transparent))'
           : done
             ? 'rgba(22,163,74,0.05)'
             : CARD_BG,
-        border: `1px solid ${current ? 'rgba(124,58,237,0.6)' : done ? 'rgba(22,163,74,0.22)' : LINE}`,
+        border: `1px solid ${current ? 'color-mix(in srgb, var(--accent) 60%, transparent)' : done ? 'rgba(22,163,74,0.22)' : CARD_BORDER}`,
         boxShadow: current
-          ? '0 0 0 1px rgba(124,58,237,0.2), 0 10px 30px -12px rgba(124,58,237,0.6)'
+          ? '0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent), 0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)'
           : 'none',
-        opacity: locked ? 0.62 : 1,
+        opacity: locked ? LOCKED_OP : 1,
       }}
     >
       {current && (
@@ -103,11 +120,11 @@ function Node({
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            background: '#ffffff',
-            border: '1px solid rgba(124,58,237,0.5)',
+            background: 'var(--surface)',
+            border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
             borderRadius: 999,
             padding: '3px 9px 3px 4px',
-            boxShadow: '0 6px 20px -8px rgba(124,58,237,0.6)',
+            boxShadow: '0 6px 20px -8px color-mix(in srgb, var(--accent) 60%, transparent)',
           }}
         >
           <span
@@ -127,7 +144,7 @@ function Node({
               color: CY,
             }}
           >
-            byte is here
+            {companionName} is here
           </span>
         </span>
       )}
@@ -142,7 +159,7 @@ function Node({
             border: `1.5px solid ${TX3}`,
             borderBottomWidth: 4.5,
             borderRadius: 3,
-            opacity: 0.7,
+            opacity: 0.9,
           }}
         />
       )}
@@ -154,8 +171,8 @@ function Node({
           flex: 'none',
           display: 'grid',
           placeItems: 'center',
-          background: done ? 'rgba(22,163,74,0.14)' : 'rgba(31,27,21,0.06)',
-          border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : LINE}`,
+          background: done ? 'rgba(22,163,74,0.14)' : CHIP_BG,
+          border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : CHIP_BORDER}`,
         }}
       >
         <span
@@ -195,7 +212,7 @@ function Node({
             whiteSpace: 'nowrap',
           }}
         >
-          {STATUS[st]}
+          {statusFor(st, companionName)}
         </span>
       </span>
     </div>
@@ -206,11 +223,14 @@ export default function RoadmapView({
   phases = ROADMAP_PHASES,
   tasks,
   projectName = 'Your company',
+  companionName = 'byte',
   onTaskClick,
 }: {
   phases?: RoadmapPhase[];
   tasks: RoadmapTask[];
   projectName?: string;
+  /** The active companion's name — labels the beacon and the "… can do this" status line. */
+  companionName?: string;
   /** Click a task card — the current move starts byte, others open their department. */
   onTaskClick?: (task: RoadmapTask) => void;
 }) {
@@ -291,7 +311,7 @@ export default function RoadmapView({
         fontFamily: 'var(--sans)',
       }}
     >
-      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid #7c3aed;outline-offset:2px}@media (prefers-reduced-motion: no-preference){@keyframes rmPulse{0%{box-shadow:0 0 0 0 rgba(124,58,237,.5),0 10px 30px -12px rgba(124,58,237,.6)}70%{box-shadow:0 0 0 13px rgba(124,58,237,0),0 10px 30px -12px rgba(124,58,237,.6)}100%{box-shadow:0 0 0 0 rgba(124,58,237,0),0 10px 30px -12px rgba(124,58,237,.6)}}.rm-pulse{animation:rmPulse 1.4s ease-out 1}}`}</style>
+      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid var(--accent);outline-offset:2px}@media (prefers-reduced-motion: no-preference){@keyframes rmPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent),0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}70%{box-shadow:0 0 0 13px transparent,0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}100%{box-shadow:0 0 0 0 transparent,0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}}.rm-pulse{animation:rmPulse 1.4s ease-out 1}}`}</style>
       <div
         ref={scrollRef}
         className="rm-scroll"
@@ -343,8 +363,8 @@ export default function RoadmapView({
                       letterSpacing: '0.14em',
                       textTransform: 'uppercase',
                       color: c.current ? CY : TX3,
-                      background: c.current ? 'rgba(124,58,237,0.08)' : 'rgba(31,27,21,0.05)',
-                      border: `1px solid ${c.current ? 'rgba(124,58,237,0.4)' : LINE}`,
+                      background: c.current ? 'var(--accent-tint)' : 'var(--well)',
+                      border: `1px solid ${c.current ? 'var(--accent-line)' : LINE}`,
                       padding: '4px 9px',
                       borderRadius: 7,
                     }}
@@ -371,7 +391,8 @@ export default function RoadmapView({
                     key={`r${i}`}
                     d={e.d}
                     fill="none"
-                    stroke="rgba(139,92,246,0.4)"
+                    // stroke via style (not the attribute) so it follows the companion accent.
+                    style={{ stroke: 'color-mix(in srgb, var(--accent) 40%, transparent)' }}
                     strokeWidth={1.5}
                     strokeLinejoin="round"
                   />
@@ -381,7 +402,9 @@ export default function RoadmapView({
                     key={`d${i}`}
                     d={e.d}
                     fill="none"
-                    stroke="rgba(31,27,21,0.18)"
+                    // var() isn't valid in the `stroke` attribute — set it via style so the faint
+                    // dependency line stays visible on both the cream and charcoal grounds.
+                    style={{ stroke: 'var(--t-4)' }}
                     strokeWidth={1.5}
                     strokeDasharray="3 4"
                   />
@@ -391,7 +414,7 @@ export default function RoadmapView({
                     key={`g${i}`}
                     d={e.d}
                     fill="none"
-                    stroke={CY}
+                    style={{ stroke: 'var(--accent)' }}
                     strokeWidth={7}
                     opacity={0.16}
                     strokeLinejoin="round"
@@ -403,7 +426,7 @@ export default function RoadmapView({
                     key={`c${i}`}
                     d={e.d}
                     fill="none"
-                    stroke={CY}
+                    style={{ stroke: 'var(--accent)' }}
                     strokeWidth={2.4}
                     strokeLinejoin="round"
                     strokeLinecap="round"
@@ -421,10 +444,10 @@ export default function RoadmapView({
                     height: L.root.h,
                     borderRadius: 16,
                     background:
-                      'linear-gradient(160deg, rgba(139,92,246,0.16), rgba(124,58,237,0.06))',
-                    border: '1px solid rgba(139,92,246,0.45)',
+                      'linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 6%, transparent))',
+                    border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
                     boxShadow:
-                      '0 0 0 1px rgba(139,92,246,0.12), 0 16px 44px -16px rgba(139,92,246,0.5)',
+                      '0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), 0 16px 44px -16px color-mix(in srgb, var(--accent) 50%, transparent)',
                     padding: 15,
                     display: 'flex',
                     flexDirection: 'column',
@@ -484,6 +507,7 @@ export default function RoadmapView({
                   node={n}
                   onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
                   pulse={pulseIds.has(n.task.id)}
+                  companionName={companionName}
                 />
               ))}
             </div>

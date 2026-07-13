@@ -27,6 +27,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
         />
         <link rel="preload" as="image" href="/splash.webp" />
+        {/* Set the theme before first paint so there's no light→dark flash. Reads the saved
+            preference (or falls back to the OS setting) and stamps data-theme on <html>;
+            lib/theme's ThemeProvider then keeps it in sync. Kept tiny and dependency-free. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var p=localStorage.getItem('codepet-theme');var d=p==='dark'||((p==='system'||!p)&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.dataset.theme=d?'dark':'light';}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>{children}</body>
     </html>

@@ -55,7 +55,8 @@ const REVISE_CHIPS = ['Shorter', 'More detail', 'Punchier'];
 // Revise keep the founder in the conversation. Revise re-runs the task against a
 // typed or chip note (empty = plain regenerate) and updates this card in place.
 function ResultCard({ m }: { m: ChatMessage }) {
-  const { reviseTaskInChat, approveChatResult, openChatResult } = useApp();
+  const { reviseTaskInChat, approveChatResult, openChatResult, companionId } = useApp();
+  const companionName = companionById(companionId).name;
   const [revising, setRevising] = useState(false);
   const [note, setNote] = useState('');
   const [reviseBusy, setReviseBusy] = useState(false);
@@ -109,7 +110,9 @@ function ResultCard({ m }: { m: ChatMessage }) {
         hasSteps ? (
           <ExecLog
             steps={steps!}
-            title={reviseBusy ? 'byte is revising…' : 'byte is doing the work…'}
+            title={
+              reviseBusy ? `${companionName} is revising…` : `${companionName} is doing the work…`
+            }
             onDone={() => setLogDone(true)}
           />
         ) : (
@@ -127,7 +130,7 @@ function ResultCard({ m }: { m: ChatMessage }) {
                 onClick={() => setShowRecord((v) => !v)}
                 aria-expanded={showRecord}
               >
-                {showRecord ? '▾' : '▸'} What byte did · {stepCountLabel(steps!)}
+                {showRecord ? '▾' : '▸'} What {companionName} did · {stepCountLabel(steps!)}
               </button>
               {showRecord && <StaticLog steps={steps!} />}
             </div>
@@ -148,7 +151,7 @@ function ResultCard({ m }: { m: ChatMessage }) {
                 <input
                   className="cres-rev-in"
                   autoFocus
-                  placeholder="Tell byte what to change…"
+                  placeholder={`Tell ${companionName} what to change…`}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   onKeyDown={(e) => {
@@ -527,7 +530,7 @@ export function Copilot() {
                               key={i}
                               title={
                                 unsure.has(i)
-                                  ? "Byte isn't fully sure here — tweak it if needed"
+                                  ? `${c.name} isn't fully sure here — tweak it if needed`
                                   : undefined
                               }
                             >
@@ -757,7 +760,7 @@ export function Copilot() {
                 placeholder={
                   buildIntakeActive
                     ? 'Tell Byte what to build — every message adds to the brief…'
-                    : 'Ask byte anything about your company…'
+                    : `Ask ${c.name} anything about your company…`
                 }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
