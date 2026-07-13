@@ -20,10 +20,6 @@ const CHIPS = [
   'What’s blocking my launch?',
 ];
 
-// The header shows the team as a cluster of pet faces (not one identity) — identity now
-// lives per-message. A representative slice of the roster, in a stable order.
-const TEAM_PETS = ['byte', 'crash', 'nova', 'glitch', 'sage'];
-
 // byte is told to write plain text, but strip stray markdown emphasis as a safety
 // net so a leftover **…**, `code`, or __…__ never renders as literal punctuation.
 function plain(text: string): string {
@@ -619,11 +615,6 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   return (
     <aside className={`copilot${inline ? ' inline' : ''}`}>
       <div className="cop-h">
-        <div className="cop-team" aria-hidden>
-          {TEAM_PETS.map((id) => (
-            <Companion key={id} id={id} size="s28" />
-          ))}
-        </div>
         <div>
           <div className="pn">Your team</div>
           <div className="st">
