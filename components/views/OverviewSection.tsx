@@ -148,6 +148,12 @@ export default function OverviewSection() {
       if (!t.done && !t.drafted && t.who === 'you') needsYou += 1;
     }
   }
+  // When the primary move is byte's to run, the founder often ALSO has a step waiting on them.
+  // Surface the top one as a distinct secondary line under Start (never the same task as the
+  // move), so the two calls-to-action read as ordered — do this, then that — not as rivals.
+  const needsYouTask = move
+    ? tasks.find((t) => t.state === 'needsYou' && t.title !== move.title)
+    : undefined;
 
   // Click a card: route into the chat by the card's state — run/review it in-thread when byte
   // can, guide the founder when it's theirs, or explain what's blocking a locked step (naming the
@@ -769,6 +775,44 @@ export default function OverviewSection() {
                   >
                     Start
                   </button>
+                  {needsYouTask && (
+                    <button
+                      type="button"
+                      onClick={() => onTaskClick(needsYouTask)}
+                      title={`Also needs you: ${needsYouTask.title}`}
+                      style={{
+                        position: 'relative',
+                        marginTop: 2,
+                        maxWidth: '100%',
+                        display: 'inline-flex',
+                        alignItems: 'baseline',
+                        gap: 5,
+                        textAlign: 'left',
+                        fontFamily: 'var(--sans)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                        color: 'var(--blue)',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <span style={{ flex: 'none', opacity: 0.75 }}>Also needs you:</span>
+                      <span
+                        style={{
+                          minWidth: 0,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          textDecoration: 'underline',
+                          textUnderlineOffset: 2,
+                        }}
+                      >
+                        {needsYouTask.title}
+                      </span>
+                    </button>
+                  )}
                 </div>
               )}
             </div>
