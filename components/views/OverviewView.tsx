@@ -99,6 +99,7 @@ interface GNode {
   color: string;
   val: number;
   deptColor?: string;
+  clusterId?: string;
   dept?: Dept;
   task?: Task;
   sub?: string;
@@ -332,6 +333,7 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [focusCluster, setFocusCluster] = useState<string | null>(null);
   const [backfilling, setBackfilling] = useState(false);
   // When the founder last synced their history into the graph. Persisted so the
   // "✓ Synced" state survives the reload a successful sync triggers. Read lazily
@@ -365,7 +367,7 @@ export default function OverviewView() {
     return () => ro.disconnect();
   }, []);
 
-  const { data, adj } = useMemo(() => {
+  const { data, adj, nodeCluster } = useMemo(() => {
     if (SECOND_BRAIN_V2) {
       // P1: render the derived knowledge graph (ledger → typed, cross-linked nodes)
       // instead of the authored company→dept→task tree. The renderer is untouched;
@@ -416,6 +418,7 @@ export default function OverviewView() {
           color: rgba(hex, n.kind === 'company' ? 0.95 : 0.85),
           val: n.kind === 'company' ? 12 : 0.7 + Math.min(6, n.weight),
           deptColor: hex,
+          clusterId: n.kind === 'department' ? n.id : n.deptK,
         };
         if (n.kind === 'company') return { ...common, x: 0, y: 0, z: 0 };
         if (n.kind === 'department') {
@@ -459,7 +462,9 @@ export default function OverviewView() {
         vadj.get(s)!.add(t);
         vadj.get(t)!.add(s);
       });
-      return { data: { nodes: vnodes, links: vlinks }, adj: vadj };
+      const nodeCluster = new Map<string, string>();
+      for (const v of vnodes) if (v.clusterId) nodeCluster.set(v.id, v.clusterId);
+      return { data: { nodes: vnodes, links: vlinks }, adj: vadj, nodeCluster };
     }
     const nodes: GNode[] = [];
     const links: GLink[] = [];
@@ -545,7 +550,7 @@ export default function OverviewView() {
       adj.get(l.source)!.add(l.target);
       adj.get(l.target)!.add(l.source);
     });
-    return { data: { nodes, links }, adj };
+    return { data: { nodes, links }, adj, nodeCluster: new Map<string, string>() };
   }, [tick, brief.projectName, revealKeys, events]);
 
   const inFocus = useCallback(
@@ -876,7 +881,7 @@ export default function OverviewView() {
     if (c) {
       // Rest the map (no auto-spin) while byte is pointing at a move, so the
       // tethered callout holds steady; gently spin only when there's no move.
-      c.autoRotate = !here;
+      c.autoRotate = !here && !focusCluster;
       c.autoRotateSpeed = 0.5;
     }
     const el = wrapRef.current;
@@ -888,7 +893,22 @@ export default function OverviewView() {
       el?.removeEventListener('pointerdown', noteInteract);
       el?.removeEventListener('wheel', noteInteract);
     };
-  }, [dims.w, noteInteract, here]);
+  }, [dims.w, noteInteract, here, focusCluster]);
+
+  // Focused on a cluster: ESC backs out to the whole galaxy.
+  useEffect(() => {
+    if (!focusCluster) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setFocusCluster(null);
+        fitView();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusCluster]);
 
   // The graph's world size is fixed (department orbit radius is constant), so a
   // fixed camera distance reliably frames it — scaled by viewport aspect so the
@@ -902,6 +922,12 @@ export default function OverviewView() {
     // node) has clear space and the project center never sits under it.
     const bx = DEPT_R * 0.35;
     fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
+  };
+
+  // Leave a focused cluster: back to the whole galaxy.
+  const exitCluster = () => {
+    setFocusCluster(null);
+    fitView();
   };
 
   const onEngineStop = () => {
@@ -1131,6 +1157,36 @@ export default function OverviewView() {
         <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
       )}
 
+      {SECOND_BRAIN_V2 && focusCluster && (
+        <button
+          onClick={exitCluster}
+          style={{
+            position: 'absolute',
+            top: 20,
+            left: 26,
+            zIndex: 6,
+            pointerEvents: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            fontFamily: 'inherit',
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: '#7DE3FF',
+            background: 'rgba(16,14,28,0.85)',
+            border: '1px solid rgba(125,227,255,0.4)',
+            borderRadius: 999,
+            padding: '6px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          ← All areas
+          <span style={{ color: 'rgba(245,243,255,.6)', fontWeight: 600 }}>
+            {data.nodes.find((n) => n.id === focusCluster)?.name ?? ''}
+          </span>
+        </button>
+      )}
+
       <div
         style={{
           position: 'absolute',
@@ -1142,14 +1198,18 @@ export default function OverviewView() {
           pointerEvents: 'none',
         }}
       >
-        <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
-          {SECOND_BRAIN_V2 ? 'Second Brain' : 'Overview'}
-        </h1>
-        <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
-          {SECOND_BRAIN_V2
-            ? 'Everything you and byte have made, connected — tap a star to open it.'
-            : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
-        </div>
+        {!(SECOND_BRAIN_V2 && focusCluster) && (
+          <>
+            <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
+              {SECOND_BRAIN_V2 ? 'Second Brain' : 'Overview'}
+            </h1>
+            <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
+              {SECOND_BRAIN_V2
+                ? 'Everything you and byte have made, connected — tap a star to open it.'
+                : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
+            </div>
+          </>
+        )}
         {SECOND_BRAIN_V2 && events.length > 0 && (sbMetricsShown.length > 0 || nextStep) && (
           <div style={{ marginTop: 12, pointerEvents: 'auto' }}>
             {sbMetricsShown.length > 0 && (
@@ -1450,7 +1510,11 @@ export default function OverviewView() {
                 }
                 // v2 hubs are feature-area clusters (id `cluster:N`), not departments —
                 // glide the camera to the cluster instead of opening a (nonexistent) dept page.
-                if (n.kind === 'dept') return flyTo(n.id);
+                if (n.kind === 'dept') {
+                  setFocusCluster(n.id);
+                  flyTo(n.id, 900);
+                  return;
+                }
                 return fitView();
               }
               if (n.kind === 'dept' && n.dept) openDept(n.dept.k);
@@ -1460,6 +1524,9 @@ export default function OverviewView() {
               } else if (n.kind === 'project') {
                 fitView();
               }
+            }}
+            onBackgroundClick={() => {
+              if (focusCluster) exitCluster();
             }}
           />
         )}
