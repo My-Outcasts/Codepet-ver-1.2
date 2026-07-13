@@ -55,8 +55,8 @@ const REVISE_CHIPS = ['Shorter', 'More detail', 'Punchier'];
 // Revise keep the founder in the conversation. Revise re-runs the task against a
 // typed or chip note (empty = plain regenerate) and updates this card in place.
 function ResultCard({ m }: { m: ChatMessage }) {
-  const { reviseTaskInChat, approveChatResult, openChatResult, companionId } = useApp();
-  const companionName = companionById(companionId).name;
+  const { reviseTaskInChat, approveChatResult, openChatResult, focusCompanionId } = useApp();
+  const companionName = companionById(focusCompanionId).name;
   const [revising, setRevising] = useState(false);
   const [note, setNote] = useState('');
   const [reviseBusy, setReviseBusy] = useState(false);
@@ -531,14 +531,15 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
     buildAutonomy,
     setBuildAutonomy,
     navigateTo,
-    companionId,
+    focusCompanionId,
     chatHistoryOpen,
     toggleChatHistory,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
   const company = cleanCompanyName(brief.projectName) ?? 'your company';
-  const c = companionById(companionId);
+  // The Copilot fronts the department in focus — its pet's avatar and name (matches the voice).
+  const c = companionById(focusCompanionId);
 
   const [draft, setDraft] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -595,7 +596,7 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   return (
     <aside className={`copilot${inline ? ' inline' : ''}`}>
       <div className="cop-h">
-        <Companion id={companionId} size="s28" />
+        <Companion id={focusCompanionId} size="s28" />
         <div>
           <div className="pn">{c.name}</div>
           <div className="st">

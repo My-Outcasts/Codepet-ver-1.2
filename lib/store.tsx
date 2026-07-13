@@ -58,7 +58,7 @@ import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
 import type { ThreadMeta, LedgerEvent } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
-import { DEFAULT_COMPANION_ID } from './companions';
+import { DEFAULT_COMPANION_ID, companionForDept } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
@@ -234,9 +234,12 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
-  /** The default companion mark shown in the chrome (byte). Voice is per-department
+  /** The default companion mark shown in the app chrome (byte). Voice is per-department
    *  (see lib/companions companionForDept); there is no global companion pick. */
   companionId: string;
+  /** The pet that voices AND fronts the Copilot right now: the department in focus
+   *  (viewed dept → CURRENT NEXT STEP's dept → byte). Drives the chat avatar + name. */
+  focusCompanionId: string;
   /** Whether this account has seen the Overview first-run intro. */
   introSeen: boolean;
   /** Mark the first-run intro seen for this account (idempotent; persists). */
@@ -2113,6 +2116,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     newChat();
   }, [companyId, threads, newChat]);
 
+  // The department in focus drives BOTH the Copilot's voice-per-department persona and its
+  // avatar/name: the department being viewed → else the CURRENT NEXT STEP's department →
+  // else undefined (byte). One source of truth so the chat's face never disagrees with its tone.
+  const focusDeptKey = (view === 'dept' ? deptKey : null) ?? nextStep?.deptK ?? undefined;
+  const focusCompanionId = companionForDept(focusDeptKey).id;
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -2140,9 +2149,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ? `CURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do or focus on — first, next, or right now — name THIS exact task and department as your headline answer; you may add sequencing or detail, but never lead with a different task.\n\n`
           : '';
       const deptSummary = focus + deptLines;
-      // Voice-per-department: the Copilot speaks as the focus department's pet — the department
-      // being viewed, else the CURRENT NEXT STEP's department. Omitted → byte (the default).
-      const focusDeptKey = (view === 'dept' ? deptKey : null) ?? nextStep?.deptK ?? undefined;
       const openTasks = DEPTS.flatMap((d) =>
         d.tasks
           .filter((t) => !t.done && liveKind(artType(t)) !== null)
@@ -2294,7 +2300,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, view, deptKey, runTaskInChat, persistMsg],
+    [companyId, nextStep, focusDeptKey, runTaskInChat, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -2603,6 +2609,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       companionId,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
@@ -2719,6 +2726,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       companionId,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
