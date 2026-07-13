@@ -3,7 +3,7 @@
 // ledger into the typed, cross-linked graph the Second Brain view renders, replacing the
 // authored "company → 8 departments → tasks" tree with what has actually happened.
 import type { LedgerEvent } from '@/lib/firebase/schema';
-import type { Dept } from '@/lib/data';
+import { eventNodeId, type FeatureCluster } from './featureClusters';
 
 export type KGNodeKind =
   | 'company'
@@ -72,7 +72,7 @@ function recencyWeight(rank: number, total: number): number {
 
 export function buildKnowledgeGraph(
   events: LedgerEvent[],
-  depts: Dept[],
+  clusters: FeatureCluster[],
 ): { nodes: KGNode[]; edges: KGEdge[] } {
   const nodes: KGNode[] = [];
   const edges: KGEdge[] = [];
@@ -80,16 +80,18 @@ export function buildKnowledgeGraph(
   const inDegree = new Map<string, number>();
   const bump = (id: string) => inDegree.set(id, (inDegree.get(id) ?? 0) + 1);
 
-  // Spine: company + one node per department.
+  // Spine: company + one hub per feature-area cluster (reuse the 'department' kind so the
+  // renderer's hub styling is unchanged). Map each member key → its cluster id.
   nodes.push({ id: 'company', name: 'Your company', kind: 'company', weight: 10 });
   seen.add('company');
-  const deptIds = new Set<string>();
-  for (const d of depts) {
-    const id = `dept:${d.k}`;
-    nodes.push({ id, name: d.name, kind: 'department', weight: 1, deptK: d.k });
-    seen.add(id);
-    deptIds.add(id);
-    edges.push({ source: 'company', target: id, kind: 'spine' });
+  const clusterIds = new Set<string>();
+  const clusterOf = new Map<string, string>();
+  for (const c of clusters) {
+    nodes.push({ id: c.id, name: c.label, kind: 'department', weight: 1, deptK: c.id });
+    seen.add(c.id);
+    clusterIds.add(c.id);
+    edges.push({ source: 'company', target: c.id, kind: 'spine' });
+    for (const k of c.memberKeys) clusterOf.set(k, c.id);
   }
 
   // Knowledge nodes from the ledger, newest-first so recency weighting is stable.
@@ -97,20 +99,21 @@ export function buildKnowledgeGraph(
   sorted.forEach((ev, i) => {
     const kind = KIND_OF[ev.type];
     if (!kind) return;
-    const id = `ev:${ev.refType ?? ev.type}:${ev.refId ?? ev.ts}`;
+    const id = eventNodeId(ev);
     if (seen.has(id)) return; // dedupe on the deterministic ref key
     seen.add(id);
+    const clusterId = clusterOf.get(id);
     nodes.push({
       id,
       name: ev.title,
       kind,
       weight: recencyWeight(i, sorted.length),
-      deptK: ev.deptK,
+      deptK: clusterId, // carries the cluster id (renderer reads deptK as the node's home)
       refType: ev.refType,
       refId: ev.refId,
       ts: ev.ts,
     });
-    const target = ev.deptK && deptIds.has(`dept:${ev.deptK}`) ? `dept:${ev.deptK}` : 'company';
+    const target = clusterId && clusterIds.has(clusterId) ? clusterId : 'company';
     edges.push({ source: id, target, kind: EDGE_OF[ev.type] ?? 'references' });
     bump(target);
   });
@@ -119,17 +122,18 @@ export function buildKnowledgeGraph(
   // and recent nodes shine brighter than dormant ones.
   for (const n of nodes) n.weight += inDegree.get(n.id) ?? 0;
 
-  // Density: chain same-department knowledge nodes with `references` edges so each cluster reads
+  // Density: chain same-cluster knowledge nodes with `references` edges so each cluster reads
   // as a connected web, not stars on a stalk. A simple chain caps each node at REFERENCES_CAP.
+  // Grouping key is the cluster id carried on deptK (set above from the feature-area cluster).
   const knowledge = nodes.filter((n) => n.kind !== 'company' && n.kind !== 'department');
-  const byDept = new Map<string, KGNode[]>();
+  const byCluster = new Map<string, KGNode[]>();
   for (const n of knowledge) {
     if (!n.deptK) continue;
-    const g = byDept.get(n.deptK) ?? [];
+    const g = byCluster.get(n.deptK) ?? [];
     g.push(n);
-    byDept.set(n.deptK, g);
+    byCluster.set(n.deptK, g);
   }
-  for (const group of byDept.values()) {
+  for (const group of byCluster.values()) {
     for (let i = 0; i < group.length; i++) {
       // Connect each node to its next REFERENCES_CAP siblings → a small web per cluster
       // (not a single chain), so departments read as connected constellations.
