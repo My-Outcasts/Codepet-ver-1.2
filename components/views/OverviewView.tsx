@@ -719,7 +719,10 @@ export default function OverviewView() {
   // ref settle after a view switch.
   useEffect(() => {
     if (!portalSignal || !dims.w) return;
-    const id = setTimeout(() => flyTo(`dept:${portalSignal.deptK}`), 220);
+    const id = setTimeout(
+      () => (SECOND_BRAIN_V2 ? fitView() : flyTo(`dept:${portalSignal.deptK}`)),
+      220,
+    );
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalSignal, dims.w]);
@@ -741,7 +744,10 @@ export default function OverviewView() {
   useEffect(() => {
     if (!growthSignal || growthSignal.unlockedKeys.length === 0) return;
     // Gentle camera ease toward the first newly-grown branch (skip under reduced motion).
-    if (!introReduceMotion()) flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
+    if (!introReduceMotion()) {
+      if (SECOND_BRAIN_V2) fitView();
+      else flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
+    }
     clearGrowthSignal(); // consume once — prevents replay on remount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [growthSignal, clearGrowthSignal]);
@@ -1161,7 +1167,7 @@ export default function OverviewView() {
             )}
             {nextStep && (
               <button
-                onClick={() => flyTo(`dept:${nextStep.deptK}`)}
+                onClick={() => fitView()}
                 style={{
                   display: 'block',
                   marginTop: 8,
@@ -1442,7 +1448,9 @@ export default function OverviewView() {
                   const item = library.find((it) => it.title === n.name);
                   if (item) return openDeliverable(item as LibItem);
                 }
-                if (n.kind === 'dept') return openDept(n.id.replace(/^dept:/, ''));
+                // v2 hubs are feature-area clusters (id `cluster:N`), not departments —
+                // glide the camera to the cluster instead of opening a (nonexistent) dept page.
+                if (n.kind === 'dept') return flyTo(n.id);
                 return fitView();
               }
               if (n.kind === 'dept' && n.dept) openDept(n.dept.k);

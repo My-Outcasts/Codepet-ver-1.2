@@ -118,8 +118,12 @@ export function clusterEvents(events: LedgerEvent[]): FeatureCluster[] {
   const K = n <= 3 ? 1 : clamp(Math.round(Math.sqrt(n)), 2, 8);
 
   // 5. Deterministic average-linkage agglomerative clustering.
-  const lowKey = (idxs: number[]) => idxs.map((i) => items[i].key).sort()[0];
+  // `minKey[c]` tracks cluster c's lowest member key in lockstep with `clusters`, so the
+  // tie-break below doesn't need to re-sort every candidate pair's combined members on
+  // every round (that resort dominated runtime for large n) — it's always equal to what
+  // `clusters[c].map(i => items[i].key).sort()[0]` would produce.
   const clusters = items.map((_, i) => [i]);
+  const minKey = items.map((it) => it.key);
   while (clusters.length > K) {
     let bestI = 0, bestJ = 1, bestSim = -Infinity, bestKey = '￿';
     for (let i = 0; i < clusters.length; i++) {
@@ -127,25 +131,32 @@ export function clusterEvents(events: LedgerEvent[]): FeatureCluster[] {
         let s = 0;
         for (const a of clusters[i]) for (const b of clusters[j]) s += sim(a, b);
         s /= clusters[i].length * clusters[j].length;
-        const mergedKey = lowKey(clusters[i].concat(clusters[j]));
+        const mergedKey = minKey[i] < minKey[j] ? minKey[i] : minKey[j];
+        // 1e-12 epsilon: float-equality tolerance so near-identical similarity scores fall
+        // through to the deterministic key tie-break instead of being decided by rounding noise.
         if (s > bestSim + 1e-12 || (Math.abs(s - bestSim) <= 1e-12 && mergedKey < bestKey)) {
           bestSim = s; bestI = i; bestJ = j; bestKey = mergedKey;
         }
       }
     }
     clusters[bestI] = clusters[bestI].concat(clusters[bestJ]);
+    minKey[bestI] = minKey[bestI] < minKey[bestJ] ? minKey[bestI] : minKey[bestJ];
     clusters.splice(bestJ, 1);
+    minKey.splice(bestJ, 1);
   }
 
-  // 6. Deterministic cluster order (by lowest member key).
-  clusters.sort((c1, c2) => (lowKey(c1) < lowKey(c2) ? -1 : 1));
+  // 6. Deterministic cluster order (by lowest member key) — reuse `minKey`, no re-sort.
+  const order = clusters.map((_, i) => i).sort((a, b) => (minKey[a] < minKey[b] ? -1 : 1));
 
   // 7. Label + emit.
-  return clusters.map((idxs, ci) => ({
-    id: `cluster:${ci}`,
-    label: labelFor(idxs, items, tokens),
-    memberKeys: idxs.map((i) => items[i].key).sort(),
-  }));
+  return order.map((i, ci) => {
+    const idxs = clusters[i];
+    return {
+      id: `cluster:${ci}`,
+      label: labelFor(idxs, items, tokens),
+      memberKeys: idxs.map((k) => items[k].key).sort(),
+    };
+  });
 }
 
 function labelFor(

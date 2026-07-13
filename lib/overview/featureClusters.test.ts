@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clusterEvents, eventNodeId, type FeatureCluster } from './featureClusters';
+import { clusterEvents, eventNodeId } from './featureClusters';
 import type { LedgerEvent } from '@/lib/firebase/schema';
 
 const ev = (
