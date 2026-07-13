@@ -17,7 +17,7 @@ import { writeServerDecisions } from '@/lib/firebase/serverDecisions';
 import { mergeDecisions } from '@/lib/ai/decisions';
 import { REMEMBER_FACT_SCHEMA, coerceMemory, newOrChanged } from '@/lib/ai/chatMemory';
 import { needsFallbackReply, REFUSAL_FALLBACK } from '@/lib/ai/chatFallback';
-import { personaOverride } from '@/lib/companions';
+import { companionForDept, personaOverride } from '@/lib/companions';
 import { recallBlock } from '@/lib/ai/secondBrainRecall';
 
 export const runtime = 'nodejs';
@@ -202,7 +202,9 @@ interface ChatBody {
   deptSummary?: unknown;
   openTasks?: unknown;
   envSetup?: unknown;
-  companionId?: unknown;
+  /** The department in focus (active dept view → else CURRENT NEXT STEP's dept).
+   *  Drives the Copilot's voice-per-department persona; omitted → byte. */
+  focusDeptKey?: unknown;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -308,10 +310,13 @@ export async function POST(req: Request): Promise<Response> {
   const memoryBlock = MEMORY_ON
     ? '\n\nMEMORY: When the founder states a durable decision or material fact about their company (a real waitlist/user/revenue number, a goal, a milestone, a pricing/positioning/naming/scope/timeline choice), also call the remember_fact tool to record it — in addition to your normal reply. Capture their real words and numbers exactly; never invent. Do not call it for questions, requests to you, opinions, or small talk.'
     : '';
-  const companionId = typeof body.companionId === 'string' ? body.companionId : undefined;
+  // Voice-per-department: the Copilot speaks as the focus department's pet — the department
+  // the founder is viewing, else the CURRENT NEXT STEP's department, resolved client-side and
+  // sent as focusDeptKey. Omitted (no department in focus) → byte, the default.
+  const focusDeptKey = typeof body.focusDeptKey === 'string' ? body.focusDeptKey : undefined;
   // P2.1: ground byte in the Second Brain ledger when recall is enabled (best-effort, gated).
   const secondBrainBlock = await recallBlock(uid, lastFounderMsg);
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionId)}`;
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionForDept(focusDeptKey).id)}`;
 
   try {
     const mstream = streamMessage({

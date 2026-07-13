@@ -33,7 +33,6 @@ import {
   persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
-  persistCompanion,
   persistIntroSeen,
   persistBrief,
   persistChatMessage,
@@ -53,11 +52,7 @@ import {
   deleteThreadAndMessages,
   appendEvent,
 } from './firebase/companyData';
-import {
-  eventFromLibItem,
-  eventFromDecision,
-  eventFromStageAdvance,
-} from './overview/ledger';
+import { eventFromLibItem, eventFromDecision, eventFromStageAdvance } from './overview/ledger';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
 import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
@@ -239,10 +234,9 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
-  /** The founder's chosen companion character id (default 'byte'). */
+  /** The default companion mark shown in the chrome (byte). Voice is per-department
+   *  (see lib/companions companionForDept); there is no global companion pick. */
   companionId: string;
-  /** Set the active companion (persists). */
-  setCompanion: (id: string) => void;
   /** Whether this account has seen the Overview first-run intro. */
   introSeen: boolean;
   /** Mark the first-run intro seen for this account (idempotent; persists). */
@@ -425,8 +419,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
-  // The founder's chosen companion character (hydrated from Firestore; default byte).
-  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
+  // Voice is per-department now (see lib/companions companionForDept); there is no global
+  // companion pick. The chrome shows byte as the neutral default mark, so this is pinned.
+  const companionId = DEFAULT_COMPANION_ID;
   // Whether THIS account has seen the Overview first-run intro (hydrated from
   // Firestore; drives introInitialPhase). Default false ⇒ a fresh account sees it.
   const [introSeen, setIntroSeen] = useState(false);
@@ -692,7 +687,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeThreadId: loadedActive,
           decisions: dec,
           projectAnalysis: pa,
-          companionId: cId,
           introSeenAt,
           events: loadedEvents,
         }) => {
@@ -701,7 +695,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setBrief(normalizeBrief(b)); // clean the persisted brief once, at the store boundary
           setDecisions(dec);
           setEvents(loadedEvents ?? []);
-          setCompanionId(cId ?? DEFAULT_COMPANION_ID);
           setIntroSeen(Boolean(introSeenAt));
           introSeenRef.current = Boolean(introSeenAt);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
@@ -840,19 +833,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId],
   );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
-  // Set the active companion (optimistic, persists non-blocking).
-  const setCompanion = useCallback(
-    (id: string) => {
-      setCompanionId(id);
-      track('companion.select', { id });
-      if (companyId) {
-        persistCompanion(companyId, id).catch((err) =>
-          console.error('[store] persist companion failed', err),
-        );
-      }
-    },
-    [companyId],
-  );
   const markIntroSeen = useCallback(() => {
     if (introSeenRef.current) return; // already seen — no state churn, no write
     introSeenRef.current = true;
@@ -2160,6 +2140,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ? `CURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do or focus on — first, next, or right now — name THIS exact task and department as your headline answer; you may add sequencing or detail, but never lead with a different task.\n\n`
           : '';
       const deptSummary = focus + deptLines;
+      // Voice-per-department: the Copilot speaks as the focus department's pet — the department
+      // being viewed, else the CURRENT NEXT STEP's department. Omitted → byte (the default).
+      const focusDeptKey = (view === 'dept' ? deptKey : null) ?? nextStep?.deptK ?? undefined;
       const openTasks = DEPTS.flatMap((d) =>
         d.tasks
           .filter((t) => !t.done && liveKind(artType(t)) !== null)
@@ -2181,7 +2164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             deptSummary,
             openTasks,
             envSetup,
-            companionId,
+            focusDeptKey,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -2311,7 +2294,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat, companionId, persistMsg],
+    [companyId, nextStep, view, deptKey, runTaskInChat, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -2620,7 +2603,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       companionId,
-      setCompanion,
       introSeen,
       markIntroSeen,
       installPromptOpen,
@@ -2737,7 +2719,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       companionId,
-      setCompanion,
       introSeen,
       markIntroSeen,
       installPromptOpen,

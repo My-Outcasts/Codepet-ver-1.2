@@ -42,7 +42,7 @@ All three AI routes already receive `deptKey` in their body, so the persona is
 resolved from the department rather than a global id:
 
 - **`app/api/run-task/route.ts`** — `composeRunSystem(context) +
-  personaOverride(companionForDept(deptKey))`
+personaOverride(companionForDept(deptKey))`
 - **`app/api/task-help/route.ts`** — same swap (`deptKey` already present)
 - **`app/api/chat/route.ts`** — `personaOverride(companionForDept(focusDeptKey))`,
   where `focusDeptKey` is a new body field sent by the client
@@ -69,10 +69,12 @@ focus, like any other pet.
   `CompanionPicker` / `setCompanion(pick)` usage.
 - **`components/Sidebar.tsx`** — remove the switcher popover (`pickerOpen`,
   `CompanionPicker`, `setCompanion`).
-- **`lib/store.tsx`** — remove `companionId` + `setCompanion` and their
-  persistence read/write. The Firestore `companionId` field on the company doc
-  goes vestigial: no longer read or written; existing docs are harmlessly
-  ignored (no migration).
+- **`lib/store.tsx`** — remove `setCompanion` and the `companionId` Firestore
+  read/write. `companionId` is **pinned to byte** (`DEFAULT_COMPANION_ID`) rather
+  than excised, so the ~13 chrome sites that render `companionById(companionId)`
+  keep showing byte with no edits (lower-risk than threading a constant through
+  every consumer). The Firestore `companionId` field goes vestigial: no longer
+  read or written; existing docs are harmlessly ignored (no migration).
 - **`lib/theme.tsx` + `components/AppRoot.tsx`** — remove `applyCompanionAccent`
   / `accentVars` so the accent returns to the brand default. **Dark mode
   (ThemeProvider, `[data-theme]` blocks) stays intact** — only the
