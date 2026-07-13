@@ -9,7 +9,7 @@
 //
 // Self-contained inline styles (no globals.css dependency) so it renders standalone in the
 // preview route without touching the concurrently-evolving app shell.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
 import { ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
@@ -55,6 +55,55 @@ const STATUS: Record<RoadmapState, string> = {
 };
 const statusFor = (st: RoadmapState, companionName: string): string =>
   st === 'available' ? `${companionName} can do this` : STATUS[st];
+
+// Actionable states earn a verb the founder can act on; done/locked stay quiet labels. The single
+// `current` move is the ONLY filled chip — everything else is an outline — so the map has exactly
+// one unmistakable hero and no competing bright call-to-action.
+const VERB: Partial<Record<RoadmapState, string>> = {
+  current: 'Start',
+  available: 'Start',
+  approve: 'Review',
+  needsYou: 'Add your input',
+};
+const CHIP_BASE = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  marginTop: 4,
+  fontSize: 10,
+  fontWeight: 700,
+  padding: '2px 9px',
+  borderRadius: 999,
+  whiteSpace: 'nowrap',
+} as const;
+const chipStyle = (st: RoadmapState): CSSProperties => {
+  switch (st) {
+    case 'current':
+      return { ...CHIP_BASE, color: 'var(--on-accent)', background: CY, border: `1px solid ${CY}` };
+    case 'available':
+      return {
+        ...CHIP_BASE,
+        color: CY,
+        background: 'var(--accent-tint)',
+        border: '1px solid var(--accent-line)',
+      };
+    case 'approve':
+      return {
+        ...CHIP_BASE,
+        color: '#d97706',
+        background: 'rgba(217,119,6,0.10)',
+        border: '1px solid rgba(217,119,6,0.35)',
+      };
+    case 'needsYou':
+      return {
+        ...CHIP_BASE,
+        color: '#2563eb',
+        background: 'rgba(37,99,235,0.10)',
+        border: '1px solid rgba(37,99,235,0.32)',
+      };
+    default:
+      return CHIP_BASE;
+  }
+};
 
 function Node({
   node,
@@ -201,19 +250,23 @@ function Node({
         >
           {task.title}
         </span>
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            marginTop: 4,
-            fontSize: 10,
-            fontWeight: 600,
-            color: DOT[st],
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {statusFor(st, companionName)}
-        </span>
+        {VERB[st] ? (
+          <span style={chipStyle(st)}>{VERB[st]}</span>
+        ) : (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              marginTop: 4,
+              fontSize: 10,
+              fontWeight: 600,
+              color: DOT[st],
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {statusFor(st, companionName)}
+          </span>
+        )}
       </span>
     </div>
   );
