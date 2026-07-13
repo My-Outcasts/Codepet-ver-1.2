@@ -3529,6 +3529,26 @@ body {
   align-items: center;
   gap: 10px;
 }
+/* Header claims no single speaker — identity lives per-message now, so it's just a neutral
+   "Your team" label + company context (no avatar). */
+/* A byte turn: the speaking pet's avatar + name above its message/card. */
+.cop-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.cop-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--t-1);
+}
+.cop-who .byte {
+  flex: none;
+}
 .cop-h .pn {
   font-family: var(--sans);
   font-size: 13px;

@@ -7,7 +7,6 @@ import type { CompanyBrief } from '@/lib/firebase/schema';
 import { track } from '@/lib/analytics';
 import { useParallax } from '@/lib/ui/useParallax';
 import { Starfield } from '@/components/ui/Starfield';
-import { CompanionPicker } from './CompanionPicker';
 import { companionById } from '@/lib/companions';
 
 interface ObData {
@@ -150,8 +149,7 @@ function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) =>
 }
 
 export function Onboarding() {
-  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding, companionId, setCompanion } =
-    useApp();
+  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding, companionId } = useApp();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<ObData>({
     name: '',
@@ -170,9 +168,8 @@ export function Onboarding() {
   const [anDone, setAnDone] = useState(false);
   const [reveal, setReveal] = useState<RevealSummary | null>(null);
   const [slow, setSlow] = useState(false);
-  const [pick, setPick] = useState(companionId);
-  // Use the live pick so the analyzing screen already greets by the just-chosen companion's name.
-  const companionName = companionById(pick).name;
+  // The chrome shows byte as the neutral default mark (companionId is pinned to byte).
+  const companionName = companionById(companionId).name;
   const nameRef = useRef<HTMLInputElement>(null);
   const coldRef = useRef<HTMLDivElement>(null);
   useParallax(coldRef);
@@ -572,27 +569,7 @@ export function Onboarding() {
         </div>
       </>
     );
-    foot = <Foot label="Choose your companion" onClick={() => setStep(8)} />;
-  } else {
-    // step 8 — choose the companion that rides along for the project.
-    body = (
-      <>
-        <h2>Choose your companion.</h2>
-        <p>
-          Pick who&apos;ll accompany you as you build. You can change this anytime in the sidebar.
-        </p>
-        <CompanionPicker selected={pick} onSelect={setPick} />
-      </>
-    );
-    foot = (
-      <Foot
-        label="Start building"
-        onClick={() => {
-          setCompanion(pick);
-          finish();
-        }}
-      />
-    );
+    foot = <Foot label="Start building" onClick={finish} />;
   }
 
   return (

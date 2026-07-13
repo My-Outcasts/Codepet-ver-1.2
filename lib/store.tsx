@@ -34,7 +34,6 @@ import {
   persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
-  persistCompanion,
   persistIntroSeen,
   persistBrief,
   persistChatMessage,
@@ -60,7 +59,7 @@ import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
 import type { ThreadMeta, LedgerEvent } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
-import { DEFAULT_COMPANION_ID } from './companions';
+import { DEFAULT_COMPANION_ID, companionForDept } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
@@ -99,6 +98,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
+  /** Which pet spoke this turn — stamped at creation so a past reply keeps its voice's face
+   *  even after the founder navigates elsewhere. Absent on older/system turns → the renderer
+   *  falls back to the task's department pet (for deliverables) or the current focus pet. */
+  companionId?: string;
   /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
@@ -239,10 +242,12 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
-  /** The founder's chosen companion character id (default 'byte'). */
+  /** The default companion mark shown in the app chrome (byte). Voice is per-department
+   *  (see lib/companions companionForDept); there is no global companion pick. */
   companionId: string;
-  /** Set the active companion (persists). */
-  setCompanion: (id: string) => void;
+  /** The pet that voices AND fronts the Copilot right now: the department in focus
+   *  (viewed dept → CURRENT NEXT STEP's dept → byte). Drives the chat avatar + name. */
+  focusCompanionId: string;
   /** Whether this account has seen the Overview first-run intro. */
   introSeen: boolean;
   /** Mark the first-run intro seen for this account (idempotent; persists). */
@@ -427,8 +432,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
-  // The founder's chosen companion character (hydrated from Firestore; default byte).
-  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
+  // Voice is per-department now (see lib/companions companionForDept); there is no global
+  // companion pick. The chrome shows byte as the neutral default mark, so this is pinned.
+  const companionId = DEFAULT_COMPANION_ID;
   // Whether THIS account has seen the Overview first-run intro (hydrated from
   // Firestore; drives introInitialPhase). Default false ⇒ a fresh account sees it.
   const [introSeen, setIntroSeen] = useState(false);
@@ -694,7 +700,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeThreadId: loadedActive,
           decisions: dec,
           projectAnalysis: pa,
-          companionId: cId,
           introSeenAt,
           events: loadedEvents,
         }) => {
@@ -703,7 +708,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           setBrief(normalizeBrief(b)); // clean the persisted brief once, at the store boundary
           setDecisions(dec);
           setEvents(loadedEvents ?? []);
-          setCompanionId(cId ?? DEFAULT_COMPANION_ID);
           setIntroSeen(Boolean(introSeenAt));
           introSeenRef.current = Boolean(introSeenAt);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
@@ -842,19 +846,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId],
   );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
-  // Set the active companion (optimistic, persists non-blocking).
-  const setCompanion = useCallback(
-    (id: string) => {
-      setCompanionId(id);
-      track('companion.select', { id });
-      if (companyId) {
-        persistCompanion(companyId, id).catch((err) =>
-          console.error('[store] persist companion failed', err),
-        );
-      }
-    },
-    [companyId],
-  );
   const markIntroSeen = useCallback(() => {
     if (introSeenRef.current) return; // already seen — no state churn, no write
     introSeenRef.current = true;
@@ -2183,6 +2174,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     newChat();
   }, [companyId, threads, newChat]);
 
+  // The department in focus drives BOTH the Copilot's voice-per-department persona and its
+  // avatar/name: the department being viewed → else the CURRENT NEXT STEP's department →
+  // else undefined (byte). One source of truth so the chat's face never disagrees with its tone.
+  const focusDeptKey = (view === 'dept' ? deptKey : null) ?? nextStep?.deptK ?? undefined;
+  const focusCompanionId = companionForDept(focusDeptKey).id;
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -2231,7 +2228,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             deptSummary,
             openTasks,
             envSetup,
-            companionId,
+            focusDeptKey,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -2361,7 +2358,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat, companionId, persistMsg],
+    [companyId, nextStep, focusDeptKey, runTaskInChat, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -2371,7 +2368,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
-      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
+      // Pin the reply to whoever is in focus now, so it keeps that pet's face in the thread
+      // even after the founder navigates to another department.
+      const byteMsg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: '',
+        ts: now + 1,
+        companionId: focusCompanionId,
+      };
 
       // Build the history to send BEFORE the empty byte placeholder is added.
       const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
@@ -2397,7 +2402,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, runByteStream, persistMsg, activeThreadId],
+    [
+      companyId,
+      chatMessages,
+      chatStreaming,
+      focusCompanionId,
+      runByteStream,
+      persistMsg,
+      activeThreadId,
+    ],
   );
 
   // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
@@ -2670,7 +2683,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       companionId,
-      setCompanion,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
@@ -2788,7 +2801,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       companionId,
-      setCompanion,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,

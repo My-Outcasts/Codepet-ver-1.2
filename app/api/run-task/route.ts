@@ -25,7 +25,7 @@ import {
   buildTaskPrompt,
   type TaskFields,
 } from '@/lib/ai/runTaskPrompt';
-import { personaOverride } from '@/lib/companions';
+import { companionForDept, personaOverride } from '@/lib/companions';
 
 export const runtime = 'nodejs';
 
@@ -158,12 +158,13 @@ export async function POST(req: Request): Promise<Response> {
     }),
   );
   const { schema, instruction } = KINDS[kind];
-  const companionId = typeof body.companionId === 'string' ? body.companionId : undefined;
+  // Voice-per-department: the persona is the department's fixed pet (byte for Engineering,
+  // Nova for Marketing, …), resolved from deptKey — not a global companion pick.
   // Cache-safe split: the stable company context goes in the system (cached across the
   // session's generations); only the per-task prompt varies call to call. The persona
   // override is appended last so it wins over the "You are byte…" opening; it feeds
   // BOTH generation call sites below (structured + plain text) since they share `system`.
-  const system = composeRunSystem(context) + personaOverride(companionId);
+  const system = composeRunSystem(context) + personaOverride(companionForDept(fields.deptKey).id);
   const prompt = buildTaskPrompt({ instruction, priorWork, fields });
   const onUsage = usageSink(uid, idToken, 'runTask');
 
