@@ -6,7 +6,6 @@ import { SignIn } from './auth/SignIn';
 import { Splash } from './Splash';
 import { LoadingScreen } from './LoadingScreen';
 import { Topbar } from './Topbar';
-import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
 import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
@@ -31,15 +30,7 @@ import { BuildCoachView } from './views/BuildCoachView';
 import OverviewSection from './views/OverviewSection';
 
 function Shell() {
-  const {
-    view,
-    show,
-    buildSessionId,
-    copilotCollapsed,
-    toggleCopilot,
-    sideCollapsed,
-    companionId,
-  } = useApp();
+  const { view, show, buildSessionId, copilotCollapsed, toggleCopilot, companionId } = useApp();
   // A build session is live once armed (until Start over). Keep its view mounted across
   // navigation so switching tabs doesn't tear down (and kill) the running session.
   const buildActive = buildSessionId != null;
@@ -73,10 +64,7 @@ function Shell() {
   return (
     <div className="app">
       <Topbar />
-      <div
-        className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}${sideCollapsed ? ' side-collapsed' : ''}`}
-      >
-        <Sidebar />
+      <div className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}`}>
         <main className="main" id="main" ref={mainRef}>
           {ActiveView}
           {(buildActive || view === 'build') && (

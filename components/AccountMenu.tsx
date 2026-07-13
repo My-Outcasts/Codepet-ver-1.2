@@ -1,7 +1,6 @@
 'use client';
-// The account control — avatar + name + dropdown, living at the top of the sidebar. Moved out of
-// the topbar (which now carries the Codepet brand) so identity sits with navigation. Owns its own
-// menu, the sign-out confirmation, the support modal, and the appearance switch.
+// The account control — avatar + name + dropdown, sitting in the topbar beside the Codepet brand.
+// Owns its own menu, the sign-out confirmation, the support modal, and the appearance switch.
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth';
 import { useApp } from '@/lib/store';
@@ -18,7 +17,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AccountMenu() {
   const { user, signOutUser } = useAuth();
-  const { show, sideCollapsed } = useApp();
+  const { show } = useApp();
   const { pref, setPref } = useTheme();
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -76,26 +75,19 @@ export function AccountMenu() {
           className="acct"
           aria-haspopup="menu"
           aria-expanded={open}
-          // Only tooltip the name when the rail is collapsed to an avatar; otherwise the name is
-          // already visible and the native tooltip just overlaps the row on hover.
-          title={sideCollapsed ? name : undefined}
           onClick={() => setOpen((o) => !o)}
         >
           <span className="av">{initial}</span>
-          {!sideCollapsed && (
-            <>
-              <span className="acct-nm">{name}</span>
-              <svg className="cv" viewBox="0 0 16 16" fill="none" aria-hidden>
-                <path
-                  d="M4 6l4 4 4-4"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </>
-          )}
+          <span className="acct-nm">{name}</span>
+          <svg className="cv" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <path
+              d="M4 6l4 4 4-4"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
         <div className="tb-menu acct-menu" role="menu" onClick={(e) => e.stopPropagation()}>
           <div className="who">

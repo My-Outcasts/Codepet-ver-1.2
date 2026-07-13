@@ -8,8 +8,9 @@ describe('Roadmap tab is retired', () => {
   it('AppRoot no longer imports or renders RoadmapView', () => {
     expect(read('components/AppRoot.tsx')).not.toMatch(/RoadmapView/);
   });
-  it('Sidebar has no roadmap nav entry', () => {
-    expect(read('components/Sidebar.tsx')).not.toMatch(/view:\s*'roadmap'/);
+  it('the topbar nav has no roadmap entry', () => {
+    // Primary nav moved from the (retired) Sidebar into the Topbar.
+    expect(read('components/Topbar.tsx')).not.toMatch(/view:\s*'roadmap'/);
   });
   it('the store View type no longer includes roadmap and never sets it', () => {
     const src = read('lib/store.tsx');

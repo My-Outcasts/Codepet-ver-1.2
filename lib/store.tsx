@@ -195,9 +195,6 @@ interface AppState {
   closeStage: () => void;
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
-  /** Sidebar collapsed to an icon-only rail (persisted) — frees width for the main + chat. */
-  sideCollapsed: boolean;
-  toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
   /** Reopen the onboarding wizard (e.g. to add a brief after skipping). */
@@ -426,7 +423,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [portalSignal, setPortalSignal] = useState<{ deptK: string; n: number } | null>(null);
   // Chat starts closed by default; the floating button opens it on demand.
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
-  const [sideCollapsed, setSideCollapsed] = useState(false);
   // Onboarding is shown only to users who haven't completed it. It starts false
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.
@@ -452,7 +448,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
-      if (localStorage.getItem('codepet:sidecollapsed') === '1') setSideCollapsed(true);
     } catch {}
   }, []);
 
@@ -858,16 +853,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [companyId]);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
-  }, []);
-  const toggleSide = useCallback((collapsed?: boolean) => {
-    setSideCollapsed((c) => {
-      const next = collapsed === undefined ? !c : collapsed;
-      try {
-        if (next) localStorage.setItem('codepet:sidecollapsed', '1');
-        else localStorage.removeItem('codepet:sidecollapsed');
-      } catch {}
-      return next;
-    });
   }, []);
 
   // The "best first move" hand-off: byte's landing greeting with the single best first
@@ -2659,8 +2644,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
-      sideCollapsed,
-      toggleSide,
       onboarding,
       finishOnboarding,
       openOnboarding,
@@ -2777,8 +2760,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
-      sideCollapsed,
-      toggleSide,
       onboarding,
       finishOnboarding,
       openOnboarding,
