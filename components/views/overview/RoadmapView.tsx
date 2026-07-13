@@ -177,131 +177,144 @@ function Node({
         top: node.y,
         width: CARD_W,
         height: CARD_H,
-        display: 'flex',
-        gap: 10,
-        alignItems: 'center',
-        padding: '0 12px',
         borderRadius: 11,
+        // OPAQUE fills (mix the tint over the card surface, never `transparent`) so a dependency
+        // line running behind a card can't bleed THROUGH it — done/current cards used to be
+        // see-through, which made the connectors look like they cut across the cards.
         background: current
-          ? 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, transparent), color-mix(in srgb, var(--accent) 2%, transparent))'
+          ? 'linear-gradient(180deg, color-mix(in srgb, var(--accent) 10%, var(--rm-card-bg)), color-mix(in srgb, var(--accent) 2%, var(--rm-card-bg)))'
           : done
-            ? 'rgba(22,163,74,0.05)'
+            ? 'color-mix(in srgb, #16a34a 6%, var(--rm-card-bg))'
             : CARD_BG,
         border: `1px solid ${current ? 'color-mix(in srgb, var(--accent) 60%, transparent)' : done ? 'rgba(22,163,74,0.22)' : CARD_BORDER}`,
         boxShadow: current
           ? '0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent), 0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)'
           : 'none',
-        opacity: locked ? LOCKED_OP : 1,
       }}
     >
-      {current && (
-        <span
-          style={{
-            position: 'absolute',
-            top: -32,
-            left: -1,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            background: 'var(--surface)',
-            border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
-            borderRadius: 999,
-            padding: '3px 9px 3px 4px',
-            boxShadow: '0 6px 20px -8px color-mix(in srgb, var(--accent) 60%, transparent)',
-          }}
-        >
-          <span
-            style={{
-              width: 17,
-              height: 17,
-              borderRadius: 5,
-              background: `linear-gradient(160deg, ${VIO}, ${CY})`,
-            }}
-          />
-          <span
-            style={{
-              fontFamily: 'var(--sans)',
-              fontSize: 9.5,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: CY,
-            }}
-          >
-            {companionName} is here
-          </span>
-        </span>
-      )}
-      {locked && (
-        <span
-          style={{
-            position: 'absolute',
-            top: 9,
-            right: 10,
-            width: 10,
-            height: 10,
-            border: `1.5px solid ${TX3}`,
-            borderBottomWidth: 4.5,
-            borderRadius: 3,
-            opacity: 0.9,
-          }}
-        />
-      )}
-      <span
+      {/* Content layer — the locked fade lives HERE, not on the card, so the card stays opaque
+          (a faded element would let the lines behind show through). */}
+      <div
         style={{
-          width: 26,
-          height: 26,
-          borderRadius: 7,
-          flex: 'none',
-          display: 'grid',
-          placeItems: 'center',
-          background: done ? 'rgba(22,163,74,0.14)' : CHIP_BG,
-          border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : CHIP_BORDER}`,
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          gap: 10,
+          alignItems: 'center',
+          padding: '0 12px',
+          borderRadius: 11,
+          opacity: locked ? LOCKED_OP : 1,
         }}
       >
-        <span
-          style={{
-            width: 10,
-            height: 10,
-            borderRadius: done ? '50%' : 3,
-            background: DOT[st],
-            display: 'block',
-          }}
-        />
-      </span>
-      <span style={{ minWidth: 0 }}>
-        <span
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            fontSize: 12.5,
-            fontWeight: 600,
-            color: TX,
-            lineHeight: 1.2,
-            overflow: 'hidden',
-            maxWidth: 150,
-          }}
-        >
-          {task.title}
-        </span>
-        {VERB[st] ? (
-          <span style={chipStyle(st)}>{VERB[st]}</span>
-        ) : (
+        {current && (
           <span
             style={{
+              position: 'absolute',
+              top: -32,
+              left: -1,
               display: 'inline-flex',
               alignItems: 'center',
-              marginTop: 4,
-              fontSize: 10,
-              fontWeight: 600,
-              color: DOT[st],
-              whiteSpace: 'nowrap',
+              gap: 6,
+              background: 'var(--surface)',
+              border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
+              borderRadius: 999,
+              padding: '3px 9px 3px 4px',
+              boxShadow: '0 6px 20px -8px color-mix(in srgb, var(--accent) 60%, transparent)',
             }}
           >
-            {statusFor(st, companionName)}
+            <span
+              style={{
+                width: 17,
+                height: 17,
+                borderRadius: 5,
+                background: `linear-gradient(160deg, ${VIO}, ${CY})`,
+              }}
+            />
+            <span
+              style={{
+                fontFamily: 'var(--sans)',
+                fontSize: 9.5,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: CY,
+              }}
+            >
+              {companionName} is here
+            </span>
           </span>
         )}
-      </span>
+        {locked && (
+          <span
+            style={{
+              position: 'absolute',
+              top: 9,
+              right: 10,
+              width: 10,
+              height: 10,
+              border: `1.5px solid ${TX3}`,
+              borderBottomWidth: 4.5,
+              borderRadius: 3,
+              opacity: 0.9,
+            }}
+          />
+        )}
+        <span
+          style={{
+            width: 26,
+            height: 26,
+            borderRadius: 7,
+            flex: 'none',
+            display: 'grid',
+            placeItems: 'center',
+            background: done ? 'rgba(22,163,74,0.14)' : CHIP_BG,
+            border: `1px solid ${done ? 'rgba(22,163,74,0.3)' : CHIP_BORDER}`,
+          }}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: done ? '50%' : 3,
+              background: DOT[st],
+              display: 'block',
+            }}
+          />
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <span
+            style={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              fontSize: 12.5,
+              fontWeight: 600,
+              color: TX,
+              lineHeight: 1.2,
+              overflow: 'hidden',
+              maxWidth: 150,
+            }}
+          >
+            {task.title}
+          </span>
+          {VERB[st] ? (
+            <span style={chipStyle(st)}>{VERB[st]}</span>
+          ) : (
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                marginTop: 4,
+                fontSize: 10,
+                fontWeight: 600,
+                color: DOT[st],
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {statusFor(st, companionName)}
+            </span>
+          )}
+        </span>
+      </div>
       {/* Hover/focus peek — learn the card (context, who does it, what it unlocks) without opening
           chat. Purely presentational (pointer-events:none via .rm-peek); the card handles clicks. */}
       {onClick && (
