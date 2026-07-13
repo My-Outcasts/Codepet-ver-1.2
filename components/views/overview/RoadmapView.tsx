@@ -11,7 +11,7 @@
 // preview route without touching the concurrently-evolving app shell.
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { layoutRoadmap, CARD_W, CARD_H, type PositionedNode } from '@/lib/overview/roadmapLayout';
-import { ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
+import { ROADMAP_PHASES, DEPT_LABEL } from '@/lib/overview/roadmapTemplate';
 import type { RoadmapPhase, RoadmapState, RoadmapTask } from '@/lib/overview/roadmapModel';
 
 // Everything accent-driven follows the companion (byte violet, Nova gold, …) + light/dark, via
@@ -55,6 +55,38 @@ const STATUS: Record<RoadmapState, string> = {
 };
 const statusFor = (st: RoadmapState, companionName: string): string =>
   st === 'available' ? `${companionName} can do this` : STATUS[st];
+
+// The peek's plain-language "who does it + what to do" line — the founder learns a card without
+// opening chat first. Names the active companion so it reads as their cofounder talking.
+const peekSentence = (st: RoadmapState, companionName: string): string => {
+  switch (st) {
+    case 'done':
+      return 'Finished — click to open the result.';
+    case 'current':
+      return `${companionName}'s next move. Click to start.`;
+    case 'available':
+      return `${companionName} can run this now. Click to start.`;
+    case 'needsYou':
+      return 'Your input needed. Click to add it.';
+    case 'approve':
+      return 'Ready for your review.';
+    case 'locked':
+      return 'Locked — finish the earlier steps first.';
+  }
+};
+
+/** What the peek needs beyond the node itself: its context tag and dependency chain, computed
+ *  once in RoadmapView (it has every task) so the card doesn't re-derive them. */
+interface Peek {
+  deptLabel: string;
+  phaseName: string;
+  /** Unfinished prerequisites — shown on a locked card as "Unlocks after: …". */
+  blockedTitles: string[];
+  /** Tasks this one unblocks — shown as "Leads to: …" so the founder sees why it matters. */
+  unlocksTitles: string[];
+  /** Anchor the popover above the card (bottom-row cards, where below would clip). */
+  flip: boolean;
+}
 
 // Actionable states earn a verb the founder can act on; done/locked stay quiet labels. The single
 // `current` move is the ONLY filled chip — everything else is an outline — so the map has exactly
@@ -110,11 +142,13 @@ function Node({
   onClick,
   pulse,
   companionName,
+  peek,
 }: {
   node: PositionedNode;
   onClick?: () => void;
   pulse?: boolean;
   companionName: string;
+  peek: Peek;
 }) {
   const { task } = node;
   const st = task.state;
@@ -268,6 +302,59 @@ function Node({
           </span>
         )}
       </span>
+      {/* Hover/focus peek — learn the card (context, who does it, what it unlocks) without opening
+          chat. Purely presentational (pointer-events:none via .rm-peek); the card handles clicks. */}
+      {onClick && (
+        <span
+          className="rm-peek"
+          role="tooltip"
+          style={{
+            position: 'absolute',
+            left: 0,
+            [peek.flip ? 'bottom' : 'top']: 'calc(100% + 8px)',
+            width: 226,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 5,
+            padding: '10px 12px',
+            borderRadius: 10,
+            background: 'var(--surface)',
+            border: `1px solid ${CARD_BORDER}`,
+            boxShadow: '0 14px 34px -14px rgba(0,0,0,0.45)',
+            textAlign: 'left',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 9.5,
+              fontWeight: 700,
+              letterSpacing: '0.09em',
+              textTransform: 'uppercase',
+              color: TX3,
+            }}
+          >
+            {peek.deptLabel}
+            {peek.phaseName ? ` · ${peek.phaseName}` : ''}
+          </span>
+          <span style={{ fontSize: 11.5, fontWeight: 550, color: TX, lineHeight: 1.35 }}>
+            {peekSentence(st, companionName)}
+          </span>
+          {locked && peek.blockedTitles.length > 0 && (
+            <span style={{ fontSize: 10.5, color: TX3, lineHeight: 1.35 }}>
+              Unlocks after:{' '}
+              <span style={{ color: TX, fontWeight: 600 }}>{peek.blockedTitles.join(', ')}</span>
+            </span>
+          )}
+          {!locked && peek.unlocksTitles.length > 0 && (
+            <span style={{ fontSize: 10.5, color: TX3, lineHeight: 1.35 }}>
+              Leads to:{' '}
+              <span style={{ color: TX, fontWeight: 600 }}>
+                {peek.unlocksTitles.slice(0, 3).join(', ')}
+              </span>
+            </span>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -290,6 +377,14 @@ export default function RoadmapView({
   const L = layoutRoadmap(phases, tasks);
   const nonCrit = L.edges.filter((e) => !e.critical);
   const crit = L.edges.filter((e) => e.critical);
+
+  // Peek context, built once here where every task is in hand: id→task, the reverse-dependency
+  // map (what each task unblocks), and phase-key→name. The Node reads these instead of re-deriving.
+  const byId = new Map(tasks.map((t) => [t.id, t]));
+  const unlocks = new Map<string, string[]>();
+  for (const t of tasks)
+    for (const dep of t.dependsOn) unlocks.set(dep, [...(unlocks.get(dep) ?? []), t.title]);
+  const phaseName = new Map(phases.map((p) => [p.key, p.name]));
 
   // Measure the available height and scale the whole diagram up to fill it (capped), so a
   // short roadmap doesn't leave dead space below. The pure layout stays at natural size —
@@ -321,6 +416,23 @@ export default function RoadmapView({
       el.scrollLeft = Math.max(0, currentX * scale + (CARD_W * scale) / 2 - el.clientWidth / 2);
     }
   }, [currentX, scale]);
+
+  // Scroll affordance: fade the edge (and hint) on whichever side has more map, so later phases
+  // (Ship/Launch) are discoverable instead of silently off-screen. Recomputed on scroll and after
+  // any relayout/resize that changes the scrollable width.
+  const [scrollEdge, setScrollEdge] = useState({ left: false, right: false });
+  const syncScrollEdge = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setScrollEdge({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  };
+  useEffect(() => {
+    const raf = requestAnimationFrame(syncScrollEdge);
+    return () => cancelAnimationFrame(raf);
+  }, [scale, avail, L.width, currentX]);
 
   // The "advance" moment: when a task improves between renders — a new move becomes `current`,
   // or a `locked` task unlocks because its prerequisites just completed — pulse it once, so
@@ -357,6 +469,7 @@ export default function RoadmapView({
     <div
       ref={wrapRef}
       style={{
+        position: 'relative',
         height: '100%',
         minHeight: 0,
         display: 'flex',
@@ -364,10 +477,11 @@ export default function RoadmapView({
         fontFamily: 'var(--sans)',
       }}
     >
-      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px)}.rm-node:focus-visible{outline:2px solid var(--accent);outline-offset:2px}@media (prefers-reduced-motion: no-preference){@keyframes rmPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent),0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}70%{box-shadow:0 0 0 13px transparent,0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}100%{box-shadow:0 0 0 0 transparent,0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}}.rm-pulse{animation:rmPulse 1.4s ease-out 1}}`}</style>
+      <style>{`.rm-scroll::-webkit-scrollbar{display:none}.rm-node{cursor:pointer;transition:filter .12s,transform .12s}.rm-node:hover{filter:brightness(1.14);transform:translateY(-1px);z-index:10}.rm-node:focus-visible{outline:2px solid var(--accent);outline-offset:2px;z-index:10}.rm-peek{opacity:0;transform:translateY(-3px);transition:opacity .13s ease,transform .13s ease;pointer-events:none;z-index:30}.rm-node:hover .rm-peek,.rm-node:focus-visible .rm-peek{opacity:1;transform:translateY(0)}@media (prefers-reduced-motion:reduce){.rm-peek{transition:opacity .13s ease}}@media (prefers-reduced-motion: no-preference){@keyframes rmPulse{0%{box-shadow:0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent),0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}70%{box-shadow:0 0 0 13px transparent,0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}100%{box-shadow:0 0 0 0 transparent,0 10px 30px -12px color-mix(in srgb, var(--accent) 60%, transparent)}}.rm-pulse{animation:rmPulse 1.4s ease-out 1}}`}</style>
       <div
         ref={scrollRef}
         className="rm-scroll"
+        onScroll={syncScrollEdge}
         style={{
           flex: 1,
           minHeight: 0,
@@ -554,18 +668,84 @@ export default function RoadmapView({
                 </div>
               )}
 
-              {L.nodes.map((n) => (
-                <Node
-                  key={n.task.id}
-                  node={n}
-                  onClick={onTaskClick ? () => onTaskClick(n.task) : undefined}
-                  pulse={pulseIds.has(n.task.id)}
-                  companionName={companionName}
-                />
-              ))}
+              {L.nodes.map((n) => {
+                const t = n.task;
+                const blockedTitles = t.dependsOn
+                  .map((id) => byId.get(id))
+                  .filter((d): d is RoadmapTask => !!d && d.state !== 'done')
+                  .map((d) => d.title);
+                return (
+                  <Node
+                    key={t.id}
+                    node={n}
+                    onClick={onTaskClick ? () => onTaskClick(t) : undefined}
+                    pulse={pulseIds.has(t.id)}
+                    companionName={companionName}
+                    peek={{
+                      deptLabel: DEPT_LABEL[t.dept] ?? t.dept,
+                      phaseName: phaseName.get(t.phase) ?? '',
+                      blockedTitles,
+                      unlocksTitles: unlocks.get(t.id) ?? [],
+                      flip: n.y + CARD_H + 128 > L.height,
+                    }}
+                  />
+                );
+              })}
             </div>
           </div>
         </div>
+      </div>
+
+      {/* edge fades — signal there's more map to either side (later phases scroll off-screen) */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: 48,
+          pointerEvents: 'none',
+          background: 'linear-gradient(90deg, var(--page), transparent)',
+          opacity: scrollEdge.left ? 1 : 0,
+          transition: 'opacity .18s ease',
+        }}
+      />
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: 56,
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          paddingRight: 6,
+          background: 'linear-gradient(270deg, var(--page), transparent)',
+          opacity: scrollEdge.right ? 1 : 0,
+          transition: 'opacity .18s ease',
+        }}
+      >
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: 'var(--surface)',
+            border: `1px solid ${LINE}`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 13,
+            color: TX3,
+            boxShadow: '0 4px 12px -6px rgba(0,0,0,0.4)',
+          }}
+        >
+          ›
+        </span>
       </div>
     </div>
   );
