@@ -1089,7 +1089,9 @@ export default function OverviewView() {
           />
         </>
       )}
-      <StageRibbon highlight={introPhase === 'tour' && currentTourStep?.target === 'stage'} />
+      {!SECOND_BRAIN_V2 && (
+        <StageRibbon highlight={introPhase === 'tour' && currentTourStep?.target === 'stage'} />
+      )}
       {revealKeys.size > 0 && (
         <div
           style={{
