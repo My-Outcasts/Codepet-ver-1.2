@@ -31,6 +31,19 @@ export function relativeTime(ts: number, now: number): string {
   if (d < DAY) return `${Math.floor(d / HOUR)}h ago`;
   if (d < 7 * DAY) return `${Math.floor(d / DAY)}d ago`;
   const date = new Date(ts);
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
   return `${months[date.getMonth()]} ${date.getDate()}`;
 }

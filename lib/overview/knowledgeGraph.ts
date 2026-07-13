@@ -6,14 +6,7 @@ import type { LedgerEvent } from '@/lib/firebase/schema';
 import { eventNodeId, type FeatureCluster } from './featureClusters';
 
 export type KGNodeKind =
-  | 'company'
-  | 'department'
-  | 'milestone'
-  | 'deliverable'
-  | 'decision'
-  | 'fact'
-  | 'session'
-  | 'task';
+  'company' | 'department' | 'milestone' | 'deliverable' | 'decision' | 'fact' | 'session' | 'task';
 
 export interface KGNode {
   id: string;
