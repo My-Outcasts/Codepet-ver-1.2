@@ -75,9 +75,9 @@ export function BillingView() {
   );
 }
 
-// Bring-your-own-key: run byte on your OWN Anthropic key (your credits, no daily cap). The key is
-// validated, encrypted, and stored server-side — it's never shown again (only its last 4). Entering
-// a real key is the founder's action; nothing here logs or echoes it back.
+// Bring-your-own-key: let byte's lighter BACKGROUND work run on the user's OWN Anthropic credits
+// (deliverables + chat always stay on Codepet). The key is validated, encrypted, and stored
+// server-side — never shown again (only its last 4). The founder enters it; nothing logs/echoes it.
 function ByokCard() {
   const [byok, setByokState] = useState<ByokStatus | null>(null);
   const [key, setKey] = useState('');
@@ -106,8 +106,8 @@ function ByokCard() {
         kind: 'ok',
         text:
           res.status === 'valid'
-            ? 'Key saved and verified. byte now runs on your key — no daily cap.'
-            : 'Key saved. We couldn’t fully verify it, but byte will use it.',
+            ? 'Key saved and verified. byte’s background work now runs on your credits.'
+            : 'Key saved. We couldn’t fully verify it, but byte will use it for background work.',
       });
     } else {
       setMsg({ kind: 'err', text: res.message || 'Couldn’t save that key.' });
@@ -121,7 +121,7 @@ function ByokCard() {
     setBusy(false);
     if (ok) {
       setByokState({ present: false });
-      setMsg({ kind: 'ok', text: 'Removed. byte is back on the shared key (daily cap applies).' });
+      setMsg({ kind: 'ok', text: 'Removed. byte’s background work is back on Codepet.' });
     } else {
       setMsg({ kind: 'err', text: 'Couldn’t remove the key.' });
     }
@@ -133,8 +133,9 @@ function ByokCard() {
       <div className="set-txt" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <b>Your Claude API key</b>
         <span style={label}>
-          Run byte on your own Anthropic key — your credits, no daily cap. Stored encrypted; we only
-          ever show the last 4 digits.
+          Optional — let byte’s background work (picking your next step, remembering decisions) run
+          on your own Anthropic credits, off Codepet’s bill. Your deliverables and chat always run
+          on Codepet. Stored encrypted; we only ever show the last 4 digits.
         </span>
       </div>
 

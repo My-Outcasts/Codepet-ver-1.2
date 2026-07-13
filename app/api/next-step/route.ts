@@ -12,6 +12,7 @@ import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
 import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { aiClientFor } from '@/lib/firebase/serverUserKey';
 
 export const runtime = 'nodejs';
 
@@ -57,9 +58,11 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // Less-important background call (picks the next move) — offload to the user's OWN key when
+  // they've set one, else Codepet's key. Uncapped either way. Fail-open to the platform key.
   let client: ReturnType<typeof getClient>;
   try {
-    client = getClient();
+    client = (await aiClientFor(uid)).client;
   } catch (err) {
     return aiErrorResponse(err, 'not_configured');
   }
