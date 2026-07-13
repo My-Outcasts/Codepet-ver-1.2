@@ -14,7 +14,7 @@
 - Fully **deterministic**: same events in → identical clusters, labels, order out. No `Math.random`, no `Date.now`; order must not depend on input array order.
 - Must work with **no embeddings** (`VOYAGE_API_KEY` unset): fall back to local TF-IDF text similarity.
 - Cluster count: `K = 1` when `n ≤ 3`, else `K = clamp(round(sqrt(n)), 2, 8)`. (This refines the spec's approximate "3–8" to a min of 2 so small sets don't over-split; `n` = number of clustered knowledge events.)
-- Node-id scheme is shared: `eventNodeId(ev) = \`ev:${ev.refType ?? ev.type}:${ev.refId ?? ev.ts}\`` — identical to the id `buildKnowledgeGraph` already uses, so cluster membership matches graph nodes exactly.
+- Node-id scheme is shared: `eventNodeId(ev) = \`ev:${ev.refType ?? ev.type}:${ev.refId ?? ev.ts}\``— identical to the id`buildKnowledgeGraph` already uses, so cluster membership matches graph nodes exactly.
 - Knowledge event types (mirror `KIND_OF` in `knowledgeGraph.ts`): `deliverable_approved`, `decision_made`, `fact_remembered`, `task_run`, `build_session`, `stage_advanced`.
 - Keep the build clean: `npm run typecheck` + `npm run lint` introduce no new errors (the repo has ~pre-existing `no-explicit-any`); `npm test` passes.
 
@@ -31,10 +31,12 @@
 ### Task 1: `featureClusters.ts` — deterministic content clustering (TDD)
 
 **Files:**
+
 - Create: `lib/overview/featureClusters.ts`
 - Test: `lib/overview/featureClusters.test.ts`
 
 **Interfaces:**
+
 - Produces (later tasks consume these exact signatures):
   - `export function eventNodeId(ev: Pick<LedgerEvent,'type'|'refType'|'refId'|'ts'>): string`
   - `export interface FeatureCluster { id: string; label: string; memberKeys: string[] }`
@@ -182,10 +184,60 @@ const KNOWLEDGE_TYPES: ReadonlySet<LedgerEvent['type']> = new Set([
 ]);
 
 const STOPWORDS: ReadonlySet<string> = new Set([
-  'the','and','for','with','that','this','from','into','your','you','are','was','had',
-  'has','have','will','not','but','all','can','out','our','use','used','via','its','it',
-  'a','an','of','to','in','on','is','be','by','as','at','or','we','so','up','the',
-  'byte','company','project','new','set','get','add','fix','make','made','page',
+  'the',
+  'and',
+  'for',
+  'with',
+  'that',
+  'this',
+  'from',
+  'into',
+  'your',
+  'you',
+  'are',
+  'was',
+  'had',
+  'has',
+  'have',
+  'will',
+  'not',
+  'but',
+  'all',
+  'can',
+  'out',
+  'our',
+  'use',
+  'used',
+  'via',
+  'its',
+  'it',
+  'a',
+  'an',
+  'of',
+  'to',
+  'in',
+  'on',
+  'is',
+  'be',
+  'by',
+  'as',
+  'at',
+  'or',
+  'we',
+  'so',
+  'up',
+  'the',
+  'byte',
+  'company',
+  'project',
+  'new',
+  'set',
+  'get',
+  'add',
+  'fix',
+  'make',
+  'made',
+  'page',
 ]);
 
 export interface FeatureCluster {
@@ -194,9 +246,7 @@ export interface FeatureCluster {
   memberKeys: string[];
 }
 
-export function eventNodeId(
-  ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' | 'ts'>,
-): string {
+export function eventNodeId(ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' | 'ts'>): string {
   return `ev:${ev.refType ?? ev.type}:${ev.refId ?? ev.ts}`;
 }
 
@@ -227,7 +277,9 @@ function cosineSparse(a: Map<string, number>, b: Map<string, number>): number {
 
 function cosineDense(a: number[], b: number[]): number {
   const n = Math.min(a.length, b.length);
-  let dot = 0, na = 0, nb = 0;
+  let dot = 0,
+    na = 0,
+    nb = 0;
   for (let i = 0; i < n; i++) {
     dot += a[i] * b[i];
     na += a[i] * a[i];
@@ -287,7 +339,10 @@ export function clusterEvents(events: LedgerEvent[]): FeatureCluster[] {
   const lowKey = (idxs: number[]) => idxs.map((i) => items[i].key).sort()[0];
   let clusters = items.map((_, i) => [i]);
   while (clusters.length > K) {
-    let bestI = 0, bestJ = 1, bestSim = -Infinity, bestKey = '￿';
+    let bestI = 0,
+      bestJ = 1,
+      bestSim = -Infinity,
+      bestKey = '￿';
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
         let s = 0;
@@ -295,7 +350,10 @@ export function clusterEvents(events: LedgerEvent[]): FeatureCluster[] {
         s /= clusters[i].length * clusters[j].length;
         const mergedKey = lowKey(clusters[i].concat(clusters[j]));
         if (s > bestSim + 1e-12 || (Math.abs(s - bestSim) <= 1e-12 && mergedKey < bestKey)) {
-          bestSim = s; bestI = i; bestJ = j; bestKey = mergedKey;
+          bestSim = s;
+          bestI = i;
+          bestJ = j;
+          bestKey = mergedKey;
         }
       }
     }
@@ -324,7 +382,11 @@ function labelFor(
   const shared = [...score.entries()]
     .filter(([, c]) => c >= 2) // a "shared" term appears in the cluster more than once
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
-  if (shared.length > 0) return shared.slice(0, 2).map(([t]) => titleCase(t)).join(' & ');
+  if (shared.length > 0)
+    return shared
+      .slice(0, 2)
+      .map(([t]) => titleCase(t))
+      .join(' & ');
   // Fallback: the newest member's title (deterministic tie-break by node key).
   const newest = idxs
     .map((i) => items[i])
@@ -355,10 +417,12 @@ git commit -m "feat(second-brain): pure deterministic feature-area clustering (v
 ### Task 2: Refactor `buildKnowledgeGraph` to build the spine from clusters
 
 **Files:**
+
 - Modify: `lib/overview/knowledgeGraph.ts`
 - Test: `lib/overview/knowledgeGraph.test.ts`
 
 **Interfaces:**
+
 - Consumes: `FeatureCluster` and `eventNodeId` from Task 1 (`./featureClusters`).
 - Produces: `buildKnowledgeGraph(events: LedgerEvent[], clusters: FeatureCluster[]): { nodes: KGNode[]; edges: KGEdge[] }`. Cluster hubs are `department`-kind nodes with `id = cluster.id`, `name = cluster.label`; each knowledge node carries its cluster id on `KGNode.deptK`.
 
@@ -373,8 +437,24 @@ import type { FeatureCluster } from './featureClusters';
 import type { LedgerEvent } from '@/lib/firebase/schema';
 
 const evs: LedgerEvent[] = [
-  { ts: 3, type: 'deliverable_approved', actor: 'byte', refType: 'library', refId: 'L1', title: 'API v1', summary: 'Approved API v1.' },
-  { ts: 2, type: 'decision_made', actor: 'byte', refType: 'decision', refId: 'Voyage', title: 'Use Voyage', summary: 'Decision: use Voyage.' },
+  {
+    ts: 3,
+    type: 'deliverable_approved',
+    actor: 'byte',
+    refType: 'library',
+    refId: 'L1',
+    title: 'API v1',
+    summary: 'Approved API v1.',
+  },
+  {
+    ts: 2,
+    type: 'decision_made',
+    actor: 'byte',
+    refType: 'decision',
+    refId: 'Voyage',
+    title: 'Use Voyage',
+    summary: 'Decision: use Voyage.',
+  },
 ];
 const clusters: FeatureCluster[] = [
   { id: 'cluster:0', label: 'Api', memberKeys: ['ev:library:L1'] },
@@ -401,7 +481,9 @@ describe('buildKnowledgeGraph (cluster spine)', () => {
     const { edges } = buildKnowledgeGraph(evs, [
       { id: 'cluster:0', label: 'Api', memberKeys: ['ev:library:L1'] },
     ]);
-    expect(edges.some((e) => e.source === 'ev:decision:Voyage' && e.target === 'company')).toBe(true);
+    expect(edges.some((e) => e.source === 'ev:decision:Voyage' && e.target === 'company')).toBe(
+      true,
+    );
   });
 });
 ```
@@ -418,12 +500,14 @@ Expected: FAIL — signature/`deptK` mismatches (the old `depts` param is gone).
 In `lib/overview/knowledgeGraph.ts`:
 
 Replace the import of `Dept`:
+
 ```ts
 // remove: import type { Dept } from '@/lib/data';
 import { eventNodeId, type FeatureCluster } from './featureClusters';
 ```
 
 Change the signature and spine (replace the current `depts` parameter and the department spine loop):
+
 ```ts
 export function buildKnowledgeGraph(
   events: LedgerEvent[],
@@ -451,29 +535,30 @@ export function buildKnowledgeGraph(
 ```
 
 Change knowledge-node creation to use `eventNodeId`, carry the cluster id on `deptK`, and attach to the cluster:
+
 ```ts
-  const sorted = [...events].sort((a, b) => b.ts - a.ts);
-  sorted.forEach((ev, i) => {
-    const kind = KIND_OF[ev.type];
-    if (!kind) return;
-    const id = eventNodeId(ev);
-    if (seen.has(id)) return;
-    seen.add(id);
-    const clusterId = clusterOf.get(id);
-    nodes.push({
-      id,
-      name: ev.title,
-      kind,
-      weight: recencyWeight(i, sorted.length),
-      deptK: clusterId, // carries the cluster id (renderer reads deptK as the node's home)
-      refType: ev.refType,
-      refId: ev.refId,
-      ts: ev.ts,
-    });
-    const target = clusterId && clusterIds.has(clusterId) ? clusterId : 'company';
-    edges.push({ source: id, target, kind: EDGE_OF[ev.type] ?? 'references' });
-    bump(target);
+const sorted = [...events].sort((a, b) => b.ts - a.ts);
+sorted.forEach((ev, i) => {
+  const kind = KIND_OF[ev.type];
+  if (!kind) return;
+  const id = eventNodeId(ev);
+  if (seen.has(id)) return;
+  seen.add(id);
+  const clusterId = clusterOf.get(id);
+  nodes.push({
+    id,
+    name: ev.title,
+    kind,
+    weight: recencyWeight(i, sorted.length),
+    deptK: clusterId, // carries the cluster id (renderer reads deptK as the node's home)
+    refType: ev.refType,
+    refId: ev.refId,
+    ts: ev.ts,
   });
+  const target = clusterId && clusterIds.has(clusterId) ? clusterId : 'company';
+  edges.push({ source: id, target, kind: EDGE_OF[ev.type] ?? 'references' });
+  bump(target);
+});
 ```
 
 Change the density-chaining grouping from `byDept` (keyed on department) to group by the cluster id now stored on `deptK` — the existing loop already reads `n.deptK`, so only the comment needs updating; the grouping key is now the cluster id. Leave `REFERENCES_CAP`, `recencyWeight`, weight-folding, and edge logic unchanged.
@@ -500,15 +585,18 @@ git commit -m "refactor(second-brain): knowledge graph spine from feature cluste
 ### Task 3: Wire clusters into the v2 galaxy in `OverviewView.tsx`
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx`
 
 **Interfaces:**
+
 - Consumes: `clusterEvents` (Task 1) and the cluster-based `buildKnowledgeGraph` (Task 2). Cluster hubs arrive as `kind === 'department'` nodes with `id === 'cluster:N'`; knowledge nodes carry their cluster id on `deptK`.
 - Produces: the v2 galaxy positions/colors clusters (no department dependency). No unit test — verified by typecheck + lint + build + a visual run.
 
 - [ ] **Step 1: Import `clusterEvents`**
 
 Add near the other `@/lib/overview/...` imports:
+
 ```ts
 import { clusterEvents } from '@/lib/overview/featureClusters';
 ```
@@ -516,14 +604,15 @@ import { clusterEvents } from '@/lib/overview/featureClusters';
 - [ ] **Step 2: Build the graph from clusters + assign per-cluster colors**
 
 In the `SECOND_BRAIN_V2` branch of the `useMemo` (currently `const kg = buildKnowledgeGraph(events, DEPTS);`), replace with:
+
 ```ts
-      const clusters = clusterEvents(events);
-      const kg = buildKnowledgeGraph(events, clusters);
-      // One palette color per cluster (cycled), keyed by cluster id.
-      const PALETTE = Object.values(HEX); // blue, clay, teal, gold, violet, accent, rose
-      const clusterColor = new Map<string, string>(
-        clusters.map((c, i) => [c.id, PALETTE[i % PALETTE.length]]),
-      );
+const clusters = clusterEvents(events);
+const kg = buildKnowledgeGraph(events, clusters);
+// One palette color per cluster (cycled), keyed by cluster id.
+const PALETTE = Object.values(HEX); // blue, clay, teal, gold, violet, accent, rose
+const clusterColor = new Map<string, string>(
+  clusters.map((c, i) => [c.id, PALETTE[i % PALETTE.length]]),
+);
 ```
 
 - [ ] **Step 3: Position cluster hubs (the `deptPos` block is now keyed by cluster id)**
@@ -533,18 +622,21 @@ The existing `deptNodes`/`deptPos` block already selects `kind === 'department'`
 - [ ] **Step 4: Color nodes by cluster, and seed knowledge nodes inside their cluster cloud**
 
 Replace the color logic (the `dk`/`deptHex`/`hex` lines) with cluster-color lookup:
+
 ```ts
-        const hex =
-          n.kind === 'department'
-            ? (clusterColor.get(n.id) ?? '#FDB022')
-            : (clusterColor.get(n.deptK ?? '') ?? KG_HEX[n.kind] ?? HEX['--accent']);
+const hex =
+  n.kind === 'department'
+    ? (clusterColor.get(n.id) ?? '#FDB022')
+    : (clusterColor.get(n.deptK ?? '') ?? KG_HEX[n.kind] ?? HEX['--accent']);
 ```
 
 Replace the knowledge-node home lookup (currently prefixes `dept:`) so it uses the cluster id directly:
+
 ```ts
-        // Knowledge node: seed inside its cluster's cloud; cluster-less nodes form a central halo.
-        const homeId = n.deptK && deptPos.has(n.deptK) ? n.deptK : null;
+// Knowledge node: seed inside its cluster's cloud; cluster-less nodes form a central halo.
+const homeId = n.deptK && deptPos.has(n.deptK) ? n.deptK : null;
 ```
+
 (The rest of the seeding math — `c`, `key`, `ci`, `R`, golden-angle spread — is unchanged.)
 
 - [ ] **Step 5: Typecheck + lint**
@@ -555,9 +647,11 @@ Expected: typecheck clean; no new eslint errors. (If `DEPTS`/`DCOL` are now unus
 - [ ] **Step 6: Build + visual verification**
 
 Run: `npm run build` (expect success), then:
+
 ```bash
 NEXT_PUBLIC_SECOND_BRAIN_V2=1 npm run dev
 ```
+
 On the Second Brain screen with a company that has events: the galaxy groups into **named feature-area clusters** (not department names), each a distinct color, related items together. Hover a hub → its cluster label. Reload → same layout (deterministic). No console errors.
 
 - [ ] **Step 7: Commit**

@@ -13,7 +13,7 @@ import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
 import { usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { getClient, generateJson, aiErrorResponse, LIGHT_MODEL } from '@/lib/ai/client';
 import { DEPTS_SEED } from '@/lib/data';
 
 export const runtime = 'nodejs';
@@ -159,6 +159,8 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 8192,
       label: 'personalize',
       schema: PERSONALIZE_SCHEMA,
+      // One-time seed text rewriting (structured templating) → cheaper tier.
+      model: LIGHT_MODEL,
       onUsage: usageSink(uid, idToken, 'personalize'),
     });
 

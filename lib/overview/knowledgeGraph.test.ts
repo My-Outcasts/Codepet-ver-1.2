@@ -4,9 +4,33 @@ import type { FeatureCluster } from './featureClusters';
 import type { LedgerEvent } from '@/lib/firebase/schema';
 
 const events: LedgerEvent[] = [
-  { ts: 3, type: 'deliverable_approved', actor: 'byte', refType: 'library', refId: 'L1', title: 'API v1', summary: 'Approved API v1.' },
-  { ts: 2, type: 'decision_made', actor: 'byte', refType: 'decision', refId: 'Voyage', title: 'Use Voyage', summary: 'Decision: use Voyage.' },
-  { ts: 1, type: 'stage_advanced', actor: 'founder', refType: 'stage', refId: 'Launch', title: 'Launch', summary: 'Advanced to Launch.' },
+  {
+    ts: 3,
+    type: 'deliverable_approved',
+    actor: 'byte',
+    refType: 'library',
+    refId: 'L1',
+    title: 'API v1',
+    summary: 'Approved API v1.',
+  },
+  {
+    ts: 2,
+    type: 'decision_made',
+    actor: 'byte',
+    refType: 'decision',
+    refId: 'Voyage',
+    title: 'Use Voyage',
+    summary: 'Decision: use Voyage.',
+  },
+  {
+    ts: 1,
+    type: 'stage_advanced',
+    actor: 'founder',
+    refType: 'stage',
+    refId: 'Launch',
+    title: 'Launch',
+    summary: 'Advanced to Launch.',
+  },
 ];
 
 const clusters: FeatureCluster[] = [
@@ -34,11 +58,16 @@ describe('buildKnowledgeGraph (cluster spine)', () => {
     const { edges } = buildKnowledgeGraph(events, [
       { id: 'cluster:0', label: 'Api', memberKeys: ['ev:library:L1'] },
     ]);
-    expect(edges.some((e) => e.source === 'ev:decision:Voyage' && e.target === 'company')).toBe(true);
+    expect(edges.some((e) => e.source === 'ev:decision:Voyage' && e.target === 'company')).toBe(
+      true,
+    );
   });
 
   it('weights a referenced cluster higher than an unreferenced one', () => {
-    const withEmpty: FeatureCluster[] = [...clusters, { id: 'cluster:2', label: 'Empty', memberKeys: [] }];
+    const withEmpty: FeatureCluster[] = [
+      ...clusters,
+      { id: 'cluster:2', label: 'Empty', memberKeys: [] },
+    ];
     const { nodes } = buildKnowledgeGraph(events, withEmpty);
     const api = nodes.find((n) => n.id === 'cluster:0')!;
     const empty = nodes.find((n) => n.id === 'cluster:2')!;
@@ -57,9 +86,33 @@ describe('buildKnowledgeGraph (cluster spine)', () => {
 
   it('chains same-cluster knowledge nodes with references edges (density)', () => {
     const clustered: LedgerEvent[] = [
-      { ts: 3, type: 'deliverable_approved', actor: 'byte', refType: 'library', refId: 'L1', title: 'A', summary: 'a' },
-      { ts: 2, type: 'deliverable_approved', actor: 'byte', refType: 'library', refId: 'L2', title: 'B', summary: 'b' },
-      { ts: 1, type: 'deliverable_approved', actor: 'byte', refType: 'library', refId: 'L3', title: 'C', summary: 'c' },
+      {
+        ts: 3,
+        type: 'deliverable_approved',
+        actor: 'byte',
+        refType: 'library',
+        refId: 'L1',
+        title: 'A',
+        summary: 'a',
+      },
+      {
+        ts: 2,
+        type: 'deliverable_approved',
+        actor: 'byte',
+        refType: 'library',
+        refId: 'L2',
+        title: 'B',
+        summary: 'b',
+      },
+      {
+        ts: 1,
+        type: 'deliverable_approved',
+        actor: 'byte',
+        refType: 'library',
+        refId: 'L3',
+        title: 'C',
+        summary: 'c',
+      },
     ];
     const twoClusters: FeatureCluster[] = [
       { id: 'cluster:0', label: 'Group A', memberKeys: ['ev:library:L1', 'ev:library:L2'] },
@@ -85,9 +138,25 @@ describe('buildKnowledgeGraph (cluster spine)', () => {
     const mixed: LedgerEvent[] = [
       ...events,
       // a task not a member of any cluster
-      { ts: 5, type: 'task_run', actor: 'byte', refType: 'task', refId: 'g1', title: 'Ghost', summary: 'x' },
+      {
+        ts: 5,
+        type: 'task_run',
+        actor: 'byte',
+        refType: 'task',
+        refId: 'g1',
+        title: 'Ghost',
+        summary: 'x',
+      },
       // an unclustered fact
-      { ts: 6, type: 'fact_remembered', actor: 'byte', refType: 'fact', refId: 'f1', title: 'Fact', summary: 'y' },
+      {
+        ts: 6,
+        type: 'fact_remembered',
+        actor: 'byte',
+        refType: 'fact',
+        refId: 'f1',
+        title: 'Fact',
+        summary: 'y',
+      },
     ];
     const { nodes, edges } = buildKnowledgeGraph(mixed, clusters);
     const ids = new Set(nodes.map((n) => n.id));

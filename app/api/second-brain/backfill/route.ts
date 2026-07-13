@@ -37,7 +37,9 @@ export async function POST(req: Request) {
   const libSnap = await db.collection(paths.library(uid)).get();
   libSnap.forEach((d) => {
     const data = d.data() as { title?: string; k?: string; createdAt?: number };
-    events.push(eventFromLibItem({ id: d.id, title: data.title, k: data.k, createdAt: data.createdAt }));
+    events.push(
+      eventFromLibItem({ id: d.id, title: data.title, k: data.k, createdAt: data.createdAt }),
+    );
   });
 
   // Locked-in decisions → decision nodes.

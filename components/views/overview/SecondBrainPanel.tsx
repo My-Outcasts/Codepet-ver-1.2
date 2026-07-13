@@ -124,7 +124,9 @@ export default function SecondBrainPanel({
             </div>
           </button>
         ) : (
-          <div style={{ fontSize: 12, color: 'rgba(245,243,255,.4)' }}>You&apos;re all caught up.</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,243,255,.4)' }}>
+            You&apos;re all caught up.
+          </div>
         )}
       </Section>
 

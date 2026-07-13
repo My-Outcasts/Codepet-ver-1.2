@@ -45,7 +45,7 @@
   },
   "components/views/OverviewView.tsx": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 18
+      "count": 21
     }
   },
   "components/views/overview/StageDrawer.tsx": {
@@ -56,19 +56,24 @@
       "count": 1
     }
   },
+  "lib/ai/applyResult.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
   "lib/data.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 23
     }
   },
+  "lib/overview/ledger.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
   "lib/roadmap.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2
-    }
-  },
-  "lib/ai/applyResult.test.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
     }
   },
   "lib/store.tsx": {

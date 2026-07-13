@@ -34,7 +34,7 @@ this phase.
 - **Embeddings are usually absent:** `LedgerEvent.vec` is filled only when
   `SECOND_BRAIN_RECALL=1` + `VOYAGE_API_KEY` are set (the embed route). On localhost
   today there are no vectors, so clustering MUST work from text alone and merely
-  *upgrade* when real vectors exist.
+  _upgrade_ when real vectors exist.
 
 ## Target design
 
@@ -42,8 +42,8 @@ this phase.
 
 ```ts
 export interface FeatureCluster {
-  id: string;          // stable: `cluster:0`, `cluster:1`, … (index order is deterministic)
-  label: string;       // heuristic name derived from the cluster's items
+  id: string; // stable: `cluster:0`, `cluster:1`, … (index order is deterministic)
+  label: string; // heuristic name derived from the cluster's items
   memberKeys: string[]; // knowledge-node ids: `ev:${refType ?? type}:${refId ?? ts}`
 }
 
@@ -55,14 +55,16 @@ export function eventNodeId(ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' |
 ```
 
 **Vectorizing each event:**
+
 - If `ev.vec` is a non-empty `number[]`, use it (real embedding).
 - Else build a **local bag-of-words / TF-IDF vector** from `\`${ev.title} ${ev.summary}\``:
   lowercase, split on non-alphanumerics, drop stopwords + tokens < 3 chars, weight by
   TF-IDF across the event set. This makes clustering work with zero external services.
 - All events in one run use the same vectorization mode (all-vec or all-text); if only
-  *some* events have `vec`, fall back to text for the whole set so the space is uniform.
+  _some_ events have `vec`, fall back to text for the whole set so the space is uniform.
 
 **Clustering (deterministic):**
+
 - Process events in a stable order (sorted by `eventNodeId` ascending) so results never
   depend on input order or timing.
 - Target cluster count `K = clamp(round(sqrt(N)), 3, 8)` where `N` = number of clustered
@@ -72,6 +74,7 @@ export function eventNodeId(ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' |
   by lowest member `eventNodeId`) until `K` clusters remain. No randomness, no seeds.
 
 **Labeling (heuristic, offline):**
+
 - For each cluster, the label is the **top 1–2 salient shared terms** across its members
   (highest summed TF-IDF, excluding stopwords), title-cased; ties broken alphabetically.
 - Fallback when no salient term stands out: the short title of the cluster's highest-weight
@@ -79,6 +82,7 @@ export function eventNodeId(ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' |
 - (LLM-quality naming is a later upgrade, out of this phase.)
 
 **Edge cases:**
+
 - `events.length === 0` → returns `[]` (galaxy shows just the company core; the existing
   empty-state invite already covers new accounts).
 - Events whose `type` has no knowledge-node kind (e.g. `stage_advanced`, `toolkit_used` if
@@ -88,6 +92,7 @@ export function eventNodeId(ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' |
 ### Refactor: `buildKnowledgeGraph(events, clusters)`
 
 Change the second parameter from `depts: Dept[]` to `clusters: FeatureCluster[]`:
+
 - Spine: `company` node + one `department`-kind node **per cluster** (`id = cluster.id`,
   `name = cluster.label`, `weight = 1`). Reusing the `department` kind keeps the renderer
   (hub sizing, aura, hover label) unchanged.

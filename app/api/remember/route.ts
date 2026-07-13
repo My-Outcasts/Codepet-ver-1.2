@@ -11,7 +11,8 @@ import { verifyIdToken } from '@/lib/firebase/admin';
 import { loadServerCompany } from '@/lib/firebase/serverCompany';
 import { writeServerDecisions } from '@/lib/firebase/serverDecisions';
 import { usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson } from '@/lib/ai/client';
+import { getClient, generateJson, LIGHT_MODEL } from '@/lib/ai/client';
+import { aiClientFor } from '@/lib/firebase/serverUserKey';
 import {
   DECISIONS_EXTRACT_SCHEMA,
   buildExtractPrompt,
@@ -21,9 +22,6 @@ import {
 } from '@/lib/ai/decisions';
 
 export const runtime = 'nodejs';
-
-// Extraction is cheap, structured work — a cheaper tier than the Opus generation routes.
-const EXTRACT_MODEL = 'claude-sonnet-5';
 
 const EXTRACT_SYSTEM = `You extract durable company decisions from a deliverable a founder just approved. A decision is an explicit, lasting choice — about pricing, positioning, naming, target audience, tech, brand voice, or scope — that should constrain the company's future work.
 
@@ -67,9 +65,11 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ ok: true, skipped: 'disabled' });
   }
 
+  // Less-important background extraction — offload to the user's OWN key when set, else Codepet's.
+  // Uncapped. Fail-open (a resolve error just uses the platform key).
   let client: ReturnType<typeof getClient>;
   try {
-    client = getClient();
+    client = (await aiClientFor(uid)).client;
   } catch {
     return Response.json({ ok: true, skipped: 'not_configured' });
   }
@@ -87,7 +87,7 @@ export async function POST(req: Request): Promise<Response> {
     const { decisions: existing } = await loadServerCompany(uid, idToken);
     const { decisions: extracted } = await generateJson<{ decisions: ExtractedDecision[] }>({
       client,
-      model: EXTRACT_MODEL,
+      model: LIGHT_MODEL,
       system: EXTRACT_SYSTEM,
       prompt: buildExtractPrompt(deliverable, existing),
       maxTokens: 1024,

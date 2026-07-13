@@ -84,6 +84,8 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // Deliverable generation is a CORE ("important") route — it always runs on Codepet's key and
+  // keeps the daily cap, so the product experience is premium and consistent for every account.
   let client: ReturnType<typeof getClient>;
   try {
     client = getClient();

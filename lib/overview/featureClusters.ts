@@ -16,10 +16,60 @@ const KNOWLEDGE_TYPES: ReadonlySet<LedgerEvent['type']> = new Set([
 ]);
 
 const STOPWORDS: ReadonlySet<string> = new Set([
-  'the','and','for','with','that','this','from','into','your','you','are','was','had',
-  'has','have','will','not','but','all','can','out','our','use','used','via','its','it',
-  'a','an','of','to','in','on','is','be','by','as','at','or','we','so','up','the',
-  'byte','company','project','new','set','get','add','fix','make','made','page',
+  'the',
+  'and',
+  'for',
+  'with',
+  'that',
+  'this',
+  'from',
+  'into',
+  'your',
+  'you',
+  'are',
+  'was',
+  'had',
+  'has',
+  'have',
+  'will',
+  'not',
+  'but',
+  'all',
+  'can',
+  'out',
+  'our',
+  'use',
+  'used',
+  'via',
+  'its',
+  'it',
+  'a',
+  'an',
+  'of',
+  'to',
+  'in',
+  'on',
+  'is',
+  'be',
+  'by',
+  'as',
+  'at',
+  'or',
+  'we',
+  'so',
+  'up',
+  'the',
+  'byte',
+  'company',
+  'project',
+  'new',
+  'set',
+  'get',
+  'add',
+  'fix',
+  'make',
+  'made',
+  'page',
 ]);
 
 export interface FeatureCluster {
@@ -28,9 +78,7 @@ export interface FeatureCluster {
   memberKeys: string[];
 }
 
-export function eventNodeId(
-  ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' | 'ts'>,
-): string {
+export function eventNodeId(ev: Pick<LedgerEvent, 'type' | 'refType' | 'refId' | 'ts'>): string {
   return `ev:${ev.refType ?? ev.type}:${ev.refId ?? ev.ts}`;
 }
 
@@ -61,7 +109,9 @@ function cosineSparse(a: Map<string, number>, b: Map<string, number>): number {
 
 function cosineDense(a: number[], b: number[]): number {
   const n = Math.min(a.length, b.length);
-  let dot = 0, na = 0, nb = 0;
+  let dot = 0,
+    na = 0,
+    nb = 0;
   for (let i = 0; i < n; i++) {
     dot += a[i] * b[i];
     na += a[i] * a[i];
@@ -125,7 +175,10 @@ export function clusterEvents(events: LedgerEvent[]): FeatureCluster[] {
   const clusters = items.map((_, i) => [i]);
   const minKey = items.map((it) => it.key);
   while (clusters.length > K) {
-    let bestI = 0, bestJ = 1, bestSim = -Infinity, bestKey = '￿';
+    let bestI = 0,
+      bestJ = 1,
+      bestSim = -Infinity,
+      bestKey = '￿';
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
         let s = 0;
@@ -135,7 +188,10 @@ export function clusterEvents(events: LedgerEvent[]): FeatureCluster[] {
         // 1e-12 epsilon: float-equality tolerance so near-identical similarity scores fall
         // through to the deterministic key tie-break instead of being decided by rounding noise.
         if (s > bestSim + 1e-12 || (Math.abs(s - bestSim) <= 1e-12 && mergedKey < bestKey)) {
-          bestSim = s; bestI = i; bestJ = j; bestKey = mergedKey;
+          bestSim = s;
+          bestI = i;
+          bestJ = j;
+          bestKey = mergedKey;
         }
       }
     }
@@ -169,7 +225,11 @@ function labelFor(
   const shared = [...score.entries()]
     .filter(([, c]) => c >= 2) // a "shared" term appears in the cluster more than once
     .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
-  if (shared.length > 0) return shared.slice(0, 2).map(([t]) => titleCase(t)).join(' & ');
+  if (shared.length > 0)
+    return shared
+      .slice(0, 2)
+      .map(([t]) => titleCase(t))
+      .join(' & ');
   // Fallback: the newest member's title (deterministic tie-break by node key).
   const newest = idxs
     .map((i) => items[i])

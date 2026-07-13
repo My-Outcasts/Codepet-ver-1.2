@@ -16,6 +16,7 @@ import React, {
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType, buildLog, type LogStep } from './helpers';
 import { runByteTask, GenerateError, postEnrichAnswer, fetchTaskHelp } from './ai/runTask';
+import { getByok } from './ai/byokClient';
 import { mergeDecisions } from './ai/decisions';
 import type { TaskHelp } from './ai/taskHelp';
 import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
@@ -53,11 +54,7 @@ import {
   deleteThreadAndMessages,
   appendEvent,
 } from './firebase/companyData';
-import {
-  eventFromLibItem,
-  eventFromDecision,
-  eventFromStageAdvance,
-} from './overview/ledger';
+import { eventFromLibItem, eventFromDecision, eventFromStageAdvance } from './overview/ledger';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
 import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
@@ -130,6 +127,9 @@ export interface ChatMessage {
   /** Assisted founder task: a generated how-to + optional capture form for a "needs your input"
    * task. Rendered as a rich card; submitting the capture writes decisions + marks it done. */
   help?: { deptK: string; taskTitle: string; nodeId?: string; data: TaskHelp; captured?: boolean };
+  /** A one-time, subtle nudge to add your own Anthropic key (Add my key / Not now). Transient —
+   * never persisted — and shown at most once per account (see maybeNudgeByok). */
+  byokNudge?: boolean;
   /** The execute-log steps for this run — streamed live in the card, then kept as the
    * "What byte did" record. Generated once (buildLog) when the run starts. */
   steps?: LogStep[];
@@ -289,6 +289,8 @@ interface AppState {
     taskTitle: string,
     values: { key: string; label: string; value: string }[],
   ) => void;
+  /** Dismiss the one-time BYOK nudge card by message id. */
+  dismissByokNudge: (msgId: string) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -1659,6 +1661,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [toggleCopilot, computeRoadmapNext],
   );
 
+  // One-time, subtle BYOK nudge: once the founder has approved a few deliverables (they're
+  // invested) and hasn't set a key, drop ONE dismissible chat card offering to run byte's
+  // lighter BACKGROUND work on their own Anthropic key. Transient (never persisted, no persistMsg)
+  // + gated by a per-account localStorage flag → appears at most once. Honest framing (no
+  // "more runs" promise); the key never touches deliverables/chat.
+  const maybeNudgeByok = useCallback(
+    async (deliverableCount: number) => {
+      if (deliverableCount < 3 || !companyId) return;
+      const seenKey = `codepet:byokNudge:${companyId}`;
+      try {
+        if (localStorage.getItem(seenKey)) return;
+      } catch {
+        return;
+      }
+      // Fetch only at the moment we'd nudge (not on every load). Mark seen either way so this
+      // never re-checks; if a key is already set, don't nudge.
+      const status = await getByok();
+      try {
+        localStorage.setItem(seenKey, '1');
+      } catch {}
+      if (status.present) return;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          ts: Date.now(),
+          byokNudge: true,
+          text: `Small optional thing — I just picked your next step and quietly logged a couple of decisions in the background. If you like, that lighter background work can run on your own Anthropic key; your deliverables and our chats always stay on me. No pressure — it just helps keep byte snappy. You can add a key anytime in Billing & Usage.`,
+        },
+      ]);
+    },
+    [companyId],
+  );
+  const dismissByokNudge = useCallback((msgId: string) => {
+    setChatMessages((prev) => prev.filter((m) => m.id !== msgId));
+  }, []);
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
       t.done = true;
@@ -1688,6 +1728,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       t._item = item;
       setLibrary((prev) => [item, ...prev]);
+      void maybeNudgeByok(library.length + 1); // after a few approvals, offer BYOK once
       const next = d.tasks.find((x) => !x.done);
       bump();
       track('task.approved', { dept: d.k, type });
@@ -1722,7 +1763,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       guideAfterCompletion(t.t); // …otherwise byte acknowledges it + nudges the next move in chat
       return { item, next };
     },
-    [companyId, bump, toast, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
+    [
+      companyId,
+      bump,
+      toast,
+      computeNextStep,
+      maybeOfferAdvance,
+      guideAfterCompletion,
+      library,
+      maybeNudgeByok,
+    ],
   );
 
   // Founder-owned tasks (incorporate, open a bank account, …) are the founder's to do — byte
@@ -2639,6 +2689,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markTaskDone,
       openTaskHelp,
       captureTaskInput,
+      dismissByokNudge,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2756,6 +2807,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markTaskDone,
       openTaskHelp,
       captureTaskInput,
+      dismissByokNudge,
       runBriefedTask,
       viewItem,
       closeModal,

@@ -25,6 +25,7 @@
 **Files:** Create `lib/overview/secondBrainStats.ts`, `lib/overview/secondBrainStats.test.ts`
 
 **Interfaces:**
+
 - `ledgerCounts(events: LedgerEvent[]): { deliverables: number; decisions: number; milestones: number; sessions: number }`
 - `topicCounts(events: LedgerEvent[], depts: {k:string;name:string}[]): Array<{ deptK: string; name: string; count: number }>` (desc by count, zero dropped)
 
@@ -36,7 +37,12 @@ import { ledgerCounts, topicCounts } from './secondBrainStats';
 import type { LedgerEvent } from '@/lib/firebase/schema';
 
 const ev = (type: LedgerEvent['type'], deptK?: string): LedgerEvent => ({
-  ts: 1, type, actor: 'byte', deptK, title: type, summary: type,
+  ts: 1,
+  type,
+  actor: 'byte',
+  deptK,
+  title: type,
+  summary: type,
 });
 const events: LedgerEvent[] = [
   ev('deliverable_approved', 'eng'),
@@ -45,11 +51,20 @@ const events: LedgerEvent[] = [
   ev('stage_advanced'),
   ev('task_run', 'mkt'),
 ];
-const depts = [{ k: 'eng', name: 'Engineering' }, { k: 'mkt', name: 'Marketing' }, { k: 'ops', name: 'Ops' }];
+const depts = [
+  { k: 'eng', name: 'Engineering' },
+  { k: 'mkt', name: 'Marketing' },
+  { k: 'ops', name: 'Ops' },
+];
 
 describe('ledgerCounts', () => {
   it('counts by category', () => {
-    expect(ledgerCounts(events)).toEqual({ deliverables: 2, decisions: 1, milestones: 1, sessions: 0 });
+    expect(ledgerCounts(events)).toEqual({
+      deliverables: 2,
+      decisions: 1,
+      milestones: 1,
+      sessions: 0,
+    });
   });
 });
 describe('topicCounts', () => {
@@ -71,7 +86,10 @@ describe('topicCounts', () => {
 import type { LedgerEvent } from '@/lib/firebase/schema';
 
 export function ledgerCounts(events: LedgerEvent[]) {
-  let deliverables = 0, decisions = 0, milestones = 0, sessions = 0;
+  let deliverables = 0,
+    decisions = 0,
+    milestones = 0,
+    sessions = 0;
   for (const e of events) {
     if (e.type === 'deliverable_approved') deliverables++;
     else if (e.type === 'decision_made' || e.type === 'fact_remembered') decisions++;
@@ -149,9 +167,11 @@ export function topicCounts(
 ---
 
 ## Final verification
+
 - [ ] `npm test` pass, `npx tsc --noEmit` clean, `npm run lint` 0 errors.
 - [ ] Manual (flag on): 3-column Second Brain — chat left, denser labeled galaxy center, real-data info rail right; no voice/capture UI. Flag off: Overview unchanged.
 
 ## Self-review
+
 - Spec A (layout) → Tasks 4. B (chat) → Task 3. C (right rail) → Tasks 1–2. D (galaxy) → Task 5. E (omissions) honored (no voice/capture; USAGE uses real TrackingSummary fields, not calls/tokens).
 - Phases independently mergeable; all flag-gated; renderer unchanged.
