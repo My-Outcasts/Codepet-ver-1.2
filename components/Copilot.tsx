@@ -275,6 +275,137 @@ function InterviewCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// Assisted founder task: a generated how-to (why-now + steps + optional provider options) plus a
+// capture form for the task's non-sensitive OUTPUT. Submitting saves those values to company
+// memory (decisions) and marks the task done. Self-contained inline styles so it doesn't depend on
+// the concurrently-evolving globals.css. Accent-token driven, so it follows the active companion.
+function TaskHelpCard({ m }: { m: ChatMessage }) {
+  const { captureTaskInput, markTaskDone } = useApp();
+  const h = m.help!;
+  const { guide, capture } = h.data;
+  const [vals, setVals] = useState<Record<string, string>>({});
+  const submit = () => {
+    if (capture) {
+      captureTaskInput(
+        h.deptK,
+        h.taskTitle,
+        capture.fields.map((f) => ({ key: f.key, label: f.label, value: vals[f.key] || '' })),
+      );
+    } else {
+      markTaskDone(h.deptK, h.taskTitle);
+    }
+  };
+  const label = { fontSize: 11, fontWeight: 700, color: 'var(--t-2)', marginBottom: 4 } as const;
+  return (
+    <div className="bub" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {m.text ? <div style={{ lineHeight: 1.45 }}>{plain(m.text)}</div> : null}
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--t-1)' }}>{guide.call}</span>
+        {guide.est ? (
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: 'var(--accent)',
+              background: 'var(--accent-tint)',
+              border: '1px solid var(--accent-line)',
+              borderRadius: 999,
+              padding: '1px 8px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {guide.est}
+          </span>
+        ) : null}
+      </div>
+
+      {guide.steps.length > 0 && (
+        <ol
+          style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 7 }}
+        >
+          {guide.steps.map((s, i) => (
+            <li key={i} style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+              <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>{s.h}</span>
+              {s.p ? <span style={{ color: 'var(--t-2)' }}> — {s.p}</span> : null}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {guide.options && guide.options.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div style={label}>Options</div>
+          {guide.options.map((o, i) => (
+            <div key={i} style={{ fontSize: 12, lineHeight: 1.4 }}>
+              <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>{o.name}</span>
+              <span style={{ color: 'var(--t-2)' }}> — {o.why}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {capture && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 9,
+            padding: '11px 12px',
+            borderRadius: 10,
+            background: 'var(--well)',
+            border: '1px solid var(--hairline)',
+          }}
+        >
+          <div style={label}>Save what you decide</div>
+          {capture.fields.map((f) => (
+            <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: 11.5, color: 'var(--t-2)' }}>{f.label}</span>
+              <input
+                value={vals[f.key] || ''}
+                placeholder={f.placeholder}
+                onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))}
+                style={{
+                  fontFamily: 'var(--sans)',
+                  fontSize: 12.5,
+                  padding: '7px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--hairline)',
+                  background: 'var(--surface)',
+                  color: 'var(--t-1)',
+                }}
+              />
+            </label>
+          ))}
+          {capture.note ? (
+            <div style={{ fontSize: 10.5, color: 'var(--t-3)', lineHeight: 1.35 }}>
+              {capture.note}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <button
+        onClick={submit}
+        style={{
+          alignSelf: 'flex-start',
+          fontFamily: 'var(--sans)',
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: 'var(--on-accent)',
+          background: 'var(--accent)',
+          border: 'none',
+          borderRadius: 9,
+          padding: '8px 16px',
+          cursor: 'pointer',
+        }}
+      >
+        {capture ? 'Save & mark done' : "I've done this"}
+      </button>
+    </div>
+  );
+}
+
 // A "Noted" chip: a durable fact/decision byte captured from the founder's last message
 // into company memory. Subtle by design (byte quietly got smarter), with an undo so the
 // founder stays in control of what byte remembers. Strikes to "Removed" once undone.
@@ -484,6 +615,7 @@ export function Copilot() {
             {chatMessages.map((m) => {
               if (m.result) return <ResultCard key={m.id} m={m} />;
               if (m.interview) return <InterviewCard key={m.id} m={m} />;
+              if (m.help) return <TaskHelpCard key={m.id} m={m} />;
               if (m.noted) return <NotedChip key={m.id} m={m} />;
               if (m.setup)
                 return (

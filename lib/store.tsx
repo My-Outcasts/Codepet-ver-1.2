@@ -15,7 +15,9 @@ import React, {
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType, buildLog, type LogStep } from './helpers';
-import { runByteTask, GenerateError, postEnrichAnswer } from './ai/runTask';
+import { runByteTask, GenerateError, postEnrichAnswer, fetchTaskHelp } from './ai/runTask';
+import { mergeDecisions } from './ai/decisions';
+import type { TaskHelp } from './ai/taskHelp';
 import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
 import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
@@ -119,6 +121,9 @@ export interface ChatMessage {
    * falsy, the chat renders an answer input + Skip; once answered/skipped it's a plain
    * past question. See lib/ai/enrichInterview. */
   interview?: { gap: Gap; answered?: boolean };
+  /** Assisted founder task: a generated how-to + optional capture form for a "needs your input"
+   * task. Rendered as a rich card; submitting the capture writes decisions + marks it done. */
+  help?: { deptK: string; taskTitle: string; nodeId?: string; data: TaskHelp; captured?: boolean };
   /** The execute-log steps for this run — streamed live in the card, then kept as the
    * "What byte did" record. Generated once (buildLog) when the run starts. */
   steps?: LogStep[];
@@ -267,6 +272,15 @@ interface AppState {
   /** Mark a founder-owned task done from an in-chat chip (the "tell me when it's done" path):
    *  flips the roadmap node to Done, unlocks its dependents, and offers stage-advance. */
   markTaskDone: (deptK: string, taskTitle: string) => void;
+  /** Open assisted help for a founder-owned task: post a generated how-to + capture form in chat
+   *  (falls back to a plain "this one's yours" brief when the guide can't be fetched). */
+  openTaskHelp: (deptK: string, title: string, nodeId?: string, actor?: string) => void;
+  /** Save a founder task's captured outputs into company memory (decisions) and mark it done. */
+  captureTaskInput: (
+    deptK: string,
+    taskTitle: string,
+    values: { key: string; label: string; value: string }[],
+  ) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -1383,6 +1397,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  // Assisted founder tasks: a "needs your input" step gets a generated how-to + a capture form
+  // instead of a shrug. Fetched once per node (cached for the session — one AI call per task),
+  // posted as the brief. Degrades to a plain "this one's yours" brief + done chip when the guide
+  // can't be fetched (offline / limit / bad generation), so it's never a dead-end.
+  const taskHelpCache = useRef<Map<string, TaskHelp>>(new Map());
+  const openTaskHelp = useCallback(
+    async (deptK: string, title: string, nodeId?: string, actor?: string) => {
+      const d = DEPTS.find((x) => x.k === deptK) || null;
+      const t = nodeId
+        ? ensureRoadmapTask(deptK, title, nodeId, actor)
+        : d?.tasks.find((x) => x.t === title) || null;
+      const doneChip: Partial<ChatMessage> = t
+        ? { action: { label: `I've done “${t.t}”`, deptK, taskTitle: t.t, done: true } }
+        : {};
+      const post = (text: string, extra: Partial<ChatMessage> = {}) => {
+        toggleCopilot(false); // open the chat so the guidance is visible
+        setChatMessages((prev) => [
+          ...prev.filter((m) => !m.brief),
+          { id: newId(), role: 'byte', text, ts: Date.now(), brief: true, ...extra },
+        ]);
+      };
+      // When the how-to can't be generated (paused / usage limit / bad generation), say so plainly
+      // so it reads as a degraded state — not as if nothing happened — then still let them finish it.
+      const staticFallback = () =>
+        post(
+          `I can't pull up the step-by-step for “${title}” right now — I'm paused for a bit (usage limit or connection). Meanwhile it's yours to do${d?.need ? ` — ${d.need}` : ''}: tap below when it's done and I'll mark it.`,
+          doneChip,
+        );
+      const intro = `Here's how to tackle “${title}”. Tell me what you land on and I'll remember it for later steps.`;
+
+      const cacheKey = nodeId || `${deptK}:${title}`;
+      const cached = taskHelpCache.current.get(cacheKey);
+      if (cached) {
+        post(intro, {
+          ...doneChip,
+          help: { deptK, taskTitle: t?.t ?? title, nodeId, data: cached },
+        });
+        return;
+      }
+      if (aiOffline) {
+        staticFallback();
+        return;
+      }
+      post(`Pulling together how to tackle “${title}”…`);
+      try {
+        const data = await fetchTaskHelp({
+          taskTitle: title,
+          taskHint: t?.d,
+          deptName: d?.name,
+          deptKey: deptK,
+          brief,
+          companionId,
+        });
+        taskHelpCache.current.set(cacheKey, data);
+        setAiOffline(null); // a successful fetch means byte is reachable again
+        post(intro, { ...doneChip, help: { deptK, taskTitle: t?.t ?? title, nodeId, data } });
+      } catch (err) {
+        const code = err instanceof GenerateError ? err.code : '';
+        if (code === 'rate_limited' || code === 'http_429' || code === 'ai_unavailable')
+          setAiOffline({ code, at: Date.now() });
+        staticFallback();
+      }
+    },
+    [ensureRoadmapTask, toggleCopilot, aiOffline, brief, companionId],
+  );
+
   // The roadmap as a control surface: clicking a cell routes by its state into the chat, so the
   // founder either completes the task in-thread or is told exactly what's blocking it — never a
   // dead-end. A shipped task opens where it lives; a locked one points at its prerequisite.
@@ -1446,14 +1526,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         case 'needsYou': {
-          // Founder-owned — byte can't run it, but it must be completable so the roadmap can
-          // move past it. Ensure the task exists (linked to the node) and offer a one-tap
-          // "mark it done" chip that flips the node and unlocks what depends on it.
-          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
-          brief(
-            `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't do it for you, but tap below when it's done and I'll mark it.`,
-            t ? { action: { label: `I've done “${t.t}”`, deptK, taskTitle: t.t, done: true } } : {},
-          );
+          // Founder-owned — byte can't run it, but it can help. Post a generated how-to + a capture
+          // form for the task's output (openTaskHelp ensures the task exists, keeps the "I've done
+          // it" chip, and falls back to a plain brief when the guide can't be fetched).
+          void openTaskHelp(deptK, title, nodeId, actor);
           return;
         }
         case 'approve': {
@@ -1487,7 +1563,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [toggleCopilot, openDept, ensureRoadmapTask, library, viewItem],
+    [toggleCopilot, openDept, ensureRoadmapTask, library, viewItem, openTaskHelp],
   );
 
   // Open the run loop for a task named by an in-chat action chip.
@@ -1648,6 +1724,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       guideAfterCompletion(taskTitle); // …otherwise acknowledge it + nudge the next move in chat
     },
     [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
+  );
+
+  // The literal "add your input": save a founder task's captured OUTPUTS into company memory
+  // (decisions — read by every downstream generation via composeProjectModel), then mark the task
+  // done. So completing "Business bank account" leaves "Bank: Mercury" behind for billing/invoices
+  // to build on. Non-sensitive values only (the capture form + prompt enforce that upstream).
+  const captureTaskInput = useCallback(
+    (deptK: string, taskTitle: string, values: { key: string; label: string; value: string }[]) => {
+      const extracted = values
+        .filter((v) => v.value.trim())
+        .map((v) => ({
+          topic: v.key.trim(),
+          statement: `${v.label.trim()}: ${v.value.trim()}`,
+          source: 'input' as const,
+        }))
+        .filter((e) => e.topic && e.statement);
+      if (extracted.length) {
+        setDecisions((prev) => {
+          const next = mergeDecisions(prev, extracted, Date.now());
+          if (companyId) persistDecisions(companyId, next).catch(() => {});
+          return next;
+        });
+      }
+      // markTaskDone clears the brief (and thus the help card) and posts the acknowledgment/nudge.
+      markTaskDone(deptK, taskTitle);
+    },
+    [companyId, markTaskDone],
   );
 
   const toggleEnv = useCallback(
@@ -2479,6 +2582,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       portalToTask,
       guideRoadmapTask,
       markTaskDone,
+      openTaskHelp,
+      captureTaskInput,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2592,6 +2697,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       portalToTask,
       guideRoadmapTask,
       markTaskDone,
+      openTaskHelp,
+      captureTaskInput,
       runBriefedTask,
       viewItem,
       closeModal,
