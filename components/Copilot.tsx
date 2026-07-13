@@ -7,7 +7,7 @@ import { cleanCompanyName } from '@/lib/companyName';
 import { resolveEnvIndex } from '@/lib/ai/envSetup';
 import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
 import { Companion } from './Companion';
-import { companionById } from '@/lib/companions';
+import { companionById, companionForDept } from '@/lib/companions';
 import { ExecLog, StaticLog } from './artifact/ExecLog';
 import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
@@ -19,6 +19,10 @@ const CHIPS = [
   'Summarize where my company is',
   'What’s blocking my launch?',
 ];
+
+// The header shows the team as a cluster of pet faces (not one identity) — identity now
+// lives per-message. A representative slice of the roster, in a stable order.
+const TEAM_PETS = ['byte', 'crash', 'nova', 'glitch', 'sage'];
 
 // byte is told to write plain text, but strip stray markdown emphasis as a safety
 // net so a leftover **…**, `code`, or __…__ never renders as literal punctuation.
@@ -55,8 +59,9 @@ const REVISE_CHIPS = ['Shorter', 'More detail', 'Punchier'];
 // Revise keep the founder in the conversation. Revise re-runs the task against a
 // typed or chip note (empty = plain regenerate) and updates this card in place.
 function ResultCard({ m }: { m: ChatMessage }) {
-  const { reviseTaskInChat, approveChatResult, openChatResult, focusCompanionId } = useApp();
-  const companionName = companionById(focusCompanionId).name;
+  const { reviseTaskInChat, approveChatResult, openChatResult } = useApp();
+  // A deliverable is voiced by the pet of the task's own department, not the current focus.
+  const companionName = companionById(companionForDept(m.result?.deptK).id).name;
   const [revising, setRevising] = useState(false);
   const [note, setNote] = useState('');
   const [reviseBusy, setReviseBusy] = useState(false);
@@ -444,8 +449,15 @@ function NotedChip({ m }: { m: ChatMessage }) {
 }
 
 function ThreadList() {
-  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread, clearAllChats } =
-    useApp();
+  const {
+    threads,
+    activeThreadId,
+    newChat,
+    openThread,
+    renameThread,
+    deleteThread,
+    clearAllChats,
+  } = useApp();
   // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
   // render is an impure call the React Compiler lint rejects. The list remounts each
   // time History opens, so the relative times refresh then.
@@ -538,8 +550,19 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
   const company = cleanCompanyName(brief.projectName) ?? 'your company';
-  // The Copilot fronts the department in focus — its pet's avatar and name (matches the voice).
+  // The current focus pet — used for live/streaming states (thinking, input placeholder).
   const c = companionById(focusCompanionId);
+  // Which pet a given turn belongs to: its own stamp, else the task's department pet (for
+  // deliverables/actions), else the current focus. Drives the per-message avatar + name.
+  const whoFor = (m: ChatMessage): string =>
+    m.companionId ??
+    (m.result
+      ? companionForDept(m.result.deptK).id
+      : m.help
+        ? companionForDept(m.help.deptK).id
+        : m.action
+          ? companionForDept(m.action.deptK).id
+          : focusCompanionId);
 
   const [draft, setDraft] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -596,9 +619,13 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   return (
     <aside className={`copilot${inline ? ' inline' : ''}`}>
       <div className="cop-h">
-        <Companion id={focusCompanionId} size="s28" />
+        <div className="cop-team" aria-hidden>
+          {TEAM_PETS.map((id) => (
+            <Companion key={id} id={id} size="s28" />
+          ))}
+        </div>
         <div>
-          <div className="pn">{c.name}</div>
+          <div className="pn">Your team</div>
           <div className="st">
             <span className="d" />
             guiding · {company}
@@ -643,235 +670,255 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
               </div>
             )}
 
-            {chatMessages.map((m) => {
-              if (m.result) return <ResultCard key={m.id} m={m} />;
-              if (m.interview) return <InterviewCard key={m.id} m={m} />;
-              if (m.help) return <TaskHelpCard key={m.id} m={m} />;
-              if (m.noted) return <NotedChip key={m.id} m={m} />;
-              if (m.setup)
-                return (
-                  <div key={m.id}>
-                    {m.text ? <div className="bub">{plain(m.text)}</div> : null}
-                    <SetupCard m={m} />
-                  </div>
-                );
-              if (m.advance) {
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <button className="bub-adv" onClick={advanceStage}>
-                      Advance to {m.advance.toStage}
-                    </button>
-                  </div>
-                );
-              }
-              const streamingByte = chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
-              if (streamingByte && !m.text) {
-                return (
-                  <div key={m.id} className="bub byte-thinking">
-                    {c.name} is thinking…
-                  </div>
-                );
-              }
-              if (m.buildPlan) {
-                // While this is the live plan card (before arming), edit the store's plan so
-                // the founder can refine the steps; older/armed cards read as static history.
-                const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
-                const plan = editable ? buildPlan! : m.buildPlan;
-                const steps = plan.steps;
-                const unsure = new Set<number>(plan.uncertain ?? []);
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <div className="cop-plan">
-                      <div className="cop-plan-h">{plan.title}</div>
-                      {editable ? (
-                        <div className="cop-steps">
-                          {steps.map((s, i) => (
-                            <div
-                              className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
-                              key={i}
-                              title={
-                                unsure.has(i)
-                                  ? `${c.name} isn't fully sure here — tweak it if needed`
-                                  : undefined
-                              }
-                            >
-                              <span className="cop-step-n">{i + 1}</span>
-                              <textarea
-                                className="cop-step-in"
-                                rows={1}
-                                value={s}
-                                onChange={(e) =>
-                                  setBuildPlanSteps(
-                                    steps.map((x, j) => (j === i ? e.target.value : x)),
-                                  )
+            {chatMessages.map((m, msgIdx) => {
+              const node = (() => {
+                if (m.result) return <ResultCard key={m.id} m={m} />;
+                if (m.interview) return <InterviewCard key={m.id} m={m} />;
+                if (m.help) return <TaskHelpCard key={m.id} m={m} />;
+                if (m.noted) return <NotedChip key={m.id} m={m} />;
+                if (m.setup)
+                  return (
+                    <div key={m.id}>
+                      {m.text ? <div className="bub">{plain(m.text)}</div> : null}
+                      <SetupCard m={m} />
+                    </div>
+                  );
+                if (m.advance) {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-adv" onClick={advanceStage}>
+                        Advance to {m.advance.toStage}
+                      </button>
+                    </div>
+                  );
+                }
+                const streamingByte =
+                  chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
+                if (streamingByte && !m.text) {
+                  return (
+                    <div key={m.id} className="bub byte-thinking">
+                      {c.name} is thinking…
+                    </div>
+                  );
+                }
+                if (m.buildPlan) {
+                  // While this is the live plan card (before arming), edit the store's plan so
+                  // the founder can refine the steps; older/armed cards read as static history.
+                  const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
+                  const plan = editable ? buildPlan! : m.buildPlan;
+                  const steps = plan.steps;
+                  const unsure = new Set<number>(plan.uncertain ?? []);
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <div className="cop-plan">
+                        <div className="cop-plan-h">{plan.title}</div>
+                        {editable ? (
+                          <div className="cop-steps">
+                            {steps.map((s, i) => (
+                              <div
+                                className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
+                                key={i}
+                                title={
+                                  unsure.has(i)
+                                    ? `${c.name} isn't fully sure here — tweak it if needed`
+                                    : undefined
                                 }
-                              />
-                              <button
-                                className="cop-step-x"
-                                title="Remove this step"
-                                aria-label="Remove this step"
-                                onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
                               >
-                                ×
-                              </button>
+                                <span className="cop-step-n">{i + 1}</span>
+                                <textarea
+                                  className="cop-step-in"
+                                  rows={1}
+                                  value={s}
+                                  onChange={(e) =>
+                                    setBuildPlanSteps(
+                                      steps.map((x, j) => (j === i ? e.target.value : x)),
+                                    )
+                                  }
+                                />
+                                <button
+                                  className="cop-step-x"
+                                  title="Remove this step"
+                                  aria-label="Remove this step"
+                                  onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              className="cop-step-add"
+                              onClick={() => setBuildPlanSteps([...steps, ''])}
+                            >
+                              + Add a step
+                            </button>
+                          </div>
+                        ) : (
+                          <ol>
+                            {steps.map((s, i) => (
+                              <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
+                                {s}
+                                {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </div>
+                      {m.buildAction?.kind === 'start-building' && (
+                        <>
+                          <label className="cop-proj">
+                            <span>Which project?</span>
+                            {projects.length > 0 ? (
+                              <select
+                                value={buildProject}
+                                onChange={(e) => setBuildProject(e.target.value)}
+                              >
+                                {/* A project is required — building "nowhere" would land
+                                  in the app server's own folder. */}
+                                <option value="" disabled>
+                                  Choose a project…
+                                </option>
+                                {projects.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <input
+                                value={buildProject}
+                                onChange={(e) => setBuildProject(e.target.value)}
+                                placeholder="Type a project folder path (or run the project scan)…"
+                              />
+                            )}
+                          </label>
+                          <div className="cop-auto">
+                            <span>How hands-on?</span>
+                            <div className="cop-auto-opts">
+                              {(
+                                [
+                                  ['suggest', 'Ask me', 'Approve each risky step'],
+                                  ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+                                  ['autopilot', 'Autopilot', 'Run everything without asking'],
+                                ] as const
+                              ).map(([mode, label, hint]) => (
+                                <button
+                                  key={mode}
+                                  className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+                                  onClick={() => setBuildAutonomy(mode)}
+                                  title={hint}
+                                >
+                                  {label}
+                                </button>
+                              ))}
                             </div>
-                          ))}
+                          </div>
                           <button
-                            className="cop-step-add"
-                            onClick={() => setBuildPlanSteps([...steps, ''])}
+                            className="bub-act"
+                            onClick={armBuild}
+                            disabled={
+                              buildArming || steps.every((s) => !s.trim()) || !buildProject.trim()
+                            }
+                            title={!buildProject.trim() ? 'Pick a project first' : undefined}
                           >
-                            + Add a step
+                            {buildArming
+                              ? 'Opening your session…'
+                              : !buildProject.trim()
+                                ? 'Pick a project to start'
+                                : m.buildAction.label}
                           </button>
-                        </div>
-                      ) : (
-                        <ol>
-                          {steps.map((s, i) => (
-                            <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
-                              {s}
-                              {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
-                            </li>
-                          ))}
-                        </ol>
+                        </>
                       )}
                     </div>
-                    {m.buildAction?.kind === 'start-building' && (
-                      <>
-                        <label className="cop-proj">
-                          <span>Which project?</span>
-                          {projects.length > 0 ? (
-                            <select
-                              value={buildProject}
-                              onChange={(e) => setBuildProject(e.target.value)}
-                            >
-                              {/* A project is required — building "nowhere" would land
-                                  in the app server's own folder. */}
-                              <option value="" disabled>
-                                Choose a project…
-                              </option>
-                              {projects.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              value={buildProject}
-                              onChange={(e) => setBuildProject(e.target.value)}
-                              placeholder="Type a project folder path (or run the project scan)…"
-                            />
-                          )}
-                        </label>
-                        <div className="cop-auto">
-                          <span>How hands-on?</span>
-                          <div className="cop-auto-opts">
-                            {(
-                              [
-                                ['suggest', 'Ask me', 'Approve each risky step'],
-                                ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
-                                ['autopilot', 'Autopilot', 'Run everything without asking'],
-                              ] as const
-                            ).map(([mode, label, hint]) => (
-                              <button
-                                key={mode}
-                                className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                                onClick={() => setBuildAutonomy(mode)}
-                                title={hint}
-                              >
-                                {label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <button
-                          className="bub-act"
-                          onClick={armBuild}
-                          disabled={
-                            buildArming || steps.every((s) => !s.trim()) || !buildProject.trim()
+                  );
+                }
+                if (m.buildAction?.kind === 'to-plan') {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-act" onClick={generateBuildPlan}>
+                        {m.buildAction.label}
+                      </button>
+                    </div>
+                  );
+                }
+                if (m.buildAction?.kind === 'begin-intake') {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-act" onClick={startBuildIntake}>
+                        {m.buildAction.label}
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
+                    {m.role === 'byte' ? plain(m.text) : m.text}
+                    {m.action && (
+                      <button
+                        className="bub-act"
+                        onClick={() => {
+                          if (m.action!.done) {
+                            markTaskDone(m.action!.deptK, m.action!.taskTitle);
+                            dismissChatAction(m.id);
+                          } else if (m.action!.inline) {
+                            track('firstrun.action_clicked', { dept: m.action!.deptK });
+                            runTaskInChat(m.action!.deptK, m.action!.taskTitle);
+                            dismissChatAction(m.id);
+                          } else {
+                            runBriefedTask(m.action!.deptK, m.action!.taskTitle);
                           }
-                          title={!buildProject.trim() ? 'Pick a project first' : undefined}
-                        >
-                          {buildArming
-                            ? 'Opening your session…'
-                            : !buildProject.trim()
-                              ? 'Pick a project to start'
-                              : m.buildAction.label}
-                        </button>
-                      </>
+                        }}
+                      >
+                        {m.action.label}
+                      </button>
+                    )}
+                    {m.nav && (
+                      <button
+                        className="bub-act"
+                        onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}
+                      >
+                        {m.nav.label}
+                      </button>
+                    )}
+                    {m.error && (
+                      <button
+                        className="bub-retry"
+                        onClick={() => retryChat(m.id)}
+                        disabled={chatStreaming}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                          <path
+                            d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        Retry
+                      </button>
                     )}
                   </div>
                 );
-              }
-              if (m.buildAction?.kind === 'to-plan') {
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <button className="bub-act" onClick={generateBuildPlan}>
-                      {m.buildAction.label}
-                    </button>
-                  </div>
-                );
-              }
-              if (m.buildAction?.kind === 'begin-intake') {
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <button className="bub-act" onClick={startBuildIntake}>
-                      {m.buildAction.label}
-                    </button>
-                  </div>
-                );
-              }
+              })();
+              // 'me' turns render as-is (right-aligned bubble). byte turns get the speaking
+              // pet's avatar + name, collapsed when the same pet speaks twice in a row.
+              if (m.role !== 'byte') return node;
+              const who = whoFor(m);
+              const prev = chatMessages[msgIdx - 1];
+              const showWho = !prev || prev.role !== 'byte' || whoFor(prev) !== who;
               return (
-                <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
-                  {m.role === 'byte' ? plain(m.text) : m.text}
-                  {m.action && (
-                    <button
-                      className="bub-act"
-                      onClick={() => {
-                        if (m.action!.done) {
-                          markTaskDone(m.action!.deptK, m.action!.taskTitle);
-                          dismissChatAction(m.id);
-                        } else if (m.action!.inline) {
-                          track('firstrun.action_clicked', { dept: m.action!.deptK });
-                          runTaskInChat(m.action!.deptK, m.action!.taskTitle);
-                          dismissChatAction(m.id);
-                        } else {
-                          runBriefedTask(m.action!.deptK, m.action!.taskTitle);
-                        }
-                      }}
-                    >
-                      {m.action.label}
-                    </button>
+                <div key={m.id} className="cop-turn">
+                  {showWho && (
+                    <div className="cop-who">
+                      <Companion id={who} size="s28" />
+                      <span>{companionById(who).name}</span>
+                    </div>
                   )}
-                  {m.nav && (
-                    <button
-                      className="bub-act"
-                      onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}
-                    >
-                      {m.nav.label}
-                    </button>
-                  )}
-                  {m.error && (
-                    <button
-                      className="bub-retry"
-                      onClick={() => retryChat(m.id)}
-                      disabled={chatStreaming}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
-                        <path
-                          d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Retry
-                    </button>
-                  )}
+                  {node}
                 </div>
               );
             })}

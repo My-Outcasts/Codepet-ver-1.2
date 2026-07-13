@@ -97,6 +97,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
+  /** Which pet spoke this turn — stamped at creation so a past reply keeps its voice's face
+   *  even after the founder navigates elsewhere. Absent on older/system turns → the renderer
+   *  falls back to the task's department pet (for deliverables) or the current focus pet. */
+  companionId?: string;
   /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
@@ -2310,7 +2314,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
-      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
+      // Pin the reply to whoever is in focus now, so it keeps that pet's face in the thread
+      // even after the founder navigates to another department.
+      const byteMsg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: '',
+        ts: now + 1,
+        companionId: focusCompanionId,
+      };
 
       // Build the history to send BEFORE the empty byte placeholder is added.
       const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
@@ -2336,7 +2348,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, runByteStream, persistMsg, activeThreadId],
+    [
+      companyId,
+      chatMessages,
+      chatStreaming,
+      focusCompanionId,
+      runByteStream,
+      persistMsg,
+      activeThreadId,
+    ],
   );
 
   // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn

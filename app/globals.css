@@ -3529,6 +3529,38 @@ body {
   align-items: center;
   gap: 10px;
 }
+/* Header identity is the TEAM, not one pet — a small cluster of overlapping faces so the
+   chat never claims a single speaker (that lives per-message now). */
+.cop-team {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.cop-team .byte {
+  box-shadow: 0 0 0 2px var(--surface);
+  border-radius: 7px;
+}
+.cop-team .byte:not(:first-child) {
+  margin-left: -13px;
+}
+/* A byte turn: the speaking pet's avatar + name above its message/card. */
+.cop-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.cop-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--t-1);
+}
+.cop-who .byte {
+  flex: none;
+}
 .cop-h .pn {
   font-family: var(--sans);
   font-size: 13px;
