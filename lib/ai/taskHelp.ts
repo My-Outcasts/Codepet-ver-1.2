@@ -117,7 +117,12 @@ export function coerceTaskHelp(raw: unknown): TaskHelp | null {
         .slice(0, 4)
     : undefined;
 
-  const guide: TaskGuide = { call, steps, ...(options?.length ? { options } : {}), est: str(g.est) || undefined };
+  const guide: TaskGuide = {
+    call,
+    steps,
+    ...(options?.length ? { options } : {}),
+    est: str(g.est) || undefined,
+  };
 
   let capture: TaskCapture | undefined;
   const c = r.capture as Record<string, unknown> | undefined;
@@ -125,7 +130,11 @@ export function coerceTaskHelp(raw: unknown): TaskHelp | null {
     const fields = c.fields
       .map((f) => {
         const x = (f ?? {}) as Record<string, unknown>;
-        return { key: str(x.key), label: str(x.label), placeholder: str(x.placeholder) || undefined };
+        return {
+          key: str(x.key),
+          label: str(x.label),
+          placeholder: str(x.placeholder) || undefined,
+        };
       })
       .filter((f) => f.key && f.label)
       .slice(0, 3);
