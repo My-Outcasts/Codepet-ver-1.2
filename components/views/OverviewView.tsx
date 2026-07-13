@@ -327,6 +327,7 @@ export default function OverviewView() {
   const [beaconFlip, setBeaconFlip] = useState(false);
   const beaconFlipRef = useRef(false);
   const hereRef = useRef<HereInfo | null>(null);
+  const focusClusterRef = useRef<string | null>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
   const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -595,6 +596,7 @@ export default function OverviewView() {
   const pulse = 0.5 + 0.5 * Math.sin(beat * 0.16); // 0..1
 
   hereRef.current = here;
+  focusClusterRef.current = focusCluster;
   // The lit trail byte draws from the center to your move: project → the active
   // department → the next task. These two link keys get the guide color +
   // particles that stream OUTWARD (source→target) from "Your company" to the node.
@@ -871,7 +873,7 @@ export default function OverviewView() {
     if (idleRef.current) clearTimeout(idleRef.current);
     idleRef.current = setTimeout(() => {
       const cc = (fgRef.current as any)?.controls?.();
-      if (cc && !hereRef.current) cc.autoRotate = true; // stay at rest while a move is pinned
+      if (cc && !hereRef.current && !focusClusterRef.current) cc.autoRotate = true; // stay at rest while a move is pinned or a cluster is focused
     }, 3500);
   }, []);
 
@@ -901,8 +903,7 @@ export default function OverviewView() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        setFocusCluster(null);
-        fitView();
+        exitCluster();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -936,6 +937,16 @@ export default function OverviewView() {
     setFocusCluster(null);
     fitView();
   };
+
+  // If the focused cluster no longer exists after a data change, drop back to the whole galaxy.
+  useEffect(() => {
+    if (focusCluster && !data.nodes.some((n) => n.clusterId === focusCluster)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resync UI state to external data (cluster ids), not derived render state
+      setFocusCluster(null);
+      fitView();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   const onEngineStop = () => {
     if (!tookControlRef.current) fitView();
@@ -1544,6 +1555,7 @@ export default function OverviewView() {
                   flyTo(n.id, 900);
                   return;
                 }
+                if (focusCluster) return; // stay immersed; opening a star is Phase C
                 return fitView();
               }
               if (n.kind === 'dept' && n.dept) openDept(n.dept.k);
