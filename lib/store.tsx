@@ -51,11 +51,17 @@ import {
   persistThread,
   updateThreadTitle,
   deleteThreadAndMessages,
+  appendEvent,
 } from './firebase/companyData';
+import {
+  eventFromLibItem,
+  eventFromDecision,
+  eventFromStageAdvance,
+} from './overview/ledger';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
 import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
-import type { ThreadMeta } from './firebase/schema';
+import type { ThreadMeta, LedgerEvent } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
 import { DEFAULT_COMPANION_ID } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
@@ -247,6 +253,8 @@ interface AppState {
   openInstallPrompt: () => void;
   closeInstallPrompt: () => void;
   library: LibItem[];
+  /** Second Brain event ledger, newest-first (P0/P1). */
+  events: LedgerEvent[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
   /** Distinct local projects the tracker has reported (empty until events arrive). */
@@ -311,6 +319,8 @@ interface AppState {
   renameThread: (id: string, title: string) => void;
   /** Delete a thread and its messages; falls back to another thread or a new chat. */
   deleteThread: (id: string) => void;
+  /** Delete every thread and its messages, then drop into a fresh empty chat. */
+  clearAllChats: () => void;
   /** Open/close the chat-history list. */
   toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
@@ -458,6 +468,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Library + business brief are owned here as state, hydrated from Firestore.
   const [library, setLibrary] = useState<LibItem[]>([]);
+  const [events, setEvents] = useState<LedgerEvent[]>([]);
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
@@ -683,11 +694,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           projectAnalysis: pa,
           companionId: cId,
           introSeenAt,
+          events: loadedEvents,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
           setBrief(normalizeBrief(b)); // clean the persisted brief once, at the store boundary
           setDecisions(dec);
+          setEvents(loadedEvents ?? []);
           setCompanionId(cId ?? DEFAULT_COMPANION_ID);
           setIntroSeen(Boolean(introSeenAt));
           introSeenRef.current = Boolean(introSeenAt);
@@ -1185,6 +1198,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           label: 'persistBrief',
           failMessage: 'Couldn’t save your project details — they may not persist.',
         });
+        // Ledger: the milestone the company just crossed (keyed by stage name).
+        const stageEv = eventFromStageAdvance(next, next, Date.now());
+        void appendEvent(companyId, stageEv);
+        setEvents((prev) => [stageEv, ...prev.filter((e) => e.refId !== stageEv.refId)]);
         bump();
         computeNextStep();
         setChatMessages((prev) =>
@@ -1683,6 +1700,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           label: 'persistApproval',
           failMessage: 'Saved here, but syncing failed — it may not persist.',
         });
+        // Ledger emit: keyed by the same id persistApproval assigns (`${d.k}-${approvedAt}`),
+        // so this live node and the backfill's node for the same deliverable never duplicate.
+        const ev = eventFromLibItem(
+          { id: `${d.k}-${approvedAt}`, title: item.title, k: d.k, createdAt: approvedAt },
+          d.k,
+        );
+        void appendEvent(companyId, ev);
+        setEvents((prev) => [ev, ...prev.filter((e) => e.refId !== ev.refId)]);
         // Fire-and-forget: let byte extract any durable decision this deliverable locks
         // in (server-gated by AI_MEMORY_ENABLED; never blocks or surfaces errors).
         rememberApproval({
@@ -2091,6 +2116,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, activeThreadId, threads, openThread, newChat],
   );
 
+  const clearAllChats = useCallback(() => {
+    if (!companyId) return;
+    // Cancel any in-flight stream first — same reason as deleteThread: a stream-end
+    // persistMsg could otherwise re-create a just-deleted thread.
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    const ids = threads.map((t) => t.id);
+    setThreads([]);
+    ids.forEach((id) =>
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      ),
+    );
+    // Drop into a fresh empty chat (also closes the history list).
+    newChat();
+  }, [companyId, threads, newChat]);
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -2186,6 +2228,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 }
                 return [...byTopic.values()];
               });
+              if (companyId) {
+                for (const c of ev.items) {
+                  const decEv = eventFromDecision({
+                    topic: c.topic,
+                    statement: c.statement,
+                    source: 'chat',
+                    updatedAt: now,
+                  });
+                  void appendEvent(companyId, decEv);
+                  setEvents((prev) => [decEv, ...prev.filter((e) => e.refId !== decEv.refId)]);
+                }
+              }
               continue;
             }
             acc += ev.text;
@@ -2573,6 +2627,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openInstallPrompt,
       closeInstallPrompt,
       library,
+      events,
       tracking,
       projects,
       modal,
@@ -2602,6 +2657,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
       runTaskInChat,
@@ -2688,6 +2744,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openInstallPrompt,
       closeInstallPrompt,
       library,
+      events,
       tracking,
       projects,
       modal,
@@ -2717,6 +2774,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
       runTaskInChat,

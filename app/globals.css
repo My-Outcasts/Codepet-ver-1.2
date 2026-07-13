@@ -3399,6 +3399,13 @@ body {
   flex-direction: column;
   min-height: 0;
 }
+/* Inline mode: embed the chat as a column inside the Second Brain layout (chat on the left)
+   instead of the app-shell's right dock. */
+.copilot.inline {
+  height: 100%;
+  border-left: none;
+  border-right: 1px solid var(--hairline);
+}
 /* "New" jump pill — floats just above the composer when byte adds content while the
    reader is scrolled up. Clicking it smooth-scrolls to the latest and re-pins. */
 .cop-new {
@@ -3426,7 +3433,9 @@ body {
 .shell.cop-collapsed {
   grid-template-columns: 212px 1fr 0;
 }
-.shell.cop-collapsed .copilot {
+/* Direct child only — hide the shell's right-dock chat when collapsed, but NOT an inline
+   Copilot embedded deeper in the main view (the Second Brain left rail). */
+.shell.cop-collapsed > .copilot {
   display: none;
 }
 .cop-collapse {
@@ -9979,8 +9988,13 @@ body {
   padding: 12px;
   overflow-y: auto;
 }
+.cthreads-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
 .cthreads-new {
-  align-self: stretch;
+  flex: 1;
   padding: 10px;
   border-radius: 10px;
   border: 1px dashed var(--hairline, rgba(255, 255, 255, 0.2));
@@ -9988,6 +10002,20 @@ body {
   color: inherit;
   cursor: pointer;
   font-weight: 500;
+}
+.cthreads-clear {
+  flex: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: transparent;
+  color: rgba(248, 113, 113, 0.9);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.cthreads-clear:hover {
+  background: rgba(248, 113, 113, 0.12);
 }
 .cthreads-list {
   list-style: none;

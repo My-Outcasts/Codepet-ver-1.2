@@ -428,7 +428,8 @@ function NotedChip({ m }: { m: ChatMessage }) {
 }
 
 function ThreadList() {
-  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread } = useApp();
+  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread, clearAllChats } =
+    useApp();
   // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
   // render is an impure call the React Compiler lint rejects. The list remounts each
   // time History opens, so the relative times refresh then.
@@ -436,9 +437,22 @@ function ThreadList() {
   const rows = sortThreadsByRecent(threads);
   return (
     <div className="cthreads">
-      <button className="cthreads-new" onClick={newChat}>
-        + New chat
-      </button>
+      <div className="cthreads-actions">
+        <button className="cthreads-new" onClick={newChat}>
+          + New chat
+        </button>
+        {rows.length > 0 && (
+          <button
+            className="cthreads-clear"
+            title="Delete every chat"
+            onClick={() => {
+              if (window.confirm('Delete all chats? This cannot be undone.')) clearAllChats();
+            }}
+          >
+            Clear all
+          </button>
+        )}
+      </div>
       <ul className="cthreads-list">
         {rows.map((t) => (
           <li key={t.id} className={`cthreads-row${t.id === activeThreadId ? ' is-active' : ''}`}>
@@ -473,7 +487,7 @@ function ThreadList() {
   );
 }
 
-export function Copilot() {
+export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   const {
     toggleCopilot,
     brief,
@@ -563,7 +577,7 @@ export function Copilot() {
   const empty = chatMessages.length === 0;
 
   return (
-    <aside className="copilot">
+    <aside className={`copilot${inline ? ' inline' : ''}`}>
       <div className="cop-h">
         <Companion id={companionId} size="s28" />
         <div>

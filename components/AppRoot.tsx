@@ -95,6 +95,7 @@ function Shell() {
         </main>
         <Copilot />
       </div>
+      {/* The floating "Ask" launcher opens the companion chat on demand. */}
       <button
         className={`cop-open${copilotCollapsed ? ' show' : ''}`}
         aria-label={`Open ${c.name} chat`}

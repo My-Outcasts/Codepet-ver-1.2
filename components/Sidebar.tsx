@@ -9,20 +9,6 @@ import { AccountMenu } from './AccountMenu';
 
 const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () => number }> = [
   {
-    view: 'summary',
-    label: 'Summary',
-    icon: (
-      <svg className="ic" viewBox="0 0 20 20" fill="none">
-        <path
-          d="M10 2.5l1.9 3.9 4.3.6-3.1 3 .7 4.3L10 12.3 6.2 14.3l.7-4.3-3.1-3 4.3-.6z"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
     view: 'overview',
     label: 'Overview',
     icon: (
