@@ -19,6 +19,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { useApp } from '@/lib/store';
 import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
 import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
+import { clusterEvents } from '@/lib/overview/featureClusters';
 import { runSecondBrainBackfill } from '@/lib/ai/recallClient';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
@@ -369,9 +370,15 @@ export default function OverviewView() {
       // P1: render the derived knowledge graph (ledger → typed, cross-linked nodes)
       // instead of the authored company→dept→task tree. The renderer is untouched;
       // only the data feeding it changes.
-      const kg = buildKnowledgeGraph(events, DEPTS);
-      // Organic clusters (not one even sphere): departments anchor on a spread sphere, and each
-      // knowledge node seeds INSIDE its department's cloud. The force sim + the dense references
+      const clusters = clusterEvents(events);
+      const kg = buildKnowledgeGraph(events, clusters);
+      // One palette color per cluster (cycled), keyed by cluster id.
+      const PALETTE = Object.values(HEX); // blue, clay, teal, gold, violet, accent, rose
+      const clusterColor = new Map<string, string>(
+        clusters.map((c, i) => [c.id, PALETTE[i % PALETTE.length]]),
+      );
+      // Organic clusters (not one even sphere): cluster hubs anchor on a spread sphere, and each
+      // knowledge node seeds INSIDE its cluster's cloud. The force sim + the dense references
       // links then relax each cluster into a nebula blob — the Chitti read.
       const deptNodes = kg.nodes.filter((n) => n.kind === 'department');
       const deptPos = new Map<string, { x: number; y: number; z: number }>();
@@ -391,16 +398,14 @@ export default function OverviewView() {
       const vnodes: GNode[] = kg.nodes.map((n) => {
         const gkind: GNode['kind'] =
           n.kind === 'company' ? 'project' : n.kind === 'department' ? 'dept' : n.kind;
-        // Color by CLUSTER, not by type: each department (and every knowledge node
-        // inside it) takes that department's palette color, so clusters read as
-        // distinct colored nebulae (blue / orange / teal / gold / violet / rose)
-        // like the reference. Dept-less halo nodes fall back to their type color.
-        const dk = n.kind === 'department' ? n.id.replace(/^dept:/, '') : n.deptK;
-        const deptHex = dk ? HEX[DCOL[dk]] : undefined;
+        // Color by CLUSTER, not by type: each cluster hub (and every knowledge node
+        // inside it) takes that cluster's palette color, so clusters read as
+        // distinct colored nebulae (blue / clay / teal / gold / violet / accent / rose)
+        // like the reference. Cluster-less halo nodes fall back to their type color.
         const hex =
           n.kind === 'department'
-            ? (deptHex ?? '#FDB022')
-            : (deptHex ?? KG_HEX[n.kind] ?? HEX['--accent']);
+            ? (clusterColor.get(n.id) ?? '#FDB022')
+            : (clusterColor.get(n.deptK ?? '') ?? KG_HEX[n.kind] ?? HEX['--accent']);
         const common = {
           id: n.id,
           name: n.name,
@@ -417,9 +422,8 @@ export default function OverviewView() {
           const p = deptPos.get(n.id)!;
           return { ...common, x: p.x, y: p.y, z: p.z };
         }
-        // Knowledge node: seed inside its department's cloud (decisions with no dept form a
-        // looser central halo). Golden-angle spread within the cloud keeps seeds non-overlapping.
-        const homeId = n.deptK && deptPos.has(`dept:${n.deptK}`) ? `dept:${n.deptK}` : null;
+        // Knowledge node: seed inside its cluster's cloud; cluster-less nodes form a central halo.
+        const homeId = n.deptK && deptPos.has(n.deptK) ? n.deptK : null;
         const c = homeId ? deptPos.get(homeId)! : { x: 0, y: 0, z: 0 };
         const key = homeId ?? 'halo';
         const ci = clusterN.get(key) ?? 0;
