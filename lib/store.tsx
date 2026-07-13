@@ -1418,9 +1418,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           { id: newId(), role: 'byte', text, ts: Date.now(), brief: true, ...extra },
         ]);
       };
+      // When the how-to can't be generated (paused / usage limit / bad generation), say so plainly
+      // so it reads as a degraded state — not as if nothing happened — then still let them finish it.
       const staticFallback = () =>
         post(
-          `“${title}” is yours to do${d?.need ? ` — ${d.need}` : ''}. This one needs you — I can't do it for you, but tap below when it's done and I'll mark it.`,
+          `I can't pull up the step-by-step for “${title}” right now — I'm paused for a bit (usage limit or connection). Meanwhile it's yours to do${d?.need ? ` — ${d.need}` : ''}: tap below when it's done and I'll mark it.`,
           doneChip,
         );
       const intro = `Here's how to tackle “${title}”. Tell me what you land on and I'll remember it for later steps.`;
