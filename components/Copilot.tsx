@@ -443,9 +443,66 @@ function NotedChip({ m }: { m: ChatMessage }) {
   );
 }
 
+// One-time, subtle nudge to add your own Anthropic key. Honest framing: it powers byte's lighter
+// background work only. "Add my key" opens Billing & Usage; "Not now" dismisses it for good.
+function ByokNudgeCard({ m }: { m: ChatMessage }) {
+  const { show, dismissByokNudge } = useApp();
+  return (
+    <div className="bub" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ lineHeight: 1.45 }}>{plain(m.text)}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => {
+            show('billing');
+            dismissByokNudge(m.id);
+          }}
+          style={{
+            fontFamily: 'var(--sans)',
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: 'var(--on-accent)',
+            background: 'var(--accent)',
+            border: 'none',
+            borderRadius: 8,
+            padding: '7px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          Add my key
+        </button>
+        <button
+          type="button"
+          onClick={() => dismissByokNudge(m.id)}
+          style={{
+            fontFamily: 'var(--sans)',
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: 'var(--t-2)',
+            background: 'transparent',
+            border: '1px solid var(--hairline)',
+            borderRadius: 8,
+            padding: '7px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ThreadList() {
-  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread, clearAllChats } =
-    useApp();
+  const {
+    threads,
+    activeThreadId,
+    newChat,
+    openThread,
+    renameThread,
+    deleteThread,
+    clearAllChats,
+  } = useApp();
   // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
   // render is an impure call the React Compiler lint rejects. The list remounts each
   // time History opens, so the relative times refresh then.
@@ -646,6 +703,7 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
               if (m.result) return <ResultCard key={m.id} m={m} />;
               if (m.interview) return <InterviewCard key={m.id} m={m} />;
               if (m.help) return <TaskHelpCard key={m.id} m={m} />;
+              if (m.byokNudge) return <ByokNudgeCard key={m.id} m={m} />;
               if (m.noted) return <NotedChip key={m.id} m={m} />;
               if (m.setup)
                 return (
