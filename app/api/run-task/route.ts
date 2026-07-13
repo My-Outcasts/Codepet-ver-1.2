@@ -11,6 +11,7 @@ import { verifyIdToken } from '@/lib/firebase/admin';
 import { loadServerCompany } from '@/lib/firebase/serverCompany';
 import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
+import { aiClientFor } from '@/lib/firebase/serverUserKey';
 import { getClient, generateText, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { composeProjectModel } from '@/lib/ai/projectModel';
@@ -84,9 +85,14 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // BYOK: run on the user's own key when they've set one (byok=true → cap waived below), else the
+  // platform key. Fail-open inside aiClientFor: a resolve error just falls back to the platform key.
   let client: ReturnType<typeof getClient>;
+  let byok = false;
   try {
-    client = getClient();
+    const resolved = await aiClientFor(uid);
+    client = resolved.client;
+    byok = resolved.byok;
   } catch (err) {
     return aiErrorResponse(err, 'not_configured');
   }
@@ -118,12 +124,15 @@ export async function POST(req: Request): Promise<Response> {
 
   // Per-user daily cost guard: count this attempt and stop if the account is over
   // its cap (fail-open if the counter is unavailable — never block on infra).
-  const limit = await enforceDailyLimit(uid, idToken, new Date());
-  if (!limit.ok) {
-    return Response.json(
-      { error: 'rate_limited', limit: limit.limit },
-      { status: 429, headers: { 'retry-after': '3600' } },
-    );
+  // BYOK accounts pay their own Anthropic bill → skip the shared-key daily cap entirely.
+  if (!byok) {
+    const limit = await enforceDailyLimit(uid, idToken, new Date());
+    if (!limit.ok) {
+      return Response.json(
+        { error: 'rate_limited', limit: limit.limit },
+        { status: 429, headers: { 'retry-after': '3600' } },
+      );
+    }
   }
 
   // Prefer the caller's REAL persisted brief (loaded by the verified uid) over

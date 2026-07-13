@@ -96,7 +96,11 @@ let client: Anthropic | null = null;
  * key is missing. Call this early in a route (where the old `if (!apiKey)` gate was) so
  * the missing-key exit happens before any brief load or usage-counter write.
  */
-export function getClient(): Anthropic {
+export function getClient(overrideKey?: string): Anthropic {
+  // BYOK: when the caller resolves a user's own key, build a fresh client for it and DON'T
+  // touch the shared singleton (which caches the platform key). The override client is not
+  // cached — a per-request Anthropic instance is cheap and keeps one user's key off another's.
+  if (overrideKey) return new Anthropic({ apiKey: overrideKey, maxRetries: 3 });
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new GenerationError({ kind: 'not_configured' });
   if (!client) client = new Anthropic({ apiKey, maxRetries: 3 });
