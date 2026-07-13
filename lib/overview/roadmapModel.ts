@@ -22,6 +22,10 @@ export interface RoadmapTask {
   dept: string;
   title: string;
   state: RoadmapState;
+  /** Who does the work once the task is unblocked: byte runs it autonomously (`byte` →
+   *  "byte can do this") or it needs the founder (`you` → "Needs your input"). Defaults to
+   *  `byte`. Determines whether an unblocked task reads as `available` or `needsYou`. */
+  actor?: 'byte' | 'you';
   /** Ids of tasks that must complete before this one — draws the branches and gates
    *  available vs locked. Cross-phase edges are the norm; may be empty (a phase entry point). */
   dependsOn: string[];

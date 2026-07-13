@@ -3,6 +3,7 @@
 // from. Used by both /api/run-task (per-deliverable generation) and
 // /api/personalize (one-time seed templating) so the company is described the
 // same way everywhere. Pure + dependency-free so it runs server-side.
+import { cleanCompanyName } from '../companyName';
 
 /**
  * Compose the user's persisted onboarding brief into company context so byte
@@ -13,7 +14,8 @@ export function briefToContext(raw: unknown): string | null {
   if (!raw || typeof raw !== 'object') return null;
   const b = raw as Record<string, unknown>;
   const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
-  const name = str(b.projectName, 120);
+  // Drop a junk name (raw email, all-digits) so byte is never told the company IS the email.
+  const name = cleanCompanyName(str(b.projectName, 120)) ?? '';
   const oneLiner = str(b.oneLiner, 240);
   const summary = str(b.summary, 400);
   const notes = str(b.notes, 800);

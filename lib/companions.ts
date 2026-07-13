@@ -10,6 +10,11 @@ export interface Companion {
   /** One-line persona, appended to the system prompt so this companion speaks
    *  in its own voice. Empty-effect for byte (byte is the baseline voice). */
   tone: string;
+  /** Signature accent (light-mode base hex). Selecting this companion re-tints the app's
+   *  --accent and its derivatives (see lib/theme accentVars) so the beacon, active nav,
+   *  primary buttons and focus rings take on this colour, in both light and dark. byte's is
+   *  the brand violet — the CSS default. */
+  accent: string;
 }
 
 export const DEFAULT_COMPANION_ID = 'byte';
@@ -20,42 +25,49 @@ export const COMPANIONS: Companion[] = [
     name: 'byte',
     sprite: '/byte.png',
     tone: 'the reliable companion — warm, clear, and encouraging.',
+    accent: '#7c3aed', // brand violet (the CSS default)
   },
   {
     id: 'nova',
     name: 'Nova',
     sprite: '/companions/nova.svg',
     tone: 'upbeat and energetic — an optimist who brings launch energy.',
+    accent: '#eab308', // launch gold
   },
   {
     id: 'crash',
     name: 'Crash',
     sprite: '/companions/crash.svg',
     tone: 'blunt, fast, and ship-it — a no-nonsense builder.',
+    accent: '#ea580c', // ship-it clay
   },
   {
     id: 'sage',
     name: 'Sage',
     sprite: '/companions/sage.svg',
     tone: 'calm, wise, and reflective — a patient strategist.',
+    accent: '#14b8a6', // calm teal
   },
   {
     id: 'glitch',
     name: 'Glitch',
     sprite: '/companions/glitch.svg',
     tone: 'playful, quirky, and experimental — a curious tinkerer.',
+    accent: '#ec4899', // playful rose
   },
   {
     id: 'luna',
     name: 'Luna',
     sprite: '/companions/luna.svg',
     tone: 'gentle, steady, and reassuring — a calm presence for the long haul.',
+    accent: '#3b82f6', // moon blue
   },
   {
     id: 'null',
     name: 'Null',
     sprite: '/companions/null.svg',
     tone: 'sharp, dry, and precise — a rigorous analyst.',
+    accent: '#64748b', // precise slate
   },
 ];
 

@@ -1,5 +1,6 @@
 'use client';
 import { useApp } from '@/lib/store';
+import { companionById } from '@/lib/companions';
 import { DEPTS, type Dept, type Task } from '@/lib/data';
 import { taskState } from '@/lib/helpers';
 
@@ -16,7 +17,7 @@ const COLS: Array<{ key: string; label: string; dot: string; test: (x: Row) => b
   {
     key: 'upnext',
     label: 'Up next',
-    dot: 'var(--accent)',
+    dot: 'var(--violet)',
     test: (x) => taskState(x.t, true).cls === 'st-does',
   },
   {
@@ -35,7 +36,8 @@ const COLS: Array<{ key: string; label: string; dot: string; test: (x: Row) => b
 ];
 
 export function TasksView() {
-  const { tick, runTask, viewItem, library } = useApp();
+  const { tick, runTask, viewItem, library, companionId } = useApp();
+  const companionName = companionById(companionId).name;
   void tick;
   const ALL: Row[] = [];
   DEPTS.forEach((d) => d.tasks.forEach((t) => ALL.push({ d, t })));
@@ -63,7 +65,7 @@ export function TasksView() {
     <section className="view on" id="v-tasks">
       <div className="vhead">
         <h1>Tasks</h1>
-        <div className="sub">What byte is doing, drafting, or waiting on you for.</div>
+        <div className="sub">What {companionName} is doing, drafting, or waiting on you for.</div>
       </div>
       <div className="kb-board">
         {COLS.map((c) => {

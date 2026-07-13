@@ -5,6 +5,7 @@
 // user's Firebase ID token so the route can authenticate the caller.
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
 import type { CompanyBrief } from '../firebase/schema';
+import type { TaskHelp } from './taskHelp';
 
 export async function authHeader(): Promise<Record<string, string>> {
   if (!isFirebaseConfigured) return {};
@@ -65,6 +66,31 @@ export async function runByteTask(args: RunArgs): Promise<RunResult> {
     throw new GenerateError(data.error || `http_${res.status}`);
   }
   return (await res.json()) as RunResult;
+}
+
+export interface TaskHelpArgs {
+  taskTitle: string;
+  taskHint?: string;
+  deptName?: string;
+  deptKey?: string;
+  brief?: CompanyBrief;
+  companionId?: string;
+}
+
+/** Fetch a generated how-to + capture spec for a founder-owned ("needs your input") task.
+ *  Throws GenerateError with the route's error code on failure, so the caller can detect
+ *  AI-offline / rate-limit exactly like runByteTask and fall back to a static message. */
+export async function fetchTaskHelp(args: TaskHelpArgs): Promise<TaskHelp> {
+  const res = await fetch('/api/task-help', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new GenerateError(data.error || `http_${res.status}`);
+  }
+  return (await res.json()) as TaskHelp;
 }
 
 export interface EnrichAnswerResult {

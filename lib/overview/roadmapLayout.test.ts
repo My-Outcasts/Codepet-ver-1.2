@@ -48,6 +48,50 @@ describe('layoutRoadmap — positions', () => {
   });
 });
 
+describe('layoutRoadmap — department lanes', () => {
+  const p3: RoadmapPhase[] = [
+    { key: 'a', name: 'A' },
+    { key: 'b', name: 'B' },
+    { key: 'c', name: 'C' },
+  ];
+
+  it('keeps a department on the same row across the columns it appears in', () => {
+    const t: RoadmapTask[] = [
+      { id: 'e1', phase: 'a', dept: 'eng', title: 'E1', state: 'done', dependsOn: [] },
+      { id: 'm1', phase: 'a', dept: 'mkt', title: 'M1', state: 'available', dependsOn: [] },
+      { id: 'e2', phase: 'c', dept: 'eng', title: 'E2', state: 'available', dependsOn: ['e1'] },
+    ];
+    const L = layoutRoadmap(p3, t);
+    const e1 = L.nodes.find((n) => n.task.id === 'e1')!;
+    const e2 = L.nodes.find((n) => n.task.id === 'e2')!;
+    const m1 = L.nodes.find((n) => n.task.id === 'm1')!;
+    expect(e1.row).toBe(e2.row); // eng is one lane across columns a and c
+    expect(m1.row).not.toBe(e1.row); // mkt shares column a → a different lane
+  });
+
+  it('spills a 2nd task in the same (phase, dept) cell to another row', () => {
+    const t: RoadmapTask[] = [
+      { id: 'e1', phase: 'a', dept: 'eng', title: 'E1', state: 'done', dependsOn: [] },
+      { id: 'e2', phase: 'a', dept: 'eng', title: 'E2', state: 'available', dependsOn: ['e1'] },
+    ];
+    const L = layoutRoadmap(p3, t);
+    const e1 = L.nodes.find((n) => n.task.id === 'e1')!;
+    const e2 = L.nodes.find((n) => n.task.id === 'e2')!;
+    expect(e1.row).not.toBe(e2.row);
+  });
+
+  it('packs departments that never share a column onto the same lane', () => {
+    const t: RoadmapTask[] = [
+      { id: 'a1', phase: 'a', dept: 'eng', title: 'A1', state: 'done', dependsOn: [] },
+      { id: 'b1', phase: 'b', dept: 'design', title: 'B1', state: 'available', dependsOn: [] },
+    ];
+    const L = layoutRoadmap(p3, t);
+    const a1 = L.nodes.find((n) => n.task.id === 'a1')!;
+    const b1 = L.nodes.find((n) => n.task.id === 'b1')!;
+    expect(a1.row).toBe(b1.row); // disjoint columns → shared lane 0
+  });
+});
+
 describe('layoutRoadmap — edges', () => {
   const L = layoutRoadmap(phases, tasks);
 

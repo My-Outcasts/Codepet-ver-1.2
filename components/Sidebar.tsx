@@ -5,6 +5,7 @@ import { DEPTS, ENV } from '@/lib/data';
 import { Companion } from './Companion';
 import { CompanionPicker } from './CompanionPicker';
 import { companionById } from '@/lib/companions';
+import { AccountMenu } from './AccountMenu';
 
 const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () => number }> = [
   {
@@ -71,8 +72,7 @@ const NAV: Array<{ view: View; label: string; icon: React.ReactNode; count?: () 
 ];
 
 export function Sidebar() {
-  const { view, show, library, tick, sideCollapsed, toggleSide, companionId, setCompanion } =
-    useApp();
+  const { view, show, library, tick, companionId, setCompanion } = useApp();
   void tick; // re-read mutable DEPTS/ENV on each store change
   const c = companionById(companionId);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -97,26 +97,8 @@ export function Sidebar() {
 
   return (
     <aside className="side">
-      <div className="brand">
-        <div className="logo" />
-        <div className="nm pixel">Codepet</div>
-        <button
-          className="side-toggle"
-          title={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          onClick={() => toggleSide()}
-        >
-          <svg viewBox="0 0 16 16" fill="none">
-            <path
-              d="M10 4L6 8l4 4"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
-      </div>
+      <AccountMenu />
+      <div className="side-sep" />
       {NAV.map((n) => {
         const c = n.view === 'library' ? library.length : n.count ? n.count() : 0;
         return item(n.view, n.label, n.icon, c || undefined);
