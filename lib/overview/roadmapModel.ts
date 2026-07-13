@@ -29,6 +29,9 @@ export interface RoadmapTask {
   /** Ids of tasks that must complete before this one — draws the branches and gates
    *  available vs locked. Cross-phase edges are the norm; may be empty (a phase entry point). */
   dependsOn: string[];
+  /** Set by the Focus-mode transform (roadmapFocus): a synthetic node standing in for a whole
+   *  completed phase, rendered as a compact ✓ pill instead of a full card. Absent on real tasks. */
+  collapsed?: boolean;
 }
 
 /** A task's fixed structure, without its (progress-dependent) state. The canonical template

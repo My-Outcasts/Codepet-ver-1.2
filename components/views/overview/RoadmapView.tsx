@@ -155,6 +155,59 @@ function Node({
   const done = st === 'done';
   const current = st === 'current';
   const locked = st === 'locked';
+
+  // Focus mode: a whole completed phase stands in as one compact ✓ pill (no verb, no peek — it's a
+  // milestone marker, not an action). Sits centered in the same card box so the layout is unchanged.
+  if (task.collapsed) {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          left: node.x,
+          top: node.y,
+          width: CARD_W,
+          height: CARD_H,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 9,
+            padding: '8px 15px',
+            borderRadius: 999,
+            background: 'rgba(22,163,74,0.10)',
+            border: '1px solid rgba(22,163,74,0.30)',
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              width: 17,
+              height: 17,
+              flex: 'none',
+              borderRadius: '50%',
+              background: '#16a34a',
+              color: '#fff',
+              fontSize: 11,
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            ✓
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: 650, color: TX, whiteSpace: 'nowrap' }}>
+            {task.title}
+          </span>
+        </span>
+      </div>
+    );
+  }
   return (
     <div
       className={[onClick && 'rm-node', pulse && 'rm-pulse'].filter(Boolean).join(' ') || undefined}
@@ -417,6 +470,23 @@ export default function RoadmapView({
     }
   }, [currentX, scale]);
 
+  // Scroll affordance: fade the edge (and hint) on whichever side has more map, so later phases
+  // (Ship/Launch) are discoverable instead of silently off-screen. Recomputed on scroll and after
+  // any relayout/resize that changes the scrollable width.
+  const [scrollEdge, setScrollEdge] = useState({ left: false, right: false });
+  const syncScrollEdge = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setScrollEdge({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  };
+  useEffect(() => {
+    const raf = requestAnimationFrame(syncScrollEdge);
+    return () => cancelAnimationFrame(raf);
+  }, [scale, avail, L.width, currentX]);
+
   // The "advance" moment: when a task improves between renders — a new move becomes `current`,
   // or a `locked` task unlocks because its prerequisites just completed — pulse it once, so
   // finishing one step visibly lights up the next. Detection runs in an effect (the ref is read
@@ -452,6 +522,7 @@ export default function RoadmapView({
     <div
       ref={wrapRef}
       style={{
+        position: 'relative',
         height: '100%',
         minHeight: 0,
         display: 'flex',
@@ -463,6 +534,7 @@ export default function RoadmapView({
       <div
         ref={scrollRef}
         className="rm-scroll"
+        onScroll={syncScrollEdge}
         style={{
           flex: 1,
           minHeight: 0,
@@ -659,7 +731,7 @@ export default function RoadmapView({
                   <Node
                     key={t.id}
                     node={n}
-                    onClick={onTaskClick ? () => onTaskClick(t) : undefined}
+                    onClick={onTaskClick && !t.collapsed ? () => onTaskClick(t) : undefined}
                     pulse={pulseIds.has(t.id)}
                     companionName={companionName}
                     peek={{
@@ -675,6 +747,58 @@ export default function RoadmapView({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* edge fades — signal there's more map to either side (later phases scroll off-screen) */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          left: 0,
+          width: 48,
+          pointerEvents: 'none',
+          background: 'linear-gradient(90deg, var(--page), transparent)',
+          opacity: scrollEdge.left ? 1 : 0,
+          transition: 'opacity .18s ease',
+        }}
+      />
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          bottom: 0,
+          right: 0,
+          width: 56,
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+          paddingRight: 6,
+          background: 'linear-gradient(270deg, var(--page), transparent)',
+          opacity: scrollEdge.right ? 1 : 0,
+          transition: 'opacity .18s ease',
+        }}
+      >
+        <span
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: '50%',
+            background: 'var(--surface)',
+            border: `1px solid ${LINE}`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 13,
+            color: TX3,
+            boxShadow: '0 4px 12px -6px rgba(0,0,0,0.4)',
+          }}
+        >
+          ›
+        </span>
       </div>
     </div>
   );
