@@ -910,6 +910,13 @@ export default function OverviewView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusCluster]);
 
+  // react-force-graph caches node three-objects, so nodeThreeObject won't re-run on a
+  // focusCluster change without a nudge. refresh() re-renders node objects in place
+  // (labels appear/disappear) without touching the simulation, so positions hold.
+  useEffect(() => {
+    (fgRef.current as any)?.refresh?.();
+  }, [focusCluster]);
+
   // The graph's world size is fixed (department orbit radius is constant), so a
   // fixed camera distance reliably frames it — scaled by viewport aspect so the
   // whole graph stays visible on narrower panels (e.g. when the chat is open).
@@ -951,7 +958,23 @@ export default function OverviewView() {
       // Soft wide aura (radiates outward), then the hot firefly core on top.
       group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.2 : 1.9), 0.26));
       group.add(makeFireflySprite(glowHex, size));
-      // No in-scene text: names show only on hover, via the built-in nodeLabel tooltip.
+      // No in-scene text by default: names show only on hover, via the built-in nodeLabel
+      // tooltip. Phase B: while a cluster is focused, label its members (hubs + items) so the
+      // founder can read the area. Universe view stays label-free (hover tooltip only).
+      if (focusCluster && n.clusterId === focusCluster && !isRoot) {
+        const lbl = new SpriteText(n.name);
+        lbl.color = '#FFFFFF';
+        lbl.textHeight = isDept ? 4.3 : 3.4;
+        lbl.fontFace = 'Inter, system-ui, sans-serif';
+        lbl.fontWeight = '700';
+        (lbl as any).backgroundColor = 'rgba(7,9,20,0.5)';
+        (lbl as any).padding = 2.5;
+        (lbl as any).borderRadius = 3;
+        lbl.strokeColor = 'rgba(3,4,12,0.95)';
+        lbl.strokeWidth = 1;
+        (lbl as any).position.set(0, size * 0.9 + 7, 0);
+        group.add(lbl);
+      }
       return group;
     }
     if (n.kind === 'task') return undefined; // default sphere; label on hover
@@ -1441,6 +1464,7 @@ export default function OverviewView() {
               if (n.id === beaconId) return rgba(BEACON_HEX, 0.85 + pulse * 0.15); // byte's guide star
               // During a node-targeted tour step, only the focus + its neighbors keep color.
               if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
+              if (focusCluster && n.clusterId !== focusCluster) return DIM_NODE;
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
             nodeOpacity={SECOND_BRAIN_V2 ? 0 : 0.95}
@@ -1456,6 +1480,11 @@ export default function OverviewView() {
               `<div style="font:600 12px Inter,sans-serif;color:#fff;background:rgba(12,10,23,.92);border:1px solid rgba(255,255,255,.14);padding:6px 9px;border-radius:8px;max-width:240px">${n.name}${n.sub ? `<div style='font-weight:500;color:rgba(255,255,255,.6);margin-top:2px;font-size:11px'>${n.sub}</div>` : ''}</div>`
             }
             linkColor={(l) => {
+              if (focusCluster) {
+                const sc = nodeCluster.get(linkId(l.source));
+                const tc = nodeCluster.get(linkId(l.target));
+                if (sc !== focusCluster || tc !== focusCluster) return DIM_LINK;
+              }
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               if (hoverId) {
                 const s = linkId(l.source),
