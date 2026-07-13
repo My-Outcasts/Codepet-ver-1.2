@@ -22,10 +22,12 @@
 ## Task 1: Vector field + embed seam
 
 **Files:**
+
 - Modify: `lib/firebase/schema.ts` (add `vec?: number[]` to `LedgerEvent`)
 - Create: `lib/ai/embed.ts`
 
 **Interfaces:**
+
 - Produces:
   - `isEmbedEnabled(): boolean`
   - `embedTexts(texts: string[]): Promise<number[][]>` — throws if `VOYAGE_API_KEY` unset.
@@ -86,10 +88,12 @@ git commit -m "feat(second-brain): vec field + provider-agnostic embed seam (Voy
 ## Task 2: Pure retrieval (cosine + topK)
 
 **Files:**
+
 - Create: `lib/overview/recall.ts`
 - Test: `lib/overview/recall.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `cosine(a: number[], b: number[]): number`
   - `interface RecallItem { refType?: string; refId?: string; title: string; summary: string; vec?: number[] }`
@@ -196,9 +200,11 @@ git commit -m "feat(second-brain): pure cosine top-k retrieval + tests"
 ## Task 3: Embed route (fill missing vectors)
 
 **Files:**
+
 - Create: `app/api/second-brain/embed/route.ts`
 
 **Interfaces:**
+
 - Consumes: `verifyIdToken`, `adminDb` (`@/lib/firebase/admin`); `paths` (`@/lib/firebase/schema`); `isEmbedEnabled`, `embedTexts` (`@/lib/ai/embed`).
 - Produces: `POST /api/second-brain/embed` → `{ enabled: boolean, embedded: number }`.
 
@@ -229,7 +235,9 @@ export async function POST(req: Request) {
   const missing = snap.docs.filter((d) => !Array.isArray(d.get('vec')));
   if (missing.length === 0) return Response.json({ enabled: true, embedded: 0 });
 
-  const vectors = await embedTexts(missing.map((d) => String(d.get('summary') ?? d.get('title') ?? '')));
+  const vectors = await embedTexts(
+    missing.map((d) => String(d.get('summary') ?? d.get('title') ?? '')),
+  );
   const batch = db.batch();
   missing.forEach((d, i) => batch.set(d.ref, { vec: vectors[i] }, { merge: true }));
   await batch.commit();
@@ -252,9 +260,11 @@ git commit -m "feat(second-brain): embed route fills missing event vectors (idem
 ## Task 4: Recall route (query → cited hits)
 
 **Files:**
+
 - Create: `app/api/second-brain/recall/route.ts`
 
 **Interfaces:**
+
 - Consumes: `verifyIdToken`, `adminDb`; `paths`; `isEmbedEnabled`, `embedTexts`; `topK`, `RecallItem` (`@/lib/overview/recall`); `LedgerEvent` type.
 - Produces: `POST /api/second-brain/recall` `{ query }` → `{ enabled, hits: Array<{refType, refId, title, summary, score}> }`.
 
@@ -317,10 +327,12 @@ git commit -m "feat(second-brain): recall route — query -> cosine top-k cited 
 ## Task 5: "Ask your Second Brain" panel
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` (a small recall input + results list, behind `SECOND_BRAIN_V2`)
 - Modify: `.env.example` (document `SECOND_BRAIN_RECALL` + `VOYAGE_API_KEY`)
 
 **Interfaces:**
+
 - Consumes: `POST /api/second-brain/recall`; the existing node-click routing (`refType==='library'` → `openDeliverable`).
 
 - [ ] **Step 1: Add the panel**

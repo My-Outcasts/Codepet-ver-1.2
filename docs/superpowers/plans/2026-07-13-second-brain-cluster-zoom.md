@@ -26,15 +26,18 @@
 ### Task 1: Enter/exit navigation, state, and cluster ids
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx`
 
 **Interfaces:**
+
 - Consumes existing: `flyTo(nodeId, ms)`, `fitView()`, the v2 `useMemo` graph build, `onNodeClick`, the auto-rotate effect, the `<ForceGraph3D>` element.
 - Produces: `focusCluster` state, `GNode.clusterId`, a `nodeCluster: Map<string,string>` returned from the `useMemo` (consumed by Task 2's `linkColor`), and a working enter/exit with camera fly. After this task, clicking a cluster flies in and ESC/breadcrumb/background-click return — but nothing is dimmed/labeled yet (that's Task 2).
 
 - [ ] **Step 1: Add `clusterId` to the `GNode` interface**
 
 In the `GNode` interface (near `deptColor?: string;`), add:
+
 ```ts
   clusterId?: string;
 ```
@@ -42,21 +45,28 @@ In the `GNode` interface (near `deptColor?: string;`), add:
 - [ ] **Step 2: Set `clusterId` on every node + return a `nodeCluster` map from the v2 `useMemo`**
 
 In the v2 branch, add `clusterId` to the `common` object (the object spread into every returned node), just after `deptColor`:
+
 ```ts
           deptColor: hex,
           clusterId: n.kind === 'department' ? n.id : n.deptK,
 ```
+
 Then, right before the v2 `return { data: { nodes: vnodes, links: vlinks }, adj: vadj };`, build a node→cluster map and include it:
+
 ```ts
-      const nodeCluster = new Map<string, string>();
-      for (const v of vnodes) if (v.clusterId) nodeCluster.set(v.id, v.clusterId);
-      return { data: { nodes: vnodes, links: vlinks }, adj: vadj, nodeCluster };
+const nodeCluster = new Map<string, string>();
+for (const v of vnodes) if (v.clusterId) nodeCluster.set(v.id, v.clusterId);
+return { data: { nodes: vnodes, links: vlinks }, adj: vadj, nodeCluster };
 ```
+
 In the **non-v2** branch's return (`return { data: { nodes, links }, adj };`), add an empty map so the shape matches:
+
 ```ts
-    return { data: { nodes, links }, adj, nodeCluster: new Map<string, string>() };
+return { data: { nodes, links }, adj, nodeCluster: new Map<string, string>() };
 ```
+
 Update the destructure (`const { data, adj } = useMemo(...)`) to:
+
 ```ts
   const { data, adj, nodeCluster } = useMemo(() => {
 ```
@@ -64,50 +74,58 @@ Update the destructure (`const { data, adj } = useMemo(...)`) to:
 - [ ] **Step 3: Add `focusCluster` state + an `exitCluster` helper**
 
 Near the other `useState` calls (e.g. beside `hoverId`), add:
+
 ```ts
-  const [focusCluster, setFocusCluster] = useState<string | null>(null);
+const [focusCluster, setFocusCluster] = useState<string | null>(null);
 ```
+
 After `fitView` is defined, add:
+
 ```ts
-  // Leave a focused cluster: back to the whole galaxy.
-  const exitCluster = () => {
-    setFocusCluster(null);
-    fitView();
-  };
+// Leave a focused cluster: back to the whole galaxy.
+const exitCluster = () => {
+  setFocusCluster(null);
+  fitView();
+};
 ```
 
 - [ ] **Step 4: Enter a cluster on hub click**
 
 In `onNodeClick`'s v2 branch, replace the current cluster-hub line
 `if (n.kind === 'dept') return flyTo(n.id);` with:
+
 ```ts
-                if (n.kind === 'dept') {
-                  setFocusCluster(n.id);
-                  flyTo(n.id, 900);
-                  return;
-                }
+if (n.kind === 'dept') {
+  setFocusCluster(n.id);
+  flyTo(n.id, 900);
+  return;
+}
 ```
+
 (Leave the library/deliverable routing above it unchanged.)
 
 - [ ] **Step 5: Exit via ESC and background click**
 
 Add an effect (near the other effects) for the ESC key:
+
 ```ts
-  useEffect(() => {
-    if (!focusCluster) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setFocusCluster(null);
-        fitView();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusCluster]);
+useEffect(() => {
+  if (!focusCluster) return;
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setFocusCluster(null);
+      fitView();
+    }
+  };
+  window.addEventListener('keydown', onKey);
+  return () => window.removeEventListener('keydown', onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [focusCluster]);
 ```
+
 Add the background-click handler to `<ForceGraph3D ...>` (alongside `onNodeClick`):
+
 ```tsx
             onBackgroundClick={() => {
               if (focusCluster) exitCluster();
@@ -117,45 +135,51 @@ Add the background-click handler to `<ForceGraph3D ...>` (alongside `onNodeClick
 - [ ] **Step 6: Breadcrumb "← All areas" button (with the current cluster name)**
 
 Render it only in v2 while focused. Place it as an absolutely-positioned element at top-left (near the title block — put it just before or inside the title block, with `pointerEvents: 'auto'` and a `zIndex` above the map, e.g. 6):
+
 ```tsx
-      {SECOND_BRAIN_V2 && focusCluster && (
-        <button
-          onClick={exitCluster}
-          style={{
-            position: 'absolute',
-            top: 20,
-            left: 26,
-            zIndex: 6,
-            pointerEvents: 'auto',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            fontFamily: 'inherit',
-            fontSize: 12.5,
-            fontWeight: 700,
-            color: '#7DE3FF',
-            background: 'rgba(16,14,28,0.85)',
-            border: '1px solid rgba(125,227,255,0.4)',
-            borderRadius: 999,
-            padding: '6px 14px',
-            cursor: 'pointer',
-          }}
-        >
-          ← All areas
-          <span style={{ color: 'rgba(245,243,255,.6)', fontWeight: 600 }}>
-            {data.nodes.find((n) => n.id === focusCluster)?.name ?? ''}
-          </span>
-        </button>
-      )}
+{
+  SECOND_BRAIN_V2 && focusCluster && (
+    <button
+      onClick={exitCluster}
+      style={{
+        position: 'absolute',
+        top: 20,
+        left: 26,
+        zIndex: 6,
+        pointerEvents: 'auto',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        fontFamily: 'inherit',
+        fontSize: 12.5,
+        fontWeight: 700,
+        color: '#7DE3FF',
+        background: 'rgba(16,14,28,0.85)',
+        border: '1px solid rgba(125,227,255,0.4)',
+        borderRadius: 999,
+        padding: '6px 14px',
+        cursor: 'pointer',
+      }}
+    >
+      ← All areas
+      <span style={{ color: 'rgba(245,243,255,.6)', fontWeight: 600 }}>
+        {data.nodes.find((n) => n.id === focusCluster)?.name ?? ''}
+      </span>
+    </button>
+  );
+}
 ```
+
 (If the title `<h1>`/subtitle would overlap it, guard the title so it doesn't show while `focusCluster` is set — hide the title block when `SECOND_BRAIN_V2 && focusCluster`.)
 
 - [ ] **Step 7: Pause auto-rotate while focused**
 
 In the auto-rotate effect (currently `c.autoRotate = !here;`), change to:
+
 ```ts
-      c.autoRotate = !here && !focusCluster;
+c.autoRotate = !here && !focusCluster;
 ```
+
 and add `focusCluster` to that effect's dependency array.
 
 - [ ] **Step 8: Typecheck + lint**
@@ -180,15 +204,18 @@ git commit -m "feat(second-brain): enter/exit a cluster — fly in, breadcrumb +
 ### Task 2: Focus visuals — dim the rest, label the focused cluster
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx`
 
 **Interfaces:**
+
 - Consumes from Task 1: `focusCluster`, `GNode.clusterId`, `nodeCluster` map.
 - Produces: the immersive look — out-of-cluster nodes/links dimmed, focused cluster's item labels shown, node objects rebuilt on focus change.
 
 - [ ] **Step 1: Dim out-of-cluster nodes**
 
 In the `nodeColor` callback, add the focus check before the existing hover/tour logic:
+
 ```ts
             nodeColor={(n) => {
               if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
@@ -200,6 +227,7 @@ In the `nodeColor` callback, add the focus check before the existing hover/tour 
 - [ ] **Step 2: Dim links that aren't inside the focused cluster**
 
 In the `linkColor` callback, add at the very top (before the hover/path logic):
+
 ```ts
             linkColor={(l) => {
               if (focusCluster) {
@@ -213,34 +241,38 @@ In the `linkColor` callback, add at the very top (before the hover/path logic):
 - [ ] **Step 3: Show labels for the focused cluster in `nodeThreeObject`**
 
 In the v2 branch of `nodeThreeObject` (after the firefly/aura sprites are added, where the old label block used to be), add a label when this node belongs to the focused cluster and isn't the company root:
+
 ```ts
-      // Phase B: while a cluster is focused, label its members (hubs + items) so the
-      // founder can read the area. Universe view stays label-free (hover tooltip only).
-      if (focusCluster && n.clusterId === focusCluster && !isRoot) {
-        const lbl = new SpriteText(n.name);
-        lbl.color = '#FFFFFF';
-        lbl.textHeight = isDept ? 4.3 : 3.4;
-        lbl.fontFace = 'Inter, system-ui, sans-serif';
-        lbl.fontWeight = '700';
-        (lbl as any).backgroundColor = 'rgba(7,9,20,0.5)';
-        (lbl as any).padding = 2.5;
-        (lbl as any).borderRadius = 3;
-        lbl.strokeColor = 'rgba(3,4,12,0.95)';
-        lbl.strokeWidth = 1;
-        (lbl as any).position.set(0, size * 0.9 + 7, 0);
-        group.add(lbl);
-      }
+// Phase B: while a cluster is focused, label its members (hubs + items) so the
+// founder can read the area. Universe view stays label-free (hover tooltip only).
+if (focusCluster && n.clusterId === focusCluster && !isRoot) {
+  const lbl = new SpriteText(n.name);
+  lbl.color = '#FFFFFF';
+  lbl.textHeight = isDept ? 4.3 : 3.4;
+  lbl.fontFace = 'Inter, system-ui, sans-serif';
+  lbl.fontWeight = '700';
+  (lbl as any).backgroundColor = 'rgba(7,9,20,0.5)';
+  (lbl as any).padding = 2.5;
+  (lbl as any).borderRadius = 3;
+  lbl.strokeColor = 'rgba(3,4,12,0.95)';
+  lbl.strokeWidth = 1;
+  (lbl as any).position.set(0, size * 0.9 + 7, 0);
+  group.add(lbl);
+}
 ```
+
 (`SpriteText` is already imported and used by the non-v2 branch; `size`, `isDept`, `isRoot`, `group` are already in scope in the v2 block.)
 
 - [ ] **Step 4: Rebuild node objects when focus changes**
 
 `react-force-graph` caches node objects, so `nodeThreeObject` won't re-run on a `focusCluster` change without a nudge. Add an effect:
+
 ```ts
-  useEffect(() => {
-    (fgRef.current as any)?.refresh?.();
-  }, [focusCluster]);
+useEffect(() => {
+  (fgRef.current as any)?.refresh?.();
+}, [focusCluster]);
 ```
+
 (Positions are preserved; only the node objects re-render, so labels appear/disappear.)
 
 - [ ] **Step 5: Typecheck + lint**

@@ -1,6 +1,6 @@
 # Second Brain rebuild — Spec #3 (P3 timeline + P2.1 chat recall)
 
-**Codepet · Design Spec** — *Approved for implementation*
+**Codepet · Design Spec** — _Approved for implementation_
 Date: 2026-07-09 · Owner: Overview / Second Brain
 Depends on: Spec #1 (P0/P1) + Spec #2 (P2) — shipped.
 
@@ -18,13 +18,13 @@ Both are inert unless their flag is on; with flags off the app is byte-for-byte 
 
 ### Decisions (sensible defaults, no new external deps)
 
-| Area | Decision |
-|---|---|
-| Timeline data | Reuse the store's already-hydrated `events` — **client-only**, no new reads |
-| Timeline surface | A toggleable panel on the Second Brain view (client flag `NEXT_PUBLIC_SECOND_BRAIN_V2`) |
-| Timeline filter | By event type (all / deliverable / decision / milestone / task) |
+| Area                 | Decision                                                                                      |
+| -------------------- | --------------------------------------------------------------------------------------------- |
+| Timeline data        | Reuse the store's already-hydrated `events` — **client-only**, no new reads                   |
+| Timeline surface     | A toggleable panel on the Second Brain view (client flag `NEXT_PUBLIC_SECOND_BRAIN_V2`)       |
+| Timeline filter      | By event type (all / deliverable / decision / milestone / task)                               |
 | Chat recall approach | **Retrieval-augment the system prompt** in `app/api/chat/route.ts` (no client/stream changes) |
-| Chat recall gate | `isEmbedEnabled()` (Spec #2) — inert without `SECOND_BRAIN_RECALL` + `VOYAGE_API_KEY` |
+| Chat recall gate     | `isEmbedEnabled()` (Spec #2) — inert without `SECOND_BRAIN_RECALL` + `VOYAGE_API_KEY`         |
 
 **Non-goals:** no new streaming tool, no client chat-UI changes, no node-weight ML tuning, no
 new collections, no `trackEvents`/Build Coach changes.
@@ -34,6 +34,7 @@ new collections, no `trackEvents`/Build Coach changes.
 ## 1 · P3 — Timeline
 
 ### 1.1 Pure helper — `lib/overview/timeline.ts`
+
 - `type TimelineFilter = 'all' | 'deliverable' | 'decision' | 'milestone' | 'task'`
 - `filterEvents(events: LedgerEvent[], filter: TimelineFilter): LedgerEvent[]` — newest-first,
   filtered by mapping the filter to event types (e.g. `deliverable` → `deliverable_approved`).
@@ -41,6 +42,7 @@ new collections, no `trackEvents`/Build Coach changes.
   Pure (takes `now`), unit-tested.
 
 ### 1.2 UI — timeline panel in `OverviewView` (behind `SECOND_BRAIN_V2`)
+
 - A toggle ("Timeline") that opens a right-side scrollable panel listing filtered events: each row
   = type badge + title + relative time. Filter chips at the top.
 - Clicking a row routes to the source (reuse Spec #2's `openHit`-style routing by `refType`).
@@ -51,6 +53,7 @@ new collections, no `trackEvents`/Build Coach changes.
 ## 2 · P2.1 — Chat recall (retrieval augmentation)
 
 ### 2.1 In `app/api/chat/route.ts`
+
 - After the verified `uid` + latest user message are known, and only when `isEmbedEnabled()`:
   embed the latest user message, load the company's events (`adminDb` → `paths.events(uid)`),
   `topK(qvec, items, 6)`, and format a compact `secondBrainBlock`:
@@ -59,6 +62,7 @@ new collections, no `trackEvents`/Build Coach changes.
 - Best-effort: any embed/load failure yields an empty block — chat never breaks or blocks on it.
 
 ### 2.2 Behavior
+
 - With the feature off, `secondBrainBlock` is `''` — the chat prompt is unchanged.
 - With it on, byte sees the most relevant ledger entries for the question and can reference them
   naturally, grounded in what actually happened.
@@ -82,4 +86,4 @@ new collections, no `trackEvents`/Build Coach changes.
 
 ---
 
-*Spec #3 — final phase of the Second Brain rebuild (P3 + P2.1).*
+_Spec #3 — final phase of the Second Brain rebuild (P3 + P2.1)._

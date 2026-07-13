@@ -13,6 +13,7 @@ glance — nothing more.
 ## Current state (v2)
 
 `components/views/OverviewView.tsx` renders, in v2:
+
 - Left column (320px): `<Copilot inline />` chat rail.
 - Center map wrapper inset to `left:320 / right:326` (galaxy is boxed between the
   two side columns).
@@ -35,6 +36,7 @@ strip has room; behavior otherwise unchanged — drag/orbit, scroll/zoom, click 
 star to open).
 
 **Removed / hidden in v2:**
+
 - Left `<Copilot inline />` chat rail.
 - Right `<SecondBrainPanel />` (the dense field panel).
 - "Ask your Second Brain" search box (input, submit, hits, `runAsk`/`askHits`
@@ -52,14 +54,14 @@ living in a permanent column. Net: chat is one click away, not always on screen.
 
 **Value strip (replaces the whole right panel).** A slim, low‑chrome block under
 the title at top‑left:
+
 - Line 1 — three core value numbers, dot‑separated:
   `{deliverables} deliverables · {decisions} decisions · ~{hoursSaved}h saved`
   - Source: `ledgerCounts(events)` for deliverables/decisions;
     `tracking.hoursSaved` for the third.
   - A metric renders only when > 0; if all three are 0, the line is omitted.
 - Line 2 — "Việc tiếp theo" / next step, when `nextStep` exists: a clickable
-  row showing `nextStep.taskTitle`; clicking calls `flyTo(\`dept:${nextStep.deptK}\`)`
-  (same fly‑to the panel used via `onTopic`). Hidden when `nextStep` is null.
+  row showing `nextStep.taskTitle`; clicking calls `flyTo(\`dept:${nextStep.deptK}\`)`(same fly‑to the panel used via`onTopic`). Hidden when `nextStep` is null.
 - Empty state unchanged: for a brand‑new account (`events.length === 0`) keep the
   "Load my past work" backfill button already present near the title.
 

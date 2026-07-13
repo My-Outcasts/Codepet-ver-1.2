@@ -24,9 +24,11 @@
 ## Task 1: Ledger types + paths
 
 **Files:**
+
 - Modify: `lib/firebase/schema.ts:153-173` (add `events`/`event` paths + `LedgerEvent` type)
 
 **Interfaces:**
+
 - Produces:
   - `paths.events(companyId: string): string` → `companies/{companyId}/events`
   - `paths.event(companyId: string, eventId: string): string`
@@ -85,10 +87,12 @@ git commit -m "feat(second-brain): LedgerEvent type + events collection paths"
 ## Task 2: Pure event builders + deterministic id
 
 **Files:**
+
 - Create: `lib/overview/ledger.ts`
 - Test: `lib/overview/ledger.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LedgerEvent`, `LedgerEventType` from `@/lib/firebase/schema`; `LibItem`, `Dept`, `Task` from `@/lib/data`; `DecisionEntry` from `@/lib/ai/projectModel`.
 - Produces:
   - `eventKey(refType: string, refId: string): string` — deterministic, filesystem/Firestore-safe doc id used for idempotent backfill.
@@ -103,11 +107,7 @@ git commit -m "feat(second-brain): LedgerEvent type + events collection paths"
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import {
-  eventKey,
-  eventFromTaskDone,
-  eventFromStageAdvance,
-} from './ledger';
+import { eventKey, eventFromTaskDone, eventFromStageAdvance } from './ledger';
 
 describe('eventKey', () => {
   it('is deterministic and Firestore-safe (no slashes)', () => {
@@ -234,10 +234,12 @@ git commit -m "feat(second-brain): pure event builders + deterministic event key
 ## Task 3: Client-side appendEvent + hydrate events into store data
 
 **Files:**
+
 - Modify: `lib/firebase/companyData.ts` (add `appendEvent`, load events in `loadCompanyData`)
 - Modify: `lib/firebase/companyData.ts:153-227` (`CompanyData` interface + `loadCompanyData` return)
 
 **Interfaces:**
+
 - Consumes: `paths.events`, `paths.event`, `LedgerEvent` from Task 1; `eventKey` from Task 2.
 - Produces:
   - `appendEvent(companyId: string, event: LedgerEvent): Promise<void>` — fail-open client write via `setDoc` using a deterministic id from `eventKey(refType, refId)` (falls back to `addDoc` when no ref).
@@ -314,9 +316,11 @@ git commit -m "feat(second-brain): client appendEvent + hydrate events in loadCo
 ## Task 4: Store — hold events + write-through emits
 
 **Files:**
+
 - Modify: `lib/store.tsx` (add `events` state + hydrate; emit at task-done ~1325, `advanceStage` ~1094, after `/api/remember` success ~1780)
 
 **Interfaces:**
+
 - Consumes: `appendEvent` (Task 3), `eventFromTaskDone`/`eventFromStageAdvance` (Task 2), `events` from `loadCompanyData` (Task 3).
 - Produces: `events: LedgerEvent[]` on the store context value (read by `OverviewView` in Task 7).
 
@@ -391,9 +395,11 @@ git commit -m "feat(second-brain): store holds events + write-through emits (tas
 ## Task 5: Backfill route (admin, idempotent)
 
 **Files:**
+
 - Create: `app/api/second-brain/backfill/route.ts`
 
 **Interfaces:**
+
 - Consumes: `verifyIdToken`, `adminDb` from `@/lib/firebase/admin`; `paths` from `@/lib/firebase/schema`; `eventKey`, `eventFromLibItem`, `eventFromDecision` from Task 2.
 - Produces: `POST /api/second-brain/backfill` → `{ backfilled: number, skipped: boolean }`.
 
@@ -464,10 +470,12 @@ git commit -m "feat(second-brain): idempotent backfill route (library + decision
 ## Task 6: Pure knowledge-graph builder
 
 **Files:**
+
 - Create: `lib/overview/knowledgeGraph.ts`
 - Test: `lib/overview/knowledgeGraph.test.ts`
 
 **Interfaces:**
+
 - Consumes: `LedgerEvent` from `@/lib/firebase/schema`; `Dept` from `@/lib/data`.
 - Produces:
   - `type KGNodeKind = 'company'|'department'|'milestone'|'deliverable'|'decision'|'fact'|'session'|'task'`
@@ -490,9 +498,34 @@ const depts = [
 ] as any;
 
 const events: LedgerEvent[] = [
-  { ts: 3, type: 'deliverable_approved', actor: 'byte', deptK: 'eng', refType: 'library', refId: 'L1', title: 'API v1', summary: 'Approved API v1.' },
-  { ts: 2, type: 'decision_made', actor: 'byte', refType: 'decision', refId: 'D1', title: 'Use Voyage', summary: 'Decision: use Voyage.' },
-  { ts: 1, type: 'stage_advanced', actor: 'founder', refType: 'stage', refId: '1', title: 'Launch', summary: 'Advanced to Launch.' },
+  {
+    ts: 3,
+    type: 'deliverable_approved',
+    actor: 'byte',
+    deptK: 'eng',
+    refType: 'library',
+    refId: 'L1',
+    title: 'API v1',
+    summary: 'Approved API v1.',
+  },
+  {
+    ts: 2,
+    type: 'decision_made',
+    actor: 'byte',
+    refType: 'decision',
+    refId: 'D1',
+    title: 'Use Voyage',
+    summary: 'Decision: use Voyage.',
+  },
+  {
+    ts: 1,
+    type: 'stage_advanced',
+    actor: 'founder',
+    refType: 'stage',
+    refId: '1',
+    title: 'Launch',
+    summary: 'Advanced to Launch.',
+  },
 ];
 
 describe('buildKnowledgeGraph', () => {
@@ -507,7 +540,9 @@ describe('buildKnowledgeGraph', () => {
     const deliverable = nodes.find((n) => n.kind === 'deliverable');
     expect(deliverable).toBeTruthy();
     expect(
-      edges.some((e) => e.kind === 'belongs_to' && e.source === deliverable!.id && e.target === 'dept:eng'),
+      edges.some(
+        (e) => e.kind === 'belongs_to' && e.source === deliverable!.id && e.target === 'dept:eng',
+      ),
     ).toBe(true);
   });
 
@@ -538,8 +573,7 @@ import type { LedgerEvent } from '@/lib/firebase/schema';
 import type { Dept } from '@/lib/data';
 
 export type KGNodeKind =
-  | 'company' | 'department' | 'milestone'
-  | 'deliverable' | 'decision' | 'fact' | 'session' | 'task';
+  'company' | 'department' | 'milestone' | 'deliverable' | 'decision' | 'fact' | 'session' | 'task';
 
 export interface KGNode {
   id: string;
@@ -556,8 +590,14 @@ export interface KGEdge {
   source: string;
   target: string;
   kind:
-    | 'belongs_to' | 'produced' | 'advances' | 'depends_on'
-    | 'references' | 'supersedes' | 'grounds' | 'spine';
+    | 'belongs_to'
+    | 'produced'
+    | 'advances'
+    | 'depends_on'
+    | 'references'
+    | 'supersedes'
+    | 'grounds'
+    | 'spine';
 }
 
 const KIND_OF: Partial<Record<LedgerEvent['type'], KGNodeKind>> = {
@@ -647,9 +687,11 @@ git commit -m "feat(second-brain): pure ledger->knowledge-graph builder + tests"
 ## Task 7: Swap OverviewView's data builder behind the flag
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` (extend `GNode.kind`/`GLink.kind`; add a flagged branch that maps `buildKnowledgeGraph` output into `GNode`/`GLink`; consume `events` from store)
 
 **Interfaces:**
+
 - Consumes: `buildKnowledgeGraph`, `KGNode`, `KGEdge` (Task 6); `events` from store (Task 4).
 - Produces: unchanged render contract — `{ data: { nodes: GNode[]; links: GLink[] }, adj }` from the existing `useMemo`.
 
@@ -658,11 +700,27 @@ git commit -m "feat(second-brain): pure ledger->knowledge-graph builder + tests"
 In `components/views/OverviewView.tsx`, widen `GNode.kind` (line ~72) and `GLink.kind` (line ~93):
 
 ```ts
-kind: 'project' | 'dept' | 'task' | 'company' | 'department' | 'milestone'
-    | 'deliverable' | 'decision' | 'fact' | 'session';
+kind: 'project' |
+  'dept' |
+  'task' |
+  'company' |
+  'department' |
+  'milestone' |
+  'deliverable' |
+  'decision' |
+  'fact' |
+  'session';
 // GLink:
-kind: 'pd' | 'dt' | 'belongs_to' | 'produced' | 'advances'
-    | 'depends_on' | 'references' | 'supersedes' | 'grounds' | 'spine';
+kind: 'pd' |
+  'dt' |
+  'belongs_to' |
+  'produced' |
+  'advances' |
+  'depends_on' |
+  'references' |
+  'supersedes' |
+  'grounds' |
+  'spine';
 ```
 
 - [ ] **Step 2: Add a flagged v2 builder branch**
@@ -746,10 +804,12 @@ git commit -m "feat(second-brain): flag-gated knowledge-graph builder in Overvie
 ## Task 8: Empty-state + flag documentation
 
 **Files:**
+
 - Modify: `components/views/OverviewView.tsx` (empty-state copy when `V2` and `events.length === 0`)
 - Modify: `.env.example` (document the flag)
 
 **Interfaces:**
+
 - Consumes: `events` (Task 4), `V2` branch (Task 7).
 
 - [ ] **Step 1: Empty-state**

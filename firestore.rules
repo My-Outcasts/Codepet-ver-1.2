@@ -92,5 +92,12 @@ service cloud.firestore {
         allow read, write: if ownsByConvention(companyId) || isMember(companyId);
       }
     }
+
+    // BYOK secrets — a user's ENCRYPTED Anthropic key. Read/written ONLY by the server via the
+    // Admin SDK (which bypasses rules); no client may ever touch it. Explicit deny over the
+    // deny-by-default, because this holds a secret and must never be client-reachable.
+    match /userSecrets/{userId} {
+      allow read, write: if false;
+    }
   }
 }

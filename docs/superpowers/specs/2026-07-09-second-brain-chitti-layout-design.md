@@ -1,6 +1,6 @@
 # Second Brain — Spec #4 (Chitti-style 3-column layout)
 
-**Codepet · Design Spec** — *Approved for implementation*
+**Codepet · Design Spec** — _Approved for implementation_
 Date: 2026-07-09 · Owner: Overview / Second Brain
 Depends on: Specs #1–#3 (ledger, graph, recall, timeline) — shipped.
 
@@ -17,13 +17,13 @@ unchanged (per the earlier non-goal); we add the two side rails and increase gra
 
 ### Decisions (locked in brainstorming)
 
-| Question | Decision |
-|---|---|
-| Placement | Replace the **Overview** tab's content when `SECOND_BRAIN_V2` is on (no new tab) |
-| Left chat | **Reuse the existing byte chat (`Copilot`)** in an inline mode (no chat rewrite) |
-| Right rail | New `SecondBrainPanel` — sections mapped to **real** data, not Chitti's capture sources |
-| Voice orb / Share screen / capture STATUS | **Omitted** (audio/capture are non-goals) |
-| Galaxy | Denser + labeled: add `references` cross-links, labels on high-weight nodes |
+| Question                                  | Decision                                                                                |
+| ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| Placement                                 | Replace the **Overview** tab's content when `SECOND_BRAIN_V2` is on (no new tab)        |
+| Left chat                                 | **Reuse the existing byte chat (`Copilot`)** in an inline mode (no chat rewrite)        |
+| Right rail                                | New `SecondBrainPanel` — sections mapped to **real** data, not Chitti's capture sources |
+| Voice orb / Share screen / capture STATUS | **Omitted** (audio/capture are non-goals)                                               |
+| Galaxy                                    | Denser + labeled: add `references` cross-links, labels on high-weight nodes             |
 
 **Non-goals:** no audio/voice, no screen capture, no new nav tab, no chat rewrite, no renderer
 swap, no new backend data (all rail content derives from existing store state).
@@ -59,22 +59,24 @@ When `SECOND_BRAIN_V2`, `OverviewView` renders a 3-column CSS grid filling the v
 
 New `components/views/overview/SecondBrainPanel.tsx`, consuming store state only:
 
-| Section | Source | Content |
-|---|---|---|
-| **STATUS** | `events` | counts by type: Deliverables · Decisions · Milestones · Sessions |
-| **BRAIN** | `companionId` + model constant | active model (claude-opus-4-8) + companion name |
-| **DO THIS NEXT** | `nextStep` | byte's next move (title + dept); empty → "You're all caught up" |
-| **USAGE** | `tracking` | calls / tokens if present on `TrackingSummary`; omit rows that are absent |
-| **TOPICS** | `events` + `DEPTS` | department name + event count, desc; click → focus that dept node |
+| Section          | Source                         | Content                                                                   |
+| ---------------- | ------------------------------ | ------------------------------------------------------------------------- |
+| **STATUS**       | `events`                       | counts by type: Deliverables · Decisions · Milestones · Sessions          |
+| **BRAIN**        | `companionId` + model constant | active model (claude-opus-4-8) + companion name                           |
+| **DO THIS NEXT** | `nextStep`                     | byte's next move (title + dept); empty → "You're all caught up"           |
+| **USAGE**        | `tracking`                     | calls / tokens if present on `TrackingSummary`; omit rows that are absent |
+| **TOPICS**       | `events` + `DEPTS`             | department name + event count, desc; click → focus that dept node         |
 
 Pure helper `lib/overview/secondBrainStats.ts`:
+
 - `ledgerCounts(events): { deliverables, decisions, milestones, sessions }`
 - `topicCounts(events, depts): Array<{ deptK, name, count }>` (desc, drop zero)
-Both pure + unit-tested.
+  Both pure + unit-tested.
 
 ## 4 · Galaxy density + labels (Section D)
 
 In `lib/overview/knowledgeGraph.ts`:
+
 - Add `references` edges: link knowledge nodes that share a `deptK` to each other (capped per
   dept, e.g. a small mesh, not full N²) so clusters read as connected webs, not stars on a stalk.
 - Expose a `label: boolean` hint on `KGNode` for high-weight nodes (top-N by weight per kind);
@@ -111,4 +113,4 @@ Each phase is independently mergeable and leaves the app working (flag-gated thr
 
 ---
 
-*Spec #4 — the Chitti-style Second Brain layout. Builds on the shipped ledger/graph/recall.*
+_Spec #4 — the Chitti-style Second Brain layout. Builds on the shipped ledger/graph/recall._

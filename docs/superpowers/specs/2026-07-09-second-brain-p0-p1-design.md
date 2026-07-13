@@ -1,6 +1,6 @@
 # Second Brain rebuild — Spec #1 (P0 event ledger + P1 derived graph)
 
-**Codepet · Design Spec** — *Approved for implementation*
+**Codepet · Design Spec** — _Approved for implementation_
 Date: 2026-07-09 · Owner: Overview / Second Brain
 Source design doc: `~/Downloads/second-brain-rebuild.md` (approach doc, P0–P3)
 
@@ -17,21 +17,21 @@ P2 (recall / Voyage embeddings) and P3 (timeline / polish) each get their own
 brainstorm → spec → plan cycle later. They are **out of scope here** except where a P0
 decision must not foreclose them (noted inline).
 
-**The payoff of this spec:** the Second Brain view renders a dense "galaxy" of *real,
-cross-linked* knowledge — deliverables, decisions, facts, build sessions, tasks — like the
+**The payoff of this spec:** the Second Brain view renders a dense "galaxy" of _real,
+cross-linked_ knowledge — deliverables, decisions, facts, build sessions, tasks — like the
 Chitti OS reference, not the authored `company → 8 depts → tasks` tree it draws today.
 
 ### Decisions locked in brainstorming
 
-| Question | Decision |
-|---|---|
-| How far this build goes | Full P0→P3 vision, as 4 sequential specs; **this spec = P0+P1** |
-| Ledger population | **Write-through going forward + one-time backfill** (real brain day one) |
-| Where derivation runs | **Client-side, in-memory** pure function (cache on server later only if slow) |
-| Embedding provider (P2) | Voyage — *decided but not used until Spec #2* |
-| Keep dept/task nodes? | **Yes** — company/department/task stay as the spine; new node types attach to it |
-| Feature flag | **Yes** — gate the view swap behind `NEXT_PUBLIC_SECOND_BRAIN_V2` |
-| Backfill trigger | **Manual admin route**, called once (not lazy-on-first-open) |
+| Question                | Decision                                                                         |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| How far this build goes | Full P0→P3 vision, as 4 sequential specs; **this spec = P0+P1**                  |
+| Ledger population       | **Write-through going forward + one-time backfill** (real brain day one)         |
+| Where derivation runs   | **Client-side, in-memory** pure function (cache on server later only if slow)    |
+| Embedding provider (P2) | Voyage — _decided but not used until Spec #2_                                    |
+| Keep dept/task nodes?   | **Yes** — company/department/task stay as the spine; new node types attach to it |
+| Feature flag            | **Yes** — gate the view swap behind `NEXT_PUBLIC_SECOND_BRAIN_V2`                |
+| Backfill trigger        | **Manual admin route**, called once (not lazy-on-first-open)                     |
 
 ---
 
@@ -39,7 +39,7 @@ Chitti OS reference, not the authored `company → 8 depts → tasks` tree it dr
 
 - Second Brain = `components/views/OverviewView.tsx` (~1270 lines): a `ForceGraph3D` + bloom
   scene. Its graph builder is a `useMemo` (lines ~250–336) that emits `project → DEPTS →
-  tasks` from the **static** `DEPTS` array in `lib/data.ts`. Structure is authored, not earned.
+tasks` from the **static** `DEPTS` array in `lib/data.ts`. Structure is authored, not earned.
 - `GNode.kind` is `'project' | 'dept' | 'task'`; `GLink.kind` is `'pd' | 'dt'`.
 - `lib/store.tsx` already hydrates `library`, `decisions`, and DEPTS/ENV to client state once
   the company is known (lines ~616–633) — so **client-side derivation has its inputs in memory**.
@@ -49,9 +49,10 @@ Chitti OS reference, not the authored `company → 8 depts → tasks` tree it dr
 - Precedent for server-gated features: `AI_MEMORY_ENABLED` (see `lib/ai/remember.ts`).
 
 ### Structural gaps this spec closes
+
 1. **No timeline** — task state is timestamp-less `done`/`drafted` booleans. P0 adds real `ts`.
 2. **No connected knowledge** — library/decisions/facts/sessions never enter the graph. P1 does.
-   (The *semantic* layer — embeddings — is deliberately deferred to Spec #2.)
+   (The _semantic_ layer — embeddings — is deliberately deferred to Spec #2.)
 
 ---
 
@@ -63,7 +64,7 @@ New append-only subcollection: `companies/{cid}/events/{eventId}`.
 
 ```ts
 interface LedgerEvent {
-  ts: number;                    // ms epoch — the timestamp we're missing today
+  ts: number; // ms epoch — the timestamp we're missing today
   type:
     | 'deliverable_approved'
     | 'decision_made'
@@ -73,11 +74,11 @@ interface LedgerEvent {
     | 'toolkit_used'
     | 'stage_advanced';
   actor: 'byte' | 'founder';
-  deptK?: string;                // owning department key (optional)
-  refType?: string;              // 'library' | 'decision' | 'trackEvent' | 'task' | ...
-  refId?: string;                // pointer back to the source record
-  title: string;                 // short human line
-  summary: string;               // one sentence — reserved for P2 embedding & recall
+  deptK?: string; // owning department key (optional)
+  refType?: string; // 'library' | 'decision' | 'trackEvent' | 'task' | ...
+  refId?: string; // pointer back to the source record
+  title: string; // short human line
+  summary: string; // one sentence — reserved for P2 embedding & recall
 }
 ```
 
@@ -86,6 +87,7 @@ interface LedgerEvent {
 ### 2.2 Writer
 
 New `lib/firebase/serverEvents.ts`, mirroring `serverDecisions.ts`:
+
 - `appendEvent(uid, idToken, event)` — REST `POST` (create) to the `events` subcollection.
 - Fail-open: returns `boolean`, never throws; a failed emit must never block the main flow.
 - Server-only (no `'use client'`).
@@ -95,13 +97,13 @@ New `lib/firebase/serverEvents.ts`, mirroring `serverDecisions.ts`:
 Emit exactly one event at each point where a source record already gets written. **No new
 data is invented** — we tap existing write paths:
 
-| Emit site (existing) | Event type | actor |
-|---|---|---|
-| `applyResult` (task produced output) | `task_run` (+ `deliverable_approved` when a library item lands) | byte |
-| task `done` flip (`lib/store.tsx` ~1325) | `task_run` (done) | founder/byte per source |
-| `advanceStage` (`lib/store.tsx` ~1094) | `stage_advanced` | founder |
-| `/api/remember` | `decision_made` / `fact_remembered` | byte |
-| envUsage write | `toolkit_used` | founder |
+| Emit site (existing)                     | Event type                                                      | actor                   |
+| ---------------------------------------- | --------------------------------------------------------------- | ----------------------- |
+| `applyResult` (task produced output)     | `task_run` (+ `deliverable_approved` when a library item lands) | byte                    |
+| task `done` flip (`lib/store.tsx` ~1325) | `task_run` (done)                                               | founder/byte per source |
+| `advanceStage` (`lib/store.tsx` ~1094)   | `stage_advanced`                                                | founder                 |
+| `/api/remember`                          | `decision_made` / `fact_remembered`                             | byte                    |
+| envUsage write                           | `toolkit_used`                                                  | founder                 |
 
 **Ownership boundary:** `trackEvents` and `/api/track` are Build Coach territory. The ledger
 **reads** from `trackEvents` (in backfill) and does **not** modify that pipeline or its hooks.
@@ -112,6 +114,7 @@ Each emit is best-effort and wrapped so a ledger failure is swallowed (log only)
 ### 2.4 One-time backfill
 
 `app/api/second-brain/backfill/route.ts` — admin-invoked once per company:
+
 - Reads existing `library`, `decisions`, `trackEvents`, and done tasks.
 - Emits one event per record, with the **best `ts` obtainable from the source** (e.g. a
   library item's own timestamp); where none exists, an approximate/ordered fallback.
@@ -222,5 +225,5 @@ precedent.
 
 ---
 
-*Spec #1 of the Second Brain rebuild. Locks P0 schema + P1 view swap. P2/P3 follow as their own
-cycles.*
+_Spec #1 of the Second Brain rebuild. Locks P0 schema + P1 view swap. P2/P3 follow as their own
+cycles._

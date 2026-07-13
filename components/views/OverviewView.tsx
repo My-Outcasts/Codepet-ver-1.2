@@ -84,15 +84,7 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 interface GNode {
   id: string;
   name: string;
-  kind:
-    | 'project'
-    | 'dept'
-    | 'task'
-    | 'milestone'
-    | 'deliverable'
-    | 'decision'
-    | 'fact'
-    | 'session';
+  kind: 'project' | 'dept' | 'task' | 'milestone' | 'deliverable' | 'decision' | 'fact' | 'session';
   refType?: string;
   refId?: string;
   sbLabel?: boolean;
@@ -785,9 +777,7 @@ export default function OverviewView() {
         // nebula blobs; the spine holds clusters apart; stronger repulsion spreads the field.
         fg.d3Force('charge')?.strength(-45);
         fg.d3Force('link')
-          ?.distance((l: GLink) =>
-            l.kind === 'spine' ? 130 : l.kind === 'references' ? 20 : 40,
-          )
+          ?.distance((l: GLink) => (l.kind === 'spine' ? 130 : l.kind === 'references' ? 20 : 40))
           .strength((l: GLink) => (l.kind === 'references' ? 0.5 : 0.18));
       } else {
         fg.d3Force('charge')?.strength(-90);
@@ -1180,9 +1170,7 @@ export default function OverviewView() {
       )}
       {/* The classic progress HUD lives bottom-left — where the Second Brain chat rail now is —
           and duplicates the right panel's STATUS/DO-THIS-NEXT, so it's hidden in v2. */}
-      {!SECOND_BRAIN_V2 && (
-        <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
-      )}
+      {!SECOND_BRAIN_V2 && <OverviewProgressHud progress={progress} nextStage={nextMilestone} />}
 
       {SECOND_BRAIN_V2 && focusCluster && (
         <button
@@ -1433,10 +1421,7 @@ export default function OverviewView() {
         </div>
       )}
 
-      <div
-        ref={wrapRef}
-        style={{ position: 'absolute', inset: 0 }}
-      >
+      <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
         {mapDimmed && (
           <div
             aria-hidden
