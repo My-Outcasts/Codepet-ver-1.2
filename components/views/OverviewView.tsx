@@ -969,23 +969,9 @@ export default function OverviewView() {
       // Soft wide aura (radiates outward), then the hot firefly core on top.
       group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.2 : 1.9), 0.26));
       group.add(makeFireflySprite(glowHex, size));
-      // No in-scene text by default: names show only on hover, via the built-in nodeLabel
-      // tooltip. Phase B: while a cluster is focused, label its members (hubs + items) so the
-      // founder can read the area. Universe view stays label-free (hover tooltip only).
-      if (focusCluster && n.clusterId === focusCluster && !isRoot) {
-        const lbl = new SpriteText(n.name);
-        lbl.color = '#FFFFFF';
-        lbl.textHeight = isDept ? 4.3 : 3.4;
-        lbl.fontFace = 'Inter, system-ui, sans-serif';
-        lbl.fontWeight = '700';
-        (lbl as any).backgroundColor = 'rgba(7,9,20,0.5)';
-        (lbl as any).padding = 2.5;
-        (lbl as any).borderRadius = 3;
-        lbl.strokeColor = 'rgba(3,4,12,0.95)';
-        lbl.strokeWidth = 1;
-        (lbl as any).position.set(0, size * 0.9 + 7, 0);
-        group.add(lbl);
-      }
+      // No in-scene text — names show only on hover (built-in nodeLabel tooltip), in both
+      // universe and focused views, so labels never overlap into an unreadable pile. The
+      // focused cluster's name is shown in the breadcrumb instead.
       return group;
     }
     if (n.kind === 'task') return undefined; // default sphere; label on hover
