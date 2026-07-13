@@ -11,7 +11,7 @@ import { verifyIdToken } from '@/lib/firebase/admin';
 import { loadServerCompany } from '@/lib/firebase/serverCompany';
 import { writeServerDecisions } from '@/lib/firebase/serverDecisions';
 import { usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson } from '@/lib/ai/client';
+import { getClient, generateJson, LIGHT_MODEL } from '@/lib/ai/client';
 import { aiClientFor } from '@/lib/firebase/serverUserKey';
 import {
   DECISIONS_EXTRACT_SCHEMA,
@@ -22,9 +22,6 @@ import {
 } from '@/lib/ai/decisions';
 
 export const runtime = 'nodejs';
-
-// Extraction is cheap, structured work — a cheaper tier than the Opus generation routes.
-const EXTRACT_MODEL = 'claude-sonnet-5';
 
 const EXTRACT_SYSTEM = `You extract durable company decisions from a deliverable a founder just approved. A decision is an explicit, lasting choice — about pricing, positioning, naming, target audience, tech, brand voice, or scope — that should constrain the company's future work.
 
@@ -90,7 +87,7 @@ export async function POST(req: Request): Promise<Response> {
     const { decisions: existing } = await loadServerCompany(uid, idToken);
     const { decisions: extracted } = await generateJson<{ decisions: ExtractedDecision[] }>({
       client,
-      model: EXTRACT_MODEL,
+      model: LIGHT_MODEL,
       system: EXTRACT_SYSTEM,
       prompt: buildExtractPrompt(deliverable, existing),
       maxTokens: 1024,
