@@ -1,36 +1,64 @@
 'use client';
-import { useApp } from '@/lib/store';
+import { useApp, type View } from '@/lib/store';
+import { DEPTS, ENV } from '@/lib/data';
 import { companionById } from '@/lib/companions';
+import { AccountMenu } from './AccountMenu';
 
-// The topbar now carries the Codepet brand (logo + wordmark) and the sidebar collapse toggle on
-// the left, plus the install/upgrade actions on the right. Identity moved to the sidebar top
-// (see AccountMenu), so the brand no longer disappears when the sidebar is collapsed.
+// Primary navigation now lives in the topbar as horizontal tabs (the sidebar was
+// retired to hand its whole column to the roadmap + chat). Counts are computed the
+// same way the old sidebar did.
+const NAV: { view: View; label: string; count?: () => number }[] = [
+  { view: 'overview', label: 'Overview' },
+  { view: 'home', label: 'Company' },
+  {
+    view: 'tasks',
+    label: 'Tasks',
+    count: () =>
+      DEPTS.reduce(
+        (a, d) =>
+          a + d.tasks.filter((t) => !t.done && (t.who === 'you' || t.who === 'draft')).length,
+        0,
+      ),
+  },
+  { view: 'library', label: 'Library' },
+  { view: 'env', label: 'Environment' },
+];
+
 export function Topbar() {
-  const { installed, openInstallPrompt, show, sideCollapsed, toggleSide, companionId } = useApp();
+  const { view, show, installed, openInstallPrompt, companionId, library, tick } = useApp();
+  void tick; // re-read mutable DEPTS/ENV on each store change
   const companionName = companionById(companionId).name;
+  const envPending = ['skills', 'connectors', 'agents'].reduce(
+    (a, k) => a + ENV[k].filter((x) => !x.s).length,
+    0,
+  );
+  // Library and Environment counts come from live store/derived values, not the
+  // static NAV entry; the rest use their own count fn.
+  const countFor = (n: (typeof NAV)[number]): number =>
+    n.view === 'library' ? library.length : n.view === 'env' ? envPending : n.count ? n.count() : 0;
 
   return (
     <div className="topbar">
       <div className="tb-brand">
-        <span className="logo" aria-hidden />
         <span className="nm pixel">Codepet</span>
       </div>
-      <button
-        className={`brand-toggle${sideCollapsed ? ' collapsed' : ''}`}
-        title={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        aria-label={sideCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        onClick={() => toggleSide()}
-      >
-        <svg viewBox="0 0 16 16" fill="none">
-          <path
-            d="M10 4L6 8l4 4"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+      <AccountMenu />
+      <nav className="tb-nav" aria-label="Primary">
+        {NAV.map((n) => {
+          const c = countFor(n);
+          return (
+            <button
+              key={n.view}
+              className={`tb-tab${view === n.view ? ' on' : ''}`}
+              aria-current={view === n.view ? 'page' : undefined}
+              onClick={() => show(n.view)}
+            >
+              {n.label}
+              {c ? <span className="ct">{c}</span> : null}
+            </button>
+          );
+        })}
+      </nav>
       <span className="right">
         {/* Install-later path for the one-time popup: stays until the toolkit is actually
             installed, then disappears. */}
