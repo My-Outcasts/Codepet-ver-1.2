@@ -155,59 +155,6 @@ function Node({
   const done = st === 'done';
   const current = st === 'current';
   const locked = st === 'locked';
-
-  // Focus mode: a whole completed phase stands in as one compact ✓ pill (no verb, no peek — it's a
-  // milestone marker, not an action). Sits centered in the same card box so the layout is unchanged.
-  if (task.collapsed) {
-    return (
-      <div
-        style={{
-          position: 'absolute',
-          left: node.x,
-          top: node.y,
-          width: CARD_W,
-          height: CARD_H,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 9,
-            padding: '8px 15px',
-            borderRadius: 999,
-            background: 'rgba(22,163,74,0.10)',
-            border: '1px solid rgba(22,163,74,0.30)',
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              width: 17,
-              height: 17,
-              flex: 'none',
-              borderRadius: '50%',
-              background: '#16a34a',
-              color: '#fff',
-              fontSize: 11,
-              fontWeight: 800,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            ✓
-          </span>
-          <span style={{ fontSize: 12.5, fontWeight: 650, color: TX, whiteSpace: 'nowrap' }}>
-            {task.title}
-          </span>
-        </span>
-      </div>
-    );
-  }
   return (
     <div
       className={[onClick && 'rm-node', pulse && 'rm-pulse'].filter(Boolean).join(' ') || undefined}
@@ -731,7 +678,7 @@ export default function RoadmapView({
                   <Node
                     key={t.id}
                     node={n}
-                    onClick={onTaskClick && !t.collapsed ? () => onTaskClick(t) : undefined}
+                    onClick={onTaskClick ? () => onTaskClick(t) : undefined}
                     pulse={pulseIds.has(t.id)}
                     companionName={companionName}
                     peek={{

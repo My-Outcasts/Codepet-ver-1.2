@@ -14,7 +14,6 @@ import RoadmapView from './overview/RoadmapView';
 import { ROADMAP_TEMPLATE, ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
 import { stageToPhase } from '@/lib/overview/roadmapProgress';
 import { selectRoadmap } from '@/lib/overview/roadmapSelector';
-import { focusRoadmap } from '@/lib/overview/roadmapFocus';
 import type { RoadmapTask } from '@/lib/overview/roadmapModel';
 
 // The force-graph, client-only + lazy (unchanged from AppRoot's previous dynamic import).
@@ -72,9 +71,6 @@ export default function OverviewSection() {
   const companionName = companionById(companionId).name;
   const LEGEND = legendFor(companionName);
   const [tab, setTab] = useState<'roadmap' | 'map'>('roadmap');
-  // Focus mode collapses finished phases to ✓ pills and hides locked/future cards, so the map is
-  // "what you've done + what you can act on now". Off by default — the full tree is the ground state.
-  const [focus, setFocus] = useState(false);
   // Preview/QA escape hatch: `?intro=1` forces byte's first-run intro even for an account that
   // has already dismissed it. Non-destructive — no account data is touched.
   const [forceIntro] = useState(
@@ -132,10 +128,6 @@ export default function OverviewSection() {
     nextMilestone,
     progress: prog,
   } = selectRoadmap(defs, stagePhase, DEPTS);
-
-  // The map's phases/tasks: full tree by default, or the Focus reshape (collapsed done phases +
-  // hidden locked). Pure — the beacon/progress above still read the unfiltered selectRoadmap.
-  const view = focus ? focusRoadmap(ROADMAP_PHASES, tasks) : { phases: ROADMAP_PHASES, tasks };
 
   // Start runs byte on the current move's real task, in its own canonical dept/title so the
   // beacon, the lit map node, and the chat all name the same thing.
@@ -543,32 +535,6 @@ export default function OverviewSection() {
                 </span>
                 How to read this map
               </button>
-              {tab === 'roadmap' && (
-                <button
-                  type="button"
-                  onClick={() => setFocus((f) => !f)}
-                  aria-pressed={focus}
-                  title={
-                    focus
-                      ? 'Showing what you can act on now — click for the full map'
-                      : 'Collapse finished phases and hide locked steps'
-                  }
-                  style={{
-                    fontFamily: 'var(--sans)',
-                    fontSize: 12.5,
-                    fontWeight: 600,
-                    whiteSpace: 'nowrap',
-                    padding: '7px 13px',
-                    borderRadius: 10,
-                    cursor: 'pointer',
-                    color: focus ? CY : 'var(--t-3)',
-                    background: focus ? 'var(--accent-tint)' : 'var(--surface)',
-                    border: `1px solid ${focus ? 'var(--accent-line)' : 'var(--hairline)'}`,
-                  }}
-                >
-                  Focus
-                </button>
-              )}
               {toggle}
             </div>
           </div>
@@ -911,8 +877,8 @@ export default function OverviewSection() {
             }}
           >
             <RoadmapView
-              tasks={view.tasks}
-              phases={view.phases}
+              tasks={tasks}
+              phases={ROADMAP_PHASES}
               projectName={projectName}
               companionName={companionName}
               onTaskClick={onTaskClick}
