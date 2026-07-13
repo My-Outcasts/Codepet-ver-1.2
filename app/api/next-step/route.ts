@@ -11,7 +11,7 @@ import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { loadServerBrief } from '@/lib/firebase/serverBrief';
 import { usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { getClient, generateJson, aiErrorResponse, LIGHT_MODEL } from '@/lib/ai/client';
 
 export const runtime = 'nodejs';
 
@@ -107,6 +107,8 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 1024,
       label: 'next-step',
       schema,
+      // Simple pick-an-index + one-line-why → runs on the cheaper tier to save cost.
+      model: LIGHT_MODEL,
       onUsage: usageSink(uid, idToken, 'nextStep'),
     });
     const pick = typeof parsed.pick === 'number' ? Math.trunc(parsed.pick) : -1;

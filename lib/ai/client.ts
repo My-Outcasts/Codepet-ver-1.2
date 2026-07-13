@@ -7,8 +7,13 @@
 // Server-only (holds ANTHROPIC_API_KEY). Import from Node-runtime route handlers.
 import Anthropic from '@anthropic-ai/sdk';
 
-/** The model every byte call uses. One constant so a bump/A-B is a one-line change. */
+/** The default (high) model — complex, user-facing generation: deliverables, chat, onboarding. */
 export const MODEL = 'claude-opus-4-8';
+
+/** The light (cheaper) tier for SIMPLE, structured work — next-step picks, decision extraction,
+ *  short distillations, seed templating. Must stay Sonnet 5+ (the generate path always uses
+ *  adaptive thinking + effort, which Haiku doesn't support). One constant so it's swappable. */
+export const LIGHT_MODEL = 'claude-sonnet-5';
 
 /** Effort levels byte uses; all current routes run `low` (cheap, structured work). */
 export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
