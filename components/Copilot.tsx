@@ -137,7 +137,23 @@ function ResultCard({ m }: { m: ChatMessage }) {
           )}
           {preview && <div className="cres-prev">{preview}</div>}
           {r.approved ? (
-            <div className="cres-saved">Saved to your library</div>
+            <button
+              type="button"
+              className="cres-saved"
+              onClick={() => openChatResult(r.deptK, r.taskTitle)}
+              title="Open this in your library"
+              style={{
+                fontFamily: 'inherit',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                textUnderlineOffset: 2,
+              }}
+            >
+              Saved to your library — open it
+            </button>
           ) : revising ? (
             <div className="cres-rev">
               <div className="cres-rev-chips">
