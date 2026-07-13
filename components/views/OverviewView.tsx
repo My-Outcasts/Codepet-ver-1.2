@@ -1486,7 +1486,10 @@ export default function OverviewView() {
               if (hoverId) {
                 const s = linkId(l.source),
                   t = linkId(l.target);
-                return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
+                const lit = s === hoverId || t === hoverId;
+                if (!lit) return DIM_LINK;
+                // v2: a cool white-blue that matches the galaxy, not the warm l.hex clash.
+                return SECOND_BRAIN_V2 ? rgba('#CFE0FF', 0.5) : rgba(l.hex, 0.9);
               }
               if (pathLinkIds.has(key)) return rgba(BEACON_HEX, 0.9);
               // v2: thin, faint cool-gray filaments so the glowing nodes carry the
@@ -1497,12 +1500,14 @@ export default function OverviewView() {
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
-              if (hoverId && (s === hoverId || t === hoverId)) return 2.4;
+              if (hoverId && (s === hoverId || t === hoverId)) return SECOND_BRAIN_V2 ? 1.1 : 2.4;
               if (pathLinkIds.has(key)) return 2;
               if (SECOND_BRAIN_V2) return l.kind === 'spine' ? 0.6 : 0.35;
               return l.kind === 'pd' ? 1.1 : 0.4;
             }}
             linkDirectionalParticles={(l) => {
+              // v2: no chunky particle "beads" — keep the galaxy's links as clean filaments.
+              if (SECOND_BRAIN_V2) return 0;
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
