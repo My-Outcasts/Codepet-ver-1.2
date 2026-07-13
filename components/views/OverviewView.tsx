@@ -129,6 +129,8 @@ interface GLink {
     | 'grounds'
     | 'spine';
   active?: boolean;
+  /** v2 base tint: the cluster's color for an intra-cluster link, cool-neutral otherwise. */
+  sbTint?: string;
 }
 
 const linkId = (x: unknown): string =>
@@ -443,8 +445,14 @@ export default function OverviewView() {
           z: c.z + Math.sin(th) * rr * R,
         };
       });
+      const nodeCluster = new Map<string, string>();
+      for (const v of vnodes) if (v.clusterId) nodeCluster.set(v.id, v.clusterId);
       const vlinks: GLink[] = kg.edges.map((e) => {
-        // Warm, faint web; spine a touch brighter, the intra-cluster references threads soft.
+        // A link inside one cluster takes that cluster's hue (subtle), so each constellation
+        // glows in its own color instead of a uniform gray; spine stays cool-neutral.
+        const sc = nodeCluster.get(e.source);
+        const sameCluster = !!sc && sc === nodeCluster.get(e.target);
+        const sbTint = sameCluster ? (clusterColor.get(sc) ?? '#AEBCDF') : '#AEBCDF';
         const lhex = e.kind === 'spine' ? '#FDB022' : '#F6A23C';
         return {
           source: e.source,
@@ -452,6 +460,7 @@ export default function OverviewView() {
           color: rgba(lhex, e.kind === 'spine' ? 0.3 : e.kind === 'references' ? 0.14 : 0.2),
           hex: lhex,
           kind: e.kind,
+          sbTint,
         };
       });
       const vadj = new Map<string, Set<string>>();
@@ -463,8 +472,6 @@ export default function OverviewView() {
         vadj.get(s)!.add(t);
         vadj.get(t)!.add(s);
       });
-      const nodeCluster = new Map<string, string>();
-      for (const v of vnodes) if (v.clusterId) nodeCluster.set(v.id, v.clusterId);
       return { data: { nodes: vnodes, links: vlinks }, adj: vadj, nodeCluster };
     }
     const nodes: GNode[] = [];
@@ -1496,10 +1503,13 @@ export default function OverviewView() {
                 return SECOND_BRAIN_V2 ? rgba('#CFE0FF', 0.5) : rgba(l.hex, 0.9);
               }
               if (pathLinkIds.has(key)) return rgba(BEACON_HEX, 0.9);
-              // v2: thin, faint cool-gray filaments so the glowing nodes carry the
-              // image and the web reads as quiet connective tissue (the reference look).
-              return SECOND_BRAIN_V2 ? rgba('#AEBCDF', l.kind === 'spine' ? 0.16 : 0.09) : l.color;
+              // v2: thin filaments tinted by the cluster's own hue (subtle), so the web reads
+              // as quiet connective tissue that still varies per constellation.
+              return SECOND_BRAIN_V2
+                ? rgba(l.sbTint ?? '#AEBCDF', l.kind === 'spine' ? 0.2 : 0.13)
+                : l.color;
             }}
+            linkCurvature={(l) => (SECOND_BRAIN_V2 && l.kind !== 'spine' ? 0.22 : 0)}
             linkWidth={(l) => {
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
