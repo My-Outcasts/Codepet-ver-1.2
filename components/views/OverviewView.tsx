@@ -1210,12 +1210,16 @@ export default function OverviewView() {
       <div
         style={{
           position: 'absolute',
-          top: 58,
+          // v2 dropped the stage ribbon, so pull the title up to fill the top gap.
+          top: SECOND_BRAIN_V2 ? 24 : 58,
           left: 26,
           right: 26,
           maxWidth: 640,
           zIndex: 5,
           pointerEvents: 'none',
+          // Hide the universe title/value strip while immersed in a cluster (the
+          // breadcrumb carries context there) so they don't overlap.
+          display: SECOND_BRAIN_V2 && focusCluster ? 'none' : undefined,
         }}
       >
         {!(SECOND_BRAIN_V2 && focusCluster) && (
