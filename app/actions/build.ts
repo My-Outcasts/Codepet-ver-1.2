@@ -10,7 +10,7 @@ import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import { detectCapability } from '@/lib/installer/capability.mjs';
 import { resolveClaudeDir } from '@/lib/installer/paths.mjs';
-import { buildOpeningPrompt, terminalCommand, DEMO_SEED_HTML } from '@/lib/armSession';
+import { buildOpeningPrompt, terminalCommand, DEMO_SEED_HTML, DEMO_PORT } from '@/lib/armSession';
 import type { BytePlan } from '@/lib/ai/plan';
 
 interface ArmInput {
@@ -88,5 +88,20 @@ export async function scaffoldDemoProject(): Promise<string> {
       /* git missing — the demo still works, the recap just won't show commits */
     }
   }
+
+  // Serve the demo on localhost so the app's "Open demo" link works in LOCAL mode too
+  // (remote mode's copy-paste command serves it instead). Best-effort; a stale server already
+  // bound to the port just fails harmlessly and keeps serving fresh reads off disk.
+  try {
+    const server = spawn('python3', ['-m', 'http.server', String(DEMO_PORT)], {
+      cwd: dir,
+      detached: true,
+      stdio: 'ignore',
+    });
+    server.unref();
+  } catch {
+    /* python missing — the Open demo link just won't resolve in local mode */
+  }
+
   return dir;
 }

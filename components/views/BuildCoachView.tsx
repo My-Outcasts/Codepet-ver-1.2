@@ -485,14 +485,19 @@ export function BuildCoachView() {
               Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your
               real projects are untouched.
             </span>
-            <a
-              href={DEMO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none', whiteSpace: 'nowrap' }}
-            >
-              Open demo →
-            </a>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+              <a
+                href={DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none' }}
+              >
+                Open demo →
+              </a>
+              {!buildLocal && (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>(after you run the command)</span>
+              )}
+            </span>
           </div>
         )}
         <div className="bc-rail">

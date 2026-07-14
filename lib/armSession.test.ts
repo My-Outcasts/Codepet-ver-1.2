@@ -53,6 +53,9 @@ describe('demoTerminalCommand', () => {
     expect(cmd).toContain('claude "build a landing page"');
     expect(cmd).toContain('python3 -m http.server 4321');
     expect(cmd).toContain('open http://localhost:4321');
+    expect(cmd).toContain(
+      'claude "build a landing page" ; python3 -m http.server 4321 >/dev/null 2>&1 & sleep 1 && open http://localhost:4321',
+    );
   });
   it('exposes the demo dir constant', () => {
     expect(DEMO_DIR).toBe('~/codepet-demo');
