@@ -103,8 +103,8 @@ export default function OverviewSection() {
   const projectName = cleanCompanyName(brief.projectName) ?? 'Your company';
   // The roadmap beacon marks where the FOUNDER stands (not the companion), so it reads in the
   // founder's own name — reusing the same junk-filter (drops empties, single chars, raw emails).
-  // Falls back to "You" when we don't have a usable name.
-  const hereLabel = cleanCompanyName(brief.founderName) ?? 'You';
+  // Undefined when we don't have a usable name → the beacon falls back to "You are here".
+  const founderName = cleanCompanyName(brief.founderName) ?? undefined;
   // byte's one-line read of the company, for the first-run briefing. Falls back through the
   // brief's own fields when the AI analysis hasn't been generated yet. `meaningfulText` (shared
   // with the brief-normalization boundary) drops placeholder-y junk so the briefing never shows
@@ -884,8 +884,9 @@ export default function OverviewSection() {
               tasks={tasks}
               phases={ROADMAP_PHASES}
               projectName={projectName}
+              tagline={oneLiner ?? undefined}
               companionName={companionName}
-              hereLabel={hereLabel}
+              founderName={founderName}
               onTaskClick={onTaskClick}
             />
           </div>
