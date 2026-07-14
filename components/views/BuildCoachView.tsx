@@ -222,8 +222,6 @@ function EndStep({
   const [saved, setSaved] = useState(false);
   // Two-step confirm — rewinding throws the build's changes away.
   const [confirmRewind, setConfirmRewind] = useState(false);
-  // Which recap checklist items the founder has personally ticked off.
-  const [checked, setChecked] = useState<Set<number>>(new Set());
   const [rewound, setRewound] = useState(false);
   // Plain "here's what Byte changed" — the files touched since the pre-build snapshot.
   const [changes, setChanges] = useState<{ files: string[]; count: number } | null>(null);
@@ -319,30 +317,6 @@ function EndStep({
               </div>
             </div>
           </div>
-          {/* The founder ticks each item — Byte never claims a step is verified for
-              them. That IS the "Double-check" habit this screen teaches. */}
-          <div className="bc-check-hint">Look at the result, then tick what checks out:</div>
-          <ul className="bc-checklist">
-            {[...(plan?.steps ?? []), `Matches what you asked for: ${brief}`].map((label, i) => (
-              <li key={i}>
-                <button
-                  className={`c${checked.has(i) ? ' on' : ''}`}
-                  aria-pressed={checked.has(i)}
-                  onClick={() =>
-                    setChecked((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(i)) next.delete(i);
-                      else next.add(i);
-                      return next;
-                    })
-                  }
-                >
-                  {checked.has(i) ? '✓' : ''}
-                </button>{' '}
-                {label}
-              </li>
-            ))}
-          </ul>
           <div className={`bc-unlock${earned ? ' live' : ''}`}>
             <div className="bc-unlock-top">
               <span className="bc-u-tag">{earned ? 'earned! ✨' : 'not yet'}</span>
