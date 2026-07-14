@@ -11,16 +11,16 @@ Turn the episodic-memory layer on **end-to-end**: byte recalls relevant history 
 
 ## Current state (all built, gated OFF)
 
-| Piece | Where | Note |
-|---|---|---|
-| `events` ledger | `companies/{uid}/events` (`schema.ts:165–175`) | `LedgerEvent { ts, type, actor, deptK?, refType?, refId?, title, summary, vec? }` — embedding stored inline as `vec`. |
-| Live write | `appendEvent` (`companyData.ts:186`) | Fires on stage advance, deliverable approval, decision made. |
-| Backfill | `app/api/second-brain/backfill/route.ts` | Projects library / decisions / done-tasks into events; wired into `OverviewView` (`runSecondBrainBackfill`). |
-| Embed | `app/api/second-brain/embed/route.ts` + `lib/ai/embed.ts` | Voyage `voyage-3`; lazily fills missing `vec`. |
-| Recall (chat) | `lib/ai/secondBrainRecall.ts` → `chat/route.ts:318` | Embeds last message, cosine `topK(6)`, injects a prompt block. Uses **Admin SDK** (`adminDb()`). |
-| Recall (endpoint) | `app/api/second-brain/recall/route.ts` + `askSecondBrain` (`recallClient.ts:30`) | **Coded but wired to nothing** — no component imports `askSecondBrain`. |
-| Gate | `isEmbedEnabled()` (`embed.ts:8`) | `VOYAGE_API_KEY` **and** `SECOND_BRAIN_RECALL === '1'`. Off ⇒ `recallBlock` returns `''`. |
-| Retrieval | `lib/overview/recall.ts` | `cosine()` + `topK()` — brute-force over all events. |
+| Piece             | Where                                                                            | Note                                                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `events` ledger   | `companies/{uid}/events` (`schema.ts:165–175`)                                   | `LedgerEvent { ts, type, actor, deptK?, refType?, refId?, title, summary, vec? }` — embedding stored inline as `vec`. |
+| Live write        | `appendEvent` (`companyData.ts:186`)                                             | Fires on stage advance, deliverable approval, decision made.                                                          |
+| Backfill          | `app/api/second-brain/backfill/route.ts`                                         | Projects library / decisions / done-tasks into events; wired into `OverviewView` (`runSecondBrainBackfill`).          |
+| Embed             | `app/api/second-brain/embed/route.ts` + `lib/ai/embed.ts`                        | Voyage `voyage-3`; lazily fills missing `vec`.                                                                        |
+| Recall (chat)     | `lib/ai/secondBrainRecall.ts` → `chat/route.ts:318`                              | Embeds last message, cosine `topK(6)`, injects a prompt block. Uses **Admin SDK** (`adminDb()`).                      |
+| Recall (endpoint) | `app/api/second-brain/recall/route.ts` + `askSecondBrain` (`recallClient.ts:30`) | **Coded but wired to nothing** — no component imports `askSecondBrain`.                                               |
+| Gate              | `isEmbedEnabled()` (`embed.ts:8`)                                                | `VOYAGE_API_KEY` **and** `SECOND_BRAIN_RECALL === '1'`. Off ⇒ `recallBlock` returns `''`.                             |
+| Retrieval         | `lib/overview/recall.ts`                                                         | `cosine()` + `topK()` — brute-force over all events.                                                                  |
 
 ## Locked decisions
 
