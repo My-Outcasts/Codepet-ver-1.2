@@ -68,6 +68,8 @@ describe('demoTerminalCommand', () => {
       buildSessionId: 'b1',
       token: 'tok',
     });
+    expect(cmd).toContain('git -C ~/codepet-demo init -q');
+    expect(cmd).toContain("commit -q -m 'demo build'");
     expect(cmd).toContain('git -C ~/codepet-demo rev-list --count HEAD');
     expect(cmd).toContain('git -C ~/codepet-demo ls-files');
     expect(cmd).toContain('https://app.example.com/api/track/demo-recap');

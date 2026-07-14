@@ -76,20 +76,32 @@ export function demoTerminalCommand(
   report?: { apiUrl: string; companyId: string; buildSessionId: string; token: string },
 ): string {
   const b64 = btoa(unescape(encodeURIComponent(DEMO_SEED_HTML)));
+  // Only when we're going to self-report do we need the demo dir to be a git repo at
+  // all — no-report copy-paste commands stay exactly as they were (no git, no curl).
+  const gitInit = report
+    ? ` && (git -C ${DEMO_DIR} rev-parse --git-dir >/dev/null 2>&1 || git -C ${DEMO_DIR} init -q)`
+    : '';
   const base =
     `mkdir -p ${DEMO_DIR} && cd ${DEMO_DIR} && ` +
-    `{ [ -f index.html ] || echo '${b64}' | base64 -d > index.html; } && ` +
-    `claude "${shq(prompt)}"`;
-  // Best-effort self-report: tally the demo dir's git history and POST it to the recap
-  // endpoint so the session shows real progress even though the app can't watch the
-  // tester's machine directly. $commits/$files are shell-substituted at run time; the
-  // ids/token/url below are JS-interpolated at build time. The `-d` payload is built as
-  // single-quoted JSON with the two numeric fields spliced in via `'"$var"'` (break out
-  // of the single quotes just long enough for the shell to expand the variable) — this
-  // keeps the static JSON free of backslash-escaped quotes while still letting the
-  // numbers be substituted at run time.
+    `{ [ -f index.html ] || echo '${b64}' | base64 -d > index.html; }` +
+    gitInit +
+    ` && claude "${shq(prompt)}"`;
+  // Best-effort self-report: commit whatever claude just built, then tally the demo
+  // dir's git history and POST it to the recap endpoint so the session shows real
+  // progress even though the app can't watch the tester's machine directly. The
+  // `-c user.*` identity means this works even with no global git config on the
+  // tester's machine; both the add and the commit are best-effort (2>/dev/null) so an
+  // empty/no-op build ("nothing to commit") fails harmlessly instead of aborting the
+  // chain. $commits/$files are shell-substituted at run time; the ids/token/url below
+  // are JS-interpolated at build time. The `-d` payload is built as single-quoted JSON
+  // with the two numeric fields spliced in via `'"$var"'` (break out of the single
+  // quotes just long enough for the shell to expand the variable) — this keeps the
+  // static JSON free of backslash-escaped quotes while still letting the numbers be
+  // substituted at run time.
   const selfReport = report
-    ? ` ; commits=$(git -C ${DEMO_DIR} rev-list --count HEAD 2>/dev/null || echo 0)` +
+    ? ` ; git -C ${DEMO_DIR} add -A 2>/dev/null` +
+      ` ; git -C ${DEMO_DIR} -c user.email=demo@codepet.local -c user.name='Codepet Demo' commit -q -m 'demo build' 2>/dev/null` +
+      ` ; commits=$(git -C ${DEMO_DIR} rev-list --count HEAD 2>/dev/null || echo 0)` +
       ` ; files=$(git -C ${DEMO_DIR} ls-files 2>/dev/null | wc -l | tr -d ' ')` +
       ` ; curl -s -X POST ${report.apiUrl.replace(/\/$/, '')}/api/track/demo-recap` +
       ` -H 'content-type: application/json'` +
