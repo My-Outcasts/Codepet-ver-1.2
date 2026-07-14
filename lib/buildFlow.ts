@@ -15,6 +15,35 @@ export const INTAKE_OPENING = `Ooh, let's build something! Tell me what you have
 /** Byte's single scripted follow-up, shown after the founder's first answer. */
 export const INTAKE_FOLLOWUP = `Love it! Anything else it must do? Add as much as you like — when you're ready, hit "Turn this into a plan". 😎`;
 
+/** The buildAction kinds byte can attach to a chat bubble. */
+export type BuildActionKind = 'begin-intake' | 'to-plan' | 'start-building';
+
+/**
+ * One-shot build TRIGGERS — buttons that must be consumed the moment any build
+ * step begins, so the thread never keeps a re-clickable trigger. `begin-intake`
+ * is included: leaving it live let a second tap re-append INTAKE_OPENING, so the
+ * "Ooh, let's build something!" opener duplicated in-thread. `start-building`
+ * is NOT a trigger — it belongs to the plan→run step and is managed separately.
+ */
+export function isTransientBuildTrigger(kind: string): boolean {
+  return kind === 'to-plan' || kind === 'begin-intake';
+}
+
+/**
+ * Drop one-shot build trigger buttons from past messages, keeping the message
+ * text. Generic over any message carrying an optional `buildAction`; returns a
+ * new array (never mutates the input).
+ */
+export function stripBuildTriggers<T extends { buildAction?: { kind: string } }>(
+  msgs: readonly T[],
+): T[] {
+  return msgs.map((m) => {
+    if (!m.buildAction || !isTransientBuildTrigger(m.buildAction.kind)) return m;
+    const { buildAction: _drop, ...rest } = m;
+    return rest as T;
+  });
+}
+
 /** Append one intake answer to the running brief (newline-joined, blank-safe). */
 export function appendBrief(brief: string, text: string): string {
   const t = text.trim();
