@@ -11,7 +11,6 @@ import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
 import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
-import { Companion } from './Companion';
 import { companionById } from '@/lib/companions';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
@@ -108,7 +107,7 @@ function Shell() {
         aria-label={`Open ${c.name} chat`}
         onClick={() => toggleCopilot(false)}
       >
-        <Companion id={companionId} size="s28" />
+        <img className="cop-logo" src="/c-logo.svg" alt="Codepet" draggable={false} />
         Ask {c.name}
       </button>
       {buildActive && view !== 'build' && (

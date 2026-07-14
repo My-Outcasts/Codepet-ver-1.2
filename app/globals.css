@@ -3297,9 +3297,11 @@ body {
   transform: translateY(-2px);
   box-shadow: 0 12px 30px rgba(124, 58, 237, 0.46);
 }
-.cop-open .byte {
+.cop-open .cop-logo {
   width: 26px;
   height: 26px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55);
 }
 /* Floating "back to your build" — shown while a session is live but you're on another tab. */
 .build-return {
