@@ -10,6 +10,8 @@ import { useApp } from '@/lib/store';
 import { useAuth } from '@/lib/firebase/auth';
 import { loadTrackEventForSession, writeNotebookNote } from '@/lib/firebase/companyData';
 import { buildChangeSummary } from '@/app/actions/checkpoint';
+import { getTodayTokens } from '@/app/actions/tokens';
+import { DEMO_URL } from '@/lib/armSession';
 
 // "Let's build" — the Build Coach flow, adapted to the app's light theme. It
 // brackets one real Claude Code session: think first (START, now in the byte
@@ -31,6 +33,13 @@ const NEXT_LABEL: Record<Step, string> = {
 };
 
 const DEFAULT_BUDGET_ACTIONS = 12;
+
+// Compact token counts for the DURING meter + END recap — "1.2M" / "48K" / "900".
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
 
 // Byte's coaching bubble — sprite + a line, a "lens" chip, and an expandable
 // "a little tip from Byte" panel. Reused across both steps.
@@ -74,6 +83,8 @@ function DuringStep({
   resume,
   onLive,
   onStatus,
+  tokens,
+  today,
 }: {
   plan: BytePlan | null;
   live: LiveState | null;
@@ -87,6 +98,8 @@ function DuringStep({
   resume: boolean;
   onLive: (s: LiveState) => void;
   onStatus: (status: string) => void;
+  tokens: number | null;
+  today: number | null;
 }) {
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const actions = live?.actionCount ?? 0;
@@ -175,6 +188,23 @@ function DuringStep({
           </span>
         </div>
         {recent.length > 0 && <div className="bc-live-feed">Byte sees: {recent.join(' · ')}</div>}
+        {(tokens || today != null) && (
+          <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
+            🔢{' '}
+            {tokens ? (
+              <>
+                This build <b>~{fmtTokens(tokens)}</b>
+              </>
+            ) : null}
+            {tokens && today != null ? ' · ' : null}
+            {today != null ? (
+              <>
+                Today <b>~{fmtTokens(today)}</b>
+              </>
+            ) : null}{' '}
+            tokens
+          </div>
+        )}
       </div>
 
       <div className={`bc-unlock${unlocked ? ' live' : ''}`}>
@@ -206,6 +236,10 @@ function EndStep({
   checkpoint,
   projectDir,
   onRewind,
+  recap,
+  demo,
+  buildTokens,
+  today,
 }: {
   companyId: string | null;
   sessionId: string | null;
@@ -215,14 +249,16 @@ function EndStep({
   checkpoint: { ref: string } | null;
   projectDir: string;
   onRewind: () => void;
+  recap: { commits: number; filesChanged: number } | null;
+  demo: boolean;
+  buildTokens: number | null;
+  today: number | null;
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
   const [fetched, setFetched] = useState(false);
   const [saved, setSaved] = useState(false);
   // Two-step confirm — rewinding throws the build's changes away.
   const [confirmRewind, setConfirmRewind] = useState(false);
-  // Which recap checklist items the founder has personally ticked off.
-  const [checked, setChecked] = useState<Set<number>>(new Set());
   const [rewound, setRewound] = useState(false);
   // Plain "here's what Byte changed" — the files touched since the pre-build snapshot.
   const [changes, setChanges] = useState<{ files: string[]; count: number } | null>(null);
@@ -268,9 +304,11 @@ function EndStep({
 
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const underBudget = actions <= target;
-  const commits = ev?.commits ?? 0;
+  const commits = ev?.commits ?? recap?.commits ?? 0;
   const earned = underBudget && commits >= 1;
-  const built = ev?.wins?.[0] ?? brief;
+  // Fall back to the plan's title (always set) so "built" is never blank when the
+  // session rollup has no win and the brief is empty.
+  const built = ev?.wins?.[0] ?? plan?.title ?? brief;
 
   const save = async () => {
     if (!companyId || saved) return;
@@ -307,9 +345,13 @@ function EndStep({
             </div>
             <div className="bc-rc">
               <label>spent</label>
-              <div className={`v${underBudget ? ' ok' : ' warn'}`}>
-                {actions}/{target} actions
-              </div>
+              {demo ? (
+                <div className="v">{recap ? `${recap.filesChanged ?? 0} files` : '—'}</div>
+              ) : (
+                <div className={`v${underBudget ? ' ok' : ' warn'}`}>
+                  {actions}/{target} actions
+                </div>
+              )}
             </div>
             <div className="bc-rc">
               <label>committed</label>
@@ -318,30 +360,23 @@ function EndStep({
               </div>
             </div>
           </div>
-          {/* The founder ticks each item — Byte never claims a step is verified for
-              them. That IS the "Double-check" habit this screen teaches. */}
-          <div className="bc-check-hint">Look at the result, then tick what checks out:</div>
-          <ul className="bc-checklist">
-            {[...(plan?.steps ?? []), `Matches what you asked for: ${brief}`].map((label, i) => (
-              <li key={i}>
-                <button
-                  className={`c${checked.has(i) ? ' on' : ''}`}
-                  aria-pressed={checked.has(i)}
-                  onClick={() =>
-                    setChecked((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(i)) next.delete(i);
-                      else next.add(i);
-                      return next;
-                    })
-                  }
-                >
-                  {checked.has(i) ? '✓' : ''}
-                </button>{' '}
-                {label}
-              </li>
-            ))}
-          </ul>
+          {(buildTokens || today != null) && (
+            <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
+              🔢{' '}
+              {buildTokens ? (
+                <>
+                  This build <b>~{fmtTokens(buildTokens)}</b>
+                </>
+              ) : null}
+              {buildTokens && today != null ? ' · ' : null}
+              {today != null ? (
+                <>
+                  Today <b>~{fmtTokens(today)}</b>
+                </>
+              ) : null}{' '}
+              tokens
+            </div>
+          )}
           <div className={`bc-unlock${earned ? ' live' : ''}`}>
             <div className="bc-unlock-top">
               <span className="bc-u-tag">{earned ? 'earned! ✨' : 'not yet'}</span>
@@ -435,6 +470,7 @@ export function BuildCoachView() {
     buildResumed,
     applyLocalLive,
     resetBuildFlow,
+    demoLetsBuild,
   } = useApp();
 
   const step = buildStep;
@@ -449,6 +485,20 @@ export function BuildCoachView() {
   const [confirmWrap, setConfirmWrap] = useState(false);
   const busy = liveStatus === 'running' || liveStatus === 'awaiting-permission';
 
+  // Today's total tokens (ccusage, local-only — null on remote/hosted). Fetched once
+  // on mount and refreshed every minute while the view is open.
+  const [today, setToday] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => getTodayTokens().then((n) => alive && setToday(n));
+    load();
+    const id = setInterval(load, 60000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
   const idx = step === 'during' ? 0 : 1;
 
   return (
@@ -462,6 +512,44 @@ export function BuildCoachView() {
       </div>
 
       <div className="bc-body">
+        {demoLetsBuild && (
+          <div
+            style={{
+              margin: '8px 0',
+              padding: '7px 12px',
+              borderRadius: 9,
+              fontSize: 12.5,
+              background: 'rgba(125,227,255,0.08)',
+              border: '1px solid rgba(125,227,255,0.3)',
+              color: 'var(--t-2, #cfe0ff)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
+            }}
+          >
+            <span>
+              Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your
+              real projects are untouched.
+            </span>
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+            >
+              <a
+                href={DEMO_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none' }}
+              >
+                Open demo →
+              </a>
+              {!buildLocal && (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>(after you run the command)</span>
+              )}
+            </span>
+          </div>
+        )}
         <div className="bc-rail">
           {RAIL.map((r, i) => (
             <div
@@ -488,6 +576,8 @@ export function BuildCoachView() {
             resume={buildResumed}
             onLive={applyLocalLive}
             onStatus={setLiveStatus}
+            tokens={buildLive?.tokens ?? null}
+            today={today}
           />
         )}
         {step === 'end' && (
@@ -500,6 +590,10 @@ export function BuildCoachView() {
             checkpoint={buildCheckpoint}
             projectDir={buildProjectDir}
             onRewind={rewindBuild}
+            recap={buildLive?.recap ?? null}
+            demo={demoLetsBuild}
+            buildTokens={buildLive?.tokens ?? buildLive?.recap?.tokens ?? null}
+            today={today}
           />
         )}
 

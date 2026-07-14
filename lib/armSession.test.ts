@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildOpeningPrompt, terminalCommand } from './armSession';
+import { buildOpeningPrompt, terminalCommand, demoTerminalCommand, DEMO_DIR } from './armSession';
 import type { BytePlan } from './ai/plan';
 
 const plan: BytePlan = {
@@ -40,5 +40,56 @@ describe('terminalCommand', () => {
   it('escapes double quotes and backslashes in the prompt and dir', () => {
     const cmd = terminalCommand('/tmp/a"b', 'say "hi"\\done');
     expect(cmd).toBe('cd "/tmp/a\\"b" && claude "say \\"hi\\"\\\\done"');
+  });
+});
+
+describe('demoTerminalCommand', () => {
+  it('creates the demo dir, seeds index.html only if missing, then runs claude and serves it', () => {
+    const cmd = demoTerminalCommand('build a landing page');
+    expect(cmd).toContain('mkdir -p ~/codepet-demo');
+    expect(cmd).toContain('cd ~/codepet-demo');
+    expect(cmd).toContain('[ -f index.html ]');
+    expect(cmd).toContain('base64 -d > index.html');
+    expect(cmd).toContain('claude "build a landing page"');
+    expect(cmd).toContain('python3 -m http.server 4321');
+    expect(cmd).toContain('open http://localhost:4321');
+    expect(cmd).toContain(
+      'claude "build a landing page" ; python3 -m http.server 4321 >/dev/null 2>&1 & sleep 1 && open http://localhost:4321',
+    );
+  });
+  it('exposes the demo dir constant', () => {
+    expect(DEMO_DIR).toBe('~/codepet-demo');
+  });
+
+  it('self-reports commits + files when given report credentials', () => {
+    const cmd = demoTerminalCommand('build it', {
+      apiUrl: 'https://app.example.com',
+      companyId: 'c1',
+      buildSessionId: 'b1',
+      token: 'tok',
+    });
+    expect(cmd).toContain('git -C ~/codepet-demo init -q');
+    expect(cmd).toContain("commit -q -m 'demo build'");
+    expect(cmd).toContain('git -C ~/codepet-demo rev-list --count HEAD');
+    expect(cmd).toContain('git -C ~/codepet-demo ls-files');
+    expect(cmd).toContain('https://app.example.com/api/track/demo-recap');
+    expect(cmd).toContain('"buildSessionId":"b1"');
+    expect(cmd).toContain('"token":"tok"');
+  });
+  it('omits the self-report when no credentials are given', () => {
+    expect(demoTerminalCommand('build it')).not.toContain('/api/track/demo-recap');
+  });
+
+  it('demoTerminalCommand includes a token self-report when given credentials', () => {
+    const cmd = demoTerminalCommand('build it', {
+      apiUrl: 'https://app.example.com',
+      companyId: 'c1',
+      buildSessionId: 'b1',
+      token: 'tok',
+    });
+    expect(cmd).toContain('~/.claude/projects');
+    expect(cmd).toContain('python3 -c');
+    expect(cmd).toContain('https://app.example.com/api/track/demo-recap');
+    expect(cmd).toContain('"tokens":');
   });
 });

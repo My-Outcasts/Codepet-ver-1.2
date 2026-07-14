@@ -79,12 +79,20 @@ import {
   appendBrief,
   stepForLive,
   INTAKE_OPENING,
-  INTAKE_FOLLOWUP,
+  decideIntakeStep,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
-import { buildOpeningPrompt, terminalCommand } from './armSession';
-import { armBuildSession } from '@/app/actions/build';
+import { requestBuildBrainstorm } from './ai/buildBrainstorm';
+import type { BrainstormTurn } from './ai/brainstorm';
+import {
+  buildOpeningPrompt,
+  terminalCommand,
+  demoTerminalCommand,
+  tokenReportSuffix,
+  DEMO_DIR,
+} from './armSession';
+import { armBuildSession, scaffoldDemoProject } from '@/app/actions/build';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
 import { getCapability, getStatus } from '@/app/actions/install';
 import { shouldPromptInstall, INSTALL_PROMPTED_KEY } from './installPrompt';
@@ -361,6 +369,8 @@ interface AppState {
   buildStep: BuildStep;
   buildProject: string;
   setBuildProject: (v: string) => void;
+  demoLetsBuild: boolean;
+  setDemoLetsBuild: (v: boolean) => void;
   buildBrief: string;
   buildPlan: BytePlan | null;
   /** Edit the generated plan's steps in place before arming (founder can refine intent). */
@@ -538,6 +548,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
   const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
+  const [demoLetsBuild, setDemoLetsBuildState] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem('codepet:demoLetsBuild') !== '0'; // default ON
+  });
+  const setDemoLetsBuild = useCallback((v: boolean) => {
+    setDemoLetsBuildState(v);
+    if (typeof window !== 'undefined')
+      window.localStorage.setItem('codepet:demoLetsBuild', v ? '1' : '0');
+  }, []);
   const [buildBrief, setBuildBrief] = useState(restoredBuild?.brief ?? '');
   const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(restoredBuild?.plan ?? null);
   const [buildSessionId, setBuildSessionId] = useState<string | null>(
@@ -551,6 +570,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // The running brainstorm transcript (Byte questions + founder answers) that
+  // /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
+  // interrupted intake just falls back to typing more.
+  const [buildIntakeLog, setBuildIntakeLog] = useState<BrainstormTurn[]>([]);
   const [buildResumed, setBuildResumed] = useState(!!restoredBuild);
   // A git snapshot of the project taken right before a local build, so the founder can
   // rewind everything the build changed. null when the project isn't a git repo.
@@ -2424,6 +2447,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const startBuildIntake = useCallback(() => {
     setBuildIntakeActive(true);
     setBuildBrief('');
+    setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
     setBuildPlanState(null);
     const opening: ChatMessage = {
       id: newId(),
@@ -2454,27 +2478,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
-      const first = buildBrief.trim().length === 0;
       setBuildBrief((b) => appendBrief(b, text));
+
+      const nextLog: BrainstormTurn[] = [...buildIntakeLog, { role: 'user', text }];
+      setBuildIntakeLog(nextLog);
+      const userTurns = nextLog.filter((t) => t.role === 'user').length;
+
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      const thinkingId = newId();
       setChatMessages((prev) => [
         ...stripBuildButtons(prev),
         userMsg,
-        // After the first answer, Byte nudges once and surfaces the "to plan" button.
-        {
-          id: newId(),
-          role: 'byte',
-          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
-          ts: now + 1,
-          buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
-        },
+        // Transient "thinking" bubble, swapped for Byte's question/summary below.
+        { id: thinkingId, role: 'byte', text: 'Byte is thinking…', ts: now + 1 },
       ]);
-      // Persist the founder's real answer; the byte follow-up carries an in-memory-only
-      // buildAction button (dead after reload) so it stays transient, like result cards.
+      // Persist only the founder's real answer; Byte's turns are transient like
+      // the result cards (they carry in-memory-only buttons and reload dead).
       persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
+
+      (async () => {
+        let reply = null as Awaited<ReturnType<typeof requestBuildBrainstorm>> | null;
+        try {
+          reply = await requestBuildBrainstorm({
+            conversation: nextLog,
+            project: buildProject || undefined,
+          });
+        } catch {
+          reply = null; // Any failure → static fallback via decideIntakeStep.
+        }
+        const step = decideIntakeStep(reply, userTurns);
+        // Only a follow-up question needs to re-enter the transcript (so the next
+        // API turn sees it). A ready/fallback reflect-back is derived from turns
+        // already in the log and is terminal — the founder builds next — so it's
+        // deliberately not appended.
+        if (step.mode === 'question') {
+          setBuildIntakeLog((prev) => [...prev, { role: 'byte', text: step.text }]);
+        }
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? {
+                  ...m,
+                  text: step.text,
+                  ...(step.mode === 'question'
+                    ? {}
+                    : {
+                        buildAction: {
+                          kind: 'to-plan' as const,
+                          label: step.mode === 'ready' ? 'Build this →' : 'Turn this into a plan →',
+                        },
+                      }),
+                }
+              : m,
+          ),
+        );
+      })();
     },
-    [buildBrief, companyId, persistMsg],
+    [buildIntakeLog, buildProject, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
@@ -2529,59 +2590,114 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const armBuild = useCallback(() => {
     // A project is required — never fall back to '.' (the app server's own cwd),
     // which would let Byte build inside whatever directory the server runs from.
-    if (!buildPlan || !companyId || buildArming || !buildProject.trim()) return;
+    // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
+    if (!buildPlan || !companyId || buildArming || (!demoLetsBuild && !buildProject.trim())) return;
     setBuildArming(true);
     buildEndedNudged.current = false;
     setBuildResumed(false);
     (async () => {
       try {
         const id = crypto.randomUUID();
-        const dirs = await loadProjectDirs(companyId);
-        const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
-        setBuildProjectDir(dir);
-        const cap = await getCapability();
-        if (cap.mode === 'local') {
-          // Snapshot the project BEFORE the session touches anything, so END can offer
-          // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
-          setBuildCheckpoint(await createCheckpoint(dir));
-          setBuildLocal(true);
-          setBuildLaunchCommand(null);
-          setBuildSessionId(id);
-          setBuildLive(null);
-          setBuildStep('during');
+        // Non-null only in remote mode (a copy-paste command is shown); drives the honest
+        // "paste this" message vs the local "I'm watching" one.
+        let launchCommand: string | null = null;
+        if (demoLetsBuild) {
+          const cap = await getCapability();
+          if (cap.mode === 'local') {
+            const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
+            setBuildProjectDir(dir);
+            setBuildCheckpoint(null); // throwaway target — no rewind
+            setBuildLocal(true);
+            setBuildLaunchCommand(null);
+            setBuildSessionId(id);
+            setBuildLive(null);
+            setBuildStep('during');
+          } else {
+            setBuildLocal(false);
+            setBuildProjectDir(DEMO_DIR);
+            setBuildCheckpoint(null); // throwaway target — no rewind
+            const token = await ensureIngestToken(companyId);
+            await armBuildSession({
+              buildSessionId: id,
+              projectDir: DEMO_DIR,
+              plan: buildPlan,
+              brief: buildBrief,
+              companyId,
+              token,
+              apiUrl: window.location.origin,
+            });
+            // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
+            launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
+              apiUrl: window.location.origin,
+              companyId,
+              buildSessionId: id,
+              token,
+            });
+            setBuildLaunchCommand(launchCommand);
+            setBuildSessionId(id);
+            setBuildLive(null);
+            setBuildStep('during');
+          }
         } else {
-          setBuildLocal(false);
-          const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
-          const token = await ensureIngestToken(companyId);
-          const res = await armBuildSession({
-            buildSessionId: id,
-            projectDir: dir,
-            plan: buildPlan,
-            brief: buildBrief,
-            companyId,
-            token,
-            apiUrl: window.location.origin,
-          });
-          setBuildLaunchCommand(res.ok && res.launched ? null : command);
-          setBuildSessionId(id);
-          setBuildLive(null);
-          setBuildStep('during');
+          const dirs = await loadProjectDirs(companyId);
+          const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
+          setBuildProjectDir(dir);
+          const cap = await getCapability();
+          if (cap.mode === 'local') {
+            // Snapshot the project BEFORE the session touches anything, so END can offer
+            // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
+            setBuildCheckpoint(await createCheckpoint(dir));
+            setBuildLocal(true);
+            setBuildLaunchCommand(null);
+            setBuildSessionId(id);
+            setBuildLive(null);
+            setBuildStep('during');
+          } else {
+            setBuildLocal(false);
+            const token = await ensureIngestToken(companyId);
+            // Self-report tokens too (best-effort, same as the demo path) so remote testers'
+            // real usage shows up without a toolkit install.
+            const command =
+              terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
+              tokenReportSuffix({
+                apiUrl: window.location.origin,
+                companyId,
+                buildSessionId: id,
+                token,
+              });
+            const res = await armBuildSession({
+              buildSessionId: id,
+              projectDir: dir,
+              plan: buildPlan,
+              brief: buildBrief,
+              companyId,
+              token,
+              apiUrl: window.location.origin,
+            });
+            launchCommand = res.ok && res.launched ? null : command;
+            setBuildLaunchCommand(launchCommand);
+            setBuildSessionId(id);
+            setBuildLive(null);
+            setBuildStep('during');
+          }
         }
         setView('build');
         const live: ChatMessage = {
           id: newId(),
           role: 'byte',
-          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+          text: launchCommand
+            ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
+            : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
           ts: Date.now(),
         };
         setChatMessages((prev) => [...prev, live]);
         persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
-        track('build.arm', {});
+        track('build.arm', { demo: demoLetsBuild });
       } finally {
         setBuildArming(false);
       }
     })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, persistMsg]);
+  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, demoLetsBuild, persistMsg]);
 
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
@@ -2722,6 +2838,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildStep,
       buildProject,
       setBuildProject,
+      demoLetsBuild,
+      setDemoLetsBuild,
       buildBrief,
       buildPlan,
       setBuildPlanSteps,
@@ -2838,6 +2956,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildStep,
       buildProject,
       setBuildProject,
+      demoLetsBuild,
+      setDemoLetsBuild,
       buildBrief,
       buildPlan,
       setBuildPlanSteps,
