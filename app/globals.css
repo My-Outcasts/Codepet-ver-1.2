@@ -3322,29 +3322,21 @@ body {
   bottom: 18px;
   z-index: 50;
   display: none;
-  align-items: center;
-  gap: 8px;
-  background: var(--accent);
-  color: var(--on-accent);
+  padding: 0;
   border: none;
-  border-radius: 99px;
-  padding: 7px 15px 7px 8px;
+  background: transparent;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
-  font-family: var(--sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  transition:
-    transform 0.14s,
-    box-shadow 0.14s;
+  line-height: 0;
+  transition: transform 0.14s;
 }
 .cop-open:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.46);
 }
-.cop-open .byte {
-  width: 26px;
-  height: 26px;
+.cop-open .cop-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  filter: drop-shadow(0 8px 24px rgba(124, 58, 237, 0.4));
 }
 /* Floating "back to your build" — shown while a session is live but you're on another tab. */
 .build-return {
