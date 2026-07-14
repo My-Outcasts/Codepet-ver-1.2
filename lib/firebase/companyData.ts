@@ -234,7 +234,10 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   });
 
   // Threads + the active thread's messages. Migrate legacy flat chat on first load.
-  let threads = threadSnap.docs.map((d) => d.data() as ThreadMeta);
+  // The doc key is the authoritative thread id (persistThread writes to
+  // paths.thread(.../id)); force it so a legacy doc whose payload lacks `id` never
+  // yields a thread with an undefined id (which breaks the History list's React key).
+  let threads = threadSnap.docs.map((d) => ({ ...(d.data() as ThreadMeta), id: d.id }));
   if (threads.length === 0) {
     const migrated = await backfillLegacyThread(companyId);
     if (migrated) threads = [migrated];
@@ -292,7 +295,9 @@ export async function persistChatMessage(
 
 export async function loadThreads(companyId: string): Promise<ThreadMeta[]> {
   const snap = await getDocs(collection(getDb(), paths.threads(companyId)));
-  return snap.docs.map((d) => d.data() as ThreadMeta);
+  // The doc key is the authoritative thread id — force it so a payload missing `id`
+  // never yields an undefined id (which breaks the History list's React key).
+  return snap.docs.map((d) => ({ ...(d.data() as ThreadMeta), id: d.id }));
 }
 
 export async function loadThreadMessages(
