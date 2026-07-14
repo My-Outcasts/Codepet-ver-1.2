@@ -7,7 +7,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { detectCapability } from '@/lib/installer/capability.mjs';
 import { resolveClaudeDir } from '@/lib/installer/paths.mjs';
 import { buildOpeningPrompt, terminalCommand, DEMO_SEED_HTML } from '@/lib/armSession';
@@ -81,5 +81,12 @@ export async function scaffoldDemoProject(): Promise<string> {
   fs.mkdirSync(dir, { recursive: true });
   const index = path.join(dir, 'index.html');
   if (!fs.existsSync(index)) fs.writeFileSync(index, DEMO_SEED_HTML);
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    try {
+      spawnSync('git', ['init', '-q'], { cwd: dir, stdio: 'ignore' });
+    } catch {
+      /* git missing — the demo still works, the recap just won't show commits */
+    }
+  }
   return dir;
 }

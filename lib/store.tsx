@@ -79,6 +79,7 @@ import {
   INTAKE_OPENING,
   INTAKE_FOLLOWUP,
   DEMO_BUILD_BRIEF,
+  DEMO_INTAKE_OPENING,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
@@ -2338,8 +2339,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const opening: ChatMessage = {
       id: newId(),
       role: 'byte',
-      text: INTAKE_OPENING,
+      text: demoLetsBuild ? DEMO_INTAKE_OPENING : INTAKE_OPENING,
       ts: Date.now(),
+      ...(demoLetsBuild
+        ? { buildAction: { kind: 'to-plan' as const, label: 'Build this demo →' } }
+        : {}),
     };
     setChatMessages((prev) => [...prev, opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
@@ -2364,8 +2368,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
-      const first = buildBrief.trim().length === 0;
-      setBuildBrief((b) => appendBrief(b, text));
+      // In demo mode the brief starts pre-filled; a typed idea should REPLACE the demo
+      // suggestion, not blend with it.
+      const isDemoPrefill = demoLetsBuild && buildBrief.trim() === DEMO_BUILD_BRIEF;
+      const first = buildBrief.trim().length === 0 || isDemoPrefill;
+      setBuildBrief((b) => (isDemoPrefill ? text : appendBrief(b, text)));
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
       setChatMessages((prev) => [
@@ -2384,7 +2391,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // buildAction button (dead after reload) so it stays transient, like result cards.
       persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
     },
-    [buildBrief, companyId, persistMsg],
+    [buildBrief, companyId, persistMsg, demoLetsBuild],
   );
 
   const generateBuildPlan = useCallback(() => {
@@ -2461,6 +2468,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           } else {
             setBuildLocal(false);
             setBuildProjectDir(DEMO_DIR);
+            setBuildCheckpoint(null); // throwaway target — no rewind
             const token = await ensureIngestToken(companyId);
             await armBuildSession({
               buildSessionId: id,
