@@ -6,10 +6,11 @@
 // See docs/superpowers/specs/2026-07-02-build-coach-live-session-design.md.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { detectCapability } from '@/lib/installer/capability.mjs';
 import { resolveClaudeDir } from '@/lib/installer/paths.mjs';
-import { buildOpeningPrompt, terminalCommand } from '@/lib/armSession';
+import { buildOpeningPrompt, terminalCommand, DEMO_SEED_HTML } from '@/lib/armSession';
 import type { BytePlan } from '@/lib/ai/plan';
 
 interface ArmInput {
@@ -70,4 +71,15 @@ export async function armBuildSession(
     }
   }
   return { ok: true, launched: false };
+}
+
+/** Create + seed the throwaway demo project on the local machine (local mode only —
+ *  in remote mode the copy-paste command seeds it instead). Returns the absolute dir.
+ *  Seeds index.html only if missing, so re-runs keep byte's earlier work. */
+export async function scaffoldDemoProject(): Promise<string> {
+  const dir = path.join(os.homedir(), 'codepet-demo');
+  fs.mkdirSync(dir, { recursive: true });
+  const index = path.join(dir, 'index.html');
+  if (!fs.existsSync(index)) fs.writeFileSync(index, DEMO_SEED_HTML);
+  return dir;
 }

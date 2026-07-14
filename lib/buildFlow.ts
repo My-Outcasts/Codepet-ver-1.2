@@ -14,6 +14,10 @@ export const INTAKE_OPENING = `Ooh, let's build something! Tell me what you have
 /** Byte's single scripted follow-up, shown after the founder's first answer. */
 export const INTAKE_FOLLOWUP = `Love it! Anything else it must do? Add as much as you like — when you're ready, hit "Turn this into a plan". 😎`;
 
+/** Suggested build prompt for the demo "Let's build" flow. */
+export const DEMO_BUILD_BRIEF =
+  'A simple landing page for a neighborhood coffee shop — a warm hero with the name and tagline, three menu highlights, opening hours, and a "Visit us" call-to-action.';
+
 /** Append one intake answer to the running brief (newline-joined, blank-safe). */
 export function appendBrief(brief: string, text: string): string {
   const t = text.trim();
