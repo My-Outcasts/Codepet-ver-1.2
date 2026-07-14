@@ -103,7 +103,10 @@ describe('parseEventLine', () => {
   });
 
   it('no usage event when the assistant message has no usage', () => {
-    const line = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'x' }] } });
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'x' }] },
+    });
     expect(parseEventLine(line).some((e) => e.kind === 'usage')).toBe(false);
   });
 

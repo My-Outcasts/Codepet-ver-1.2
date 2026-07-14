@@ -190,7 +190,8 @@ function DuringStep({
         {recent.length > 0 && <div className="bc-live-feed">Byte sees: {recent.join(' · ')}</div>}
         {(tokens || today != null) && (
           <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
-            🔢 {tokens ? (
+            🔢{' '}
+            {tokens ? (
               <>
                 This build <b>~{fmtTokens(tokens)}</b>
               </>
@@ -361,7 +362,8 @@ function EndStep({
           </div>
           {(buildTokens || today != null) && (
             <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
-              🔢 {buildTokens ? (
+              🔢{' '}
+              {buildTokens ? (
                 <>
                   This build <b>~{fmtTokens(buildTokens)}</b>
                 </>
@@ -531,7 +533,9 @@ export function BuildCoachView() {
               Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your
               real projects are untouched.
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
+            <span
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+            >
               <a
                 href={DEMO_URL}
                 target="_blank"

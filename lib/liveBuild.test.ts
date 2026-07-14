@@ -197,8 +197,8 @@ describe('sanitizeDemoRecap', () => {
     expect(sanitizeDemoRecap(null)).toBeNull();
   });
   it('clamps present numbers', () => {
-    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: '5', filesChanged: -2, tokens: 3.9 })).toEqual(
-      { buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } },
-    );
+    expect(
+      sanitizeDemoRecap({ buildSessionId: 'b', commits: '5', filesChanged: -2, tokens: 3.9 }),
+    ).toEqual({ buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } });
   });
 });

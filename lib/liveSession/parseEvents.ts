@@ -84,7 +84,10 @@ export function parseEventLine(line: string): SessionEvent[] {
     if (u && typeof u === 'object') {
       const n = (k: string) => Number((u as Record<string, unknown>)[k]) || 0;
       const tokens =
-        n('input_tokens') + n('output_tokens') + n('cache_creation_input_tokens') + n('cache_read_input_tokens');
+        n('input_tokens') +
+        n('output_tokens') +
+        n('cache_creation_input_tokens') +
+        n('cache_read_input_tokens');
       if (tokens > 0) out.push({ kind: 'usage', tokens });
     }
     return out;

@@ -1,7 +1,7 @@
 # Byte brainstorms at "Let's build" (adaptive Q&A + reflect-back)
 
 **Date:** 2026-07-14
-**Goal:** When a founder hits "Let's build", Byte should *brainstorm* with them —
+**Goal:** When a founder hits "Let's build", Byte should _brainstorm_ with them —
 ask a few targeted, adaptive clarifying questions one at a time (who's it for /
 core problem / scope / what "done" looks like), then reflect back a short "here's
 what I'll build…" summary for the founder to confirm before Byte generates the
@@ -55,10 +55,20 @@ feature is: three new AI files + a pure decision helper + rework of
 ### A. Pure brainstorm lib — `lib/ai/brainstorm.ts` (mirrors `lib/ai/plan.ts`)
 
 Types:
+
 ```ts
-export interface BrainstormTurn { role: 'byte' | 'user'; text: string }
-export interface BrainstormInput { conversation: BrainstormTurn[]; project?: string }
-export interface BrainstormReply { kind: 'question' | 'ready'; text: string }
+export interface BrainstormTurn {
+  role: 'byte' | 'user';
+  text: string;
+}
+export interface BrainstormInput {
+  conversation: BrainstormTurn[];
+  project?: string;
+}
+export interface BrainstormReply {
+  kind: 'question' | 'ready';
+  text: string;
+}
 ```
 
 - `sanitizeBrainstormInput(body): BrainstormInput | null` — returns null unless
@@ -86,6 +96,7 @@ export interface BrainstormReply { kind: 'question' | 'ready'; text: string }
 export class BrainstormError extends Error { constructor(public code: string) … }
 export async function requestBuildBrainstorm(input: BrainstormInput): Promise<BrainstormReply>
 ```
+
 Same `authHeader()` (Firebase ID token) + `POST /api/build-brainstorm`; throws
 `BrainstormError(code)` on non-OK; returns the parsed `{ kind, text }`.
 
@@ -110,16 +121,18 @@ unit-tested without React or network:
 export const MAX_INTAKE_QUESTIONS = 3;
 
 export type IntakeStep =
-  | { mode: 'question'; text: string }              // ask again, no button
-  | { mode: 'ready'; text: string }                 // reflect-back + "Build this →" button
-  | { mode: 'fallback'; text: string };             // static INTAKE_FOLLOWUP + button
+  | { mode: 'question'; text: string } // ask again, no button
+  | { mode: 'ready'; text: string } // reflect-back + "Build this →" button
+  | { mode: 'fallback'; text: string }; // static INTAKE_FOLLOWUP + button
 
 /** Decide what Byte says after a founder's answer.
  *  reply === null means the AI call failed → fallback to the static flow.
  *  userTurns = how many answers the founder has now given (>=1). */
 export function decideIntakeStep(reply: BrainstormReply | null, userTurns: number): IntakeStep;
 ```
+
 Logic:
+
 - `reply === null` → `{ mode:'fallback', text: INTAKE_FOLLOWUP }`.
 - `reply.kind === 'ready'` → `{ mode:'ready', text: reply.text }`.
 - `reply.kind === 'question'` **and** `userTurns >= MAX_INTAKE_QUESTIONS` → force
@@ -171,11 +184,12 @@ unchanged.
 
 `submit` → `addIntakeTurn(answer)` → append brief + log → POST
 `/api/build-brainstorm` (company key) → `{ kind, text }` → `decideIntakeStep`:
+
 - question → Byte asks the next question → founder answers → loop (≤3);
 - ready → Byte reflects back "here's what I'll build…" + **Build this →** →
   founder clicks → `generateBuildPlan` (existing) → plan card → **Start building**.
-On any AI failure → static `INTAKE_FOLLOWUP` + **Turn this into a plan →** (today's
-exact behavior). Nothing can strand the founder.
+  On any AI failure → static `INTAKE_FOLLOWUP` + **Turn this into a plan →** (today's
+  exact behavior). Nothing can strand the founder.
 
 ## Error handling / graceful degradation
 

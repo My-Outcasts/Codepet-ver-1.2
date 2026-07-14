@@ -27,27 +27,31 @@
 ### Task 1: Serve + auto-open in `demoTerminalCommand` (TDD)
 
 **Files:**
+
 - Modify: `lib/armSession.ts`
 - Test: `lib/armSession.test.ts`
 
 **Interfaces:**
+
 - Produces: `export const DEMO_PORT = 4321`, `export const DEMO_URL = 'http://localhost:4321'`; `demoTerminalCommand` now ends by serving the demo dir on `DEMO_PORT` and opening `DEMO_URL`.
 
 - [ ] **Step 1: Update the test**
 
 In `lib/armSession.test.ts`, extend the existing `demoTerminalCommand` test's assertions:
+
 ```ts
-  it('creates the demo dir, seeds index.html only if missing, then runs claude and serves it', () => {
-    const cmd = demoTerminalCommand('build a landing page');
-    expect(cmd).toContain('mkdir -p ~/codepet-demo');
-    expect(cmd).toContain('cd ~/codepet-demo');
-    expect(cmd).toContain('[ -f index.html ]');
-    expect(cmd).toContain('base64 -d > index.html');
-    expect(cmd).toContain('claude "build a landing page"');
-    expect(cmd).toContain('python3 -m http.server 4321');
-    expect(cmd).toContain('open http://localhost:4321');
-  });
+it('creates the demo dir, seeds index.html only if missing, then runs claude and serves it', () => {
+  const cmd = demoTerminalCommand('build a landing page');
+  expect(cmd).toContain('mkdir -p ~/codepet-demo');
+  expect(cmd).toContain('cd ~/codepet-demo');
+  expect(cmd).toContain('[ -f index.html ]');
+  expect(cmd).toContain('base64 -d > index.html');
+  expect(cmd).toContain('claude "build a landing page"');
+  expect(cmd).toContain('python3 -m http.server 4321');
+  expect(cmd).toContain('open http://localhost:4321');
+});
 ```
+
 (Keep the existing `DEMO_DIR` assertion test.)
 
 - [ ] **Step 2: Run to verify it fails**
@@ -58,11 +62,14 @@ Expected: FAIL — the command doesn't yet contain the server/open parts.
 - [ ] **Step 3: Implement**
 
 In `lib/armSession.ts`, add the constants beside `DEMO_DIR`:
+
 ```ts
 export const DEMO_PORT = 4321;
 export const DEMO_URL = 'http://localhost:4321';
 ```
+
 and append serve+open to `demoTerminalCommand`'s returned string:
+
 ```ts
 export function demoTerminalCommand(prompt: string): string {
   const b64 = btoa(unescape(encodeURIComponent(DEMO_SEED_HTML)));
@@ -94,14 +101,17 @@ git commit -m "feat(build): demo command serves ~/codepet-demo on localhost:4321
 ### Task 2: "Open demo →" link in the build view
 
 **Files:**
+
 - Modify: `components/views/BuildCoachView.tsx`
 
 **Interfaces:**
+
 - Consumes: `DEMO_URL` from `@/lib/armSession` (Task 1); `demoLetsBuild` (already read in this component).
 
 - [ ] **Step 1: Import `DEMO_URL`**
 
 Add to the imports in `BuildCoachView.tsx`:
+
 ```ts
 import { DEMO_URL } from '@/lib/armSession';
 ```
@@ -109,37 +119,40 @@ import { DEMO_URL } from '@/lib/armSession';
 - [ ] **Step 2: Add the link to the demo banner**
 
 Replace the existing demo banner block (the `{demoLetsBuild && (<div …>Demo mode — …</div>)}`) with a version that lays the text and the link in a row:
+
 ```tsx
-        {demoLetsBuild && (
-          <div
-            style={{
-              margin: '8px 0',
-              padding: '7px 12px',
-              borderRadius: 9,
-              fontSize: 12.5,
-              background: 'rgba(125,227,255,0.08)',
-              border: '1px solid rgba(125,227,255,0.3)',
-              color: 'var(--t-2, #cfe0ff)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              flexWrap: 'wrap',
-              justifyContent: 'space-between',
-            }}
-          >
-            <span>
-              Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>.
-            </span>
-            <a
-              href={DEMO_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none', whiteSpace: 'nowrap' }}
-            >
-              Open demo →
-            </a>
-          </div>
-        )}
+{
+  demoLetsBuild && (
+    <div
+      style={{
+        margin: '8px 0',
+        padding: '7px 12px',
+        borderRadius: 9,
+        fontSize: 12.5,
+        background: 'rgba(125,227,255,0.08)',
+        border: '1px solid rgba(125,227,255,0.3)',
+        color: 'var(--t-2, #cfe0ff)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        flexWrap: 'wrap',
+        justifyContent: 'space-between',
+      }}
+    >
+      <span>
+        Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>.
+      </span>
+      <a
+        href={DEMO_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none', whiteSpace: 'nowrap' }}
+      >
+        Open demo →
+      </a>
+    </div>
+  );
+}
 ```
 
 - [ ] **Step 3: Typecheck + lint + build**
@@ -147,6 +160,7 @@ Replace the existing demo banner block (the `{demoLetsBuild && (<div …>Demo mo
 ```bash
 npm run typecheck && npx eslint components/views/BuildCoachView.tsx && npm run build
 ```
+
 Expected: clean; build succeeds.
 
 - [ ] **Step 4: Visual check**

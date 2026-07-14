@@ -1,9 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  sanitizeBrainstormInput,
-  buildBrainstormPrompt,
-  BRAINSTORM_SCHEMA,
-} from './brainstorm';
+import { sanitizeBrainstormInput, buildBrainstormPrompt, BRAINSTORM_SCHEMA } from './brainstorm';
 
 describe('sanitizeBrainstormInput', () => {
   it('keeps valid byte/user turns and trims text', () => {
@@ -95,7 +91,10 @@ describe('BRAINSTORM_SCHEMA', () => {
   it('is a strict object with kind enum and required text', () => {
     expect(BRAINSTORM_SCHEMA.additionalProperties).toBe(false);
     expect(BRAINSTORM_SCHEMA.required as string[]).toEqual(['kind', 'text']);
-    const props = BRAINSTORM_SCHEMA.properties as Record<string, { type?: string; enum?: string[] }>;
+    const props = BRAINSTORM_SCHEMA.properties as Record<
+      string,
+      { type?: string; enum?: string[] }
+    >;
     expect(props.kind?.enum).toEqual(['question', 'ready']);
     expect(props.text?.type).toBe('string');
   });

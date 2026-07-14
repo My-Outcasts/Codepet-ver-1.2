@@ -2659,7 +2659,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // real usage shows up without a toolkit install.
             const command =
               terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
-              tokenReportSuffix({ apiUrl: window.location.origin, companyId, buildSessionId: id, token });
+              tokenReportSuffix({
+                apiUrl: window.location.origin,
+                companyId,
+                buildSessionId: id,
+                token,
+              });
             const res = await armBuildSession({
               buildSessionId: id,
               projectDir: dir,

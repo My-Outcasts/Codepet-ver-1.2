@@ -32,15 +32,18 @@
 ### Task 1: `demoTerminalCommand` + demo constants (TDD)
 
 **Files:**
+
 - Modify: `lib/armSession.ts`
 - Test: `lib/armSession.test.ts`
 
 **Interfaces:**
+
 - Produces: `export const DEMO_DIR = '~/codepet-demo'`; `export const DEMO_SEED_HTML: string`; `export function demoTerminalCommand(prompt: string): string`.
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `lib/armSession.test.ts`:
+
 ```ts
 import { demoTerminalCommand, DEMO_DIR } from './armSession';
 
@@ -67,6 +70,7 @@ Expected: FAIL — `demoTerminalCommand`/`DEMO_DIR` are not exported.
 - [ ] **Step 3: Implement**
 
 In `lib/armSession.ts` (reuse the existing `shq` helper the file already has), add:
+
 ```ts
 export const DEMO_DIR = '~/codepet-demo';
 
@@ -119,16 +123,19 @@ git commit -m "feat(build): demoTerminalCommand + demo landing-page seed for dem
 ### Task 2: `scaffoldDemoProject` server action + `DEMO_BUILD_BRIEF`
 
 **Files:**
+
 - Modify: `app/actions/build.ts`
 - Modify: `lib/buildFlow.ts`
 
 **Interfaces:**
+
 - Produces: `export async function scaffoldDemoProject(): Promise<string>` (returns the absolute demo dir, seeded); `export const DEMO_BUILD_BRIEF: string`.
 - Consumes: `DEMO_SEED_HTML` from `lib/armSession.ts` (Task 1).
 
 - [ ] **Step 1: Add the demo brief constant**
 
 In `lib/buildFlow.ts` (beside `INTAKE_OPENING`), add:
+
 ```ts
 export const DEMO_BUILD_BRIEF =
   'A simple landing page for a neighborhood coffee shop — a warm hero with the name and tagline, three menu highlights, opening hours, and a "Visit us" call-to-action.';
@@ -137,11 +144,14 @@ export const DEMO_BUILD_BRIEF =
 - [ ] **Step 2: Add the scaffold action**
 
 In `app/actions/build.ts`, add `os` to the node imports and the `DEMO_SEED_HTML` import, then append:
+
 ```ts
 import os from 'node:os';
 import { buildOpeningPrompt, terminalCommand, DEMO_SEED_HTML } from '@/lib/armSession';
 ```
+
 (merge with the existing `@/lib/armSession` import) and:
+
 ```ts
 /** Create + seed the throwaway demo project on the local machine (local mode only —
  *  in remote mode the copy-paste command seeds it instead). Returns the absolute dir.
@@ -168,42 +178,50 @@ git commit -m "feat(build): scaffoldDemoProject action + demo build brief"
 ### Task 3: `demoLetsBuild` state + `armBuild` demo branch + intake pre-fill
 
 **Files:**
+
 - Modify: `lib/store.tsx`
 
 **Interfaces:**
+
 - Consumes: `demoTerminalCommand`, `DEMO_DIR` (Task 1); `scaffoldDemoProject` (Task 2); `DEMO_BUILD_BRIEF` (Task 2).
 - Produces on the store context: `demoLetsBuild: boolean`, `setDemoLetsBuild: (v: boolean) => void`.
 
 - [ ] **Step 1: Imports**
 
 Add to the existing imports in `lib/store.tsx`:
+
 ```ts
 import { buildOpeningPrompt, terminalCommand, demoTerminalCommand, DEMO_DIR } from './armSession';
 ```
+
 (merge with the existing `./armSession` import), and:
+
 ```ts
 import { scaffoldDemoProject } from '@/app/actions/build';
 ```
+
 (merge with the existing `@/app/actions/build` import — it already imports `armBuildSession`), and add `DEMO_BUILD_BRIEF` to the existing `./buildFlow` import (which already imports `INTAKE_OPENING`).
 
 - [ ] **Step 2: Add the state + setter**
 
 Near the other build state (`const [buildProject, setBuildProject] = useState(...)`), add:
+
 ```ts
-  const [demoLetsBuild, setDemoLetsBuildState] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return window.localStorage.getItem('codepet:demoLetsBuild') !== '0'; // default ON
-  });
-  const setDemoLetsBuild = useCallback((v: boolean) => {
-    setDemoLetsBuildState(v);
-    if (typeof window !== 'undefined')
-      window.localStorage.setItem('codepet:demoLetsBuild', v ? '1' : '0');
-  }, []);
+const [demoLetsBuild, setDemoLetsBuildState] = useState<boolean>(() => {
+  if (typeof window === 'undefined') return true;
+  return window.localStorage.getItem('codepet:demoLetsBuild') !== '0'; // default ON
+});
+const setDemoLetsBuild = useCallback((v: boolean) => {
+  setDemoLetsBuildState(v);
+  if (typeof window !== 'undefined')
+    window.localStorage.setItem('codepet:demoLetsBuild', v ? '1' : '0');
+}, []);
 ```
 
 - [ ] **Step 3: Declare them on the store interface**
 
 In the store's context interface (beside `buildProject: string;`), add:
+
 ```ts
   demoLetsBuild: boolean;
   setDemoLetsBuild: (v: boolean) => void;
@@ -212,99 +230,102 @@ In the store's context interface (beside `buildProject: string;`), add:
 - [ ] **Step 4: Pre-fill the intake brief in demo mode**
 
 In `startBuildIntake`, change `setBuildBrief('');` to:
+
 ```ts
-    setBuildBrief(demoLetsBuild ? DEMO_BUILD_BRIEF : '');
+setBuildBrief(demoLetsBuild ? DEMO_BUILD_BRIEF : '');
 ```
+
 and add `demoLetsBuild` to its `useCallback` dependency array.
 
 - [ ] **Step 5: Add the demo branch in `armBuild`**
 
 Relax the guard and add a demo branch. Replace the current `armBuild` body's guard + `try` interior so it reads:
+
 ```ts
-  const armBuild = useCallback(() => {
-    if (!buildPlan || !companyId || buildArming || (!demoLetsBuild && !buildProject.trim())) return;
-    setBuildArming(true);
-    buildEndedNudged.current = false;
-    setBuildResumed(false);
-    (async () => {
-      try {
-        const id = crypto.randomUUID();
-        if (demoLetsBuild) {
-          const cap = await getCapability();
-          if (cap.mode === 'local') {
-            const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
-            setBuildProjectDir(dir);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            setBuildLocal(true);
-            setBuildLaunchCommand(null);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else {
-            setBuildLocal(false);
-            setBuildProjectDir(DEMO_DIR);
-            const token = await ensureIngestToken(companyId);
-            await armBuildSession({
-              buildSessionId: id,
-              projectDir: DEMO_DIR,
-              plan: buildPlan,
-              brief: buildBrief,
-              companyId,
-              token,
-              apiUrl: window.location.origin,
-            });
-            // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
-            setBuildLaunchCommand(demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief)));
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          }
-        } else {
-          const dirs = await loadProjectDirs(companyId);
-          const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
+const armBuild = useCallback(() => {
+  if (!buildPlan || !companyId || buildArming || (!demoLetsBuild && !buildProject.trim())) return;
+  setBuildArming(true);
+  buildEndedNudged.current = false;
+  setBuildResumed(false);
+  (async () => {
+    try {
+      const id = crypto.randomUUID();
+      if (demoLetsBuild) {
+        const cap = await getCapability();
+        if (cap.mode === 'local') {
+          const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
           setBuildProjectDir(dir);
-          const cap = await getCapability();
-          if (cap.mode === 'local') {
-            setBuildCheckpoint(await createCheckpoint(dir));
-            setBuildLocal(true);
-            setBuildLaunchCommand(null);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else {
-            setBuildLocal(false);
-            const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
-            const token = await ensureIngestToken(companyId);
-            const res = await armBuildSession({
-              buildSessionId: id,
-              projectDir: dir,
-              plan: buildPlan,
-              brief: buildBrief,
-              companyId,
-              token,
-              apiUrl: window.location.origin,
-            });
-            setBuildLaunchCommand(res.ok && res.launched ? null : command);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          }
+          setBuildCheckpoint(null); // throwaway target — no rewind
+          setBuildLocal(true);
+          setBuildLaunchCommand(null);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        } else {
+          setBuildLocal(false);
+          setBuildProjectDir(DEMO_DIR);
+          const token = await ensureIngestToken(companyId);
+          await armBuildSession({
+            buildSessionId: id,
+            projectDir: DEMO_DIR,
+            plan: buildPlan,
+            brief: buildBrief,
+            companyId,
+            token,
+            apiUrl: window.location.origin,
+          });
+          // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
+          setBuildLaunchCommand(demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief)));
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
         }
-        setView('build');
-        const live: ChatMessage = {
-          id: newId(),
-          role: 'byte',
-          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
-          ts: Date.now(),
-        };
-        setChatMessages((prev) => [...prev, live]);
-        persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
-        track('build.arm', { demo: demoLetsBuild });
-      } finally {
-        setBuildArming(false);
+      } else {
+        const dirs = await loadProjectDirs(companyId);
+        const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
+        setBuildProjectDir(dir);
+        const cap = await getCapability();
+        if (cap.mode === 'local') {
+          setBuildCheckpoint(await createCheckpoint(dir));
+          setBuildLocal(true);
+          setBuildLaunchCommand(null);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        } else {
+          setBuildLocal(false);
+          const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
+          const token = await ensureIngestToken(companyId);
+          const res = await armBuildSession({
+            buildSessionId: id,
+            projectDir: dir,
+            plan: buildPlan,
+            brief: buildBrief,
+            companyId,
+            token,
+            apiUrl: window.location.origin,
+          });
+          setBuildLaunchCommand(res.ok && res.launched ? null : command);
+          setBuildSessionId(id);
+          setBuildLive(null);
+          setBuildStep('during');
+        }
       }
-    })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, demoLetsBuild, persistMsg]);
+      setView('build');
+      const live: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+        ts: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, live]);
+      persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
+      track('build.arm', { demo: demoLetsBuild });
+    } finally {
+      setBuildArming(false);
+    }
+  })();
+}, [buildPlan, companyId, buildArming, buildProject, buildBrief, demoLetsBuild, persistMsg]);
 ```
 
 - [ ] **Step 6: Expose on the context value**
@@ -324,59 +345,66 @@ git commit -m "feat(build): demoLetsBuild store state + armBuild demo branch + i
 ### Task 4: Settings toggle + demo banner
 
 **Files:**
+
 - Modify: `components/views/SettingsView.tsx`
 - Modify: `components/views/BuildCoachView.tsx`
 
 **Interfaces:**
+
 - Consumes: `demoLetsBuild`, `setDemoLetsBuild` from the store (Task 3).
 
 - [ ] **Step 1: Settings toggle card**
 
 In `SettingsView`, read the store values (`const { demoLetsBuild, setDemoLetsBuild } = useApp();`) and add a `set-card` (not dev-gated) using the same `role="switch"` pattern as the existing tracking toggle:
+
 ```tsx
-        <div className="set-card">
-          <div className="set-row">
-            <div className="set-txt">
-              <b>Demo Let&apos;s build</b>
-              <span>
-                Builds a throwaway landing page in <code>~/codepet-demo</code> instead of your
-                real project — for trying the feature safely. On by default.
-              </span>
-            </div>
-            <button
-              role="switch"
-              aria-checked={demoLetsBuild}
-              aria-label="Demo Let's build"
-              className={`switch${demoLetsBuild ? ' on' : ''}`}
-              onClick={() => setDemoLetsBuild(!demoLetsBuild)}
-            >
-              <span className="knob" />
-            </button>
-          </div>
-        </div>
+<div className="set-card">
+  <div className="set-row">
+    <div className="set-txt">
+      <b>Demo Let&apos;s build</b>
+      <span>
+        Builds a throwaway landing page in <code>~/codepet-demo</code> instead of your real project
+        — for trying the feature safely. On by default.
+      </span>
+    </div>
+    <button
+      role="switch"
+      aria-checked={demoLetsBuild}
+      aria-label="Demo Let's build"
+      className={`switch${demoLetsBuild ? ' on' : ''}`}
+      onClick={() => setDemoLetsBuild(!demoLetsBuild)}
+    >
+      <span className="knob" />
+    </button>
+  </div>
+</div>
 ```
 
 - [ ] **Step 2: Demo banner in the build view**
 
 In `BuildCoachView`, read `demoLetsBuild` from the store and, when true, render a small calm banner near the top of the build/during view:
+
 ```tsx
-      {demoLetsBuild && (
-        <div
-          style={{
-            margin: '8px 0',
-            padding: '7px 12px',
-            borderRadius: 9,
-            fontSize: 12.5,
-            background: 'rgba(125,227,255,0.08)',
-            border: '1px solid rgba(125,227,255,0.3)',
-            color: 'var(--t-2, #cfe0ff)',
-          }}
-        >
-          Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your real
-          projects are untouched.
-        </div>
-      )}
+{
+  demoLetsBuild && (
+    <div
+      style={{
+        margin: '8px 0',
+        padding: '7px 12px',
+        borderRadius: 9,
+        fontSize: 12.5,
+        background: 'rgba(125,227,255,0.08)',
+        border: '1px solid rgba(125,227,255,0.3)',
+        color: 'var(--t-2, #cfe0ff)',
+      }}
+    >
+      Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your real
+      projects are untouched.
+    </div>
+  );
+}
 ```
+
 (Place it where it renders in the build view regardless of local/remote; match the file's existing structure — if `BuildCoachView` composes sub-panels, put it in the shared wrapper.)
 
 - [ ] **Step 3: Typecheck + lint + build**
@@ -384,6 +412,7 @@ In `BuildCoachView`, read `demoLetsBuild` from the store and, when true, render 
 ```bash
 npm run typecheck && npx eslint components/views/SettingsView.tsx components/views/BuildCoachView.tsx && npm run build
 ```
+
 Expected: clean; build succeeds.
 
 - [ ] **Step 4: Visual check**

@@ -27,6 +27,7 @@ rate-limited, not token-metered) — dropped. We show **tokens spent**.
 ## Target design
 
 ### A. Local per-build tokens (direct, exact)
+
 1. `parseEvents.ts`: add `{ kind: 'usage'; tokens: number }` to `SessionEvent`. In the
    `assistant` branch, if `obj.message.usage` is an object, emit one usage event with
    `tokens = input_tokens + output_tokens + cache_creation_input_tokens + cache_read_input_tokens`
@@ -39,21 +40,24 @@ rate-limited, not token-metered) — dropped. We show **tokens spent**.
 This makes `buildLive.tokens` update live in local mode.
 
 ### B. Remote per-build tokens (self-report, best-effort, no install)
+
 Add a shared `tokenReportSuffix(report: { apiUrl; companyId; buildSessionId; token }): string`
 in `lib/armSession.ts` — a shell segment run after `claude`:
+
 - Find the session's transcript (newest recently-modified jsonl):
   `TF=$(find ~/.claude/projects -name '*.jsonl' -newermt '-30 minutes' 2>/dev/null | xargs ls -t 2>/dev/null | head -1)`
 - Sum tokens with a python one-liner (best-effort, `|| echo 0`):
   `tokens=$(python3 -c "import json,sys;t=0
-  ...sum message.usage fields per line, ignore parse errors..." "$TF" 2>/dev/null || echo 0)`
+...sum message.usage fields per line, ignore parse errors..." "$TF" 2>/dev/null || echo 0)`
 - POST to `/api/track/demo-recap` with `{ companyId, token, buildSessionId, tokens }`
   (`curl -s … >/dev/null 2>&1`, ids/token/apiUrl baked at build time, `tokens` shell-substituted).
-Append it in **both** remote build paths in `armBuild`: inside `demoTerminalCommand` (which
-already self-reports commits/files — add tokens to the same curl or a second curl), and in the
-non-demo remote branch by appending `tokenReportSuffix(report)` to `terminalCommand(dir, prompt)`
-(the store has `companyId`, `id`, `token`, `window.location.origin` in scope).
+  Append it in **both** remote build paths in `armBuild`: inside `demoTerminalCommand` (which
+  already self-reports commits/files — add tokens to the same curl or a second curl), and in the
+  non-demo remote branch by appending `tokenReportSuffix(report)` to `terminalCommand(dir, prompt)`
+  (the store has `companyId`, `id`, `token`, `window.location.origin` in scope).
 
 ### C. Endpoint accepts tokens
+
 Extend `DemoRecap` (`lib/liveBuild.ts`) to `{ commits: number; filesChanged: number; tokens: number }`
 and `sanitizeDemoRecap` to clamp `tokens` (floored, ≥0, capped e.g. 2_000_000_000). The endpoint
 already writes `{ recap }` with `{ merge: true }`, so a tokens-only POST merges fine (missing
@@ -62,12 +66,15 @@ carry through only the fields present, or default absent numbers to 0; a real bu
 only tokens must not zero a prior commits value → **write only the keys present** in the body).
 
 ### D. Today's total (ccusage, local only)
+
 New server action `getTodayTokens(): Promise<number | null>` (`app/actions/`) — spawns
 `npx -y ccusage@latest daily --since <yyyymmdd> --json`, parses `totals.totalTokens`, returns it;
 returns `null` on any error or when not on a local machine. (Best-effort; slow first run.)
 
 ### E. UI (build view)
+
 In `BuildCoachView`:
+
 - **DURING** (`DuringStep`): a small line under the meter — `🔢 This build ~{fmt(live.tokens)}`
   (only when `live?.tokens` present) `· Today ~{fmt(today)}` (only when the ccusage action
   returned a number).
@@ -77,22 +84,26 @@ In `BuildCoachView`:
 - Fetch `getTodayTokens()` on entering the build view; refresh every ~60s while in DURING.
 
 ## Data flow
+
 Local: `claude` stdout → parseEvents (usage) → reduceTranscript.tokens → liveFromTranscript →
 `buildLive.tokens` → UI. Remote: command sums the transcript → POST → `liveBuilds/{id}.recap.tokens`
 → store's `subscribeLiveBuild` → `buildLive.recap.tokens` → UI. Today's total: ccusage server
 action (local).
 
 ## Out of scope
+
 - "Remaining" subscription tokens (impossible).
 - Today's total on remote/Vercel (ccusage can't run there).
 - Live DURING token stream for remote (self-report lands at session end).
 
 ## Security / robustness notes
+
 - Same ingest-token model as the demo-recap endpoint (token in the command; internal use).
 - The remote transcript-sum is **best-effort**: picks the newest jsonl, so a concurrent
   session could skew it; parse errors degrade to 0. Local is exact.
 
 ## Success criteria
+
 - Local build: "this build" tokens tick up live and appear in the recap; "today" shows the
   ccusage total.
 - Remote build (demo or real): the recap shows a real "this build" token figure with no

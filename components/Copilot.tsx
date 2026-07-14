@@ -876,7 +876,9 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                               (!demoLetsBuild && !buildProject.trim())
                             }
                             title={
-                              !demoLetsBuild && !buildProject.trim() ? 'Pick a project first' : undefined
+                              !demoLetsBuild && !buildProject.trim()
+                                ? 'Pick a project first'
+                                : undefined
                             }
                           >
                             {buildArming

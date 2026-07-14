@@ -29,16 +29,18 @@ accepted, since the point is to feel the real thing.
 ## Target design
 
 ### 1. Setting: `demoLetsBuild` (default ON), localStorage-persisted
+
 - Add store state `demoLetsBuild: boolean` + `setDemoLetsBuild(v)`, initialized from
   `localStorage['codepet:demoLetsBuild']`, **defaulting to `true`** when unset. The setter
   writes localStorage. (Client behavior only — no Firestore.)
 - Expose both on the store context.
 - `SettingsView`: a new `set-card` with a `role="switch"` toggle bound to
   `demoLetsBuild`/`setDemoLetsBuild`, labeled e.g. **"Demo Let's build"** with a sub line:
-  *"Builds a throwaway landing page in `~/codepet-demo` instead of your real project — for
-  trying the feature safely. On by default."* This card shows for all users (not dev-gated).
+  _"Builds a throwaway landing page in `~/codepet-demo` instead of your real project — for
+  trying the feature safely. On by default."_ This card shows for all users (not dev-gated).
 
 ### 2. Demo target + self-seeding command
+
 - New constants/helpers in `lib/armSession.ts`:
   - `DEMO_DIR = '~/codepet-demo'` (home-relative; the shell expands `~`).
   - `DEMO_SEED_HTML`: a minimal but real starter `index.html` (a barebones landing page —
@@ -52,7 +54,9 @@ accepted, since the point is to feel the real thing.
     unit test asserting the command contains `~/codepet-demo`, the decode, and `claude`.)
 
 ### 3. `armBuild`: demo branch
+
 When `demoLetsBuild` is true:
+
 - **Bypass** the `!buildProject.trim()` guard (no project needed) and skip
   `loadProjectDirs`; the target dir is `~/codepet-demo`.
 - **remote mode**: `setBuildLaunchCommand(demoTerminalCommand(buildOpeningPrompt(plan, brief)))`
@@ -67,29 +71,34 @@ When `demoLetsBuild` is true:
   unchanged — the tester sees the real session.
 
 ### 4. Pre-filled suggestion
-- Add `DEMO_BUILD_BRIEF` (a constant, e.g. *"A simple landing page for a neighborhood coffee
+
+- Add `DEMO_BUILD_BRIEF` (a constant, e.g. _"A simple landing page for a neighborhood coffee
   shop — a warm hero with the name and tagline, three menu highlights, hours, and a 'Visit us'
-  call-to-action."*).
+  call-to-action."_).
 - In `startBuildIntake`, when `demoLetsBuild` is true, pre-fill `buildBrief` with
   `DEMO_BUILD_BRIEF` (instead of empty) so `generateBuildPlan` can run immediately — the
   tester can still edit it, but doesn't have to invent one.
 
 ### 5. Demo banner
+
 - In the build view (BuildCoachView / the "during" panel), when `demoLetsBuild` is true show
   a small, calm banner: **"Demo mode — building a throwaway landing page in ~/codepet-demo.
   Your real projects are untouched."**
 
 ## Data flow
+
 No backend/schema change beyond the `demo` flag on the arm action input. The toggle is
 client state (localStorage). The demo dir + seed live on the tester's machine, created by
 the command/action at arm time.
 
 ## Out of scope
+
 - A no-Claude-Code simulation (that was option b2, rejected).
 - Changing the build engine, plan generation, or live-session protocol.
 - Cleaning up `~/codepet-demo` automatically (re-runs reuse it; deleting is manual).
 
 ## Success criteria
+
 - Settings shows a **default-ON** "Demo Let's build" toggle that persists across reloads.
 - With it ON, "Let's build" needs no project pick, pre-fills a suggested landing-page brief,
   and (remote) yields a single copy-paste command that creates `~/codepet-demo` with a seed

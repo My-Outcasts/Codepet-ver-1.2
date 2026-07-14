@@ -31,16 +31,19 @@
 ### Task 1: `sanitizeDemoRecap` + `LiveState.recap` + the endpoint (TDD for the helper)
 
 **Files:**
+
 - Modify: `lib/liveBuild.ts`, `lib/liveBuild.test.ts`
 - Create: `app/api/track/demo-recap/route.ts`
 
 **Interfaces:**
+
 - Produces: `export interface DemoRecap { commits: number; filesChanged: number }`;
   `LiveState.recap?: DemoRecap`; `export function sanitizeDemoRecap(raw): { buildSessionId: string; recap: DemoRecap } | null`.
 
 - [ ] **Step 1: Write the failing test**
 
 Append to `lib/liveBuild.test.ts`:
+
 ```ts
 import { sanitizeDemoRecap } from './liveBuild';
 
@@ -76,6 +79,7 @@ Expected: FAIL — `sanitizeDemoRecap` not exported.
 - [ ] **Step 3: Implement the type + helper**
 
 In `lib/liveBuild.ts`, add `recap?: DemoRecap;` to the `LiveState` interface (after `pendingAsk?`), and add:
+
 ```ts
 export interface DemoRecap {
   commits: number;
@@ -108,6 +112,7 @@ Expected: PASS (existing reduceLive/sanitizeLiveEvent tests stay green).
 - [ ] **Step 5: Create the endpoint**
 
 Create `app/api/track/demo-recap/route.ts` (mirror `app/api/track/live/route.ts`'s auth):
+
 ```ts
 // Demo self-report ingest: the demo copy-paste command POSTs a git rollup (commits + files
 // changed) so remote testers see real recap stats without installing the toolkit. Auth is the
@@ -141,7 +146,9 @@ export async function POST(req: Request): Promise<Response> {
   if (!clean) {
     return NextResponse.json({ error: 'invalid body' }, { status: 400 });
   }
-  await db.doc(paths.liveBuild(companyId, clean.buildSessionId)).set({ recap: clean.recap }, { merge: true });
+  await db
+    .doc(paths.liveBuild(companyId, clean.buildSessionId))
+    .set({ recap: clean.recap }, { merge: true });
   return NextResponse.json({ ok: true });
 }
 ```
@@ -159,32 +166,35 @@ git commit -m "feat(build): demo-recap ingest endpoint + LiveState.recap + sanit
 ### Task 2: `demoTerminalCommand` self-report + `armBuild` credentials
 
 **Files:**
+
 - Modify: `lib/armSession.ts`, `lib/armSession.test.ts`, `lib/store.tsx`
 
 **Interfaces:**
+
 - Consumes: `/api/track/demo-recap` (Task 1).
 - Produces: `demoTerminalCommand(prompt: string, report?: { apiUrl: string; companyId: string; buildSessionId: string; token: string }): string`.
 
 - [ ] **Step 1: Update the test**
 
 In `lib/armSession.test.ts`, add a case for the report variant (keep the existing no-report test):
+
 ```ts
-  it('self-reports commits + files when given report credentials', () => {
-    const cmd = demoTerminalCommand('build it', {
-      apiUrl: 'https://app.example.com',
-      companyId: 'c1',
-      buildSessionId: 'b1',
-      token: 'tok',
-    });
-    expect(cmd).toContain('git -C ~/codepet-demo rev-list --count HEAD');
-    expect(cmd).toContain('git -C ~/codepet-demo ls-files');
-    expect(cmd).toContain('https://app.example.com/api/track/demo-recap');
-    expect(cmd).toContain('"buildSessionId":"b1"');
-    expect(cmd).toContain('"token":"tok"');
+it('self-reports commits + files when given report credentials', () => {
+  const cmd = demoTerminalCommand('build it', {
+    apiUrl: 'https://app.example.com',
+    companyId: 'c1',
+    buildSessionId: 'b1',
+    token: 'tok',
   });
-  it('omits the self-report when no credentials are given', () => {
-    expect(demoTerminalCommand('build it')).not.toContain('/api/track/demo-recap');
-  });
+  expect(cmd).toContain('git -C ~/codepet-demo rev-list --count HEAD');
+  expect(cmd).toContain('git -C ~/codepet-demo ls-files');
+  expect(cmd).toContain('https://app.example.com/api/track/demo-recap');
+  expect(cmd).toContain('"buildSessionId":"b1"');
+  expect(cmd).toContain('"token":"tok"');
+});
+it('omits the self-report when no credentials are given', () => {
+  expect(demoTerminalCommand('build it')).not.toContain('/api/track/demo-recap');
+});
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -195,6 +205,7 @@ Expected: FAIL — no report segment yet.
 - [ ] **Step 3: Implement**
 
 In `lib/armSession.ts`, change `demoTerminalCommand` to accept an optional `report` and append the rollup+curl when present. Numbers are shell-substituted at run time; ids/token/url are baked at build time:
+
 ```ts
 export function demoTerminalCommand(
   prompt: string,
@@ -220,6 +231,7 @@ export function demoTerminalCommand(
   return base + selfReport + serve;
 }
 ```
+
 (The `\${commits:-0}` / `\${files:-0}` stay literal in the emitted command so the shell
 expands them at run time; `${report.*}` are JS-interpolated at build time.)
 
@@ -232,16 +244,18 @@ Expected: PASS.
 
 In `lib/store.tsx`, the remote-demo branch currently calls
 `setBuildLaunchCommand(demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief)))`. Change to:
+
 ```ts
-            setBuildLaunchCommand(
-              demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
-                apiUrl: window.location.origin,
-                companyId,
-                buildSessionId: id,
-                token,
-              }),
-            );
+setBuildLaunchCommand(
+  demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
+    apiUrl: window.location.origin,
+    companyId,
+    buildSessionId: id,
+    token,
+  }),
+);
 ```
+
 (`companyId`, `id`, and `token` are already in scope in that branch.)
 
 - [ ] **Step 6: Typecheck + lint + commit**
@@ -257,20 +271,25 @@ git commit -m "feat(build): demo command self-reports commits + files to the rec
 ### Task 3: Recap shows the self-reported stats
 
 **Files:**
+
 - Modify: `components/views/BuildCoachView.tsx`
 
 **Interfaces:**
+
 - Consumes: `buildLive.recap` (`LiveState.recap` from Task 1); `demoLetsBuild` (already read in this component).
 
 - [ ] **Step 1: Pass recap + demo into `EndStep`**
 
 In the parent (where `<EndStep … actions={actions} … />` is rendered), add two props:
+
 ```tsx
             actions={actions}
             recap={buildLive?.recap ?? null}
             demo={demoLetsBuild}
 ```
+
 And in `EndStep`'s prop type, add:
+
 ```ts
   recap: { commits: number; filesChanged: number } | null;
   demo: boolean;
@@ -279,23 +298,27 @@ And in `EndStep`'s prop type, add:
 - [ ] **Step 2: Feed committed from recap; make spent honest in demo**
 
 In `EndStep`, change `commits` to prefer the live rollup then the self-report:
+
 ```ts
-  const commits = ev?.commits ?? recap?.commits ?? 0;
+const commits = ev?.commits ?? recap?.commits ?? 0;
 ```
+
 And the **spent** tile — actions aren't tracked remotely in demo, so show the real files-changed
 count when we have a self-report, else "—", instead of a fake `0/{target}`:
+
 ```tsx
-            <div className="bc-rc">
-              <label>spent</label>
-              {demo ? (
-                <div className="v">{recap ? `${recap.filesChanged} files` : '—'}</div>
-              ) : (
-                <div className={`v${underBudget ? ' ok' : ' warn'}`}>
-                  {actions}/{target} actions
-                </div>
-              )}
-            </div>
+<div className="bc-rc">
+  <label>spent</label>
+  {demo ? (
+    <div className="v">{recap ? `${recap.filesChanged} files` : '—'}</div>
+  ) : (
+    <div className={`v${underBudget ? ' ok' : ' warn'}`}>
+      {actions}/{target} actions
+    </div>
+  )}
+</div>
 ```
+
 (Leave `built` and `committed` tiles as-is — `built` already falls back to the plan title, and
 `committed` now reads the recap-fed `commits`.)
 
@@ -304,6 +327,7 @@ count when we have a self-report, else "—", instead of a fake `0/{target}`:
 ```bash
 npm run typecheck && npx eslint components/views/BuildCoachView.tsx && npm run build
 ```
+
 Expected: clean; build succeeds.
 
 - [ ] **Step 4: Visual check**

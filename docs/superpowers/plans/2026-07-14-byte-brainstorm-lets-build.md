@@ -24,10 +24,12 @@
 ### Task 1: Pure brainstorm lib (`lib/ai/brainstorm.ts`)
 
 **Files:**
+
 - Create: `lib/ai/brainstorm.ts`
 - Test: `lib/ai/brainstorm.test.ts`
 
 **Interfaces:**
+
 - Consumes: nothing (pure).
 - Produces:
   - `interface BrainstormTurn { role: 'byte' | 'user'; text: string }`
@@ -43,11 +45,7 @@ Create `lib/ai/brainstorm.test.ts`:
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import {
-  sanitizeBrainstormInput,
-  buildBrainstormPrompt,
-  BRAINSTORM_SCHEMA,
-} from './brainstorm';
+import { sanitizeBrainstormInput, buildBrainstormPrompt, BRAINSTORM_SCHEMA } from './brainstorm';
 
 describe('sanitizeBrainstormInput', () => {
   it('keeps valid byte/user turns and trims text', () => {
@@ -139,7 +137,10 @@ describe('BRAINSTORM_SCHEMA', () => {
   it('is a strict object with kind enum and required text', () => {
     expect(BRAINSTORM_SCHEMA.additionalProperties).toBe(false);
     expect(BRAINSTORM_SCHEMA.required as string[]).toEqual(['kind', 'text']);
-    const props = BRAINSTORM_SCHEMA.properties as Record<string, { type?: string; enum?: string[] }>;
+    const props = BRAINSTORM_SCHEMA.properties as Record<
+      string,
+      { type?: string; enum?: string[] }
+    >;
     expect(props.kind?.enum).toEqual(['question', 'ready']);
     expect(props.text?.type).toBe('string');
   });
@@ -231,7 +232,7 @@ export function buildBrainstormPrompt({ conversation, project }: BrainstormInput
     "  remaining gap among: who it's for, the core problem, scope/must-haves, and",
     '  what "done" looks like. Never re-ask something already answered.',
     '- kind:"ready" — if you already have enough, OR you have asked 3 questions,',
-    '  reflect back what you will build in 1-2 warm sentences ("Here\'s what I\'ll',
+    "  reflect back what you will build in 1-2 warm sentences (\"Here's what I'll",
     '  build: ..."). Do not ask another question.',
     '',
     'Keep it token-thrifty. Reply only with the requested JSON.',
@@ -276,10 +277,12 @@ git commit -m "feat(build): pure brainstorm lib — sanitize, prompt, schema"
 ### Task 2: Intake decision helper (`lib/buildFlow.ts`)
 
 **Files:**
+
 - Modify: `lib/buildFlow.ts`
 - Test: `lib/buildFlow.test.ts` (extend)
 
 **Interfaces:**
+
 - Consumes: `BrainstormReply` (type-only) from `./ai/brainstorm`; existing `INTAKE_FOLLOWUP`.
 - Produces:
   - `const MAX_INTAKE_QUESTIONS = 3`
@@ -322,9 +325,9 @@ describe('decideIntakeStep', () => {
   });
 
   it('forces ready when a question arrives at the cap', () => {
-    expect(
-      decideIntakeStep({ kind: 'question', text: 'one more?' }, MAX_INTAKE_QUESTIONS),
-    ).toEqual({ mode: 'ready', text: READY_FALLBACK });
+    expect(decideIntakeStep({ kind: 'question', text: 'one more?' }, MAX_INTAKE_QUESTIONS)).toEqual(
+      { mode: 'ready', text: READY_FALLBACK },
+    );
   });
 });
 ```
@@ -386,10 +389,12 @@ git commit -m "feat(build): decideIntakeStep helper + question cap"
 ### Task 3: Network layer — client helper + route
 
 **Files:**
+
 - Create: `lib/ai/buildBrainstorm.ts`
 - Create: `app/api/build-brainstorm/route.ts`
 
 **Interfaces:**
+
 - Consumes: `BrainstormInput`, `BrainstormReply`, `sanitizeBrainstormInput`, `buildBrainstormPrompt`, `BRAINSTORM_SCHEMA` from `lib/ai/brainstorm` (Task 1); `getFirebaseAuth`/`isFirebaseConfigured` from `lib/firebase/client`; `verifyIdToken` from `@/lib/firebase/admin`.
 - Produces: `requestBuildBrainstorm(input: BrainstormInput): Promise<BrainstormReply>` and `class BrainstormError extends Error { code: string }`; the `POST /api/build-brainstorm` route returning `{ reply: BrainstormReply }`.
 
@@ -556,9 +561,11 @@ git commit -m "feat(build): /api/build-brainstorm route + client helper"
 ### Task 4: Wire the loop into the store (`lib/store.tsx`)
 
 **Files:**
+
 - Modify: `lib/store.tsx`
 
 **Interfaces:**
+
 - Consumes: `requestBuildBrainstorm` (Task 3), `decideIntakeStep`/`BrainstormTurn`/`INTAKE_OPENING` (Tasks 1-2), existing `appendBrief`, `persistMsg`, `stripBuildButtons`, `newId`, `buildProject`, `setBuildIntakeActive`, `setBuildPlanState`.
 - Produces: reworked `startBuildIntake` + async-driven `addIntakeTurn`; new in-memory state `buildIntakeLog`. `generateBuildPlan` and `Copilot.tsx` are unchanged.
 
@@ -591,10 +598,10 @@ import type { BrainstormTurn } from './ai/brainstorm';
 Immediately after the `const [buildIntakeActive, setBuildIntakeActive] = useState(false);` line (~556), add:
 
 ```ts
-  // The running brainstorm transcript (Byte questions + founder answers) that
-  // /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
-  // interrupted intake just falls back to typing more.
-  const [buildIntakeLog, setBuildIntakeLog] = useState<BrainstormTurn[]>([]);
+// The running brainstorm transcript (Byte questions + founder answers) that
+// /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
+// interrupted intake just falls back to typing more.
+const [buildIntakeLog, setBuildIntakeLog] = useState<BrainstormTurn[]>([]);
 ```
 
 - [ ] **Step 3: Seed the log in `startBuildIntake`**
@@ -602,7 +609,7 @@ Immediately after the `const [buildIntakeActive, setBuildIntakeActive] = useStat
 In `startBuildIntake` (~2339), after `setBuildBrief('');` add:
 
 ```ts
-    setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
+setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
 ```
 
 - [ ] **Step 4: Rework `addIntakeTurn` to drive the AI loop**
@@ -610,65 +617,65 @@ In `startBuildIntake` (~2339), after `setBuildBrief('');` add:
 Replace the entire `addIntakeTurn` callback (~2368-2393) with:
 
 ```ts
-  const addIntakeTurn = useCallback(
-    (raw: string) => {
-      const text = raw.trim();
-      if (!text) return;
-      setBuildBrief((b) => appendBrief(b, text));
+const addIntakeTurn = useCallback(
+  (raw: string) => {
+    const text = raw.trim();
+    if (!text) return;
+    setBuildBrief((b) => appendBrief(b, text));
 
-      const nextLog: BrainstormTurn[] = [...buildIntakeLog, { role: 'user', text }];
-      setBuildIntakeLog(nextLog);
-      const userTurns = nextLog.filter((t) => t.role === 'user').length;
+    const nextLog: BrainstormTurn[] = [...buildIntakeLog, { role: 'user', text }];
+    setBuildIntakeLog(nextLog);
+    const userTurns = nextLog.filter((t) => t.role === 'user').length;
 
-      const now = Date.now();
-      const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
-      const thinkingId = newId();
-      setChatMessages((prev) => [
-        ...stripBuildButtons(prev),
-        userMsg,
-        // Transient "thinking" bubble, swapped for Byte's question/summary below.
-        { id: thinkingId, role: 'byte', text: 'Byte is thinking…', ts: now + 1 },
-      ]);
-      // Persist only the founder's real answer; Byte's turns are transient like
-      // the result cards (they carry in-memory-only buttons and reload dead).
-      persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
+    const now = Date.now();
+    const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+    const thinkingId = newId();
+    setChatMessages((prev) => [
+      ...stripBuildButtons(prev),
+      userMsg,
+      // Transient "thinking" bubble, swapped for Byte's question/summary below.
+      { id: thinkingId, role: 'byte', text: 'Byte is thinking…', ts: now + 1 },
+    ]);
+    // Persist only the founder's real answer; Byte's turns are transient like
+    // the result cards (they carry in-memory-only buttons and reload dead).
+    persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
 
-      (async () => {
-        let reply = null as Awaited<ReturnType<typeof requestBuildBrainstorm>> | null;
-        try {
-          reply = await requestBuildBrainstorm({
-            conversation: nextLog,
-            project: buildProject || undefined,
-          });
-        } catch {
-          reply = null; // Any failure → static fallback via decideIntakeStep.
-        }
-        const step = decideIntakeStep(reply, userTurns);
-        if (step.mode === 'question') {
-          setBuildIntakeLog((prev) => [...prev, { role: 'byte', text: step.text }]);
-        }
-        setChatMessages((prev) =>
-          prev.map((m) =>
-            m.id === thinkingId
-              ? {
-                  ...m,
-                  text: step.text,
-                  ...(step.mode === 'question'
-                    ? {}
-                    : {
-                        buildAction: {
-                          kind: 'to-plan' as const,
-                          label: step.mode === 'ready' ? 'Build this →' : 'Turn this into a plan →',
-                        },
-                      }),
-                }
-              : m,
-          ),
-        );
-      })();
-    },
-    [buildIntakeLog, buildProject, persistMsg],
-  );
+    (async () => {
+      let reply = null as Awaited<ReturnType<typeof requestBuildBrainstorm>> | null;
+      try {
+        reply = await requestBuildBrainstorm({
+          conversation: nextLog,
+          project: buildProject || undefined,
+        });
+      } catch {
+        reply = null; // Any failure → static fallback via decideIntakeStep.
+      }
+      const step = decideIntakeStep(reply, userTurns);
+      if (step.mode === 'question') {
+        setBuildIntakeLog((prev) => [...prev, { role: 'byte', text: step.text }]);
+      }
+      setChatMessages((prev) =>
+        prev.map((m) =>
+          m.id === thinkingId
+            ? {
+                ...m,
+                text: step.text,
+                ...(step.mode === 'question'
+                  ? {}
+                  : {
+                      buildAction: {
+                        kind: 'to-plan' as const,
+                        label: step.mode === 'ready' ? 'Build this →' : 'Turn this into a plan →',
+                      },
+                    }),
+              }
+            : m,
+        ),
+      );
+    })();
+  },
+  [buildIntakeLog, buildProject, persistMsg],
+);
 ```
 
 - [ ] **Step 5: Verify types, lint, and the full suite**

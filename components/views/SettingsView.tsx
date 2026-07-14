@@ -64,8 +64,8 @@ export function SettingsView() {
             <div className="set-txt">
               <b>Demo Let&apos;s build</b>
               <span>
-                Builds a throwaway landing page in <code>~/codepet-demo</code> instead of your
-                real project — for trying the feature safely. On by default.
+                Builds a throwaway landing page in <code>~/codepet-demo</code> instead of your real
+                project — for trying the feature safely. On by default.
               </span>
             </div>
             <button

@@ -59,8 +59,8 @@ describe('decideIntakeStep', () => {
   });
 
   it('forces ready when a question arrives at the cap', () => {
-    expect(
-      decideIntakeStep({ kind: 'question', text: 'one more?' }, MAX_INTAKE_QUESTIONS),
-    ).toEqual({ mode: 'ready', text: READY_FALLBACK });
+    expect(decideIntakeStep({ kind: 'question', text: 'one more?' }, MAX_INTAKE_QUESTIONS)).toEqual(
+      { mode: 'ready', text: READY_FALLBACK },
+    );
   });
 });

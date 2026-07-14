@@ -73,7 +73,7 @@ export function buildBrainstormPrompt({ conversation, project }: BrainstormInput
     "  remaining gap among: who it's for, the core problem, scope/must-haves, and",
     '  what "done" looks like. Never re-ask something already answered.',
     '- kind:"ready" — if you already have enough, OR you have asked 3 questions,',
-    '  reflect back what you will build in 1-2 warm sentences ("Here\'s what I\'ll',
+    "  reflect back what you will build in 1-2 warm sentences (\"Here's what I'll",
     '  build: ..."). Do not ask another question.',
     '',
     'Keep it token-thrifty. Reply only with the requested JSON.',
