@@ -2406,6 +2406,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           reply = null; // Any failure → static fallback via decideIntakeStep.
         }
         const step = decideIntakeStep(reply, userTurns);
+        // Only a follow-up question needs to re-enter the transcript (so the next
+        // API turn sees it). A ready/fallback reflect-back is derived from turns
+        // already in the log and is terminal — the founder builds next — so it's
+        // deliberately not appended.
         if (step.mode === 'question') {
           setBuildIntakeLog((prev) => [...prev, { role: 'byte', text: step.text }]);
         }
