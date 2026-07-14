@@ -10,6 +10,7 @@ import { useApp } from '@/lib/store';
 import { useAuth } from '@/lib/firebase/auth';
 import { loadTrackEventForSession, writeNotebookNote } from '@/lib/firebase/companyData';
 import { buildChangeSummary } from '@/app/actions/checkpoint';
+import { getTodayTokens } from '@/app/actions/tokens';
 import { DEMO_URL } from '@/lib/armSession';
 
 // "Let's build" — the Build Coach flow, adapted to the app's light theme. It
@@ -32,6 +33,13 @@ const NEXT_LABEL: Record<Step, string> = {
 };
 
 const DEFAULT_BUDGET_ACTIONS = 12;
+
+// Compact token counts for the DURING meter + END recap — "1.2M" / "48K" / "900".
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`;
+  return String(n);
+}
 
 // Byte's coaching bubble — sprite + a line, a "lens" chip, and an expandable
 // "a little tip from Byte" panel. Reused across both steps.
@@ -75,6 +83,8 @@ function DuringStep({
   resume,
   onLive,
   onStatus,
+  tokens,
+  today,
 }: {
   plan: BytePlan | null;
   live: LiveState | null;
@@ -88,6 +98,8 @@ function DuringStep({
   resume: boolean;
   onLive: (s: LiveState) => void;
   onStatus: (status: string) => void;
+  tokens: number | null;
+  today: number | null;
 }) {
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const actions = live?.actionCount ?? 0;
@@ -176,6 +188,22 @@ function DuringStep({
           </span>
         </div>
         {recent.length > 0 && <div className="bc-live-feed">Byte sees: {recent.join(' · ')}</div>}
+        {(tokens || today != null) && (
+          <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
+            🔢 {tokens ? (
+              <>
+                This build <b>~{fmtTokens(tokens)}</b>
+              </>
+            ) : null}
+            {tokens && today != null ? ' · ' : null}
+            {today != null ? (
+              <>
+                Today <b>~{fmtTokens(today)}</b>
+              </>
+            ) : null}{' '}
+            tokens
+          </div>
+        )}
       </div>
 
       <div className={`bc-unlock${unlocked ? ' live' : ''}`}>
@@ -209,6 +237,8 @@ function EndStep({
   onRewind,
   recap,
   demo,
+  buildTokens,
+  today,
 }: {
   companyId: string | null;
   sessionId: string | null;
@@ -220,6 +250,8 @@ function EndStep({
   onRewind: () => void;
   recap: { commits: number; filesChanged: number } | null;
   demo: boolean;
+  buildTokens: number | null;
+  today: number | null;
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
   const [fetched, setFetched] = useState(false);
@@ -327,6 +359,22 @@ function EndStep({
               </div>
             </div>
           </div>
+          {(buildTokens || today != null) && (
+            <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
+              🔢 {buildTokens ? (
+                <>
+                  This build <b>~{fmtTokens(buildTokens)}</b>
+                </>
+              ) : null}
+              {buildTokens && today != null ? ' · ' : null}
+              {today != null ? (
+                <>
+                  Today <b>~{fmtTokens(today)}</b>
+                </>
+              ) : null}{' '}
+              tokens
+            </div>
+          )}
           <div className={`bc-unlock${earned ? ' live' : ''}`}>
             <div className="bc-unlock-top">
               <span className="bc-u-tag">{earned ? 'earned! ✨' : 'not yet'}</span>
@@ -435,6 +483,20 @@ export function BuildCoachView() {
   const [confirmWrap, setConfirmWrap] = useState(false);
   const busy = liveStatus === 'running' || liveStatus === 'awaiting-permission';
 
+  // Today's total tokens (ccusage, local-only — null on remote/hosted). Fetched once
+  // on mount and refreshed every minute while the view is open.
+  const [today, setToday] = useState<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const load = () => getTodayTokens().then((n) => alive && setToday(n));
+    load();
+    const id = setInterval(load, 60000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
   const idx = step === 'during' ? 0 : 1;
 
   return (
@@ -510,6 +572,8 @@ export function BuildCoachView() {
             resume={buildResumed}
             onLive={applyLocalLive}
             onStatus={setLiveStatus}
+            tokens={buildLive?.tokens ?? null}
+            today={today}
           />
         )}
         {step === 'end' && (
@@ -524,6 +588,8 @@ export function BuildCoachView() {
             onRewind={rewindBuild}
             recap={buildLive?.recap ?? null}
             demo={demoLetsBuild}
+            buildTokens={buildLive?.tokens ?? buildLive?.recap?.tokens ?? null}
+            today={today}
           />
         )}
 
