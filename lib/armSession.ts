@@ -68,6 +68,29 @@ export const DEMO_SEED_HTML = `<!doctype html>
 </html>
 `;
 
+// Best-effort: sum this session's tokens from the newest claude transcript and POST them, so
+// remote testers see real token usage with no toolkit install. Single-line python (no try/except):
+// a malformed line makes it error out and `|| echo 0` yields 0.
+export function tokenReportSuffix(report: {
+  apiUrl: string;
+  companyId: string;
+  buildSessionId: string;
+  token: string;
+}): string {
+  const url = `${report.apiUrl.replace(/\/$/, '')}/api/track/demo-recap`;
+  const py =
+    'import json,sys;print(sum(' +
+    "(lambda u:u.get('input_tokens',0)+u.get('output_tokens',0)+u.get('cache_creation_input_tokens',0)+u.get('cache_read_input_tokens',0))" +
+    "((json.loads(l).get('message') or {}).get('usage') or {}) for l in open(sys.argv[1])))";
+  return (
+    ` ; TF=$(find ~/.claude/projects -name '*.jsonl' -newermt '-30 minutes' 2>/dev/null | xargs ls -t 2>/dev/null | head -1)` +
+    ` ; tokens=$(python3 -c "${py}" "$TF" 2>/dev/null || echo 0)` +
+    ` ; curl -s -X POST ${url} -H 'content-type: application/json'` +
+    ` -d '{"companyId":"${report.companyId}","token":"${report.token}","buildSessionId":"${report.buildSessionId}","tokens":'"\${tokens:-0}"'}'` +
+    ` >/dev/null 2>&1`
+  );
+}
+
 // A single copy-paste command (remote mode): make the demo dir, seed index.html only if
 // it's missing (so re-runs keep byte's progress), then run the real claude session.
 // The seed is base64-embedded to avoid shell-escaping the HTML.
@@ -110,7 +133,8 @@ export function demoTerminalCommand(
       `"filesChanged":'"\${files:-0}"'}'` +
       ` >/dev/null 2>&1`
     : '';
+  const tokenReport = report ? tokenReportSuffix(report) : '';
   // Serve the built page (background) and open it, so the tester can view + re-view it.
   const serve = ` ; python3 -m http.server ${DEMO_PORT} >/dev/null 2>&1 & sleep 1 && open ${DEMO_URL}`;
-  return base + selfReport + serve;
+  return base + selfReport + tokenReport + serve;
 }

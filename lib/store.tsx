@@ -81,7 +81,13 @@ import {
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
-import { buildOpeningPrompt, terminalCommand, demoTerminalCommand, DEMO_DIR } from './armSession';
+import {
+  buildOpeningPrompt,
+  terminalCommand,
+  demoTerminalCommand,
+  tokenReportSuffix,
+  DEMO_DIR,
+} from './armSession';
 import { armBuildSession, scaffoldDemoProject } from '@/app/actions/build';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
 import { getCapability, getStatus } from '@/app/actions/install';
@@ -2502,8 +2508,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setBuildStep('during');
           } else {
             setBuildLocal(false);
-            const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
             const token = await ensureIngestToken(companyId);
+            // Self-report tokens too (best-effort, same as the demo path) so remote testers'
+            // real usage shows up without a toolkit install.
+            const command =
+              terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
+              tokenReportSuffix({ apiUrl: window.location.origin, companyId, buildSessionId: id, token });
             const res = await armBuildSession({
               buildSessionId: id,
               projectDir: dir,

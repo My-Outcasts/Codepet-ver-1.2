@@ -79,4 +79,17 @@ describe('demoTerminalCommand', () => {
   it('omits the self-report when no credentials are given', () => {
     expect(demoTerminalCommand('build it')).not.toContain('/api/track/demo-recap');
   });
+
+  it('demoTerminalCommand includes a token self-report when given credentials', () => {
+    const cmd = demoTerminalCommand('build it', {
+      apiUrl: 'https://app.example.com',
+      companyId: 'c1',
+      buildSessionId: 'b1',
+      token: 'tok',
+    });
+    expect(cmd).toContain('~/.claude/projects');
+    expect(cmd).toContain('python3 -c');
+    expect(cmd).toContain('https://app.example.com/api/track/demo-recap');
+    expect(cmd).toContain('"tokens":');
+  });
 });
