@@ -2454,6 +2454,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const id = crypto.randomUUID();
+        // Non-null only in remote mode (a copy-paste command is shown); drives the honest
+        // "paste this" message vs the local "I'm watching" one.
+        let launchCommand: string | null = null;
         if (demoLetsBuild) {
           const cap = await getCapability();
           if (cap.mode === 'local') {
@@ -2480,7 +2483,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               apiUrl: window.location.origin,
             });
             // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
-            setBuildLaunchCommand(demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief)));
+            launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief));
+            setBuildLaunchCommand(launchCommand);
             setBuildSessionId(id);
             setBuildLive(null);
             setBuildStep('during');
@@ -2512,7 +2516,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               token,
               apiUrl: window.location.origin,
             });
-            setBuildLaunchCommand(res.ok && res.launched ? null : command);
+            launchCommand = res.ok && res.launched ? null : command;
+            setBuildLaunchCommand(launchCommand);
             setBuildSessionId(id);
             setBuildLive(null);
             setBuildStep('during');
@@ -2522,7 +2527,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const live: ChatMessage = {
           id: newId(),
           role: 'byte',
-          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+          text: launchCommand
+            ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
+            : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
           ts: Date.now(),
         };
         setChatMessages((prev) => [...prev, live]);
