@@ -8309,12 +8309,22 @@ body {
 }
 
 /* Settings & Billing ------------------------------------------------------- */
+/* These two account pages are the only views that don't fill the canvas, so we
+   centre their column (heading + cards) instead of pinning it hard-left. */
+#v-settings .vhead,
+#v-billing .vhead {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
 .set-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 18px 26px 44px;
+  width: 100%;
   max-width: 760px;
+  margin-inline: auto;
 }
 .set-card {
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
