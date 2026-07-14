@@ -12,7 +12,7 @@ import { briefToContext } from '@/lib/ai/brief';
 import { departmentBlock } from '@/lib/ai/departments';
 import { loadServerBrief, writeServerBrief } from '@/lib/firebase/serverBrief';
 import { usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { getClient, generateJson, aiErrorResponse, LIGHT_MODEL } from '@/lib/ai/client';
 import {
   ENRICH_SCHEMA,
   buildEnrichPrompt,
@@ -42,6 +42,9 @@ async function enrichBrief(
       prompt: buildEnrichPrompt(brief),
       maxTokens: 1024,
       label: 'enrich',
+      // Faithful distillation is extraction — the cheaper shared tier handles it,
+      // matching next-step/remember. The heavier scaffold generation stays on MODEL.
+      model: LIGHT_MODEL,
       schema: ENRICH_SCHEMA,
       onUsage: usageSink(uid, idToken, 'enrich'),
     });
