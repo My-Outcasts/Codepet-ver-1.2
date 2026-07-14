@@ -30,8 +30,11 @@ export async function POST(req: Request): Promise<Response> {
   if (!clean) {
     return NextResponse.json({ error: 'invalid body' }, { status: 400 });
   }
-  await db
-    .doc(paths.liveBuild(companyId, clean.buildSessionId))
-    .set({ recap: clean.recap }, { merge: true });
+  const ref = db.doc(paths.liveBuild(companyId, clean.buildSessionId));
+  await db.runTransaction(async (tx) => {
+    const cur = await tx.get(ref);
+    const prev = (cur.exists ? (cur.data()?.recap as Partial<typeof clean.recap>) : null) ?? {};
+    tx.set(ref, { recap: { ...prev, ...clean.recap } }, { merge: true });
+  });
   return NextResponse.json({ ok: true });
 }

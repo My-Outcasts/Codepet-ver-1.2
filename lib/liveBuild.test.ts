@@ -182,24 +182,23 @@ describe('sanitizeLiveEvent — narration', () => {
 });
 
 describe('sanitizeDemoRecap', () => {
-  it('parses a valid body', () => {
-    expect(sanitizeDemoRecap({ buildSessionId: 'b1', commits: 3, filesChanged: 7 })).toEqual({
-      buildSessionId: 'b1',
+  it('keeps only the numeric keys present (partial)', () => {
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', tokens: 1200 })).toEqual({
+      buildSessionId: 'b',
+      recap: { tokens: 1200 },
+    });
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: 3, filesChanged: 7 })).toEqual({
+      buildSessionId: 'b',
       recap: { commits: 3, filesChanged: 7 },
     });
   });
   it('rejects a missing buildSessionId', () => {
-    expect(sanitizeDemoRecap({ commits: 3, filesChanged: 7 })).toBeNull();
+    expect(sanitizeDemoRecap({ tokens: 1 })).toBeNull();
     expect(sanitizeDemoRecap(null)).toBeNull();
   });
-  it('coerces/clamps non-numbers and negatives to safe integers', () => {
-    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: '5', filesChanged: -2 })).toEqual({
-      buildSessionId: 'b',
-      recap: { commits: 5, filesChanged: 0 },
-    });
-    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: NaN, filesChanged: 3.9 })).toEqual({
-      buildSessionId: 'b',
-      recap: { commits: 0, filesChanged: 3 },
-    });
+  it('clamps present numbers', () => {
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: '5', filesChanged: -2, tokens: 3.9 })).toEqual(
+      { buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } },
+    );
   });
 });
