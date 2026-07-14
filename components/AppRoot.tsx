@@ -80,7 +80,7 @@ function Shell() {
         aria-label={`Open ${c.name} chat`}
         onClick={() => toggleCopilot(false)}
       >
-        <img className="cop-logo" src="/c-logo.svg" alt={`Ask ${c.name}`} draggable={false} />
+        <img className="cop-logo" src="/c-logo.svg" alt="" draggable={false} />
       </button>
       {buildActive && view !== 'build' && (
         <button className="build-return" onClick={() => show('build')}>
