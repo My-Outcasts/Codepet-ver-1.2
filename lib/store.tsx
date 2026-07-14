@@ -2475,7 +2475,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               apiUrl: window.location.origin,
             });
             // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
-            launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief));
+            launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
+              apiUrl: window.location.origin,
+              companyId,
+              buildSessionId: id,
+              token,
+            });
             setBuildLaunchCommand(launchCommand);
             setBuildSessionId(id);
             setBuildLive(null);

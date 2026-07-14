@@ -60,4 +60,21 @@ describe('demoTerminalCommand', () => {
   it('exposes the demo dir constant', () => {
     expect(DEMO_DIR).toBe('~/codepet-demo');
   });
+
+  it('self-reports commits + files when given report credentials', () => {
+    const cmd = demoTerminalCommand('build it', {
+      apiUrl: 'https://app.example.com',
+      companyId: 'c1',
+      buildSessionId: 'b1',
+      token: 'tok',
+    });
+    expect(cmd).toContain('git -C ~/codepet-demo rev-list --count HEAD');
+    expect(cmd).toContain('git -C ~/codepet-demo ls-files');
+    expect(cmd).toContain('https://app.example.com/api/track/demo-recap');
+    expect(cmd).toContain('"buildSessionId":"b1"');
+    expect(cmd).toContain('"token":"tok"');
+  });
+  it('omits the self-report when no credentials are given', () => {
+    expect(demoTerminalCommand('build it')).not.toContain('/api/track/demo-recap');
+  });
 });

@@ -71,13 +71,34 @@ export const DEMO_SEED_HTML = `<!doctype html>
 // A single copy-paste command (remote mode): make the demo dir, seed index.html only if
 // it's missing (so re-runs keep byte's progress), then run the real claude session.
 // The seed is base64-embedded to avoid shell-escaping the HTML.
-export function demoTerminalCommand(prompt: string): string {
+export function demoTerminalCommand(
+  prompt: string,
+  report?: { apiUrl: string; companyId: string; buildSessionId: string; token: string },
+): string {
   const b64 = btoa(unescape(encodeURIComponent(DEMO_SEED_HTML)));
-  return (
+  const base =
     `mkdir -p ${DEMO_DIR} && cd ${DEMO_DIR} && ` +
     `{ [ -f index.html ] || echo '${b64}' | base64 -d > index.html; } && ` +
-    `claude "${shq(prompt)}" ; ` +
-    // Serve the built page (background) and open it, so the tester can view + re-view it.
-    `python3 -m http.server ${DEMO_PORT} >/dev/null 2>&1 & sleep 1 && open ${DEMO_URL}`
-  );
+    `claude "${shq(prompt)}"`;
+  // Best-effort self-report: tally the demo dir's git history and POST it to the recap
+  // endpoint so the session shows real progress even though the app can't watch the
+  // tester's machine directly. $commits/$files are shell-substituted at run time; the
+  // ids/token/url below are JS-interpolated at build time. The `-d` payload is built as
+  // single-quoted JSON with the two numeric fields spliced in via `'"$var"'` (break out
+  // of the single quotes just long enough for the shell to expand the variable) — this
+  // keeps the static JSON free of backslash-escaped quotes while still letting the
+  // numbers be substituted at run time.
+  const selfReport = report
+    ? ` ; commits=$(git -C ${DEMO_DIR} rev-list --count HEAD 2>/dev/null || echo 0)` +
+      ` ; files=$(git -C ${DEMO_DIR} ls-files 2>/dev/null | wc -l | tr -d ' ')` +
+      ` ; curl -s -X POST ${report.apiUrl.replace(/\/$/, '')}/api/track/demo-recap` +
+      ` -H 'content-type: application/json'` +
+      ` -d '{"companyId":"${report.companyId}","token":"${report.token}",` +
+      `"buildSessionId":"${report.buildSessionId}","commits":'"\${commits:-0}"',` +
+      `"filesChanged":'"\${files:-0}"'}'` +
+      ` >/dev/null 2>&1`
+    : '';
+  // Serve the built page (background) and open it, so the tester can view + re-view it.
+  const serve = ` ; python3 -m http.server ${DEMO_PORT} >/dev/null 2>&1 & sleep 1 && open ${DEMO_URL}`;
+  return base + selfReport + serve;
 }
