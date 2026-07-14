@@ -376,10 +376,10 @@ export function ArtifactModal() {
     genError === 'rate_limited'
       ? 'You’ve reached today’s generation limit — it resets tomorrow.'
       : genError === 'refused'
-        ? 'byte held back on this one — try rephrasing the task or adding a bit more detail.'
+        ? `${companionName} held back on this one — try rephrasing the task or adding a bit more detail.`
         : genError === 'ai_unavailable'
           ? `${companionName} is temporarily unavailable — try again shortly.`
-          : 'Couldn’t reach byte just now.';
+          : `Couldn’t reach ${companionName} just now.`;
   const liveErrorMsg = `${liveErrorReason} Showing the saved draft.`;
 
   const olLabel: React.CSSProperties = {
@@ -398,7 +398,7 @@ export function ArtifactModal() {
     <div className="artifact">
       <div className="art-body" style={{ padding: '18px 4px' }}>
         <div style={{ fontSize: 14.5, fontWeight: 650, color: 'var(--t-1)' }}>
-          byte couldn’t generate this right now
+          {companionName} couldn’t generate this right now
         </div>
         <div style={{ fontSize: 13, color: 'var(--t-3)', marginTop: 6, lineHeight: 1.5 }}>
           {liveErrorReason}
@@ -476,7 +476,7 @@ export function ArtifactModal() {
               ↻
             </span>
             <span>
-              Revised — byte applied: <b>{rev}</b>
+              Revised — {companionName} applied: <b>{rev}</b>
             </span>
           </div>
         )}
@@ -501,7 +501,7 @@ export function ArtifactModal() {
                 <>
                   {LIVE_TYPES.has(type) && genStatus === 'done' && (
                     <div style={{ fontSize: 12, color: 'var(--accent-deep)', marginBottom: 10 }}>
-                      ✦ Written live by byte · Claude
+                      ✦ Written live by {companionName} · Claude
                     </div>
                   )}
                   {LIVE_TYPES.has(type) && genStatus === 'error' && hasPayload && (
@@ -533,12 +533,12 @@ export function ArtifactModal() {
           <>
             {LIVE_TYPES.has(type) && genStatus === 'done' && (
               <div style={{ fontSize: 12, color: 'var(--accent-deep)', marginBottom: 10 }}>
-                ✦ Written live by byte · Claude
+                ✦ Written live by {companionName} · Claude
               </div>
             )}
             {LIVE_TYPES.has(type) && genStatus === 'error' && hasPayload && (
               <div style={{ fontSize: 12, color: 'var(--clay)', marginBottom: 10 }}>
-                Couldn’t reach byte just now — showing the saved draft.
+                Couldn’t reach {companionName} just now — showing the saved draft.
               </div>
             )}
             <ErrorBoundary fallback={failureState} resetKey={`${type}:${genStatus}:${hasPayload}`}>
@@ -553,10 +553,11 @@ export function ArtifactModal() {
       <div className="revise">
         <div className="rv-h">
           <span className="byte s28" style={{ width: 24, height: 24 }}>
-            <img className="bimg" src="/byte.png" alt="byte" />
+            <img className="bimg" src="/byte.png" alt="Codepet" />
           </span>
           <div>
-            Tell byte what to change — it’ll run another pass and bring back a revised version.
+            Tell {companionName} what to change — it’ll run another pass and bring back a revised
+            version.
           </div>
         </div>
         <div className="rv-chips">
@@ -628,7 +629,7 @@ export function ArtifactModal() {
     footer = (
       <>
         <button className="btn" onClick={sendRevision}>
-          Send to byte
+          Send to {companionName}
         </button>
         <button className="btn ghost" onClick={() => setStage('deliver')}>
           Back to the draft
@@ -651,7 +652,7 @@ export function ArtifactModal() {
             toggleCopilot(false);
           }}
         >
-          Continue with byte
+          Continue with {companionName}
         </button>
         {next && (
           <button className="btn ghost" onClick={() => runTask(next, d, next.who === 'you')}>

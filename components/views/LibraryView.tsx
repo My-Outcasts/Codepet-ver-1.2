@@ -82,7 +82,7 @@ export function LibraryView() {
       <div className="vhead lib-mast">
         <h1>Library</h1>
         <div className="sub lib-say">
-          Everything byte has shipped or drafted — approved by you, kept in one place.
+          Everything Codepet has shipped or drafted — approved by you, kept in one place.
         </div>
         {library.length > 0 && (
           <div className="lib-idx">
@@ -118,7 +118,7 @@ export function LibraryView() {
       {library.length === 0 ? (
         <div className="lib-grid">
           <div className="lib-empty">
-            Nothing here yet. When byte finishes a task and you approve it, the deliverable lands
+            Nothing here yet. When Codepet finishes a task and you approve it, the deliverable lands
             here — drafts, shipped changes, and checklists in one place.
           </div>
         </div>

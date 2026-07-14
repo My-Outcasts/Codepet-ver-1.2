@@ -48,7 +48,7 @@ const DOT: Record<RoadmapState, string> = {
 const STATUS: Record<RoadmapState, string> = {
   done: 'Done',
   current: 'Up next',
-  available: 'byte can do this',
+  available: 'Codepet can do this',
   needsYou: 'Needs your input',
   approve: 'Needs approval',
   locked: 'Needs earlier steps',
@@ -142,12 +142,14 @@ function Node({
   onClick,
   pulse,
   companionName,
+  hereLabel,
   peek,
 }: {
   node: PositionedNode;
   onClick?: () => void;
   pulse?: boolean;
   companionName: string;
+  hereLabel: string;
   peek: Peek;
 }) {
   const { task } = node;
@@ -239,7 +241,7 @@ function Node({
                 color: CY,
               }}
             >
-              {companionName} is here
+              {hereLabel} is here
             </span>
           </span>
         )}
@@ -376,15 +378,18 @@ export default function RoadmapView({
   phases = ROADMAP_PHASES,
   tasks,
   projectName = 'Your company',
-  companionName = 'byte',
+  companionName = 'Codepet',
+  hereLabel = 'You',
   onTaskClick,
 }: {
   phases?: RoadmapPhase[];
   tasks: RoadmapTask[];
   projectName?: string;
-  /** The active companion's name — labels the beacon and the "… can do this" status line. */
+  /** The active companion's name — labels the "… can do this" status line. */
   companionName?: string;
-  /** Click a task card — the current move starts byte, others open their department. */
+  /** Whose position the beacon marks — the founder's name, or 'You' when unknown. */
+  hereLabel?: string;
+  /** Click a task card — the current move starts the companion, others open their department. */
   onTaskClick?: (task: RoadmapTask) => void;
 }) {
   const L = layoutRoadmap(phases, tasks);
@@ -694,6 +699,7 @@ export default function RoadmapView({
                     onClick={onTaskClick ? () => onTaskClick(t) : undefined}
                     pulse={pulseIds.has(t.id)}
                     companionName={companionName}
+                    hereLabel={hereLabel}
                     peek={{
                       deptLabel: DEPT_LABEL[t.dept] ?? t.dept,
                       phaseName: phaseName.get(t.phase) ?? '',

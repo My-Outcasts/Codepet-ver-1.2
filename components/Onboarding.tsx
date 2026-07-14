@@ -246,8 +246,8 @@ export function Onboarding() {
       () =>
         toast(
           ok
-            ? 'Your roadmap is ready — byte mapped your company across your departments.'
-            : 'You’re in — I’ll tailor your map as soon as byte’s back. For now it’s an example you can regenerate anytime.',
+            ? 'Your roadmap is ready — Codepet mapped your company across your departments.'
+            : 'You’re in — I’ll tailor your map as soon as Codepet’s back. For now it’s an example you can regenerate anytime.',
         ),
       400,
     );

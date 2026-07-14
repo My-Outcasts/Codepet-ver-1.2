@@ -22,7 +22,7 @@ export const DEFAULT_COMPANION_ID = 'byte';
 export const COMPANIONS: Companion[] = [
   {
     id: 'byte',
-    name: 'byte',
+    name: 'Codepet',
     sprite: '/byte.png',
     tone: 'the reliable companion — warm, clear, and encouraging.',
     accent: '#7c3aed', // brand violet (the CSS default)

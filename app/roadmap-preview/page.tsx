@@ -61,7 +61,7 @@ export default function RoadmapPreviewPage() {
           }}
         >
           Read-only render of the canonical journey — phases across, departments per task, the
-          critical path lit out of byte&rsquo;s current move. Data + geometry come from the pure,
+          critical path lit out of Codepet&rsquo;s current move. Data + geometry come from the pure,
           unit-tested layout engine.
         </p>
         <div
