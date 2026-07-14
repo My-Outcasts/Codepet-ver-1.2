@@ -10,12 +10,12 @@ Only `chat`, `run-task`, and `task-help` ground on the full **project model**
 (`composeProjectModel` = brief narrative + locked-in `decisions` + shipped-work digest).
 The lighter generation routes ground on the **brief alone** (`briefToContext`):
 
-| Route | Grounded on (before) |
-|---|---|
-| `next-step` | brief only |
-| `roadmap` | brief only |
-| `scaffold` | brief only |
-| `project-analysis` | brief only |
+| Route              | Grounded on (before) |
+| ------------------ | -------------------- |
+| `next-step`        | brief only           |
+| `roadmap`          | brief only           |
+| `scaffold`         | brief only           |
+| `project-analysis` | brief only           |
 
 Consequence: these routes can contradict decisions the founder has locked in — a
 regenerated roadmap can re-open a settled pricing/positioning call, or re-plan work
@@ -38,11 +38,11 @@ Add a shared server helper and route it into the three routes where decisions ma
 
 ### Route wiring
 
-| Route | Grounding now | Notes |
-|---|---|---|
-| `roadmap` | brief + decisions + **shipped digest** | `withShipped: true`; `noBrief` guard now keys on `hasBrief`; stage still read off raw `brief`. |
-| `next-step` | brief + decisions | Cheapest win; runs on `LIGHT_MODEL`. Falls back to `CODEPET_CONTEXT` when empty (unchanged). |
-| `scaffold` | brief + decisions | Keeps its **enriched in-memory brief** (from `enrichBrief`) for narrative + stage; only appends `composeDecisions(decisions)`. No `hasBrief` change — its existing `!context` guard is preserved. |
+| Route       | Grounding now                          | Notes                                                                                                                                                                                             |
+| ----------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `roadmap`   | brief + decisions + **shipped digest** | `withShipped: true`; `noBrief` guard now keys on `hasBrief`; stage still read off raw `brief`.                                                                                                    |
+| `next-step` | brief + decisions                      | Cheapest win; runs on `LIGHT_MODEL`. Falls back to `CODEPET_CONTEXT` when empty (unchanged).                                                                                                      |
+| `scaffold`  | brief + decisions                      | Keeps its **enriched in-memory brief** (from `enrichBrief`) for narrative + stage; only appends `composeDecisions(decisions)`. No `hasBrief` change — its existing `!context` guard is preserved. |
 
 ### Out of scope — `project-analysis`
 
