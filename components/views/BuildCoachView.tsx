@@ -435,6 +435,7 @@ export function BuildCoachView() {
     buildResumed,
     applyLocalLive,
     resetBuildFlow,
+    demoLetsBuild,
   } = useApp();
 
   const step = buildStep;
@@ -462,6 +463,22 @@ export function BuildCoachView() {
       </div>
 
       <div className="bc-body">
+        {demoLetsBuild && (
+          <div
+            style={{
+              margin: '8px 0',
+              padding: '7px 12px',
+              borderRadius: 9,
+              fontSize: 12.5,
+              background: 'rgba(125,227,255,0.08)',
+              border: '1px solid rgba(125,227,255,0.3)',
+              color: 'var(--t-2, #cfe0ff)',
+            }}
+          >
+            Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your
+            real projects are untouched.
+          </div>
+        )}
         <div className="bc-rail">
           {RAIL.map((r, i) => (
             <div

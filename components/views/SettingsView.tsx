@@ -7,7 +7,7 @@ import { getTrackingState, setTracking } from '@/app/actions/install';
 type State = { installed: boolean; enabled: boolean };
 
 export function SettingsView() {
-  const { openInstallPrompt } = useApp();
+  const { openInstallPrompt, demoLetsBuild, setDemoLetsBuild } = useApp();
   const { user } = useAuth();
   const name = user?.displayName || user?.email?.split('@')[0] || 'You';
   const email = user?.email ?? '';
@@ -56,6 +56,27 @@ export function SettingsView() {
                 {email && <span>{email}</span>}
               </div>
             </div>
+          </div>
+        </div>
+
+        <div className="set-card">
+          <div className="set-row">
+            <div className="set-txt">
+              <b>Demo Let&apos;s build</b>
+              <span>
+                Builds a throwaway landing page in <code>~/codepet-demo</code> instead of your
+                real project — for trying the feature safely. On by default.
+              </span>
+            </div>
+            <button
+              role="switch"
+              aria-checked={demoLetsBuild}
+              aria-label="Demo Let's build"
+              className={`switch${demoLetsBuild ? ' on' : ''}`}
+              onClick={() => setDemoLetsBuild(!demoLetsBuild)}
+            >
+              <span className="knob" />
+            </button>
           </div>
         </div>
 
