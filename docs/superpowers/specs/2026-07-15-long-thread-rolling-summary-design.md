@@ -23,6 +23,7 @@ latency; the summarizer runs in the background after a reply.
 ## Design
 
 ### Pure core — `lib/ai/threadSummary.ts` (unit-tested, no React/SDK/network)
+
 - `planThreadSummary(history, summarizedThrough, window, batch)` → `{ turns, through }`.
   Summarizes dropped turns beyond the high-water mark, **only once `SUMMARY_BATCH = 8`**
   have accumulated (batches summarizer calls; short threads never trigger one).
@@ -30,14 +31,17 @@ latency; the summarizer runs in the background after a reply.
 - `SUMMARY_SYSTEM` + `buildSummaryPrompt(prior, turns)` → the fold prompt.
 
 ### Endpoint — `app/api/summarize-thread/route.ts`
+
 Auth-gated, behind the daily cost guard. Takes `{ priorSummary, turns }`, folds them on
 `LIGHT_MODEL` (512 tokens), returns `{ summary }`. Input bounded (≤60 turns, ≤2000 chars each).
 
 ### Chat route — `app/api/chat/route.ts`
+
 Accepts `body.threadSummary` and injects `formatThreadSummaryBlock(...)` into the system
 prompt, right after the Second-Brain block and before the dept summary.
 
 ### Client — `lib/ai/chat.ts` + `lib/store.tsx`
+
 - `streamByteChat` gains a `threadSummary` arg → sent in the chat body.
 - `summarizeThread(priorSummary, turns)` → the `/api/summarize-thread` client call (best-effort).
 - `store.maybeSummarizeThread(threadId, turns)`: after a successful reply, runs
@@ -46,6 +50,7 @@ prompt, right after the Second-Brain block and before the dept summary.
   added latency to the chat response.
 
 ### Persistence — `lib/firebase/schema.ts`
+
 `ThreadMeta` gains `summary?: string` and `summarizedThrough?: number`. Both round-trip
 for free: `persistThread` writes the whole doc and the loader spreads it (`{ ...data, id }`).
 
