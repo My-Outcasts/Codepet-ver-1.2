@@ -10,6 +10,7 @@ import { useApp } from '@/lib/store';
 import { useAuth } from '@/lib/firebase/auth';
 import { loadTrackEventForSession, writeNotebookNote } from '@/lib/firebase/companyData';
 import { buildChangeSummary } from '@/app/actions/checkpoint';
+import { DEMO_URL } from '@/lib/armSession';
 
 // "Let's build" — the Build Coach flow, adapted to the app's light theme. It
 // brackets one real Claude Code session: think first (START, now in the byte
@@ -473,10 +474,25 @@ export function BuildCoachView() {
               background: 'rgba(125,227,255,0.08)',
               border: '1px solid rgba(125,227,255,0.3)',
               color: 'var(--t-2, #cfe0ff)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              flexWrap: 'wrap',
+              justifyContent: 'space-between',
             }}
           >
-            Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your
-            real projects are untouched.
+            <span>
+              Demo mode — building a throwaway landing page in <code>~/codepet-demo</code>. Your
+              real projects are untouched.
+            </span>
+            <a
+              href={DEMO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none', whiteSpace: 'nowrap' }}
+            >
+              Open demo →
+            </a>
           </div>
         )}
         <div className="bc-rail">
