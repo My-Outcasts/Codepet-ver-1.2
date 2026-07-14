@@ -45,3 +45,35 @@ function shq(s: string): string {
 export function terminalCommand(projectDir: string, prompt: string): string {
   return `cd "${shq(projectDir)}" && claude "${shq(prompt)}"`;
 }
+
+export const DEMO_DIR = '~/codepet-demo';
+
+// A minimal but real starter landing page — byte builds this out during the demo.
+export const DEMO_SEED_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo — built with Codepet</title>
+  </head>
+  <body>
+    <!-- Starter page. byte will build this out. -->
+    <main>
+      <h1>Coming soon</h1>
+      <p>This page is a throwaway demo target for Codepet's "Let's build".</p>
+    </main>
+  </body>
+</html>
+`;
+
+// A single copy-paste command (remote mode): make the demo dir, seed index.html only if
+// it's missing (so re-runs keep byte's progress), then run the real claude session.
+// The seed is base64-embedded to avoid shell-escaping the HTML.
+export function demoTerminalCommand(prompt: string): string {
+  const b64 = btoa(unescape(encodeURIComponent(DEMO_SEED_HTML)));
+  return (
+    `mkdir -p ${DEMO_DIR} && cd ${DEMO_DIR} && ` +
+    `{ [ -f index.html ] || echo '${b64}' | base64 -d > index.html; } && ` +
+    `claude "${shq(prompt)}"`
+  );
+}

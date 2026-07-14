@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildOpeningPrompt, terminalCommand } from './armSession';
+import { buildOpeningPrompt, terminalCommand, demoTerminalCommand, DEMO_DIR } from './armSession';
 import type { BytePlan } from './ai/plan';
 
 const plan: BytePlan = {
@@ -40,5 +40,19 @@ describe('terminalCommand', () => {
   it('escapes double quotes and backslashes in the prompt and dir', () => {
     const cmd = terminalCommand('/tmp/a"b', 'say "hi"\\done');
     expect(cmd).toBe('cd "/tmp/a\\"b" && claude "say \\"hi\\"\\\\done"');
+  });
+});
+
+describe('demoTerminalCommand', () => {
+  it('creates the demo dir, seeds index.html only if missing, then runs claude', () => {
+    const cmd = demoTerminalCommand('build a landing page');
+    expect(cmd).toContain('mkdir -p ~/codepet-demo');
+    expect(cmd).toContain('cd ~/codepet-demo');
+    expect(cmd).toContain('[ -f index.html ]'); // guard: only seed when missing
+    expect(cmd).toContain('base64 -d > index.html');
+    expect(cmd).toContain('claude "build a landing page"');
+  });
+  it('exposes the demo dir constant', () => {
+    expect(DEMO_DIR).toBe('~/codepet-demo');
   });
 });
