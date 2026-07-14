@@ -78,8 +78,6 @@ import {
   stepForLive,
   INTAKE_OPENING,
   INTAKE_FOLLOWUP,
-  DEMO_BUILD_BRIEF,
-  DEMO_INTAKE_OPENING,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
@@ -2334,21 +2332,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const startBuildIntake = useCallback(() => {
     setBuildIntakeActive(true);
-    setBuildBrief(demoLetsBuild ? DEMO_BUILD_BRIEF : '');
+    setBuildBrief('');
     setBuildPlanState(null);
     const opening: ChatMessage = {
       id: newId(),
       role: 'byte',
-      text: demoLetsBuild ? DEMO_INTAKE_OPENING : INTAKE_OPENING,
+      text: INTAKE_OPENING,
       ts: Date.now(),
-      ...(demoLetsBuild
-        ? { buildAction: { kind: 'to-plan' as const, label: 'Build this demo →' } }
-        : {}),
     };
     setChatMessages((prev) => [...prev, opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
-  }, [companyId, persistMsg, demoLetsBuild]);
+  }, [companyId, persistMsg]);
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
@@ -2368,11 +2363,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
-      // In demo mode the brief starts pre-filled; a typed idea should REPLACE the demo
-      // suggestion, not blend with it.
-      const isDemoPrefill = demoLetsBuild && buildBrief.trim() === DEMO_BUILD_BRIEF;
-      const first = buildBrief.trim().length === 0 || isDemoPrefill;
-      setBuildBrief((b) => (isDemoPrefill ? text : appendBrief(b, text)));
+      const first = buildBrief.trim().length === 0;
+      setBuildBrief((b) => appendBrief(b, text));
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
       setChatMessages((prev) => [
@@ -2391,7 +2383,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // buildAction button (dead after reload) so it stays transient, like result cards.
       persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
     },
-    [buildBrief, companyId, persistMsg, demoLetsBuild],
+    [buildBrief, companyId, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
