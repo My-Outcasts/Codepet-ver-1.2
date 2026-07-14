@@ -17,15 +17,21 @@ export interface TranscriptState {
   messages: Array<{ role: 'user' | 'assistant'; text: string }>;
   tools: ToolActivity[];
   actionCount: number;
+  tokens: number;
   pendingPermission?: { requestId: string; tool: string; input: unknown };
   error?: string;
 }
 
 export function initialTranscript(): TranscriptState {
-  return { status: 'running', messages: [], tools: [], actionCount: 0 };
+  return { status: 'running', messages: [], tools: [], actionCount: 0, tokens: 0 };
 }
 
 export function reduceTranscript(state: TranscriptState, event: SessionEvent): TranscriptState {
+  // A usage event carries no tool/permission semantics — just bump the token
+  // total and leave everything else (including any pending permission) alone.
+  if (event.kind === 'usage') {
+    return { ...state, tokens: state.tokens + event.tokens };
+  }
   // Any event other than a NEW permission-request resolves/supersedes a pending
   // permission (allow → tool-use, deny → the model continues with text/result).
   // Dropping it here also stops a stale, already-resolved card from reappearing

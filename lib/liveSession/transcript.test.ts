@@ -86,6 +86,14 @@ describe('reduceTranscript', () => {
     ]);
   });
 
+  it('sums usage events into tokens', () => {
+    let s = initialTranscript();
+    expect(s.tokens).toBe(0);
+    s = reduceTranscript(s, { kind: 'usage', tokens: 18 });
+    s = reduceTranscript(s, { kind: 'usage', tokens: 7 });
+    expect(s.tokens).toBe(25);
+  });
+
   it('does not mutate the input state', () => {
     const s0 = initialTranscript();
     reduceTranscript(s0, { kind: 'assistant-text', text: 'x' });

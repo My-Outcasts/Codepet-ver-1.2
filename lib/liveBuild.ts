@@ -33,6 +33,8 @@ export interface LiveState {
   lastSay?: string;
   /** Set while Claude is waiting on the user; cleared when a tool event lands. */
   pendingAsk?: string;
+  /** Sum of Claude's per-message usage token counts (local, exact path). */
+  tokens?: number;
   /** Real recap stats self-reported by the demo copy-paste command (no toolkit
    *  install required), so remote testers see real commits/files-changed. */
   recap?: DemoRecap;
