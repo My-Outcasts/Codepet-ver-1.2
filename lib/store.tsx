@@ -78,9 +78,12 @@ import {
   stepForLive,
   INTAKE_OPENING,
   INTAKE_FOLLOWUP,
+  decideIntakeStep,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
+import { requestBuildBrainstorm } from './ai/buildBrainstorm';
+import type { BrainstormTurn } from './ai/brainstorm';
 import {
   buildOpeningPrompt,
   terminalCommand,
@@ -554,6 +557,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // The running brainstorm transcript (Byte questions + founder answers) that
+  // /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
+  // interrupted intake just falls back to typing more.
+  const [buildIntakeLog, setBuildIntakeLog] = useState<BrainstormTurn[]>([]);
   const [buildResumed, setBuildResumed] = useState(!!restoredBuild);
   // A git snapshot of the project taken right before a local build, so the founder can
   // rewind everything the build changed. null when the project isn't a git repo.
@@ -2339,6 +2346,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const startBuildIntake = useCallback(() => {
     setBuildIntakeActive(true);
     setBuildBrief('');
+    setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
     setBuildPlanState(null);
     const opening: ChatMessage = {
       id: newId(),
@@ -2369,27 +2377,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
-      const first = buildBrief.trim().length === 0;
       setBuildBrief((b) => appendBrief(b, text));
+
+      const nextLog: BrainstormTurn[] = [...buildIntakeLog, { role: 'user', text }];
+      setBuildIntakeLog(nextLog);
+      const userTurns = nextLog.filter((t) => t.role === 'user').length;
+
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      const thinkingId = newId();
       setChatMessages((prev) => [
         ...stripBuildButtons(prev),
         userMsg,
-        // After the first answer, Byte nudges once and surfaces the "to plan" button.
-        {
-          id: newId(),
-          role: 'byte',
-          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
-          ts: now + 1,
-          buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
-        },
+        // Transient "thinking" bubble, swapped for Byte's question/summary below.
+        { id: thinkingId, role: 'byte', text: 'Byte is thinking…', ts: now + 1 },
       ]);
-      // Persist the founder's real answer; the byte follow-up carries an in-memory-only
-      // buildAction button (dead after reload) so it stays transient, like result cards.
+      // Persist only the founder's real answer; Byte's turns are transient like
+      // the result cards (they carry in-memory-only buttons and reload dead).
       persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
+
+      (async () => {
+        let reply = null as Awaited<ReturnType<typeof requestBuildBrainstorm>> | null;
+        try {
+          reply = await requestBuildBrainstorm({
+            conversation: nextLog,
+            project: buildProject || undefined,
+          });
+        } catch {
+          reply = null; // Any failure → static fallback via decideIntakeStep.
+        }
+        const step = decideIntakeStep(reply, userTurns);
+        if (step.mode === 'question') {
+          setBuildIntakeLog((prev) => [...prev, { role: 'byte', text: step.text }]);
+        }
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? {
+                  ...m,
+                  text: step.text,
+                  ...(step.mode === 'question'
+                    ? {}
+                    : {
+                        buildAction: {
+                          kind: 'to-plan' as const,
+                          label: step.mode === 'ready' ? 'Build this →' : 'Turn this into a plan →',
+                        },
+                      }),
+                }
+              : m,
+          ),
+        );
+      })();
     },
-    [buildBrief, companyId, persistMsg],
+    [buildIntakeLog, buildProject, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
