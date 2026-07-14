@@ -22,6 +22,12 @@ import {
 } from '@/lib/ai/enrichBrief';
 import type { CompanyBrief } from '@/lib/firebase/schema';
 
+// Faithful distillation of the founder's notes (no invention) — extraction work a
+// cheaper tier handles well. Sonnet 5 (adaptive thinking + effort, as the shared client
+// expects), matching the decision-extraction route. The heavier scaffold generation
+// itself stays on the default model.
+const ENRICH_MODEL = 'claude-sonnet-5';
+
 // byte reads the founder's onboarding inputs into a richer brief (audience, categories, a
 // sharp summary) BEFORE scaffolding, so the plan is tailored to the real product — not the
 // three or four fields most founders bother to fill. Runs once (skipped once a summary
@@ -42,6 +48,7 @@ async function enrichBrief(
       prompt: buildEnrichPrompt(brief),
       maxTokens: 1024,
       label: 'enrich',
+      model: ENRICH_MODEL,
       schema: ENRICH_SCHEMA,
       onUsage: usageSink(uid, idToken, 'enrich'),
     });

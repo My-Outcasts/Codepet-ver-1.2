@@ -19,6 +19,12 @@ const SYSTEM = `You are byte, the AI operator inside Codepet, helping a solo fou
 
 Sequence sensibly: build the core product before promoting it, stand up the essentials before scaling, and prefer work that later tasks depend on. Return the chosen task's index and one plain-language sentence on why it's the next move.`;
 
+// Picking the next task is bounded selection + one sentence, not open reasoning —
+// a cheaper tier handles it well. Sonnet 5 (adaptive thinking + effort, like the
+// shared client expects); same tier the decision-extraction route uses. ~40% cheaper
+// than Opus on the beacon brain, which every Overview load hits.
+const NEXT_STEP_MODEL = 'claude-sonnet-5';
+
 const CODEPET_CONTEXT = `Codepet is a macOS companion that builds your whole company with you, department by department — reading your project, writing the brief and roadmap, then doing real work across Engineering, Marketing, Design, Finance, Operations, Legal, Sales, and Support.`;
 
 interface NextStepBody {
@@ -106,6 +112,7 @@ export async function POST(req: Request): Promise<Response> {
       prompt,
       maxTokens: 1024,
       label: 'next-step',
+      model: NEXT_STEP_MODEL,
       schema,
       onUsage: usageSink(uid, idToken, 'nextStep'),
     });
