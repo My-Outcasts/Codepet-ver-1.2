@@ -269,7 +269,9 @@ function EndStep({
   const underBudget = actions <= target;
   const commits = ev?.commits ?? 0;
   const earned = underBudget && commits >= 1;
-  const built = ev?.wins?.[0] ?? brief;
+  // Fall back to the plan's title (always set) so "built" is never blank when the
+  // session rollup has no win and the brief is empty.
+  const built = ev?.wins?.[0] ?? plan?.title ?? brief;
 
   const save = async () => {
     if (!companyId || saved) return;
