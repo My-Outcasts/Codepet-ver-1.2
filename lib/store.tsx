@@ -77,7 +77,6 @@ import {
   appendBrief,
   stepForLive,
   INTAKE_OPENING,
-  INTAKE_FOLLOWUP,
   decideIntakeStep,
   type BuildStep,
 } from './buildFlow';
