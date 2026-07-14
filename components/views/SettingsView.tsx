@@ -87,7 +87,7 @@ export function SettingsView() {
                 <b>Track Claude Code sessions</b>
                 <span>
                   {state?.installed
-                    ? "byte's SessionEnd hook reports this machine's git activity to your Summary. Turn off to pause reporting (the hook stays installed)."
+                    ? "Codepet's SessionEnd hook reports this machine's git activity to your Summary. Turn off to pause reporting (the hook stays installed)."
                     : 'The tracker is not installed on this machine yet.'}
                 </span>
               </div>

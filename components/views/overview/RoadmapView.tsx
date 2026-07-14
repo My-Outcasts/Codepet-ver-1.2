@@ -48,7 +48,7 @@ const DOT: Record<RoadmapState, string> = {
 const STATUS: Record<RoadmapState, string> = {
   done: 'Done',
   current: 'Up next',
-  available: 'byte can do this',
+  available: 'Codepet can do this',
   needsYou: 'Needs your input',
   approve: 'Needs approval',
   locked: 'Needs earlier steps',
@@ -142,12 +142,14 @@ function Node({
   onClick,
   pulse,
   companionName,
+  herePhrase,
   peek,
 }: {
   node: PositionedNode;
   onClick?: () => void;
   pulse?: boolean;
   companionName: string;
+  herePhrase: string;
   peek: Peek;
 }) {
   const { task } = node;
@@ -239,7 +241,7 @@ function Node({
                 color: CY,
               }}
             >
-              {companionName} is here
+              {herePhrase}
             </span>
           </span>
         )}
@@ -376,17 +378,26 @@ export default function RoadmapView({
   phases = ROADMAP_PHASES,
   tasks,
   projectName = 'Your company',
-  companionName = 'byte',
+  tagline,
+  companionName = 'Codepet',
+  founderName,
   onTaskClick,
 }: {
   phases?: RoadmapPhase[];
   tasks: RoadmapTask[];
   projectName?: string;
-  /** The active companion's name — labels the beacon and the "… can do this" status line. */
+  /** The company's one-liner, shown under the name on the root node. Falls back to a label. */
+  tagline?: string;
+  /** The active companion's name — labels the "… can do this" status line. */
   companionName?: string;
-  /** Click a task card — the current move starts byte, others open their department. */
+  /** The founder's name — the beacon reads "{name} is here", or "You are here" when unknown. */
+  founderName?: string;
+  /** Click a task card — the current move starts the companion, others open their department. */
   onTaskClick?: (task: RoadmapTask) => void;
 }) {
+  // The beacon marks where the FOUNDER stands — named when we have it, second-person otherwise.
+  // Composed here (not "{label} is here") so the fallback reads "You are here", never "You is here".
+  const herePhrase = founderName ? `${founderName} is here` : 'You are here';
   const L = layoutRoadmap(phases, tasks);
   const nonCrit = L.edges.filter((e) => !e.critical);
   const crit = L.edges.filter((e) => e.critical);
@@ -615,70 +626,123 @@ export default function RoadmapView({
               </svg>
 
               {L.root && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: L.root.x,
-                    top: L.root.y,
-                    width: L.root.w,
-                    height: L.root.h,
-                    borderRadius: 16,
-                    background:
-                      'linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 6%, transparent))',
-                    border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
-                    boxShadow:
-                      '0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), 0 16px 44px -16px color-mix(in srgb, var(--accent) 50%, transparent)',
-                    padding: 15,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    gap: 11,
-                  }}
-                >
-                  <span
+                <>
+                  {/* Soft aura behind the origin so the company node reads as the luminous root
+                      the whole tree grows from — not just another card. Blurred, non-interactive,
+                      and painted before the card so it sits underneath. */}
+                  <div
+                    aria-hidden
                     style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: 10,
-                      background: `linear-gradient(160deg, ${VIO}, ${CY})`,
+                      position: 'absolute',
+                      left: L.root.x - 26,
+                      top: L.root.y - 20,
+                      width: L.root.w + 52,
+                      height: L.root.h + 40,
+                      borderRadius: 44,
+                      background:
+                        'radial-gradient(60% 60% at 50% 50%, color-mix(in srgb, var(--accent) 42%, transparent), transparent 72%)',
+                      filter: 'blur(22px)',
+                      pointerEvents: 'none',
+                      zIndex: 0,
                     }}
                   />
-                  <span style={{ display: 'block', minWidth: 0, maxWidth: '100%' }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: L.root.x,
+                      top: L.root.y,
+                      width: L.root.w,
+                      height: L.root.h,
+                      zIndex: 1,
+                      borderRadius: 16,
+                      background:
+                        'linear-gradient(160deg, color-mix(in srgb, var(--accent) 16%, transparent), color-mix(in srgb, var(--accent) 6%, transparent))',
+                      border: '1px solid color-mix(in srgb, var(--accent) 45%, transparent)',
+                      boxShadow:
+                        '0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent), 0 16px 44px -16px color-mix(in srgb, var(--accent) 55%, transparent)',
+                      padding: 15,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'center',
+                      gap: 11,
+                    }}
+                  >
+                    {/* The Codepet mark — the brand identity, so the origin node isn't a generic
+                        gradient chip. A self-contained circular badge, drawn as a background so it
+                        needs no <img> (keeps the tracked eslint-suppression count stable). */}
                     <span
-                      title={projectName}
+                      aria-hidden
                       style={{
-                        display: 'block',
-                        fontFamily: 'var(--sans)',
-                        fontSize: 19,
-                        fontWeight: 600,
-                        color: TX,
-                        lineHeight: 1,
-                        // Keep the name inside the fixed-width card: clip a long token (e.g. a
-                        // long company name) to one line with an ellipsis instead of spilling
-                        // out the right edge.
-                        maxWidth: '100%',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        backgroundImage: 'url(/codepet-logo.svg)',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        boxShadow:
+                          '0 2px 10px -3px color-mix(in srgb, var(--accent) 60%, transparent)',
                       }}
-                    >
-                      {projectName}
+                    />
+                    <span style={{ display: 'block', minWidth: 0, maxWidth: '100%' }}>
+                      <span
+                        title={projectName}
+                        style={{
+                          display: 'block',
+                          fontFamily: 'var(--sans)',
+                          fontSize: 19,
+                          fontWeight: 600,
+                          color: TX,
+                          lineHeight: 1,
+                          // Keep the name inside the fixed-width card: clip a long token (e.g. a
+                          // long company name) to one line with an ellipsis instead of spilling
+                          // out the right edge.
+                          maxWidth: '100%',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                      >
+                        {projectName}
+                      </span>
+                      {tagline ? (
+                        // The company's one-liner — what it actually is, so the second line adds
+                        // signal instead of repeating "your company". Clipped to one tidy line.
+                        <span
+                          title={tagline}
+                          style={{
+                            display: 'block',
+                            marginTop: 6,
+                            fontFamily: 'var(--sans)',
+                            fontSize: 11,
+                            fontWeight: 500,
+                            lineHeight: 1.25,
+                            color: TX3,
+                            maxWidth: '100%',
+                            whiteSpace: 'nowrap',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
+                          {tagline}
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            display: 'block',
+                            marginTop: 5,
+                            fontFamily: 'var(--sans)',
+                            fontSize: 9.5,
+                            letterSpacing: '0.14em',
+                            textTransform: 'uppercase',
+                            color: VIO,
+                          }}
+                        >
+                          your company
+                        </span>
+                      )}
                     </span>
-                    <span
-                      style={{
-                        display: 'block',
-                        marginTop: 5,
-                        fontFamily: 'var(--sans)',
-                        fontSize: 9.5,
-                        letterSpacing: '0.14em',
-                        textTransform: 'uppercase',
-                        color: VIO,
-                      }}
-                    >
-                      your company
-                    </span>
-                  </span>
-                </div>
+                  </div>
+                </>
               )}
 
               {L.nodes.map((n) => {
@@ -694,6 +758,7 @@ export default function RoadmapView({
                     onClick={onTaskClick ? () => onTaskClick(t) : undefined}
                     pulse={pulseIds.has(t.id)}
                     companionName={companionName}
+                    herePhrase={herePhrase}
                     peek={{
                       deptLabel: DEPT_LABEL[t.dept] ?? t.dept,
                       phaseName: phaseName.get(t.phase) ?? '',

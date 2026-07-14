@@ -58,7 +58,7 @@ export default function OverviewIntro({
             textTransform: 'uppercase',
           }}
         >
-          byte · your companion
+          Codepet · your companion
         </div>
         <div
           style={{
@@ -84,7 +84,7 @@ export default function OverviewIntro({
               fontStyle: 'italic',
             }}
           >
-            byte is sizing up your project…
+            Codepet is sizing up your project…
           </div>
         )}
         {analysis && (

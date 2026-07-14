@@ -61,7 +61,7 @@ export function BillingView() {
           <div className="bill-row">
             <div className="set-txt">
               <b>Plan · Free (beta)</b>
-              <span>Pro is coming — more runs, priority byte, and team seats.</span>
+              <span>Pro is coming — more runs, priority Codepet, and team seats.</span>
             </div>
             <span className="upg-soon" title="Coming soon">
               Upgrade — coming soon
@@ -106,8 +106,8 @@ function ByokCard() {
         kind: 'ok',
         text:
           res.status === 'valid'
-            ? 'Key saved and verified. byte’s background work now runs on your credits.'
-            : 'Key saved. We couldn’t fully verify it, but byte will use it for background work.',
+            ? 'Key saved and verified. Codepet’s background work now runs on your credits.'
+            : 'Key saved. We couldn’t fully verify it, but Codepet will use it for background work.',
       });
     } else {
       setMsg({ kind: 'err', text: res.message || 'Couldn’t save that key.' });
@@ -121,7 +121,7 @@ function ByokCard() {
     setBusy(false);
     if (ok) {
       setByokState({ present: false });
-      setMsg({ kind: 'ok', text: 'Removed. byte’s background work is back on Codepet.' });
+      setMsg({ kind: 'ok', text: 'Removed. Background work is back on Codepet’s shared credits.' });
     } else {
       setMsg({ kind: 'err', text: 'Couldn’t remove the key.' });
     }
@@ -133,9 +133,9 @@ function ByokCard() {
       <div className="set-txt" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <b>Your Claude API key</b>
         <span style={label}>
-          Optional — let byte’s background work (picking your next step, remembering decisions) run
-          on your own Anthropic credits, off Codepet’s bill. Your deliverables and chat always run
-          on Codepet. Stored encrypted; we only ever show the last 4 digits.
+          Optional — let Codepet’s background work (picking your next step, remembering decisions)
+          run on your own Anthropic credits, off Codepet’s bill. Your deliverables and chat always
+          run on Codepet. Stored encrypted; we only ever show the last 4 digits.
         </span>
       </div>
 

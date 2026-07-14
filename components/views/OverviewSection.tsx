@@ -101,6 +101,10 @@ export default function OverviewSection() {
   // like "1", or a raw signup email) and fall back to "Your company" rather than showing junk
   // on the hero node.
   const projectName = cleanCompanyName(brief.projectName) ?? 'Your company';
+  // The roadmap beacon marks where the FOUNDER stands (not the companion), so it reads in the
+  // founder's own name — reusing the same junk-filter (drops empties, single chars, raw emails).
+  // Undefined when we don't have a usable name → the beacon falls back to "You are here".
+  const founderName = cleanCompanyName(brief.founderName) ?? undefined;
   // byte's one-line read of the company, for the first-run briefing. Falls back through the
   // brief's own fields when the AI analysis hasn't been generated yet. `meaningfulText` (shared
   // with the brief-normalization boundary) drops placeholder-y junk so the briefing never shows
@@ -262,10 +266,10 @@ export default function OverviewSection() {
             }}
           />
           <span>
-            <strong style={{ fontWeight: 650 }}>byte is paused.</strong>{' '}
+            <strong style={{ fontWeight: 650 }}>Codepet is paused.</strong>{' '}
             {aiOffline.code === 'rate_limited'
               ? 'Today’s usage limit is reached — it resets tomorrow. Runs and chat are on hold until then.'
-              : 'The workspace is out of AI credits — top it up in the Anthropic console and byte picks right back up. Runs and chat are on hold until then.'}
+              : 'The workspace is out of AI credits — top it up in the Anthropic console and Codepet picks right back up. Runs and chat are on hold until then.'}
           </span>
         </div>
       )}
@@ -880,7 +884,9 @@ export default function OverviewSection() {
               tasks={tasks}
               phases={ROADMAP_PHASES}
               projectName={projectName}
+              tagline={oneLiner ?? undefined}
               companionName={companionName}
+              founderName={founderName}
               onTaskClick={onTaskClick}
             />
           </div>
