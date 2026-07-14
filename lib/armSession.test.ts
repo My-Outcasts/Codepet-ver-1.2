@@ -44,13 +44,15 @@ describe('terminalCommand', () => {
 });
 
 describe('demoTerminalCommand', () => {
-  it('creates the demo dir, seeds index.html only if missing, then runs claude', () => {
+  it('creates the demo dir, seeds index.html only if missing, then runs claude and serves it', () => {
     const cmd = demoTerminalCommand('build a landing page');
     expect(cmd).toContain('mkdir -p ~/codepet-demo');
     expect(cmd).toContain('cd ~/codepet-demo');
-    expect(cmd).toContain('[ -f index.html ]'); // guard: only seed when missing
+    expect(cmd).toContain('[ -f index.html ]');
     expect(cmd).toContain('base64 -d > index.html');
     expect(cmd).toContain('claude "build a landing page"');
+    expect(cmd).toContain('python3 -m http.server 4321');
+    expect(cmd).toContain('open http://localhost:4321');
   });
   it('exposes the demo dir constant', () => {
     expect(DEMO_DIR).toBe('~/codepet-demo');

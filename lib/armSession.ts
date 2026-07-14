@@ -47,6 +47,8 @@ export function terminalCommand(projectDir: string, prompt: string): string {
 }
 
 export const DEMO_DIR = '~/codepet-demo';
+export const DEMO_PORT = 4321;
+export const DEMO_URL = 'http://localhost:4321';
 
 // A minimal but real starter landing page — byte builds this out during the demo.
 export const DEMO_SEED_HTML = `<!doctype html>
@@ -74,6 +76,8 @@ export function demoTerminalCommand(prompt: string): string {
   return (
     `mkdir -p ${DEMO_DIR} && cd ${DEMO_DIR} && ` +
     `{ [ -f index.html ] || echo '${b64}' | base64 -d > index.html; } && ` +
-    `claude "${shq(prompt)}"`
+    `claude "${shq(prompt)}" ; ` +
+    // Serve the built page (background) and open it, so the tester can view + re-view it.
+    `python3 -m http.server ${DEMO_PORT} >/dev/null 2>&1 & sleep 1 && open ${DEMO_URL}`
   );
 }
