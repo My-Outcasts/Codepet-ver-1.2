@@ -207,6 +207,8 @@ function EndStep({
   checkpoint,
   projectDir,
   onRewind,
+  recap,
+  demo,
 }: {
   companyId: string | null;
   sessionId: string | null;
@@ -216,6 +218,8 @@ function EndStep({
   checkpoint: { ref: string } | null;
   projectDir: string;
   onRewind: () => void;
+  recap: { commits: number; filesChanged: number } | null;
+  demo: boolean;
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
   const [fetched, setFetched] = useState(false);
@@ -267,7 +271,7 @@ function EndStep({
 
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const underBudget = actions <= target;
-  const commits = ev?.commits ?? 0;
+  const commits = ev?.commits ?? recap?.commits ?? 0;
   const earned = underBudget && commits >= 1;
   // Fall back to the plan's title (always set) so "built" is never blank when the
   // session rollup has no win and the brief is empty.
@@ -308,9 +312,13 @@ function EndStep({
             </div>
             <div className="bc-rc">
               <label>spent</label>
-              <div className={`v${underBudget ? ' ok' : ' warn'}`}>
-                {actions}/{target} actions
-              </div>
+              {demo ? (
+                <div className="v">{recap ? `${recap.filesChanged} files` : '—'}</div>
+              ) : (
+                <div className={`v${underBudget ? ' ok' : ' warn'}`}>
+                  {actions}/{target} actions
+                </div>
+              )}
             </div>
             <div className="bc-rc">
               <label>committed</label>
@@ -514,6 +522,8 @@ export function BuildCoachView() {
             checkpoint={buildCheckpoint}
             projectDir={buildProjectDir}
             onRewind={rewindBuild}
+            recap={buildLive?.recap ?? null}
+            demo={demoLetsBuild}
           />
         )}
 
