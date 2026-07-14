@@ -20,6 +20,12 @@ export async function getTodayTokens(): Promise<number | null> {
         resolve(null);
       }, 20000);
       child.stdout.on('data', (b) => (out += b.toString()));
+      // A stdout stream error would otherwise throw asynchronously (uncaught) — this action
+      // must never throw, so fail closed to null.
+      child.stdout.on('error', () => {
+        clearTimeout(timer);
+        resolve(null);
+      });
       child.on('error', () => {
         clearTimeout(timer);
         resolve(null);

@@ -345,7 +345,7 @@ function EndStep({
             <div className="bc-rc">
               <label>spent</label>
               {demo ? (
-                <div className="v">{recap ? `${recap.filesChanged} files` : '—'}</div>
+                <div className="v">{recap ? `${recap.filesChanged ?? 0} files` : '—'}</div>
               ) : (
                 <div className={`v${underBudget ? ' ok' : ' warn'}`}>
                   {actions}/{target} actions
