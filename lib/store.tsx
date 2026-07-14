@@ -80,6 +80,7 @@ import {
   stepForLive,
   INTAKE_OPENING,
   decideIntakeStep,
+  stripBuildTriggers,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
@@ -157,14 +158,10 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-// Strip the tap-to-continue "Turn this into a plan" buttons from past messages, so
-// the thread never accumulates a trail of live buttons — only the newest carries one.
-const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] =>
-  msgs.map((m) => {
-    if (!m.buildAction || m.buildAction.kind !== 'to-plan') return m;
-    const { buildAction: _drop, ...rest } = m;
-    return rest;
-  });
+// Strip the one-shot build TRIGGER buttons ("Turn this into a plan", "Let's build it")
+// from past messages, so the thread never accumulates a trail of live buttons a stray
+// tap could re-fire. See isTransientBuildTrigger for which kinds are consumed.
+const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] => stripBuildTriggers(msgs);
 import type { CompanyBrief } from './firebase/schema';
 import {
   buildRevealSummary,
@@ -2445,6 +2442,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const startBuildIntake = useCallback(() => {
+    // Idempotent: an intake already in progress must never stack a second opener.
+    if (buildIntakeActive) return;
     setBuildIntakeActive(true);
     setBuildBrief('');
     setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
@@ -2455,10 +2454,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       text: INTAKE_OPENING,
       ts: Date.now(),
     };
-    setChatMessages((prev) => [...prev, opening]);
+    // Strip the "Let's build it" trigger(s) as we open, so they can't be tapped
+    // again to re-append the opener (the source of the duplicated intake message).
+    setChatMessages((prev) => [...stripBuildButtons(prev), opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
-  }, [companyId, persistMsg]);
+  }, [companyId, persistMsg, buildIntakeActive]);
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
