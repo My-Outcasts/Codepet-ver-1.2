@@ -1,9 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/firebase/auth';
-import { loadTodayUsage } from '@/lib/firebase/companyData';
-import { DEFAULT_DAILY_LIMIT } from '@/lib/ai/rateLimit';
-import { usageMeter } from '@/lib/billing';
+import { loadPeriodCredits } from '@/lib/firebase/companyData';
+import { TRIAL_INCLUDED_CREDITS, PRO_INCLUDED_CREDITS } from '@/lib/ai/credits';
+import { creditMeter } from '@/lib/billing';
+
+// Plan state isn't persisted yet (credit engine + billing land in roadmap Phase 2/3), so
+// the plan and its allowance are placeholders. Defaulting to Trial keeps the meter and the
+// card coherent (X / trial-allowance) for this preview; the real plan drives both later.
+const PLACEHOLDER_PLAN = 'trial' as const;
+const PLACEHOLDER_ALLOWANCE =
+  PLACEHOLDER_PLAN === 'trial' ? TRIAL_INCLUDED_CREDITS : PRO_INCLUDED_CREDITS;
 
 export function BillingView() {
   const { companyId } = useAuth();
@@ -13,29 +20,30 @@ export function BillingView() {
   useEffect(() => {
     if (!companyId) return;
     let live = true;
-    loadTodayUsage(companyId)
-      .then((n) => live && setUsed(n))
+    loadPeriodCredits(companyId)
+      .then((c) => live && setUsed(c))
       .catch(() => live && setFailed(true));
     return () => {
       live = false;
     };
   }, [companyId]);
 
-  const meter = usageMeter(used ?? 0, DEFAULT_DAILY_LIMIT);
-  const remaining = Math.max(0, meter.limit - meter.used);
+  const meter = creditMeter(used ?? 0, PLACEHOLDER_ALLOWANCE);
 
   return (
     <section className="view on" id="v-billing">
       <div className="vhead">
         <h1>Billing &amp; Usage</h1>
-        <div className="sub">Your plan and today&apos;s activity.</div>
+        <div className="sub">Your plan and this month&apos;s credits.</div>
       </div>
 
       <div className="set-body">
         <div className="set-card usage-card">
           <div className="usage-head">
-            <b>Today&apos;s usage</b>
-            {!failed && used !== null && <span className="usage-left">{remaining} left</span>}
+            <b>Credits this month</b>
+            {!failed && used !== null && (
+              <span className="usage-left">{Math.round(meter.remaining)} left</span>
+            )}
           </div>
 
           {failed ? (
@@ -45,13 +53,13 @@ export function BillingView() {
           ) : (
             <>
               <div className="usage-stat">
-                <span className="usage-n">{meter.used}</span>
-                <span className="usage-tot">/ {meter.limit} runs</span>
+                <span className="usage-n">{Math.round(meter.used)}</span>
+                <span className="usage-tot">/ {meter.allowance} credits</span>
               </div>
               <div className="bill-meter">
                 <i style={{ width: `${meter.pct}%` }} />
               </div>
-              <span className="usage-cap">Resets at midnight.</span>
+              <span className="usage-cap">Renews monthly.</span>
             </>
           )}
         </div>
@@ -59,11 +67,13 @@ export function BillingView() {
         <div className="set-card plan-card">
           <div className="bill-row">
             <div className="set-txt">
-              <b>Plan · Free (beta)</b>
-              <span>Pro is coming — more runs, priority byte, and team seats.</span>
+              <b>Plan · Trial</b>
+              <span>
+                Upgrade to Pro for {PRO_INCLUDED_CREDITS} credits a month, then metered overage.
+              </span>
             </div>
             <span className="upg-soon" title="Coming soon">
-              Upgrade — coming soon
+              Upgrade to Pro
             </span>
           </div>
         </div>

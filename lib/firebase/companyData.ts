@@ -45,6 +45,7 @@ import {
 } from '../tracking';
 import { normalizeDecisions, type DecisionEntry } from '../ai/projectModel';
 import { dayKey } from '../ai/rateLimit';
+import { creditsFromUsage, type UsageDocData } from '../billing';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -436,6 +437,26 @@ export async function loadTodayUsage(companyId: string): Promise<number> {
   const snap = await getDoc(doc(getDb(), `companies/${companyId}/usage/${dayKey(new Date())}`));
   const n = snap.exists() ? (snap.data() as { n?: unknown }).n : 0;
   return typeof n === 'number' && Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Credits consumed in the current billing month, computed from the per-route call counts
+ * already recorded on the daily usage docs (one doc per active day). Reads the usage
+ * subcollection and sums only this month's docs (id is `yyyy-mm-dd`). Infrequent (opened
+ * from the Billing view), so a full subcollection read is acceptable for now. NOTE: this
+ * is a read-only view of what usage WOULD cost in credits — enforcement still runs on the
+ * daily generation cap until the credit engine is wired (see Notion roadmap Phase 2).
+ */
+export async function loadPeriodCredits(
+  companyId: string,
+  now: Date = new Date(),
+): Promise<number> {
+  const monthPrefix = dayKey(now).slice(0, 7); // 'yyyy-mm'
+  const snaps = await getDocs(collection(getDb(), `companies/${companyId}/usage`));
+  const docs = snaps.docs
+    .filter((d) => d.id.startsWith(monthPrefix))
+    .map((d) => d.data() as UsageDocData);
+  return creditsFromUsage(docs);
 }
 
 /** Local projects for the Build Coach's "Which project?" picker. Prefers the
