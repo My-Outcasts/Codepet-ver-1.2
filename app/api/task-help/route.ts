@@ -18,7 +18,7 @@ import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
 import { CODEPET_CONTEXT, composeRunSystem } from '@/lib/ai/runTaskPrompt';
 import { departmentBrief } from '@/lib/ai/departments';
-import { personaOverride } from '@/lib/companions';
+import { companionForDept, personaOverride } from '@/lib/companions';
 import { TASK_HELP_SCHEMA, coerceTaskHelp, type TaskHelp } from '@/lib/ai/taskHelp';
 
 export const runtime = 'nodejs';
@@ -138,11 +138,11 @@ export async function POST(req: Request): Promise<Response> {
       shipped: library,
     }) || CODEPET_CONTEXT;
 
-  const companionId = typeof body.companionId === 'string' ? body.companionId : undefined;
+  // Voice-per-department: the persona is the department's fixed pet, resolved from deptKey.
   // Cache-safe split: the stable company context goes in the (cached) system; the persona
   // override is appended last so it wins over the "You are byte…" opening. Only the per-task
   // prompt below varies call to call.
-  const system = composeRunSystem(context) + personaOverride(companionId);
+  const system = composeRunSystem(context) + personaOverride(companionForDept(fields.deptKey).id);
   const prompt = buildTaskHelpPrompt(fields);
   const onUsage = usageSink(uid, idToken, 'runTask');
 

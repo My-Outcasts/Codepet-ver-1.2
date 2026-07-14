@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COMPANIONS, companionById, personaOverride } from './companions';
+import { COMPANIONS, companionById, companionForDept, personaOverride } from './companions';
 
 describe('companions registry', () => {
   it('has byte first as the default', () => {
@@ -33,5 +33,28 @@ describe('companions registry', () => {
     const p = personaOverride('nova');
     expect(p).toContain('Nova');
     expect(p).toContain('first person');
+  });
+});
+
+describe('companionForDept', () => {
+  it('maps each department to its pet', () => {
+    expect(companionForDept('eng').id).toBe('byte');
+    expect(companionForDept('sales').id).toBe('crash');
+    expect(companionForDept('mkt').id).toBe('nova');
+    expect(companionForDept('design').id).toBe('glitch');
+    expect(companionForDept('ops').id).toBe('sage');
+    expect(companionForDept('support').id).toBe('luna');
+  });
+
+  it('shares Null across Finance and Legal', () => {
+    expect(companionForDept('fin').id).toBe('null');
+    expect(companionForDept('legal').id).toBe('null');
+  });
+
+  it('falls back to byte for unknown / missing department keys', () => {
+    expect(companionForDept('nope').id).toBe('byte');
+    expect(companionForDept(undefined).id).toBe('byte');
+    expect(companionForDept(null).id).toBe('byte');
+    expect(companionForDept('').id).toBe('byte');
   });
 });

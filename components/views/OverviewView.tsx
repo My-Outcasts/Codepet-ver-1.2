@@ -17,13 +17,18 @@ import * as THREE from 'three';
 // @ts-ignore - addons ship without bundled types in some setups
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { useApp } from '@/lib/store';
-import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
+import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
+import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
+import { clusterEvents } from '@/lib/overview/featureClusters';
+import { runSecondBrainBackfill } from '@/lib/ai/recallClient';
 import { taskState } from '@/lib/helpers';
-import { cleanCompanyName } from '@/lib/companyName';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
+import { examplePlanBanner } from '@/lib/examplePlan';
+import StageRibbon from '@/components/views/overview/StageRibbon';
 import OverviewProgressHud from '@/components/views/overview/OverviewProgressHud';
 import { overviewProgress, deptProgress } from '@/lib/overview/progress';
+import { ledgerCounts } from '@/lib/overview/secondBrainStats';
 import { StageDrawer } from '@/components/views/overview/StageDrawer';
 import OverviewIntro from '@/components/views/overview/OverviewIntro';
 import OverviewTour from '@/components/views/overview/OverviewTour';
@@ -37,21 +42,32 @@ const HEX: Record<string, string> = {
   '--teal': '#2DD4BF',
   '--gold': '#FDB022',
   '--violet': '#A855F7',
-  '--accent': '#9333ea',
+  '--accent': '#8B5CF6',
   '--rose': '#FF6B9D',
 };
 const STATE_HEX: Record<string, string> = {
-  'st-does': '#9333ea',
+  'st-does': '#8B5CF6',
   'st-draft': '#FDB022',
   'st-you': '#3B82F6',
   'st-done': '#34D399',
 };
+// Second Brain v2 — warm-nebula palette (mostly amber/gold like the reference, with a couple of
+// cool accents for variety): deliverable/session/fact are the warm field; decision/milestone pop.
+const KG_HEX: Record<string, string> = {
+  deliverable: '#F6A23C',
+  decision: '#2DD4BF',
+  fact: '#FFD98A',
+  session: '#FFB454',
+  milestone: '#FF6B9D',
+  task: '#FDB022',
+};
+const SECOND_BRAIN_V2 = process.env.NEXT_PUBLIC_SECOND_BRAIN_V2 === '1';
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
 const DIM_NODE = 'rgba(150,150,170,0.09)';
 const DIM_LINK = 'rgba(150,150,170,0.03)';
 // byte's "do this next" guide color — deliberately outside the state palette
 // (purple/gold/blue/green) so the beacon + its trail pop from the field.
-const BEACON_HEX = '#7c3aed';
+const BEACON_HEX = '#7DE3FF';
 
 function rgba(hex: string, a: number) {
   const h = hex.replace('#', '');
@@ -68,10 +84,14 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 interface GNode {
   id: string;
   name: string;
-  kind: 'project' | 'dept' | 'task';
+  kind: 'project' | 'dept' | 'task' | 'milestone' | 'deliverable' | 'decision' | 'fact' | 'session';
+  refType?: string;
+  refId?: string;
+  sbLabel?: boolean;
   color: string;
   val: number;
   deptColor?: string;
+  clusterId?: string;
   dept?: Dept;
   task?: Task;
   sub?: string;
@@ -89,8 +109,20 @@ interface GLink {
   target: string;
   color: string;
   hex: string;
-  kind: 'pd' | 'dt';
+  kind:
+    | 'pd'
+    | 'dt'
+    | 'belongs_to'
+    | 'produced'
+    | 'advances'
+    | 'depends_on'
+    | 'references'
+    | 'supersedes'
+    | 'grounds'
+    | 'spine';
   active?: boolean;
+  /** v2 base tint: the cluster's color for an intra-cluster link, cool-neutral otherwise. */
+  sbTint?: string;
 }
 
 const linkId = (x: unknown): string =>
@@ -175,6 +207,69 @@ function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
   return sprite;
 }
 
+// A wide, soft aura sprite that sits behind a firefly so each node radiates outward
+// (the "tỏa" halo) instead of ending abruptly. Low alpha + early falloff so many
+// overlapping auras add into a warm nebula glow without washing to grey.
+function makeAuraSprite(colorHex: string, size: number, alpha = 0.34): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, colorHex);
+  g.addColorStop(0.22, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.globalAlpha = alpha;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
+// A firefly: hot near-white core → warm color → transparent, additive-blended so overlapping
+// dots add up into bright cluster cores (the Second Brain nebula read from the reference).
+function makeFireflySprite(colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  // Smaller, softer white core so the cluster color reads instead of blowing out to
+  // pure white under bloom — a warm-tinted hot center, then the color, then fade.
+  g.addColorStop(0, 'rgba(255,250,238,0.82)');
+  g.addColorStop(0.12, colorHex);
+  g.addColorStop(0.46, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 export default function OverviewView() {
   const {
     openDept,
@@ -190,11 +285,29 @@ export default function OverviewView() {
     projectAnalysis,
     analysisLoading,
     ensureProjectAnalysis,
+    planTailored,
+    scaffoldFailure,
+    regenerateCompany,
+    regenerating,
+    openOnboarding,
     growthSignal,
     clearGrowthSignal,
     introSeen,
     markIntroSeen,
+    events,
+    library,
+    openDeliverable,
+    tracking,
   } = useApp();
+  const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
+  // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
+  // Retry re-plans in place; otherwise "Generate my plan" reopens the wizard to collect one.
+  const hasBrief = !!(
+    brief.oneLiner?.trim() ||
+    brief.summary?.trim() ||
+    brief.projectName?.trim() ||
+    brief.notes?.trim()
+  );
   void tick; // (already present) keeps the reads below live
   const progress = overviewProgress(DEPTS);
   const nextMilestone = nextPhaseName(brief.stage);
@@ -208,12 +321,29 @@ export default function OverviewView() {
   const [beaconFlip, setBeaconFlip] = useState(false);
   const beaconFlipRef = useRef(false);
   const hereRef = useRef<HereInfo | null>(null);
+  const focusClusterRef = useRef<string | null>(null);
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const bloomRef = useRef<any>(null);
   const idleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [focusCluster, setFocusCluster] = useState<string | null>(null);
+  const [backfilling, setBackfilling] = useState(false);
+  // When the founder last synced their history into the graph. Persisted so the
+  // "✓ Synced" state survives the reload a successful sync triggers. Read lazily
+  // from localStorage — the Sync pill only renders after client state hydrates
+  // (events > 0), so there is no server HTML to mismatch against.
+  const [syncedAt, setSyncedAt] = useState<number | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const v = window.localStorage.getItem('sb:syncedAt');
+    return v ? Number(v) : null;
+  });
+  const markSynced = () => {
+    const now = Date.now();
+    window.localStorage.setItem('sb:syncedAt', String(now));
+    setSyncedAt(now);
+  };
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
@@ -232,12 +362,115 @@ export default function OverviewView() {
     return () => ro.disconnect();
   }, []);
 
-  const { data, adj } = useMemo(() => {
+  const { data, adj, nodeCluster } = useMemo(() => {
+    if (SECOND_BRAIN_V2) {
+      // P1: render the derived knowledge graph (ledger → typed, cross-linked nodes)
+      // instead of the authored company→dept→task tree. The renderer is untouched;
+      // only the data feeding it changes.
+      const clusters = clusterEvents(events);
+      const kg = buildKnowledgeGraph(events, clusters);
+      // One palette color per cluster (cycled), keyed by cluster id.
+      const PALETTE = Object.values(HEX); // blue, clay, teal, gold, violet, accent, rose
+      const clusterColor = new Map<string, string>(
+        clusters.map((c, i) => [c.id, PALETTE[i % PALETTE.length]]),
+      );
+      // Organic clusters (not one even sphere): cluster hubs anchor on a spread sphere, and each
+      // knowledge node seeds INSIDE its cluster's cloud. The force sim + the dense references
+      // links then relax each cluster into a nebula blob — the Chitti read.
+      const deptNodes = kg.nodes.filter((n) => n.kind === 'department');
+      const deptPos = new Map<string, { x: number; y: number; z: number }>();
+      deptNodes.forEach((d, di) => {
+        const denom = Math.max(1, deptNodes.length - 1);
+        const yy = deptNodes.length > 1 ? 1 - (di / denom) * 2 : 0;
+        const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+        const th = GOLDEN * di;
+        deptPos.set(d.id, {
+          x: Math.cos(th) * rr * DEPT_R,
+          y: yy * DEPT_R * 0.55, // flatten toward a horizontal nebula
+          z: Math.sin(th) * rr * DEPT_R,
+        });
+      });
+      const clusterN = new Map<string, number>();
+      const CLOUD = 66;
+      const vnodes: GNode[] = kg.nodes.map((n) => {
+        const gkind: GNode['kind'] =
+          n.kind === 'company' ? 'project' : n.kind === 'department' ? 'dept' : n.kind;
+        // Color by CLUSTER, not by type: each cluster hub (and every knowledge node
+        // inside it) takes that cluster's palette color, so clusters read as
+        // distinct colored nebulae (blue / clay / teal / gold / violet / accent / rose)
+        // like the reference. Cluster-less halo nodes fall back to their type color.
+        const hex =
+          n.kind === 'department'
+            ? (clusterColor.get(n.id) ?? '#FDB022')
+            : (clusterColor.get(n.deptK ?? '') ?? KG_HEX[n.kind] ?? HEX['--accent']);
+        const common = {
+          id: n.id,
+          name: n.name,
+          kind: gkind,
+          sbLabel: n.label,
+          refType: n.refType,
+          refId: n.refId,
+          color: rgba(hex, n.kind === 'company' ? 0.95 : 0.85),
+          val: n.kind === 'company' ? 12 : 0.7 + Math.min(6, n.weight),
+          deptColor: hex,
+          clusterId: n.kind === 'department' ? n.id : n.deptK,
+        };
+        if (n.kind === 'company') return { ...common, x: 0, y: 0, z: 0 };
+        if (n.kind === 'department') {
+          const p = deptPos.get(n.id)!;
+          return { ...common, x: p.x, y: p.y, z: p.z };
+        }
+        // Knowledge node: seed inside its cluster's cloud; cluster-less nodes form a central halo.
+        const homeId = n.deptK && deptPos.has(n.deptK) ? n.deptK : null;
+        const c = homeId ? deptPos.get(homeId)! : { x: 0, y: 0, z: 0 };
+        const key = homeId ?? 'halo';
+        const ci = clusterN.get(key) ?? 0;
+        clusterN.set(key, ci + 1);
+        const R = homeId ? CLOUD : 150;
+        const yy = 1 - ((ci % 7) / 6) * 2;
+        const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+        const th = GOLDEN * (ci + 1);
+        return {
+          ...common,
+          x: c.x + Math.cos(th) * rr * R,
+          y: c.y + yy * R * 0.55,
+          z: c.z + Math.sin(th) * rr * R,
+        };
+      });
+      const nodeCluster = new Map<string, string>();
+      for (const v of vnodes) if (v.clusterId) nodeCluster.set(v.id, v.clusterId);
+      const vlinks: GLink[] = kg.edges.map((e) => {
+        // A link inside one cluster takes that cluster's hue (subtle), so each constellation
+        // glows in its own color instead of a uniform gray; spine stays cool-neutral.
+        const sc = nodeCluster.get(e.source);
+        const sameCluster = !!sc && sc === nodeCluster.get(e.target);
+        const sbTint = sameCluster ? (clusterColor.get(sc) ?? '#AEBCDF') : '#AEBCDF';
+        const lhex = e.kind === 'spine' ? '#FDB022' : '#F6A23C';
+        return {
+          source: e.source,
+          target: e.target,
+          color: rgba(lhex, e.kind === 'spine' ? 0.3 : e.kind === 'references' ? 0.14 : 0.2),
+          hex: lhex,
+          kind: e.kind,
+          sbTint,
+        };
+      });
+      const vadj = new Map<string, Set<string>>();
+      vlinks.forEach((l) => {
+        const s = linkId(l.source),
+          t = linkId(l.target);
+        if (!vadj.has(s)) vadj.set(s, new Set());
+        if (!vadj.has(t)) vadj.set(t, new Set());
+        vadj.get(s)!.add(t);
+        vadj.get(t)!.add(s);
+      });
+      return { data: { nodes: vnodes, links: vlinks }, adj: vadj, nodeCluster };
+    }
     const nodes: GNode[] = [];
     const links: GLink[] = [];
     nodes.push({
       id: 'project',
-      name: cleanCompanyName(brief.projectName) ?? 'Your company',
+      name: brief.projectName?.trim() || 'Your company',
       kind: 'project',
       color: '#D8D2F5',
       val: 12,
@@ -317,8 +550,8 @@ export default function OverviewView() {
       adj.get(l.source)!.add(l.target);
       adj.get(l.target)!.add(l.source);
     });
-    return { data: { nodes, links }, adj };
-  }, [tick, brief.projectName, revealKeys]);
+    return { data: { nodes, links }, adj, nodeCluster: new Map<string, string>() };
+  }, [tick, brief.projectName, revealKeys, events]);
 
   const inFocus = useCallback(
     (id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id),
@@ -362,6 +595,7 @@ export default function OverviewView() {
   const pulse = 0.5 + 0.5 * Math.sin(beat * 0.16); // 0..1
 
   hereRef.current = here;
+  focusClusterRef.current = focusCluster;
   // The lit trail byte draws from the center to your move: project → the active
   // department → the next task. These two link keys get the guide color +
   // particles that stream OUTWARD (source→target) from "Your company" to the node.
@@ -491,7 +725,10 @@ export default function OverviewView() {
   // ref settle after a view switch.
   useEffect(() => {
     if (!portalSignal || !dims.w) return;
-    const id = setTimeout(() => flyTo(`dept:${portalSignal.deptK}`), 220);
+    const id = setTimeout(
+      () => (SECOND_BRAIN_V2 ? fitView() : flyTo(`dept:${portalSignal.deptK}`)),
+      220,
+    );
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [portalSignal, dims.w]);
@@ -513,7 +750,10 @@ export default function OverviewView() {
   useEffect(() => {
     if (!growthSignal || growthSignal.unlockedKeys.length === 0) return;
     // Gentle camera ease toward the first newly-grown branch (skip under reduced motion).
-    if (!introReduceMotion()) flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
+    if (!introReduceMotion()) {
+      if (SECOND_BRAIN_V2) fitView();
+      else flyTo(`dept:${growthSignal.unlockedKeys[0]}`, 900);
+    }
     clearGrowthSignal(); // consume once — prevents replay on remount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [growthSignal, clearGrowthSignal]);
@@ -532,10 +772,19 @@ export default function OverviewView() {
     const fg = fgRef.current as any;
     if (!fg) return;
     try {
-      fg.d3Force('charge')?.strength(-90);
-      fg.d3Force('link')
-        ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
-        .strength(0.25);
+      if (SECOND_BRAIN_V2) {
+        // Tight clusters: intra-cluster references pull short so departments condense into
+        // nebula blobs; the spine holds clusters apart; stronger repulsion spreads the field.
+        fg.d3Force('charge')?.strength(-45);
+        fg.d3Force('link')
+          ?.distance((l: GLink) => (l.kind === 'spine' ? 130 : l.kind === 'references' ? 20 : 40))
+          .strength((l: GLink) => (l.kind === 'references' ? 0.5 : 0.18));
+      } else {
+        fg.d3Force('charge')?.strength(-90);
+        fg.d3Force('link')
+          ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
+          .strength(0.25);
+      }
     } catch {
       /* forces not ready */
     }
@@ -570,9 +819,46 @@ export default function OverviewView() {
     // bloom (not the whole field, which washed the canvas to grey).
     // radius ~0 keeps the glow tight on each node instead of spreading a
     // full-frame haze across the coarse mip (which washed the field to purple).
-    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
+    // Warmer, stronger glow for the Second Brain nebula; the classic tighter bloom otherwise.
+    const bloom = SECOND_BRAIN_V2
+      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.72, 0.5, 0.5)
+      : new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
     composer.addPass(bloom);
     bloomRef.current = bloom;
+  }, [dims.w]);
+
+  // Starfield (added once, v2 only) — a shell of faint distant points around the
+  // graph so the dark field reads as deep space and parallaxes as the camera orbits.
+  const starsRef = useRef<any>(null);
+  useEffect(() => {
+    if (!SECOND_BRAIN_V2 || !dims.w || starsRef.current) return;
+    const scene = (fgRef.current as any)?.scene?.();
+    if (!scene) return;
+    const N = 1500;
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const r = 700 + Math.random() * 1600;
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
+      pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th);
+      pos[i * 3 + 2] = r * Math.cos(ph);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const stars = new THREE.Points(
+      geo,
+      new THREE.PointsMaterial({
+        color: 0xaebcdf,
+        size: 2.1,
+        sizeAttenuation: true,
+        transparent: true,
+        opacity: 0.65,
+        depthWrite: false,
+      }),
+    );
+    scene.add(stars);
+    starsRef.current = stars;
   }, [dims.w]);
 
   // idle auto-rotate (pauses on interaction, resumes after ~3.5s idle)
@@ -584,7 +870,7 @@ export default function OverviewView() {
     if (idleRef.current) clearTimeout(idleRef.current);
     idleRef.current = setTimeout(() => {
       const cc = (fgRef.current as any)?.controls?.();
-      if (cc && !hereRef.current) cc.autoRotate = true; // stay at rest while a move is pinned
+      if (cc && !hereRef.current && !focusClusterRef.current) cc.autoRotate = true; // stay at rest while a move is pinned or a cluster is focused
     }, 3500);
   }, []);
 
@@ -594,7 +880,7 @@ export default function OverviewView() {
     if (c) {
       // Rest the map (no auto-spin) while byte is pointing at a move, so the
       // tethered callout holds steady; gently spin only when there's no move.
-      c.autoRotate = !here;
+      c.autoRotate = !here && !focusCluster;
       c.autoRotateSpeed = 0.5;
     }
     const el = wrapRef.current;
@@ -606,7 +892,28 @@ export default function OverviewView() {
       el?.removeEventListener('pointerdown', noteInteract);
       el?.removeEventListener('wheel', noteInteract);
     };
-  }, [dims.w, noteInteract, here]);
+  }, [dims.w, noteInteract, here, focusCluster]);
+
+  // Focused on a cluster: ESC backs out to the whole galaxy.
+  useEffect(() => {
+    if (!focusCluster) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        exitCluster();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusCluster]);
+
+  // react-force-graph caches node three-objects, so nodeThreeObject won't re-run on a
+  // focusCluster change without a nudge. refresh() re-renders node objects in place
+  // (labels appear/disappear) without touching the simulation, so positions hold.
+  useEffect(() => {
+    (fgRef.current as any)?.refresh?.();
+  }, [focusCluster]);
 
   // The graph's world size is fixed (department orbit radius is constant), so a
   // fixed camera distance reliably frames it — scaled by viewport aspect so the
@@ -622,11 +929,48 @@ export default function OverviewView() {
     fg.cameraPosition({ x: bx, y: 0, z: dist }, { x: bx, y: 0, z: 0 }, 800);
   };
 
+  // Leave a focused cluster: back to the whole galaxy.
+  const exitCluster = () => {
+    setFocusCluster(null);
+    fitView();
+  };
+
+  // If the focused cluster no longer exists after a data change, drop back to the whole galaxy.
+  useEffect(() => {
+    if (focusCluster && !data.nodes.some((n) => n.clusterId === focusCluster)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resync UI state to external data (cluster ids), not derived render state
+      setFocusCluster(null);
+      fitView();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   const onEngineStop = () => {
     if (!tookControlRef.current) fitView();
   };
 
   const nodeThreeObject = (n: GNode): any => {
+    // Second Brain v2: render EVERY node as a firefly (hot core + warm glow, additive-blended),
+    // no hard sphere — the nebula read from the reference. Roots/departments are bigger and always
+    // labeled; high-weight knowledge nodes carry a label too, the rest are hover-only.
+    if (SECOND_BRAIN_V2) {
+      const radius = Math.cbrt(n.val) * 2.2;
+      const isRoot = n.kind === 'project';
+      const isDept = n.kind === 'dept';
+      const glowHex = isRoot ? '#FFE7A8' : (n.deptColor ?? '#FDB022');
+      const size = radius * (isRoot ? 5.5 : isDept ? 5 : 4.2);
+      const group = new THREE.Group();
+      // Cluster hubs (company + departments) sit inside a big, very dim colored cloud
+      // — the nebula haze behind each cluster in the reference.
+      if (isRoot || isDept) group.add(makeAuraSprite(glowHex, size * (isRoot ? 6 : 4.6), 0.08));
+      // Soft wide aura (radiates outward), then the hot firefly core on top.
+      group.add(makeAuraSprite(glowHex, size * (isRoot ? 2.2 : 1.9), 0.26));
+      group.add(makeFireflySprite(glowHex, size));
+      // No in-scene text — names show only on hover (built-in nodeLabel tooltip), in both
+      // universe and focused views, so labels never overlap into an unreadable pile. The
+      // focused cluster's name is shown in the breadcrumb instead.
+      return group;
+    }
     if (n.kind === 'task') return undefined; // default sphere; label on hover
 
     // Label — for departments, append the progress count.
@@ -674,7 +1018,7 @@ export default function OverviewView() {
       sub.textHeight = 2.6;
       sub.fontFace = 'Inter, system-ui, sans-serif';
       (sub as any).position.set(0, radius + 1.5, 0);
-      const parkedRing = makeRingSprite(0, n.deptColor ?? '#9333ea', radius * 3.4, true);
+      const parkedRing = makeRingSprite(0, n.deptColor ?? '#8B5CF6', radius * 3.4, true);
       const group = new THREE.Group();
       group.add(parkedRing);
       group.add(label);
@@ -683,13 +1027,13 @@ export default function OverviewView() {
     }
 
     // Department node: label + progress ring around the node.
-    const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#9333ea');
+    const ringColor = total > 0 && done === total ? '#34D399' : (n.deptColor ?? '#8B5CF6');
     const ring = makeRingSprite(n.pct ?? 0, ringColor, radius * 3.4); // tune multiplier on preview
     const group = new THREE.Group();
     group.add(ring);
     group.add(s);
     if (n.reveal) {
-      const halo = makeGlowSprite(n.deptColor ?? '#7c3aed', radius * 5.5);
+      const halo = makeGlowSprite(n.deptColor ?? '#7DE3FF', radius * 5.5);
       group.add(halo);
     }
     return group;
@@ -747,6 +1091,19 @@ export default function OverviewView() {
     if (introPhase === 'intro') ensureProjectAnalysis();
   }, [introPhase, ensureProjectAnalysis]);
 
+  // Second Brain value strip: three "what you've made" numbers + the next move.
+  const sbCounts = SECOND_BRAIN_V2 ? ledgerCounts(events) : null;
+  const sbMetrics: [string, number][] = sbCounts
+    ? [
+        ['deliverables', sbCounts.deliverables],
+        ['decisions', sbCounts.decisions],
+        ['h saved', Math.round(tracking.hoursSaved)],
+      ]
+    : [];
+  const sbMetricsShown = sbMetrics.filter(([, v]) => v > 0);
+  const nextStepDept =
+    SECOND_BRAIN_V2 && nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : null;
+
   return (
     <section
       className="view on"
@@ -785,6 +1142,9 @@ export default function OverviewView() {
           />
         </>
       )}
+      {!SECOND_BRAIN_V2 && (
+        <StageRibbon highlight={introPhase === 'tour' && currentTourStep?.target === 'stage'} />
+      )}
       {revealKeys.size > 0 && (
         <div
           style={{
@@ -798,7 +1158,7 @@ export default function OverviewView() {
             borderRadius: 999,
             background: 'rgba(16,14,28,0.92)',
             border: '1px solid rgba(125,227,255,0.4)',
-            color: '#7c3aed',
+            color: '#7DE3FF',
             fontSize: 12,
             fontWeight: 700,
             fontFamily: 'inherit',
@@ -808,51 +1168,258 @@ export default function OverviewView() {
           ✦ {revealKeys.size} {revealKeys.size === 1 ? 'area' : 'areas'} unlocked
         </div>
       )}
-      <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
+      {/* The classic progress HUD lives bottom-left — where the Second Brain chat rail now is —
+          and duplicates the right panel's STATUS/DO-THIS-NEXT, so it's hidden in v2. */}
+      {!SECOND_BRAIN_V2 && <OverviewProgressHud progress={progress} nextStage={nextMilestone} />}
 
-      {/* heading + description removed for a cleaner, fuller canvas — the Roadmap ⁄ Second Brain
-          toggle already labels the tab. */}
+      {SECOND_BRAIN_V2 && focusCluster && (
+        <button
+          onClick={exitCluster}
+          style={{
+            position: 'absolute',
+            top: 20,
+            left: 26,
+            zIndex: 6,
+            pointerEvents: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            fontFamily: 'inherit',
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: '#7DE3FF',
+            background: 'rgba(16,14,28,0.85)',
+            border: '1px solid rgba(125,227,255,0.4)',
+            borderRadius: 999,
+            padding: '6px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          ← All areas
+          <span style={{ color: 'rgba(245,243,255,.6)', fontWeight: 600 }}>
+            {data.nodes.find((n) => n.id === focusCluster)?.name ?? ''}
+          </span>
+        </button>
+      )}
 
-      {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
       <div
         style={{
           position: 'absolute',
-          bottom: 20,
+          // v2 dropped the stage ribbon, so pull the title up to fill the top gap.
+          top: SECOND_BRAIN_V2 ? 24 : 58,
           left: 26,
+          right: 26,
+          maxWidth: 640,
           zIndex: 5,
-          display: 'flex',
-          gap: 16,
-          flexWrap: 'wrap',
-          fontSize: 11.5,
-          color: 'rgba(245,243,255,.7)',
           pointerEvents: 'none',
+          // Hide the universe title/value strip while immersed in a cluster (the
+          // breadcrumb carries context there) so they don't overlap.
+          display: SECOND_BRAIN_V2 && focusCluster ? 'none' : undefined,
         }}
       >
-        <Legend dot="#F4F1FF" label="Project" />
-        <Legend dot="#9333ea" label="byte does" />
-        <Legend dot="#FDB022" label="Needs approval" />
-        <Legend dot="#3B82F6" label="Needs you" />
-        <Legend dot="#34D399" label="Done" />
-        {introPhase === 'done' && (
-          <button
-            type="button"
-            onClick={() => setIntroPhase('intro')}
+        {!(SECOND_BRAIN_V2 && focusCluster) && (
+          <>
+            <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
+              {SECOND_BRAIN_V2 ? 'Second Brain' : 'Overview'}
+            </h1>
+            <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
+              {SECOND_BRAIN_V2
+                ? 'Everything you and byte have made, connected — tap a star to open it.'
+                : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
+            </div>
+          </>
+        )}
+        {SECOND_BRAIN_V2 && events.length > 0 && (sbMetricsShown.length > 0 || nextStep) && (
+          <div style={{ marginTop: 12, pointerEvents: 'auto' }}>
+            {sbMetricsShown.length > 0 && (
+              <div style={{ fontSize: 13, color: 'rgba(245,243,255,.75)' }}>
+                {sbMetricsShown.map(([label, v], i) => (
+                  <span key={label}>
+                    {i > 0 && <span style={{ opacity: 0.4 }}>{'  ·  '}</span>}
+                    <span style={{ color: '#7DE3FF', fontWeight: 700 }}>
+                      {label === 'h saved' ? `~${v}h` : v}
+                    </span>{' '}
+                    {label === 'h saved' ? 'saved' : label}
+                  </span>
+                ))}
+              </div>
+            )}
+            {nextStep && (
+              <button
+                onClick={() => fitView()}
+                style={{
+                  display: 'block',
+                  marginTop: 8,
+                  textAlign: 'left',
+                  fontSize: 12.5,
+                  fontFamily: 'inherit',
+                  color: '#F5F3FF',
+                  background: 'rgba(125,227,255,0.08)',
+                  border: '1px solid rgba(125,227,255,0.3)',
+                  borderRadius: 9,
+                  padding: '7px 11px',
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ color: '#7DE3FF', fontWeight: 700 }}>▸ Do this next:</span>{' '}
+                {nextStep.taskTitle}
+                {nextStepDept && (
+                  <span style={{ color: 'rgba(245,243,255,.45)' }}>{`  ·  ${nextStepDept}`}</span>
+                )}
+              </button>
+            )}
+          </div>
+        )}
+        {/* Second Brain v2 empty-state: the spine still renders, so this is never a blank screen —
+            just an honest invitation for a brand-new account with no ledger events yet. */}
+        {SECOND_BRAIN_V2 && events.length === 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12.5, color: 'rgba(125,227,255,.75)' }}>
+              Your Second Brain fills in as you and byte work — approve a deliverable or lock a
+              decision to see it join the graph.
+            </div>
+            <button
+              onClick={async () => {
+                if (backfilling) return;
+                setBackfilling(true);
+                const r = await runSecondBrainBackfill();
+                markSynced();
+                if (r.backfilled > 0) window.location.reload();
+                else setBackfilling(false);
+              }}
+              style={{
+                pointerEvents: 'auto',
+                marginTop: 8,
+                fontSize: 12.5,
+                fontWeight: 700,
+                padding: '6px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(125,227,255,0.4)',
+                background: 'rgba(125,227,255,0.12)',
+                color: '#7DE3FF',
+                cursor: backfilling ? 'default' : 'pointer',
+                opacity: backfilling ? 0.6 : 1,
+              }}
+            >
+              {backfilling ? 'Loading your history…' : 'Load my past work'}
+            </button>
+          </div>
+        )}
+        {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
+            never let a seeded map pass for a plan tailored to the founder's product. */}
+        {examplePlan && (
+          <div
             style={{
               pointerEvents: 'auto',
-              fontFamily: 'inherit',
-              fontSize: 11.5,
-              color: 'rgba(245,243,255,.55)',
-              background: 'transparent',
-              border: 'none',
-              borderLeft: '1px solid rgba(245,243,255,.15)',
-              paddingLeft: 16,
-              cursor: 'pointer',
+              marginTop: 11,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 10,
+              padding: '7px 12px',
+              borderRadius: 8,
+              background: 'rgba(253,176,34,.12)',
+              border: '1px solid rgba(253,176,34,.28)',
+              fontSize: 12.5,
+              color: 'rgba(245,243,255,.82)',
             }}
           >
-            ? how to read this
-          </button>
+            <span>{examplePlan.text}</span>
+            <button
+              type="button"
+              onClick={() => (hasBrief ? regenerateCompany() : openOnboarding())}
+              disabled={regenerating}
+              style={{
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                fontWeight: 600,
+                color: '#FDB022',
+                background: 'transparent',
+                border: 'none',
+                cursor: regenerating ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+                opacity: regenerating ? 0.6 : 1,
+              }}
+            >
+              {regenerating ? 'Re-planning…' : examplePlan.cta}
+            </button>
+          </div>
+        )}
+        {SECOND_BRAIN_V2 && events.length > 0 && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, pointerEvents: 'auto' }}>
+            <button
+              onClick={async () => {
+                if (backfilling) return;
+                setBackfilling(true);
+                const r = await runSecondBrainBackfill();
+                markSynced();
+                if (r.backfilled > 0) window.location.reload();
+                else setBackfilling(false);
+              }}
+              title={
+                syncedAt
+                  ? `Last synced ${new Date(syncedAt).toLocaleString()} — click to pull any newer history`
+                  : 'Pull all your deliverables, decisions and completed tasks into the graph'
+              }
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: `1px solid ${syncedAt ? 'rgba(52,211,153,0.3)' : 'rgba(255,255,255,0.12)'}`,
+                background: syncedAt ? 'rgba(52,211,153,0.08)' : 'rgba(16,14,28,0.7)',
+                color: syncedAt ? 'rgba(52,211,153,0.85)' : 'rgba(245,243,255,.7)',
+                cursor: backfilling ? 'default' : 'pointer',
+                opacity: backfilling ? 0.6 : 1,
+              }}
+            >
+              {backfilling ? 'Syncing…' : syncedAt ? '✓ Synced' : 'Sync history'}
+            </button>
+          </div>
         )}
       </div>
+
+      {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
+      {!SECOND_BRAIN_V2 && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 20,
+            left: 26,
+            zIndex: 5,
+            display: 'flex',
+            gap: 16,
+            flexWrap: 'wrap',
+            fontSize: 11.5,
+            color: 'rgba(245,243,255,.7)',
+            pointerEvents: 'none',
+          }}
+        >
+          <Legend dot="#F4F1FF" label="Project" />
+          <Legend dot="#8B5CF6" label="byte does" />
+          <Legend dot="#FDB022" label="Needs approval" />
+          <Legend dot="#3B82F6" label="Needs you" />
+          <Legend dot="#34D399" label="Done" />
+          {introPhase === 'done' && (
+            <button
+              type="button"
+              onClick={() => setIntroPhase('intro')}
+              style={{
+                pointerEvents: 'auto',
+                fontFamily: 'inherit',
+                fontSize: 11.5,
+                color: 'rgba(245,243,255,.55)',
+                background: 'transparent',
+                border: 'none',
+                borderLeft: '1px solid rgba(245,243,255,.15)',
+                paddingLeft: 16,
+                cursor: 'pointer',
+              }}
+            >
+              ? how to read this map
+            </button>
+          )}
+        </div>
+      )}
 
       <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
         {mapDimmed && (
@@ -874,9 +1441,9 @@ export default function OverviewView() {
             width={dims.w}
             height={dims.h}
             graphData={data}
-            // pure black so the composer's linear->sRGB output stays black
-            // (any non-zero dark value gets lifted to a visible purple-navy)
-            backgroundColor="#000000"
+            // v2: a dark navy that the bloom composer lifts into a soft purple-navy
+            // nebula field (the reference background). Classic mode stays pure black.
+            backgroundColor={SECOND_BRAIN_V2 ? '#070912' : '#000000'}
             showNavInfo={false}
             controlType="orbit"
             nodeVal={(n) => {
@@ -890,9 +1457,10 @@ export default function OverviewView() {
               if (n.id === beaconId) return rgba(BEACON_HEX, 0.85 + pulse * 0.15); // byte's guide star
               // During a node-targeted tour step, only the focus + its neighbors keep color.
               if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
+              if (focusCluster && n.clusterId !== focusCluster) return DIM_NODE;
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
-            nodeOpacity={0.95}
+            nodeOpacity={SECOND_BRAIN_V2 ? 0 : 0.95}
             nodeResolution={18}
             nodeRelSize={2.2}
             nodeThreeObjectExtend
@@ -905,23 +1473,40 @@ export default function OverviewView() {
               `<div style="font:600 12px Inter,sans-serif;color:#fff;background:rgba(12,10,23,.92);border:1px solid rgba(255,255,255,.14);padding:6px 9px;border-radius:8px;max-width:240px">${n.name}${n.sub ? `<div style='font-weight:500;color:rgba(255,255,255,.6);margin-top:2px;font-size:11px'>${n.sub}</div>` : ''}</div>`
             }
             linkColor={(l) => {
+              if (focusCluster) {
+                const sc = nodeCluster.get(linkId(l.source));
+                const tc = nodeCluster.get(linkId(l.target));
+                if (sc !== focusCluster || tc !== focusCluster) return DIM_LINK;
+              }
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               if (hoverId) {
                 const s = linkId(l.source),
                   t = linkId(l.target);
-                return s === hoverId || t === hoverId ? rgba(l.hex, 0.9) : DIM_LINK;
+                const lit = s === hoverId || t === hoverId;
+                if (!lit) return DIM_LINK;
+                // v2: a cool white-blue that matches the galaxy, not the warm l.hex clash.
+                return SECOND_BRAIN_V2 ? rgba('#CFE0FF', 0.5) : rgba(l.hex, 0.9);
               }
-              return pathLinkIds.has(key) ? rgba(BEACON_HEX, 0.9) : l.color;
+              if (pathLinkIds.has(key)) return rgba(BEACON_HEX, 0.9);
+              // v2: thin filaments tinted by the cluster's own hue (subtle), so the web reads
+              // as quiet connective tissue that still varies per constellation.
+              return SECOND_BRAIN_V2
+                ? rgba(l.sbTint ?? '#AEBCDF', l.kind === 'spine' ? 0.2 : 0.13)
+                : l.color;
             }}
+            linkCurvature={(l) => (SECOND_BRAIN_V2 && l.kind !== 'spine' ? 0.22 : 0)}
             linkWidth={(l) => {
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
-              if (hoverId && (s === hoverId || t === hoverId)) return 2.4;
+              if (hoverId && (s === hoverId || t === hoverId)) return SECOND_BRAIN_V2 ? 1.1 : 2.4;
               if (pathLinkIds.has(key)) return 2;
+              if (SECOND_BRAIN_V2) return l.kind === 'spine' ? 0.6 : 0.35;
               return l.kind === 'pd' ? 1.1 : 0.4;
             }}
             linkDirectionalParticles={(l) => {
+              // v2: no chunky particle "beads" — keep the galaxy's links as clean filaments.
+              if (SECOND_BRAIN_V2) return 0;
               const key = `${linkId(l.source)}->${linkId(l.target)}`;
               const s = linkId(l.source),
                 t = linkId(l.target);
@@ -938,12 +1523,31 @@ export default function OverviewView() {
               return pathLinkIds.has(key) ? 3 : 1.8;
             }}
             linkDirectionalParticleSpeed={0.006}
-            enableNodeDrag
+            // Node dragging is off: this is an orbit/zoom/click map (positions are seeded), and
+            // three's DragControls forwards a pointercancel into OrbitControls.onPointerUp that
+            // crashes on an untracked pointer ("reading 'x'"). Disabling it removes that path.
+            enableNodeDrag={false}
             cooldownTime={4000}
             d3AlphaDecay={0.05}
             d3VelocityDecay={0.45}
             onEngineStop={onEngineStop}
             onNodeClick={(n) => {
+              if (SECOND_BRAIN_V2) {
+                // Route a knowledge node back to its source record where we have one.
+                if (n.refType === 'library') {
+                  const item = library.find((it) => it.title === n.name);
+                  if (item) return openDeliverable(item as LibItem);
+                }
+                // v2 hubs are feature-area clusters (id `cluster:N`), not departments —
+                // glide the camera to the cluster instead of opening a (nonexistent) dept page.
+                if (n.kind === 'dept') {
+                  setFocusCluster(n.id);
+                  flyTo(n.id, 900);
+                  return;
+                }
+                if (focusCluster) return; // stay immersed; opening a star is Phase C
+                return fitView();
+              }
               if (n.kind === 'dept' && n.dept) openDept(n.dept.k);
               else if (n.kind === 'task' && n.task && n.dept) {
                 if (n.task.done) openDept(n.dept.k);
@@ -951,6 +1555,9 @@ export default function OverviewView() {
               } else if (n.kind === 'project') {
                 fitView();
               }
+            }}
+            onBackgroundClick={() => {
+              if (focusCluster) exitCluster();
             }}
           />
         )}
@@ -1089,7 +1696,7 @@ function ByteGuide({
               color: 'rgba(125,227,255,.9)',
             }}
           >
-            The glowing beacon is always your next move.
+            The bright cyan star is always your next move.
           </div>
         )}
         <button

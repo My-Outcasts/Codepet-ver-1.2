@@ -16,6 +16,7 @@ import React, {
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType, buildLog, type LogStep } from './helpers';
 import { runByteTask, GenerateError, postEnrichAnswer, fetchTaskHelp } from './ai/runTask';
+import { getByok } from './ai/byokClient';
 import { mergeDecisions } from './ai/decisions';
 import type { TaskHelp } from './ai/taskHelp';
 import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
@@ -33,7 +34,6 @@ import {
   persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
-  persistCompanion,
   persistIntroSeen,
   persistBrief,
   persistChatMessage,
@@ -51,13 +51,15 @@ import {
   persistThread,
   updateThreadTitle,
   deleteThreadAndMessages,
+  appendEvent,
 } from './firebase/companyData';
+import { eventFromLibItem, eventFromDecision, eventFromStageAdvance } from './overview/ledger';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
 import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
-import type { ThreadMeta } from './firebase/schema';
+import type { ThreadMeta, LedgerEvent } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
-import { DEFAULT_COMPANION_ID } from './companions';
+import { DEFAULT_COMPANION_ID, companionForDept } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
@@ -104,6 +106,10 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
+  /** Which pet spoke this turn — stamped at creation so a past reply keeps its voice's face
+   *  even after the founder navigates elsewhere. Absent on older/system turns → the renderer
+   *  falls back to the task's department pet (for deliverables) or the current focus pet. */
+  companionId?: string;
   /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
@@ -132,6 +138,9 @@ export interface ChatMessage {
   /** Assisted founder task: a generated how-to + optional capture form for a "needs your input"
    * task. Rendered as a rich card; submitting the capture writes decisions + marks it done. */
   help?: { deptK: string; taskTitle: string; nodeId?: string; data: TaskHelp; captured?: boolean };
+  /** A one-time, subtle nudge to add your own Anthropic key (Add my key / Not now). Transient —
+   * never persisted — and shown at most once per account (see maybeNudgeByok). */
+  byokNudge?: boolean;
   /** The execute-log steps for this run — streamed live in the card, then kept as the
    * "What byte did" record. Generated once (buildLog) when the run starts. */
   steps?: LogStep[];
@@ -194,9 +203,6 @@ interface AppState {
   closeStage: () => void;
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
-  /** Sidebar collapsed to an icon-only rail (persisted) — frees width for the main + chat. */
-  sideCollapsed: boolean;
-  toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
   /** Reopen the onboarding wizard (e.g. to add a brief after skipping). */
@@ -241,10 +247,12 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
-  /** The founder's chosen companion character id (default 'byte'). */
+  /** The default companion mark shown in the app chrome (byte). Voice is per-department
+   *  (see lib/companions companionForDept); there is no global companion pick. */
   companionId: string;
-  /** Set the active companion (persists). */
-  setCompanion: (id: string) => void;
+  /** The pet that voices AND fronts the Copilot right now: the department in focus
+   *  (viewed dept → CURRENT NEXT STEP's dept → byte). Drives the chat avatar + name. */
+  focusCompanionId: string;
   /** Whether this account has seen the Overview first-run intro. */
   introSeen: boolean;
   /** Mark the first-run intro seen for this account (idempotent; persists). */
@@ -255,6 +263,8 @@ interface AppState {
   openInstallPrompt: () => void;
   closeInstallPrompt: () => void;
   library: LibItem[];
+  /** Second Brain event ledger, newest-first (P0/P1). */
+  events: LedgerEvent[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
   /** Distinct local projects the tracker has reported (empty until events arrive). */
@@ -289,6 +299,8 @@ interface AppState {
     taskTitle: string,
     values: { key: string; label: string; value: string }[],
   ) => void;
+  /** Dismiss the one-time BYOK nudge card by message id. */
+  dismissByokNudge: (msgId: string) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -319,6 +331,8 @@ interface AppState {
   renameThread: (id: string, title: string) => void;
   /** Delete a thread and its messages; falls back to another thread or a new chat. */
   deleteThread: (id: string) => void;
+  /** Delete every thread and its messages, then drop into a fresh empty chat. */
+  clearAllChats: () => void;
   /** Open/close the chat-history list. */
   toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
@@ -419,14 +433,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [portalSignal, setPortalSignal] = useState<{ deptK: string; n: number } | null>(null);
   // Chat starts closed by default; the floating button opens it on demand.
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
-  const [sideCollapsed, setSideCollapsed] = useState(false);
   // Onboarding is shown only to users who haven't completed it. It starts false
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
-  // The founder's chosen companion character (hydrated from Firestore; default byte).
-  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
+  // Voice is per-department now (see lib/companions companionForDept); there is no global
+  // companion pick. The chrome shows byte as the neutral default mark, so this is pinned.
+  const companionId = DEFAULT_COMPANION_ID;
   // Whether THIS account has seen the Overview first-run intro (hydrated from
   // Firestore; drives introInitialPhase). Default false ⇒ a fresh account sees it.
   const [introSeen, setIntroSeen] = useState(false);
@@ -444,7 +458,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
-      if (localStorage.getItem('codepet:sidecollapsed') === '1') setSideCollapsed(true);
     } catch {}
   }, []);
 
@@ -468,6 +481,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Library + business brief are owned here as state, hydrated from Firestore.
   const [library, setLibrary] = useState<LibItem[]>([]);
+  const [events, setEvents] = useState<LedgerEvent[]>([]);
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
@@ -704,14 +718,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeThreadId: loadedActive,
           decisions: dec,
           projectAnalysis: pa,
-          companionId: cId,
           introSeenAt,
+          events: loadedEvents,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
           setBrief(normalizeBrief(b)); // clean the persisted brief once, at the store boundary
           setDecisions(dec);
-          setCompanionId(cId ?? DEFAULT_COMPANION_ID);
+          setEvents(loadedEvents ?? []);
           setIntroSeen(Boolean(introSeenAt));
           introSeenRef.current = Boolean(introSeenAt);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
@@ -850,19 +864,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId],
   );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
-  // Set the active companion (optimistic, persists non-blocking).
-  const setCompanion = useCallback(
-    (id: string) => {
-      setCompanionId(id);
-      track('companion.select', { id });
-      if (companyId) {
-        persistCompanion(companyId, id).catch((err) =>
-          console.error('[store] persist companion failed', err),
-        );
-      }
-    },
-    [companyId],
-  );
   const markIntroSeen = useCallback(() => {
     if (introSeenRef.current) return; // already seen — no state churn, no write
     introSeenRef.current = true;
@@ -875,16 +876,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [companyId]);
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
-  }, []);
-  const toggleSide = useCallback((collapsed?: boolean) => {
-    setSideCollapsed((c) => {
-      const next = collapsed === undefined ? !c : collapsed;
-      try {
-        if (next) localStorage.setItem('codepet:sidecollapsed', '1');
-        else localStorage.removeItem('codepet:sidecollapsed');
-      } catch {}
-      return next;
-    });
   }, []);
 
   // The "best first move" hand-off: byte's landing greeting with the single best first
@@ -1208,6 +1199,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           label: 'persistBrief',
           failMessage: 'Couldn’t save your project details — they may not persist.',
         });
+        // Ledger: the milestone the company just crossed (keyed by stage name).
+        const stageEv = eventFromStageAdvance(next, next, Date.now());
+        void appendEvent(companyId, stageEv);
+        setEvents((prev) => [stageEv, ...prev.filter((e) => e.refId !== stageEv.refId)]);
         bump();
         computeNextStep();
         setChatMessages((prev) =>
@@ -1665,6 +1660,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [toggleCopilot, computeRoadmapNext],
   );
 
+  // One-time, subtle BYOK nudge: once the founder has approved a few deliverables (they're
+  // invested) and hasn't set a key, drop ONE dismissible chat card offering to run byte's
+  // lighter BACKGROUND work on their own Anthropic key. Transient (never persisted, no persistMsg)
+  // + gated by a per-account localStorage flag → appears at most once. Honest framing (no
+  // "more runs" promise); the key never touches deliverables/chat.
+  const maybeNudgeByok = useCallback(
+    async (deliverableCount: number) => {
+      if (deliverableCount < 3 || !companyId) return;
+      const seenKey = `codepet:byokNudge:${companyId}`;
+      try {
+        if (localStorage.getItem(seenKey)) return;
+      } catch {
+        return;
+      }
+      // Fetch only at the moment we'd nudge (not on every load). Mark seen either way so this
+      // never re-checks; if a key is already set, don't nudge.
+      const status = await getByok();
+      try {
+        localStorage.setItem(seenKey, '1');
+      } catch {}
+      if (status.present) return;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          ts: Date.now(),
+          byokNudge: true,
+          text: `Small optional thing — I just picked your next step and quietly logged a couple of decisions in the background. If you like, that lighter background work can run on your own Anthropic key; your deliverables and our chats always stay on me. No pressure — it just helps keep byte snappy. You can add a key anytime in Billing & Usage.`,
+        },
+      ]);
+    },
+    [companyId],
+  );
+  const dismissByokNudge = useCallback((msgId: string) => {
+    setChatMessages((prev) => prev.filter((m) => m.id !== msgId));
+  }, []);
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
       t.done = true;
@@ -1694,6 +1727,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
       t._item = item;
       setLibrary((prev) => [item, ...prev]);
+      void maybeNudgeByok(library.length + 1); // after a few approvals, offer BYOK once
       const next = d.tasks.find((x) => !x.done);
       bump();
       track('task.approved', { dept: d.k, type });
@@ -1706,6 +1740,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           label: 'persistApproval',
           failMessage: 'Saved here, but syncing failed — it may not persist.',
         });
+        // Ledger emit: keyed by the same id persistApproval assigns (`${d.k}-${approvedAt}`),
+        // so this live node and the backfill's node for the same deliverable never duplicate.
+        const ev = eventFromLibItem(
+          { id: `${d.k}-${approvedAt}`, title: item.title, k: d.k, createdAt: approvedAt },
+          d.k,
+        );
+        void appendEvent(companyId, ev);
+        setEvents((prev) => [ev, ...prev.filter((e) => e.refId !== ev.refId)]);
         // Fire-and-forget: let byte extract any durable decision this deliverable locks
         // in (server-gated by AI_MEMORY_ENABLED; never blocks or surfaces errors).
         rememberApproval({
@@ -1720,7 +1762,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       guideAfterCompletion(t.t); // …otherwise byte acknowledges it + nudges the next move in chat
       return { item, next };
     },
-    [companyId, bump, toast, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
+    [
+      companyId,
+      bump,
+      toast,
+      computeNextStep,
+      maybeOfferAdvance,
+      guideAfterCompletion,
+      library,
+      maybeNudgeByok,
+    ],
   );
 
   // Founder-owned tasks (incorporate, open a bank account, …) are the founder's to do — byte
@@ -2114,6 +2165,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, activeThreadId, threads, openThread, newChat],
   );
 
+  const clearAllChats = useCallback(() => {
+    if (!companyId) return;
+    // Cancel any in-flight stream first — same reason as deleteThread: a stream-end
+    // persistMsg could otherwise re-create a just-deleted thread.
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    const ids = threads.map((t) => t.id);
+    setThreads([]);
+    ids.forEach((id) =>
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      ),
+    );
+    // Drop into a fresh empty chat (also closes the history list).
+    newChat();
+  }, [companyId, threads, newChat]);
+
+  // The department in focus drives BOTH the Copilot's voice-per-department persona and its
+  // avatar/name: the department being viewed → else the CURRENT NEXT STEP's department →
+  // else undefined (byte). One source of truth so the chat's face never disagrees with its tone.
+  const focusDeptKey = (view === 'dept' ? deptKey : null) ?? nextStep?.deptK ?? undefined;
+  const focusCompanionId = companionForDept(focusDeptKey).id;
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
@@ -2162,7 +2236,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             deptSummary,
             openTasks,
             envSetup,
-            companionId,
+            focusDeptKey,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -2209,6 +2283,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 }
                 return [...byTopic.values()];
               });
+              if (companyId) {
+                for (const c of ev.items) {
+                  const decEv = eventFromDecision({
+                    topic: c.topic,
+                    statement: c.statement,
+                    source: 'chat',
+                    updatedAt: now,
+                  });
+                  void appendEvent(companyId, decEv);
+                  setEvents((prev) => [decEv, ...prev.filter((e) => e.refId !== decEv.refId)]);
+                }
+              }
               continue;
             }
             acc += ev.text;
@@ -2280,7 +2366,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat, companionId, persistMsg],
+    [companyId, nextStep, focusDeptKey, runTaskInChat, persistMsg],
   );
 
   const sendChat = useCallback(
@@ -2290,7 +2376,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
-      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
+      // Pin the reply to whoever is in focus now, so it keeps that pet's face in the thread
+      // even after the founder navigates to another department.
+      const byteMsg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: '',
+        ts: now + 1,
+        companionId: focusCompanionId,
+      };
 
       // Build the history to send BEFORE the empty byte placeholder is added.
       const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
@@ -2316,7 +2410,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, runByteStream, persistMsg, activeThreadId],
+    [
+      companyId,
+      chatMessages,
+      chatStreaming,
+      focusCompanionId,
+      runByteStream,
+      persistMsg,
+      activeThreadId,
+    ],
   );
 
   // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
@@ -2653,8 +2755,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
-      sideCollapsed,
-      toggleSide,
       onboarding,
       finishOnboarding,
       openOnboarding,
@@ -2677,13 +2777,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       companionId,
-      setCompanion,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
       library,
+      events,
       tracking,
       projects,
       modal,
@@ -2695,6 +2796,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markTaskDone,
       openTaskHelp,
       captureTaskInput,
+      dismissByokNudge,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2713,6 +2815,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
       runTaskInChat,
@@ -2770,8 +2873,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
-      sideCollapsed,
-      toggleSide,
       onboarding,
       finishOnboarding,
       openOnboarding,
@@ -2794,13 +2895,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       companionId,
-      setCompanion,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
       library,
+      events,
       tracking,
       projects,
       modal,
@@ -2812,6 +2914,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       markTaskDone,
       openTaskHelp,
       captureTaskInput,
+      dismissByokNudge,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2830,6 +2933,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
       runTaskInChat,

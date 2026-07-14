@@ -6,13 +6,11 @@ import { SignIn } from './auth/SignIn';
 import { Splash } from './Splash';
 import { LoadingScreen } from './LoadingScreen';
 import { Topbar } from './Topbar';
-import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
 import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
-import { Companion } from './Companion';
 import { companionById } from '@/lib/companions';
-import { ThemeProvider, useTheme, applyCompanionAccent } from '@/lib/theme';
+import { ThemeProvider } from '@/lib/theme';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
@@ -31,15 +29,7 @@ import { BuildCoachView } from './views/BuildCoachView';
 import OverviewSection from './views/OverviewSection';
 
 function Shell() {
-  const {
-    view,
-    show,
-    buildSessionId,
-    copilotCollapsed,
-    toggleCopilot,
-    sideCollapsed,
-    companionId,
-  } = useApp();
+  const { view, show, buildSessionId, copilotCollapsed, toggleCopilot, companionId } = useApp();
   // A build session is live once armed (until Start over). Keep its view mounted across
   // navigation so switching tabs doesn't tear down (and kill) the running session.
   const buildActive = buildSessionId != null;
@@ -48,14 +38,6 @@ function Shell() {
     if (mainRef.current) mainRef.current.scrollTop = 0;
   }, [view]);
   const c = companionById(companionId);
-
-  // Sync the app's accent to the active companion (in whichever theme). Cleared on unmount so
-  // the signed-out splash returns to byte's brand violet.
-  const { resolved } = useTheme();
-  useEffect(() => {
-    applyCompanionAccent(c.accent, resolved);
-    return () => applyCompanionAccent(null, resolved);
-  }, [c.accent, resolved]);
 
   const ActiveView =
     view === 'summary' ? (
@@ -81,10 +63,7 @@ function Shell() {
   return (
     <div className="app">
       <Topbar />
-      <div
-        className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}${sideCollapsed ? ' side-collapsed' : ''}`}
-      >
-        <Sidebar />
+      <div className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}`}>
         <main className="main" id="main" ref={mainRef}>
           {ActiveView}
           {(buildActive || view === 'build') && (
@@ -95,13 +74,13 @@ function Shell() {
         </main>
         <Copilot />
       </div>
+      {/* The floating "Ask" launcher opens the companion chat on demand. */}
       <button
         className={`cop-open${copilotCollapsed ? ' show' : ''}`}
         aria-label={`Open ${c.name} chat`}
         onClick={() => toggleCopilot(false)}
       >
-        <Companion id={companionId} size="s28" />
-        Ask {c.name}
+        <img className="cop-logo" src="/c-logo.svg" alt={`Ask ${c.name}`} draggable={false} />
       </button>
       {buildActive && view !== 'build' && (
         <button className="build-return" onClick={() => show('build')}>

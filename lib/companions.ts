@@ -76,6 +76,30 @@ export function companionById(id: string | null | undefined): Companion {
 }
 
 /**
+ * The fixed pet ↔ department mapping — the single source of truth for which
+ * companion voices a given department's work. Each department has one pet; the
+ * founder does not pick. There are 8 departments and 7 pets, so Null covers the
+ * two least-important departments (Finance + Legal). Any unknown/empty key (e.g.
+ * a general, non-department surface) falls back to byte, the default.
+ */
+const DEPT_COMPANION: Record<string, string> = {
+  eng: 'byte',
+  sales: 'crash',
+  mkt: 'nova',
+  design: 'glitch',
+  ops: 'sage',
+  support: 'luna',
+  fin: 'null',
+  legal: 'null',
+};
+
+/** Resolve the companion that voices a department's work (byte for unknown keys). */
+export function companionForDept(deptKey: string | null | undefined): Companion {
+  const id = deptKey ? DEPT_COMPANION[deptKey] : undefined;
+  return companionById(id ?? DEFAULT_COMPANION_ID);
+}
+
+/**
  * The persona line appended to a system prompt so the active companion speaks in
  * its own voice. Empty for byte (byte is the baseline). Written as an override so
  * it wins over the "You are byte…" opening of the existing prompts.

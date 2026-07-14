@@ -204,47 +204,13 @@ body {
 .tb-brand {
   display: flex;
   align-items: center;
-  gap: 9px;
   margin-left: 4px;
-}
-.tb-brand .logo {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: url('/codepet-logo.svg') center / cover no-repeat;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
 }
 .tb-brand .nm {
   font-family: 'Codepet Pixel', var(--sans);
   font-size: 15px;
   letter-spacing: 0.5px;
   color: var(--t-1);
-}
-/* Sidebar collapse toggle — sits just after the brand. */
-.brand-toggle {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  border: 0;
-  border-radius: 7px;
-  color: var(--t-3);
-  background: transparent;
-  cursor: pointer;
-  transition: 0.15s;
-}
-.brand-toggle:hover {
-  background: var(--well);
-  color: var(--t-1);
-}
-.brand-toggle svg {
-  width: 15px;
-  height: 15px;
-  transition: transform 0.2s;
-}
-.brand-toggle.collapsed svg {
-  transform: rotate(180deg);
 }
 .topbar .right {
   margin-left: auto;
@@ -428,40 +394,29 @@ body {
   box-shadow: 0 0 0 1.5px var(--surface-2);
 }
 
+/* Two-column shell: main + chat. Primary nav now lives in the topbar, so there is
+   no sidebar column. */
 .shell {
   flex: 1;
   display: grid;
-  grid-template-columns: 212px 1fr 340px;
+  grid-template-columns: 1fr 520px;
   min-height: 0;
   transition: grid-template-columns 0.22s ease;
 }
-/* User-toggled icon rail: sidebar shrinks to 64px, freeing width for the main + chat. */
-.shell.side-collapsed {
-  grid-template-columns: 64px 1fr 340px;
-}
-.shell.side-collapsed.cop-collapsed {
-  grid-template-columns: 64px 1fr 0;
+/* Chat collapsed → main takes the full width. */
+.shell.cop-collapsed {
+  grid-template-columns: 1fr 0;
 }
 
-/* ===== sidebar ===== */
-.side {
-  background: var(--surface-2);
-  border-right: 1px solid var(--hairline);
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-/* Account control at the sidebar top (avatar + name + dropdown). See AccountMenu. */
+/* ===== account control (topbar, beside the brand) — avatar + name + dropdown. See AccountMenu. ===== */
 .acct-wrap {
   position: relative;
 }
 .acct {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 8px;
+  gap: 7px;
+  padding: 4px 8px 4px 5px;
   border: 0;
   background: transparent;
   border-radius: 9px;
@@ -474,20 +429,19 @@ body {
   background: var(--well);
 }
 .acct .av {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   flex: none;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--violet));
   color: var(--on-accent);
   display: grid;
   place-items: center;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
 }
 .acct-nm {
-  flex: 1;
-  min-width: 0;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -503,157 +457,65 @@ body {
 .acct-wrap.open .tb-menu {
   display: block;
 }
-/* Reposition the shared dropdown to hang below the sidebar row, spanning its width. */
+/* Dropdown hangs below the account button, left-aligned to it. */
 .acct-menu {
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
-  right: 0;
-}
-.side-sep {
-  height: 1px;
-  background: var(--hairline);
-  margin: 8px 4px 4px;
+  right: auto;
+  min-width: 232px;
 }
 
-/* ===== collapsed icon-rail treatment (toggled) ===== */
-.shell.side-collapsed .side {
-  padding: 16px 8px;
-}
-.shell.side-collapsed .acct {
-  justify-content: center;
-  padding: 6px 0;
-}
-/* In the narrow rail the dropdown keeps its own width and spills over the main area. */
-.shell.side-collapsed .acct-menu {
-  right: auto;
-  min-width: 172px;
-}
-.shell.side-collapsed .nav {
-  position: relative;
-  justify-content: center;
-  padding: 9px 0;
-}
-.shell.side-collapsed .nav span {
-  display: none;
-}
-.shell.side-collapsed .side .grp {
-  display: none;
-}
-/* Count badge → a small corner dot, so "something's here" still reads at a glance. */
-.shell.side-collapsed .nav .ct {
-  position: absolute;
-  top: 5px;
-  right: 9px;
-  margin: 0;
-  width: 7px;
-  height: 7px;
-  padding: 0;
-  font-size: 0;
-  border-radius: 50%;
-}
-.shell.side-collapsed .nav .nav-dot,
-.shell.side-collapsed .nav .nav-ck {
-  position: absolute;
-  top: 5px;
-  right: 9px;
-  margin: 0;
-}
-.shell.side-collapsed .petcard {
-  justify-content: center;
-  padding: 10px 0;
-}
-.shell.side-collapsed .petcard .meta {
-  display: none;
-}
-.nav {
+/* ===== topbar primary nav (tabs) ===== */
+.tb-nav {
   display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 100%;
+  margin-left: 6px;
+}
+.tb-tab {
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 11px;
-  border-radius: 10px;
-  color: var(--t-3);
-  font-size: 13.5px;
-  font-weight: 500;
+  gap: 6px;
+  height: 100%;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
   cursor: pointer;
-  transition: 0.15s;
+  color: var(--t-3);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  transition: color 0.15s;
 }
-.nav:hover {
-  background: var(--well);
-  color: var(--t-2);
+.tb-tab:hover {
+  color: var(--t-1);
 }
-.nav.on {
-  background: var(--accent-tint);
-  color: var(--accent-deep);
+.tb-tab.on {
+  color: var(--accent);
   font-weight: 600;
 }
-.nav .ic {
-  width: 17px;
-  height: 17px;
-  flex: none;
-  opacity: 0.85;
+/* Active indicator: a 2px accent underline riding the topbar's bottom edge. */
+.tb-tab.on::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
 }
-.nav .ct {
-  margin-left: auto;
+.tb-tab .ct {
   font-family: var(--sans);
   font-size: 9px;
+  font-weight: 600;
   color: #fff;
   background: var(--gold);
   border-radius: 99px;
   padding: 2px 6px;
 }
-.nav .nav-dot {
-  margin-left: auto;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--gold);
-}
-.nav .nav-ck {
-  margin-left: auto;
-  font-size: 11px;
-  color: var(--accent-deep);
-}
-.side .grp {
-  font-family: var(--sans);
-  font-size: 9px;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--t-4);
-  padding: 14px 11px 6px;
-}
-.petcard {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border-radius: 12px;
-  background: var(--surface);
-  border: 1px solid var(--hairline);
-}
-.petcard .lvl {
-  font-size: 11px;
-  color: var(--t-3);
-}
-.petcard .pn {
-  font-family: var(--sans);
-  font-size: 12px;
-  color: var(--t-1);
-}
-.petbar {
-  height: 5px;
-  border-radius: 9px;
-  background: var(--well);
-  margin-top: 5px;
-  overflow: hidden;
-}
-.petbar i {
-  display: block;
-  height: 100%;
-  width: 62%;
-  background: var(--accent);
-}
-
 /* pixel pet sprite */
 .byte {
   position: relative;
@@ -3399,6 +3261,13 @@ body {
   flex-direction: column;
   min-height: 0;
 }
+/* Inline mode: embed the chat as a column inside the Second Brain layout (chat on the left)
+   instead of the app-shell's right dock. */
+.copilot.inline {
+  height: 100%;
+  border-left: none;
+  border-right: 1px solid var(--hairline);
+}
 /* "New" jump pill — floats just above the composer when byte adds content while the
    reader is scrolled up. Clicking it smooth-scrolls to the latest and re-pins. */
 .cop-new {
@@ -3423,10 +3292,10 @@ body {
 .cop-new:hover {
   background: var(--accent-tint);
 }
-.shell.cop-collapsed {
-  grid-template-columns: 212px 1fr 0;
-}
-.shell.cop-collapsed .copilot {
+/* Direct child only — hide the shell's right-dock chat when collapsed, but NOT an inline
+   Copilot embedded deeper in the main view (the Second Brain left rail). The collapsed
+   grid (1fr 0) is defined with the other .shell rules above. */
+.shell.cop-collapsed > .copilot {
   display: none;
 }
 .cop-collapse {
@@ -3453,29 +3322,21 @@ body {
   bottom: 18px;
   z-index: 50;
   display: none;
-  align-items: center;
-  gap: 8px;
-  background: var(--accent);
-  color: var(--on-accent);
+  padding: 0;
   border: none;
-  border-radius: 99px;
-  padding: 7px 15px 7px 8px;
+  background: transparent;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
-  font-family: var(--sans);
-  font-size: 12.5px;
-  font-weight: 600;
-  transition:
-    transform 0.14s,
-    box-shadow 0.14s;
+  line-height: 0;
+  transition: transform 0.14s;
 }
 .cop-open:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.46);
 }
-.cop-open .byte {
-  width: 26px;
-  height: 26px;
+.cop-open .cop-logo {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  filter: drop-shadow(0 8px 24px rgba(124, 58, 237, 0.4));
 }
 /* Floating "back to your build" — shown while a session is live but you're on another tab. */
 .build-return {
@@ -3519,6 +3380,26 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+/* Header claims no single speaker — identity lives per-message now, so it's just a neutral
+   "Your team" label + company context (no avatar). */
+/* A byte turn: the speaking pet's avatar + name above its message/card. */
+.cop-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+}
+.cop-who {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--t-1);
+}
+.cop-who .byte {
+  flex: none;
 }
 .cop-h .pn {
   font-family: var(--sans);
@@ -7927,19 +7808,10 @@ body {
 }
 @media (max-width: 1080px) {
   .shell {
-    grid-template-columns: 64px 1fr 300px;
+    grid-template-columns: 1fr 300px;
   }
   .shell.cop-collapsed {
-    grid-template-columns: 64px 1fr 0;
-  }
-  .side .nm,
-  .nav span,
-  .side .grp,
-  .petcard .meta {
-    display: none;
-  }
-  .nav {
-    justify-content: center;
+    grid-template-columns: 1fr 0;
   }
   .jd-acts {
     grid-template-columns: 1fr;
@@ -8429,12 +8301,22 @@ body {
 }
 
 /* Settings & Billing ------------------------------------------------------- */
+/* These two account pages are the only views that don't fill the canvas, so we
+   centre their column (heading + cards) instead of pinning it hard-left. */
+#v-settings .vhead,
+#v-billing .vhead {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+}
 .set-body {
   display: flex;
   flex-direction: column;
   gap: 14px;
   padding: 18px 26px 44px;
+  width: 100%;
   max-width: 760px;
+  margin-inline: auto;
 }
 .set-card {
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
@@ -9873,38 +9755,7 @@ body {
   opacity: 0.7;
   line-height: 1.3;
 }
-.petcard-wrap {
-  position: relative;
-  /* Pin the companion card to the bottom of the sidebar (a flex column) instead of
-     letting it sit right under the nav with empty space below. The picker popover
-     already opens upward (bottom: 100%), so it fills the freed space cleanly. */
-  margin-top: auto;
-}
-.petcard {
-  width: 100%;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-}
-.petcard-pop {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  /* Break past the narrow sidebar rail so the rows have room; cap the height so a
-     7-companion list can never spill off-screen (scrolls past that). */
-  width: 264px;
-  max-width: calc(100vw - 24px);
-  max-height: min(58vh, 440px);
-  overflow-y: auto;
-  padding: 10px;
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: var(--surface, #fff);
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
-  z-index: 40;
-}
-/* Compact list layout — the sidebar switcher popover. */
+/* Compact list layout — the account-menu companion switcher. */
 .cpick.is-list {
   display: flex;
   flex-direction: column;
@@ -9956,12 +9807,6 @@ body {
   margin-top: 8px;
   color: var(--accent, #7c5cff);
 }
-.petcard-pop-h {
-  font-size: 12px;
-  font-weight: 600;
-  opacity: 0.7;
-  margin-bottom: 10px;
-}
 /* In-panel chat history — thread list toggled from the Copilot header. */
 .ccopilot-history {
   font-size: 12px;
@@ -9979,8 +9824,13 @@ body {
   padding: 12px;
   overflow-y: auto;
 }
+.cthreads-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
 .cthreads-new {
-  align-self: stretch;
+  flex: 1;
   padding: 10px;
   border-radius: 10px;
   border: 1px dashed var(--hairline, rgba(255, 255, 255, 0.2));
@@ -9988,6 +9838,20 @@ body {
   color: inherit;
   cursor: pointer;
   font-weight: 500;
+}
+.cthreads-clear {
+  flex: none;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: transparent;
+  color: rgba(248, 113, 113, 0.9);
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 12.5px;
+}
+.cthreads-clear:hover {
+  background: rgba(248, 113, 113, 0.12);
 }
 .cthreads-list {
   list-style: none;

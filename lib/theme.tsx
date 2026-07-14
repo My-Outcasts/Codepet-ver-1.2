@@ -1,14 +1,11 @@
 'use client';
-// The theming layer. Two independent axes, both driven through the CSS custom properties the
-// whole app already reads (--page, --surface, --t-1, --accent, …):
-//   1. light / dark — a `data-theme` attribute on <html> that flips the token override block in
-//      globals.css. Preference is `system` (follow the OS), `light`, or `dark`; `system` tracks
-//      prefers-color-scheme live. Persisted in localStorage; a no-FOUC script in app/layout.tsx
-//      sets the attribute before first paint so there's no flash.
-//   2. companion accent — the active companion re-tints --accent (and its derivatives + the
-//      readable-text pair --on-accent) so the beacon, active nav, primary buttons and focus rings
-//      all take on that character's signature colour, in either theme. Applied imperatively on
-//      <html> from `applyCompanionAccent` so it overlays whichever theme block is active.
+// The theming layer — light / dark, driven through the CSS custom properties the whole app
+// already reads (--page, --surface, --t-1, --accent, …): a `data-theme` attribute on <html>
+// flips the token override block in globals.css. Preference is `system` (follow the OS),
+// `light`, or `dark`; `system` tracks prefers-color-scheme live. Persisted in localStorage; a
+// no-FOUC script in app/layout.tsx sets the attribute before first paint so there's no flash.
+// (`accentVars` derives an accent token set from a base colour; retained for tests. The app no
+// longer re-tints per companion — accent stays at the brand default, voice is per-department.)
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 
 export type ThemePref = 'system' | 'light' | 'dark';
@@ -139,20 +136,4 @@ export function accentVars(baseLight: string, theme: ResolvedTheme): Record<stri
     '--accent-line': theme === 'dark' ? mix(accent, surface, 0.62) : mix(accent, WHITE, 0.6),
     '--on-accent': luminance(accent) > 0.42 ? '#160f26' : WHITE,
   };
-}
-
-/**
- * Paint the active companion's accent onto <html> (overlaying the theme block). Passing a null
- * base clears the override so the CSS default (byte violet) returns — used on sign-out.
- */
-export function applyCompanionAccent(baseLight: string | null, theme: ResolvedTheme): void {
-  if (typeof document === 'undefined') return;
-  const root = document.documentElement;
-  const keys = ['--accent', '--accent-deep', '--accent-tint', '--accent-line', '--on-accent'];
-  if (!baseLight) {
-    keys.forEach((k) => root.style.removeProperty(k));
-    return;
-  }
-  const vars = accentVars(baseLight, theme);
-  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
 }
