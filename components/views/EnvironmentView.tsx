@@ -24,7 +24,7 @@ export function EnvironmentView() {
       <div className="vhead">
         <h1>Your Claude Code environment</h1>
         <div className="sub">
-          Set up byte&apos;s toolkit — skills, connectors, and agents — so it can do more of the
+          Set up Codepet&apos;s toolkit — skills, connectors, and agents — so it can do more of the
           work for you.
         </div>
       </div>

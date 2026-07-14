@@ -13,7 +13,8 @@ export type SessionEvent =
   | { kind: 'result'; text: string; sessionId: string }
   | { kind: 'error'; message: string }
   | { kind: 'exit'; code: number | null }
-  | { kind: 'permission-request'; requestId: string; tool: string; input: unknown };
+  | { kind: 'permission-request'; requestId: string; tool: string; input: unknown }
+  | { kind: 'usage'; tokens: number };
 
 /** Coerce tool_result `content` (string, or an array of text blocks) to a string. */
 function resultSummary(content: unknown): string {
@@ -78,6 +79,16 @@ export function parseEventLine(line: string): SessionEvent[] {
           input: block.input,
         });
       }
+    }
+    const u = (obj.message as { usage?: Record<string, unknown> } | undefined)?.usage;
+    if (u && typeof u === 'object') {
+      const n = (k: string) => Number((u as Record<string, unknown>)[k]) || 0;
+      const tokens =
+        n('input_tokens') +
+        n('output_tokens') +
+        n('cache_creation_input_tokens') +
+        n('cache_read_input_tokens');
+      if (tokens > 0) out.push({ kind: 'usage', tokens });
     }
     return out;
   }

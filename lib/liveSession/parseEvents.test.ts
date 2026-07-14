@@ -89,6 +89,27 @@ describe('parseEventLine', () => {
     expect(parseEventLine(line({ type: 'whatever' }))).toEqual([]);
   });
 
+  it('emits a usage event from an assistant message usage block', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: {
+        content: [{ type: 'text', text: 'hi' }],
+        usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 3 },
+      },
+    });
+    const out = parseEventLine(line);
+    expect(out).toContainEqual({ kind: 'assistant-text', text: 'hi' });
+    expect(out).toContainEqual({ kind: 'usage', tokens: 18 });
+  });
+
+  it('no usage event when the assistant message has no usage', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      message: { content: [{ type: 'text', text: 'x' }] },
+    });
+    expect(parseEventLine(line).some((e) => e.kind === 'usage')).toBe(false);
+  });
+
   it('flattens tool_result content given as an array of blocks', () => {
     const raw = line({
       type: 'user',

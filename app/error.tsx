@@ -17,7 +17,7 @@ export default function Error({ reset }: { error: Error; reset: () => void }) {
       <div style={{ textAlign: 'center', maxWidth: 380 }}>
         <div style={{ fontSize: 18, fontWeight: 650 }}>Something went wrong.</div>
         <div style={{ fontSize: 13.5, opacity: 0.7, marginTop: 8, lineHeight: 1.5 }}>
-          byte hit an unexpected error. Your work is saved — try again, or reload the page.
+          Codepet hit an unexpected error. Your work is saved — try again, or reload the page.
         </div>
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 18 }}>
           <button

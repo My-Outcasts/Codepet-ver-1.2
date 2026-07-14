@@ -584,6 +584,7 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
     projects,
     buildProject,
     setBuildProject,
+    demoLetsBuild,
     buildPlan,
     setBuildPlanSteps,
     buildAutonomy,
@@ -809,32 +810,42 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                       </div>
                       {m.buildAction?.kind === 'start-building' && (
                         <>
-                          <label className="cop-proj">
-                            <span>Which project?</span>
-                            {projects.length > 0 ? (
-                              <select
-                                value={buildProject}
-                                onChange={(e) => setBuildProject(e.target.value)}
-                              >
-                                {/* A project is required — building "nowhere" would land
-                                  in the app server's own folder. */}
-                                <option value="" disabled>
-                                  Choose a project…
-                                </option>
-                                {projects.map((name) => (
-                                  <option key={name} value={name}>
-                                    {name}
+                          {demoLetsBuild ? (
+                            // Demo mode targets a throwaway ~/codepet-demo, so no project pick —
+                            // showing one would confuse internal testers.
+                            <div className="cop-proj">
+                              <span>
+                                Demo — builds a throwaway page in <code>~/codepet-demo</code>
+                              </span>
+                            </div>
+                          ) : (
+                            <label className="cop-proj">
+                              <span>Which project?</span>
+                              {projects.length > 0 ? (
+                                <select
+                                  value={buildProject}
+                                  onChange={(e) => setBuildProject(e.target.value)}
+                                >
+                                  {/* A project is required — building "nowhere" would land
+                                    in the app server's own folder. */}
+                                  <option value="" disabled>
+                                    Choose a project…
                                   </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                value={buildProject}
-                                onChange={(e) => setBuildProject(e.target.value)}
-                                placeholder="Type a project folder path (or run the project scan)…"
-                              />
-                            )}
-                          </label>
+                                  {projects.map((name) => (
+                                    <option key={name} value={name}>
+                                      {name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  value={buildProject}
+                                  onChange={(e) => setBuildProject(e.target.value)}
+                                  placeholder="Type a project folder path (or run the project scan)…"
+                                />
+                              )}
+                            </label>
+                          )}
                           <div className="cop-auto">
                             <span>How hands-on?</span>
                             <div className="cop-auto-opts">
@@ -860,13 +871,19 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                             className="bub-act"
                             onClick={armBuild}
                             disabled={
-                              buildArming || steps.every((s) => !s.trim()) || !buildProject.trim()
+                              buildArming ||
+                              steps.every((s) => !s.trim()) ||
+                              (!demoLetsBuild && !buildProject.trim())
                             }
-                            title={!buildProject.trim() ? 'Pick a project first' : undefined}
+                            title={
+                              !demoLetsBuild && !buildProject.trim()
+                                ? 'Pick a project first'
+                                : undefined
+                            }
                           >
                             {buildArming
                               ? 'Opening your session…'
-                              : !buildProject.trim()
+                              : !demoLetsBuild && !buildProject.trim()
                                 ? 'Pick a project to start'
                                 : m.buildAction.label}
                           </button>

@@ -55,7 +55,7 @@ export default function OverviewTour({
             textTransform: 'uppercase',
           }}
         >
-          byte · guide
+          Codepet · guide
         </span>
         <span
           style={{ display: 'inline-flex', gap: 5 }}

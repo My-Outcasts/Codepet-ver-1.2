@@ -3,7 +3,7 @@ import { useApp } from '@/lib/store';
 
 export function Toast() {
   const { toastMsg } = useApp();
-  const msg = toastMsg || 'Your roadmap is ready — byte mapped 9 steps across 8 departments.';
+  const msg = toastMsg || 'Your roadmap is ready — Codepet mapped 9 steps across 8 departments.';
   return (
     <div className={`toast${toastMsg ? ' on' : ''}`}>
       <span

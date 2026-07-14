@@ -4,7 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Codepet — your AI building companion',
   description:
-    'Run your whole company with AI, department by department. byte drafts and builds with you — you approve every move.',
+    'Run your whole company with AI, department by department. Codepet drafts and builds with you — you approve every move.',
 };
 
 export const viewport: Viewport = {
@@ -14,7 +14,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: the pre-paint script in <head> stamps data-theme on <html>
+    // before hydration, so the server-vs-client attribute diff is intentional.
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />

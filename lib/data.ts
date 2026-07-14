@@ -1023,7 +1023,12 @@ export const OB_NOTES: string[] = [
   "I'll help you grow distribution and tighten the funnel.",
   "I'll focus on scaling what already works.",
 ];
-export const OB_PHASES: string[] = ['About you', 'Your project', 'byte reads it', 'Your company'];
+export const OB_PHASES: string[] = [
+  'About you',
+  'Your project',
+  'Codepet reads it',
+  'Your company',
+];
 // Quick-select product categories shown as chips on the project step.
 export const OB_CATEGORIES: string[] = [
   'Web app',
@@ -1055,7 +1060,7 @@ export const ENV: Record<string, EnvItem[]> = {
     {
       n: 'Web research',
       ab: 'Wr',
-      d: 'byte searches the web and cites sources in its drafts.',
+      d: 'Codepet searches the web and cites sources in its drafts.',
       s: 0,
       fits: ['post', 'doc', 'plan', 'sheet', 'email'],
     },
@@ -1065,7 +1070,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Turn a rough idea into a structured product spec.',
       s: 1,
       rec: 1,
-      why: 'Turn each beta feature into a clear spec before byte builds it.',
+      why: 'Turn each beta feature into a clear spec before Codepet builds it.',
       fits: ['plan', 'doc', 'prep', 'build'],
     },
     {
@@ -1092,7 +1097,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Read repos, open PRs, track issues.',
       s: 1,
       rec: 1,
-      why: 'byte reads your repo and opens PRs as it ships beta work.',
+      why: 'Codepet reads your repo and opens PRs as it ships beta work.',
       fits: ['build', 'site'],
     },
     {
@@ -1101,7 +1106,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Sync briefs, roadmaps, and docs.',
       s: 0,
       rec: 1,
-      why: 'You collect beta feedback in Notion — connect it so byte can write there.',
+      why: 'You collect beta feedback in Notion — connect it so Codepet can write there.',
       fits: ['doc', 'plan', 'prep', 'post', 'dms', 'checklist', 'calendar'],
     },
     {
@@ -1147,7 +1152,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Generates tests for new code.',
       s: 0,
       rec: 1,
-      why: 'Writes tests as byte ships each new beta feature.',
+      why: 'Writes tests as Codepet ships each new beta feature.',
       fits: ['build'],
     },
     {
@@ -1171,9 +1176,9 @@ export const ENV_CATS: [string, string, string, string, string][] = [
   ['agents', 'Agents', 'ag', 'Enable', 'Enabled'],
 ];
 export const ENV_META: Record<string, { label: string; col: string; add: string; on: string }> = {
-  skills: { label: 'Skill', col: '--accent', add: 'Turn on', on: 'byte turned this on' },
+  skills: { label: 'Skill', col: '--accent', add: 'Turn on', on: 'Codepet turned this on' },
   connectors: { label: 'Connector', col: '--blue', add: 'Connect', on: 'Connected' },
-  agents: { label: 'Agent', col: '--teal', add: 'Turn on', on: 'byte turned this on' },
+  agents: { label: 'Agent', col: '--teal', add: 'Turn on', on: 'Codepet turned this on' },
 };
 
 /* ===== site revision variants + pure revisers ===== */

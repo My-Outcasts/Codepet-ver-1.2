@@ -4,6 +4,7 @@ import {
   initialLive,
   eventKindFor,
   sanitizeLiveEvent,
+  sanitizeDemoRecap,
   RECENT_TOOLS_CAP,
 } from './liveBuild';
 
@@ -177,5 +178,27 @@ describe('sanitizeLiveEvent — narration', () => {
     });
     expect(e).not.toHaveProperty('say');
     expect(e).not.toHaveProperty('ask');
+  });
+});
+
+describe('sanitizeDemoRecap', () => {
+  it('keeps only the numeric keys present (partial)', () => {
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', tokens: 1200 })).toEqual({
+      buildSessionId: 'b',
+      recap: { tokens: 1200 },
+    });
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: 3, filesChanged: 7 })).toEqual({
+      buildSessionId: 'b',
+      recap: { commits: 3, filesChanged: 7 },
+    });
+  });
+  it('rejects a missing buildSessionId', () => {
+    expect(sanitizeDemoRecap({ tokens: 1 })).toBeNull();
+    expect(sanitizeDemoRecap(null)).toBeNull();
+  });
+  it('clamps present numbers', () => {
+    expect(
+      sanitizeDemoRecap({ buildSessionId: 'b', commits: '5', filesChanged: -2, tokens: 3.9 }),
+    ).toEqual({ buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } });
   });
 });
