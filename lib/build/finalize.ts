@@ -15,8 +15,9 @@ export interface FinalizeBody {
   files: FinalizeFile[];
 }
 
-/** A safe, relative, traversal-free web path (POSIX). */
-function safePath(p: unknown): p is string {
+/** A safe, relative, traversal-free web path (POSIX). Exported so the /preview
+ *  route can reuse the same guard on the (user-controlled, URL-derived) asset path. */
+export function safePath(p: unknown): p is string {
   if (typeof p !== 'string' || p.length === 0 || p.length > 400) return false;
   if (p.includes('\0')) return false;
   if (p.includes('\\')) return false;
