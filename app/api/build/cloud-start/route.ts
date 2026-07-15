@@ -6,7 +6,7 @@
 // happens later, on a successful /api/build/cloud-finalize — this route never charges.
 // See docs/superpowers/specs/2026-07-15-cloud-demo-build-design.md.
 import { verifyIdToken, adminDb } from '@/lib/firebase/admin';
-import { loadPeriodCredits, ensureIngestToken } from '@/lib/firebase/companyData';
+import { loadPeriodCreditsAdmin, ensureIngestTokenAdmin } from '@/lib/firebase/companyDataAdmin';
 import { startCloudBuild } from '@/lib/build/cloudSandbox';
 // Relative (not `@/`) for the modules this route does NOT mock in tests: vitest.config.ts
 // has no tsconfig-paths plugin, so an unmocked `@/` value import fails to resolve under
@@ -19,7 +19,6 @@ import { cloudBuildScript } from '../../../../lib/build/cloudBuildScript';
 export const runtime = 'nodejs';
 
 interface CloudStartBody {
-  companyId?: string;
   plan?: { title: string; budgetActions?: number; steps?: string[] };
   brief?: string;
 }
@@ -31,11 +30,17 @@ export async function POST(req: Request): Promise<Response> {
   if (!idToken) {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
+  let decoded;
   try {
-    await verifyIdToken(idToken);
+    decoded = await verifyIdToken(idToken);
   } catch {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
+  // Scope every read/write to the verified token's uid (the app convention is
+  // companyId === uid, per firestore.rules' `ownsByConvention`) — NEVER trust a
+  // companyId from the request body, or a signed-in user could pass another
+  // company's id and lock its builds / hijack its ingest token.
+  const companyId = decoded.uid;
 
   if (!process.env.E2B_API_KEY || !process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: 'not_configured' }, { status: 503 });
@@ -47,17 +52,14 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return Response.json({ error: 'bad_request' }, { status: 400 });
   }
-  const { companyId, plan, brief } = (body ?? {}) as CloudStartBody;
-  if (!companyId || typeof companyId !== 'string') {
-    return Response.json({ error: 'bad_request' }, { status: 400 });
-  }
+  const { plan, brief } = (body ?? {}) as CloudStartBody;
   if (!plan || typeof plan.title !== 'string' || typeof brief !== 'string') {
     return Response.json({ error: 'bad_request' }, { status: 400 });
   }
 
   // Credit gate — checked BEFORE booting anything, so an over-allowance company never
   // gets a sandbox started (no boot, no charge).
-  const used = await loadPeriodCredits(companyId);
+  const used = await loadPeriodCreditsAdmin(companyId);
   const allowance = PRO_INCLUDED_CREDITS;
   if (!canAffordBuild(used, allowance)) {
     return Response.json({ error: 'no_credits' }, { status: 402 });
@@ -76,7 +78,7 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const buildSessionId = crypto.randomUUID();
-  const token = await ensureIngestToken(companyId);
+  const token = await ensureIngestTokenAdmin(companyId);
 
   const openingPrompt = `Let's build: ${plan.title}\nWhat to build: ${brief}`;
   const script = cloudBuildScript({
