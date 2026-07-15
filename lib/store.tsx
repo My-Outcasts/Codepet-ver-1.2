@@ -505,6 +505,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const pendingThreadRef = useRef(false); // true ⇒ active thread not yet written to Firestore
+  // Live mirror of `threads` for reads inside async callbacks — a background summarize can
+  // resolve after the thread was deleted, and state updaters run async, so a ref reads current.
+  const threadsRef = useRef<ThreadMeta[]>([]);
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   // Every persisted chat message carries the active thread id. Route all persistence
   // through here so no call site forgets it.
@@ -2198,19 +2204,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const maybeSummarizeThread = useCallback(
     async (threadId: string, turns: TurnRef[]) => {
       if (!companyId) return;
-      const thread = threads.find((t) => t.id === threadId);
+      const thread = threadsRef.current.find((t) => t.id === threadId);
       if (!thread) return;
       const plan = planThreadSummary(turns, thread.summarizedThroughTs ?? 0);
       if (plan.turns.length === 0) return;
       const summary = await summarizeThread(thread.summary ?? '', plan.turns);
       if (summary == null || !summary.trim()) return;
-      const updated: ThreadMeta = { ...thread, summary, summarizedThroughTs: plan.throughTs };
+      // The thread may have been deleted while we were summarizing — never resurrect it via
+      // persistThread's setDoc (GAP-1). Re-read the live ref and bail if it's gone; also build
+      // the update from the latest meta so a concurrent rename/updatedAt isn't clobbered.
+      const latest = threadsRef.current.find((t) => t.id === threadId);
+      if (!latest) return;
+      const updated: ThreadMeta = { ...latest, summary, summarizedThroughTs: plan.throughTs };
       setThreads((prev) => prev.map((t) => (t.id === threadId ? updated : t)));
       persistThread(companyId, updated).catch((err) =>
         console.error('[store] persistThread(summary) failed', err),
       );
     },
-    [companyId, threads],
+    [companyId],
   );
 
   const runByteStream = useCallback(
