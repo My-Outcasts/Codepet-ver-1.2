@@ -788,6 +788,11 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                                 >
                                   ×
                                 </button>
+                                {unsure.has(i) && (
+                                  <span className="cop-step-unsure">
+                                    🤔 {c.name} isn&apos;t sure here — tweak if needed
+                                  </span>
+                                )}
                               </div>
                             ))}
                             <button
@@ -859,7 +864,20 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                                 <button
                                   key={mode}
                                   className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                                  onClick={() => setBuildAutonomy(mode)}
+                                  onClick={() => {
+                                    // Autopilot grants full unattended authority (incl. deleting
+                                    // files) — confirm before arming it, since a hover hint alone
+                                    // is easy to miss and there's no per-step stop afterward.
+                                    if (
+                                      mode === 'autopilot' &&
+                                      buildAutonomy !== 'autopilot' &&
+                                      !window.confirm(
+                                        'Autopilot runs every step without asking — including risky ones like deleting files — and can’t be stopped mid-step. Turn it on?',
+                                      )
+                                    )
+                                      return;
+                                    setBuildAutonomy(mode);
+                                  }}
                                   title={hint}
                                 >
                                   {label}

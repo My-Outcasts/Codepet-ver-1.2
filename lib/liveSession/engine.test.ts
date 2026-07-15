@@ -8,6 +8,7 @@ import {
   enqueuePermission,
   resolvePermission,
   PERMISSION_TIMEOUT_MS,
+  launchErrorMessage,
 } from './engine';
 import { getSession } from './registry';
 import type { SessionEvent } from './parseEvents';
@@ -326,4 +327,21 @@ describe('permission bridge', () => {
 
 it('PERMISSION_TIMEOUT_MS is a positive number', () => {
   expect(PERMISSION_TIMEOUT_MS).toBeGreaterThan(0);
+});
+
+describe('launchErrorMessage', () => {
+  it('turns an ENOENT (claude not installed) into a plain install nudge', () => {
+    const msg = launchErrorMessage({ code: 'ENOENT', message: 'spawn claude ENOENT' });
+    expect(msg).toContain('Claude Code');
+    expect(msg).toContain('claude.com/claude-code');
+    expect(msg).not.toContain('ENOENT');
+  });
+
+  it('passes through a normal Error message unchanged', () => {
+    expect(launchErrorMessage(new Error('boom'))).toBe('boom');
+  });
+
+  it('stringifies a non-Error value', () => {
+    expect(launchErrorMessage('weird')).toBe('weird');
+  });
 });

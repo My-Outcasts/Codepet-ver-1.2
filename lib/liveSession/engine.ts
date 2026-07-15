@@ -15,6 +15,17 @@ import { permissionModeFor, autoAllows, riskLevel, type Autonomy } from './permi
 
 export const PERMISSION_TIMEOUT_MS = 120_000;
 
+/** Turn a child-launch failure into a message a non-technical founder can act on.
+ *  The common case is that Claude Code isn't installed, so spawning `claude` fails
+ *  with ENOENT — surface a plain "install it first" instead of a raw system error. */
+export function launchErrorMessage(err: unknown): string {
+  const code = (err as { code?: string } | null)?.code;
+  if (code === 'ENOENT') {
+    return 'Byte couldn\'t find Claude Code on this computer. "Let\'s build" runs your own Claude Code session, so it needs Claude Code installed and signed in first — get it from claude.com/claude-code, then try again.';
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** MCP server key that hosts the permission-prompt tool (see writeMcpConfig). */
 const PERMIT_SERVER = 'codepet_permit';
 /** The fully-qualified name Claude Code exposes an MCP tool under is
@@ -143,9 +154,7 @@ export function startSession(opts: {
     const msg = chunk.toString('utf8').trim();
     if (msg) emit({ kind: 'error', message: msg });
   });
-  child.on('error', (err) =>
-    emit({ kind: 'error', message: err instanceof Error ? err.message : String(err) }),
-  );
+  child.on('error', (err) => emit({ kind: 'error', message: launchErrorMessage(err) }));
   child.on('close', (code) => emit({ kind: 'exit', code: typeof code === 'number' ? code : null }));
 
   // Send the opening prompt. Phase 2: keep stdin OPEN so follow-up turns can be

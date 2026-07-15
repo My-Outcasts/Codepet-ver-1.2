@@ -2546,7 +2546,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     track('build.intake.start', {});
   }, [companyId, persistMsg, buildIntakeActive]);
 
+  // Guards the brainstorm loop against a double-submit race: while a "Byte is
+  // thinking…" reply is in flight, a second answer is ignored (a ref so the check
+  // is synchronous — state wouldn't settle between two rapid submits).
+  const buildIntakeThinkingRef = useRef(false);
+
   const cancelBuildIntake = useCallback(() => {
+    // Don't silently throw away answers the founder has already typed.
+    if (buildBrief.trim() && !window.confirm("Discard what you've told Byte so far?")) return;
+    buildIntakeThinkingRef.current = false;
     setBuildIntakeActive(false);
     setBuildBrief('');
     const msg: ChatMessage = {
@@ -2558,12 +2566,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatMessages((prev) => [...stripBuildButtons(prev), msg]);
     persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
     track('build.intake.cancel', {});
-  }, [persistMsg]);
+  }, [persistMsg, buildBrief]);
 
   const addIntakeTurn = useCallback(
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
+      // Ignore a second answer sent while Byte is still thinking about the first —
+      // otherwise two in-flight calls stack thinking bubbles and resolve out of order.
+      if (buildIntakeThinkingRef.current) return;
+      buildIntakeThinkingRef.current = true;
       setBuildBrief((b) => appendBrief(b, text));
 
       const nextLog: BrainstormTurn[] = [...buildIntakeLog, { role: 'user', text }];
@@ -2619,6 +2631,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               : m,
           ),
         );
+        buildIntakeThinkingRef.current = false; // ready for the next answer
       })();
     },
     [buildIntakeLog, buildProject, persistMsg],

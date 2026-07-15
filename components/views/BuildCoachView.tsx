@@ -108,6 +108,17 @@ function DuringStep({
   const recent = live?.recentTools ?? [];
   const line = byteDuringLine(live, bs.warn);
   const [copied, setCopied] = useState(false);
+  // If no live session has shown up after a while, stop silently "waiting forever"
+  // and offer a plain-language nudge (the usual cause is Claude Code not running).
+  const [stalled, setStalled] = useState(false);
+  useEffect(() => {
+    // Once a session is live the meter/coach take over (the `live` branch wins in the
+    // copy below), so only arm the nudge while there's still no session.
+    if (live) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fires 25s later via a timer, not during render
+    const id = setTimeout(() => setStalled(true), 25_000);
+    return () => clearTimeout(id);
+  }, [live]);
 
   return (
     <div>
@@ -132,7 +143,9 @@ function DuringStep({
             ? "Whoa, we're using a lot of steps! Let's slow down and double-check before we go further 😟"
             : live
               ? "Byte's watching your session — every step lands here in real time 👀"
-              : 'Byte is waiting to see your session start…')
+              : stalled && !launchCommand
+                ? "Byte hasn't seen your session start yet. If nothing's happening, check that Claude Code is installed and running, then wrap up and try again."
+                : 'Byte is waiting to see your session start…')
         }
         lens="🐷 It's like feeding a piggy bank"
         learn={
@@ -202,7 +215,7 @@ function DuringStep({
                 Today <b>~{fmtTokens(today)}</b>
               </>
             ) : null}{' '}
-            tokens
+            tokens used — from your own Claude plan, no extra charge
           </div>
         )}
       </div>
@@ -360,6 +373,22 @@ function EndStep({
               </div>
             </div>
           </div>
+          {demo && (
+            <a
+              href={DEMO_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block',
+                marginTop: 8,
+                fontWeight: 700,
+                color: '#7DE3FF',
+                textDecoration: 'none',
+              }}
+            >
+              Open your demo page →
+            </a>
+          )}
           {(buildTokens || today != null) && (
             <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
               🔢{' '}
@@ -374,7 +403,7 @@ function EndStep({
                   Today <b>~{fmtTokens(today)}</b>
                 </>
               ) : null}{' '}
-              tokens
+              tokens used — from your own Claude plan, no extra charge
             </div>
           )}
           <div className={`bc-unlock${earned ? ' live' : ''}`}>
