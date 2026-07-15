@@ -46,16 +46,18 @@ function req(body: unknown, opts: { auth?: string } = {}): Request {
   });
 }
 
-/** A fake Firestore handle: `.collection(...).where(...).where(...).limit(...).get()`
- *  resolves to `{ empty }`, and `.doc(...).set(...)` is a spy. `activeEmpty` controls
- *  whether the single-flight query finds an existing live cloud build. */
-function fakeDb(activeEmpty: boolean) {
+/** A fake Firestore handle: `.collection(...).where('ended','==',false).get()` resolves
+ *  to `{ docs }` (a single `.where`, no composite index needed — cloud-start filters
+ *  `mode === 'cloud'` in code over the returned docs), and `.doc(...).set(...)` is a spy.
+ *  `activeCloudBuild` controls whether one of the not-yet-ended docs has `mode: 'cloud'`,
+ *  i.e. whether the single-flight check finds an existing live cloud build. */
+function fakeDb(activeCloudBuild: boolean) {
   const setSpy = vi.fn().mockResolvedValue(undefined);
   const docSpy = vi.fn(() => ({ set: setSpy }));
-  const getSpy = vi.fn().mockResolvedValue({ empty: activeEmpty });
+  const docs = activeCloudBuild ? [{ data: () => ({ mode: 'cloud', ended: false }) }] : [];
+  const getSpy = vi.fn().mockResolvedValue({ docs });
   const query = {
     where: vi.fn(() => query),
-    limit: vi.fn(() => query),
     get: getSpy,
   };
   const collectionSpy = vi.fn(() => query);
@@ -79,7 +81,7 @@ beforeEach(() => {
   mockEnsureIngestTokenAdmin.mockResolvedValue('ingest-token');
   mockStartCloudBuild.mockResolvedValue({ sandboxId: 'sbx1' });
   mockAdminDb.mockReturnValue(
-    fakeDb(true) as unknown as ReturnType<typeof adminDb>,
+    fakeDb(false) as unknown as ReturnType<typeof adminDb>,
   );
 });
 
@@ -130,11 +132,31 @@ describe('POST /api/build/cloud-start', () => {
   });
 
   it('409s when a cloud build is already in progress for the company', async () => {
-    mockAdminDb.mockReturnValue(fakeDb(false) as unknown as ReturnType<typeof adminDb>);
+    mockAdminDb.mockReturnValue(fakeDb(true) as unknown as ReturnType<typeof adminDb>);
     const res = await POST(req({ plan, brief: 'x' }));
     expect(res.status).toBe(409);
     expect(await res.json()).toEqual({ error: 'build_in_progress' });
     expect(mockStartCloudBuild).not.toHaveBeenCalled();
+  });
+
+  it('does not 409 when a not-yet-ended doc exists but is not a cloud build (single where, mode filtered in code)', async () => {
+    const query = {
+      where: vi.fn(function (this: unknown) {
+        return this;
+      }),
+      get: vi.fn().mockResolvedValue({ docs: [{ data: () => ({ mode: 'local', ended: false }) }] }),
+    };
+    const setSpy = vi.fn().mockResolvedValue(undefined);
+    const fake = {
+      collection: vi.fn(() => query),
+      doc: vi.fn(() => ({ set: setSpy })),
+    };
+    mockAdminDb.mockReturnValue(fake as unknown as ReturnType<typeof adminDb>);
+    const res = await POST(req({ plan, brief: 'x' }));
+    expect(res.status).toBe(200);
+    // Exactly one `.where` call — no composite (`mode` + `ended`) index needed.
+    expect(query.where).toHaveBeenCalledTimes(1);
+    expect(query.where).toHaveBeenCalledWith('ended', '==', false);
   });
 
   it('502s when the sandbox fails to boot', async () => {
@@ -145,7 +167,7 @@ describe('POST /api/build/cloud-start', () => {
   });
 
   it('200s with a buildSessionId, boots the sandbox, and writes the initial live doc', async () => {
-    const fake = fakeDb(true);
+    const fake = fakeDb(false);
     mockAdminDb.mockReturnValue(fake as unknown as ReturnType<typeof adminDb>);
     const res = await POST(req({ plan, brief: 'do the thing' }));
     expect(res.status).toBe(200);
@@ -172,7 +194,7 @@ describe('POST /api/build/cloud-start', () => {
   });
 
   it('ignores a companyId in the body and scopes everything to the verified uid (IDOR guard)', async () => {
-    const fake = fakeDb(true);
+    const fake = fakeDb(false);
     mockAdminDb.mockReturnValue(fake as unknown as ReturnType<typeof adminDb>);
     // uid resolves to 'co1' (see beforeEach); the body tries to hijack another company.
     const res = await POST(req({ companyId: 'someone-elses-company', plan, brief: 'x' }));

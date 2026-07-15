@@ -65,15 +65,13 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'no_credits' }, { status: 402 });
   }
 
-  // Single-flight — at most one live cloud build per company at a time.
+  // Single-flight — at most one live cloud build per company at a time. A single
+  // equality `where` needs no composite Firestore index (a two-equality where would);
+  // filter `mode === 'cloud'` in code over the (small) set of not-yet-ended builds.
   const db = adminDb();
-  const activeSnap = await db
-    .collection(paths.liveBuilds(companyId))
-    .where('ended', '==', false)
-    .where('mode', '==', 'cloud')
-    .limit(1)
-    .get();
-  if (!activeSnap.empty) {
+  const activeSnap = await db.collection(paths.liveBuilds(companyId)).where('ended', '==', false).get();
+  const hasActiveCloudBuild = activeSnap.docs.some((d) => d.data()?.mode === 'cloud');
+  if (hasActiveCloudBuild) {
     return Response.json({ error: 'build_in_progress' }, { status: 409 });
   }
 

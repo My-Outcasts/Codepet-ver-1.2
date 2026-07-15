@@ -47,7 +47,7 @@ const validBody = {
 beforeEach(() => {
   mockFinalizeBuild.mockReset();
   mockAdminDb.mockReset();
-  mockFinalizeBuild.mockResolvedValue(undefined);
+  mockFinalizeBuild.mockResolvedValue({ ok: true });
   mockAdminDb.mockReturnValue(fakeDb('ingest-token') as unknown as ReturnType<typeof adminDb>);
 });
 
@@ -114,6 +114,31 @@ describe('POST /api/build/cloud-finalize', () => {
     expect(res.status).toBe(200);
     expect(mockFinalizeBuild).toHaveBeenCalledTimes(1);
     expect(mockFinalizeBuild.mock.calls[0][0].status).toBe('error');
+  });
+
+  it('only the literal status "ok" charges — a missing/garbage status maps to error (no charge)', async () => {
+    const resMissing = await POST(req({ ...validBody, status: undefined }));
+    expect(resMissing.status).toBe(200);
+    expect(mockFinalizeBuild.mock.calls[0][0].status).toBe('error');
+
+    mockFinalizeBuild.mockClear();
+    const resGarbage = await POST(req({ ...validBody, status: 'garbage' }));
+    expect(resGarbage.status).toBe(200);
+    expect(mockFinalizeBuild.mock.calls[0][0].status).toBe('error');
+  });
+
+  it('404s with no_such_build when finalizeBuild reports the buildSessionId is not this company\'s build', async () => {
+    mockFinalizeBuild.mockResolvedValue({ ok: false, reason: 'no_such_build' });
+    const res = await POST(req(validBody));
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'no_such_build' });
+  });
+
+  it('200s idempotently when finalizeBuild reports the build already ended (double-finalize)', async () => {
+    mockFinalizeBuild.mockResolvedValue({ ok: false, reason: 'already_ended' });
+    const res = await POST(req(validBody));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
   });
 
   it('500s with finalize_failed when finalizeBuild rejects', async () => {

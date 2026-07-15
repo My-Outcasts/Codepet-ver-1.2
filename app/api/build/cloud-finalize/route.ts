@@ -59,16 +59,27 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
   }
 
-  const status = rawStatus === 'error' ? 'error' : 'ok';
+  // Only an explicit 'ok' charges — a missing/blank/garbage status (or any value other
+  // than the literal 'ok') is treated as a failed build and never charges.
+  const status = rawStatus === 'ok' ? 'ok' : 'error';
 
   try {
-    await finalizeBuild({
+    const result = await finalizeBuild({
       companyId,
       buildSessionId,
       origin: new URL(req.url).origin,
       status,
       body: clean,
     });
+    if (!result.ok) {
+      if (result.reason === 'no_such_build') {
+        return NextResponse.json({ error: 'no_such_build' }, { status: 404 });
+      }
+      // 'already_ended' — a repeat finalize (e.g. the sandbox launcher's EXIT trap
+      // firing twice) is idempotent success, not an error: nothing was stored/charged
+      // again, but the caller's original finalize already succeeded.
+      return NextResponse.json({ ok: true });
+    }
   } catch (err) {
     console.error('[cloud-finalize] finalizeBuild failed', err);
     return NextResponse.json({ error: 'finalize_failed' }, { status: 500 });
