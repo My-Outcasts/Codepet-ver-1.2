@@ -285,9 +285,14 @@ export function departmentBlock(k: string, stage: string): string {
   return lines.join('\n');
 }
 
-/** Run-task block: mandate + skills only (the task already carries the stage ask). */
-export function departmentBrief(k: string): string {
-  const f = DEPARTMENT_FOUNDATIONS[k];
+/**
+ * Stage-less brief: mandate + skills only (the caller carries any stage ask).
+ * Read by run-task and task-help's prompt builders, and by the chat copilot's
+ * system prompt. Tolerant of a null/undefined/unknown key (e.g. chat with no
+ * department in focus) → '' , so every caller fails open to no department brief.
+ */
+export function departmentBrief(k?: string | null): string {
+  const f = k ? DEPARTMENT_FOUNDATIONS[k] : undefined;
   if (!f) return '';
   return `Mandate: ${f.mandate}\nCore skills: ${f.skills.join(', ')}.`;
 }

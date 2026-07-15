@@ -510,7 +510,7 @@ export const DELIVERABLE_INSTRUCTIONS: Record<StructuredKind | 'text', string> =
   email:
     'Write a launch/activation email: a subject, a preheader, 3-5 short body paragraphs, a CTA label, and a 2-3 step follow-up sequence.',
   legal:
-    'Draft a real, formatted legal document with a clear title and 4-7 substantive sections written in plain language.',
+    'Draft a real, formatted legal document with a clear title and 4-7 substantive sections written in plain language. Close with a short note that this is general information, not legal advice, and that the founder should have a qualified professional review anything binding.',
   screens:
     'Design exactly 3 onboarding screens for this company. Set `art` to "connect", then "session", then "recap" in that order (step 1, 2, 3). Walk a brand-new user to their first real moment of value in under ~2 minutes. Use empty strings for any sub/cta/note a screen does not need.',
   sheet:

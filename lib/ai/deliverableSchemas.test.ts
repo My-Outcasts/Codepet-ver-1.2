@@ -60,6 +60,10 @@ describe('deliverableSchemas', () => {
     expect(DELIVERABLE_INSTRUCTIONS[kind]?.length ?? 0).toBeGreaterThan(0);
   });
 
+  it('legal deliverables carry a not-legal-advice disclaimer', () => {
+    expect(DELIVERABLE_INSTRUCTIONS.legal).toContain('not legal advice');
+  });
+
   it('constrains screen art to exactly what the viewer can render', () => {
     const screens = SCREENS_SCHEMA.properties as { screens: { items: Record<string, unknown> } };
     const art = (screens.screens.items.properties as { art: { enum: string[] } }).art;

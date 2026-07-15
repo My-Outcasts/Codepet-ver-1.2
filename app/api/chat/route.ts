@@ -19,6 +19,7 @@ import { mergeDecisions } from '@/lib/ai/decisions';
 import { REMEMBER_FACT_SCHEMA, coerceMemory, newOrChanged } from '@/lib/ai/chatMemory';
 import { needsFallbackReply, REFUSAL_FALLBACK } from '@/lib/ai/chatFallback';
 import { companionForDept, personaOverride } from '@/lib/companions';
+import { departmentBrief } from '@/lib/ai/departments';
 import { recallBlock } from '@/lib/ai/secondBrainRecall';
 
 export const runtime = 'nodejs';
@@ -318,6 +319,13 @@ export async function POST(req: Request): Promise<Response> {
   // the founder is viewing, else the CURRENT NEXT STEP's department, resolved client-side and
   // sent as focusDeptKey. Omitted (no department in focus) → byte, the default.
   const focusDeptKey = typeof body.focusDeptKey === 'string' ? body.focusDeptKey : undefined;
+  // Department expertise: give the Copilot the SAME per-department foundation (mandate + core
+  // skills, see lib/ai/departments) that the generation routes already read, so chat reasons
+  // from the department's operator brain — not just its voice. departmentBrief returns '' when
+  // no department is in focus, so general chat is unchanged. Placed before the persona override
+  // so the voice identity stays the final instruction.
+  const deptExpertise = departmentBrief(focusDeptKey);
+  const deptExpertiseBlock = deptExpertise ? `\n\n${deptExpertise}` : '';
   // P2.1: ground byte in the Second Brain ledger when recall is enabled (best-effort, gated).
   const secondBrainBlock = await recallBlock(uid, lastFounderMsg);
   // Rolling summary of this thread's turns that scrolled past the window — keeps a long
@@ -325,7 +333,7 @@ export async function POST(req: Request): Promise<Response> {
   const threadSummaryBlock = formatThreadSummaryBlock(
     typeof body.threadSummary === 'string' ? body.threadSummary : '',
   );
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${threadSummaryBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionForDept(focusDeptKey).id)}`;
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${threadSummaryBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${deptExpertiseBlock}${personaOverride(companionForDept(focusDeptKey).id)}`;
 
   try {
     const mstream = streamMessage({
