@@ -9,17 +9,19 @@ import { paths } from '../firebase/schema';
 import { dayKey } from '../ai/rateLimit';
 import type { FinalizeBody } from './finalize';
 
-/** Storage path prefix for a build's files. Namespaced by buildSessionId only (no
- *  companyId): the public /preview/{buildSessionId} route has just the session id, and
- *  the id is already a unique UUID. The Firestore liveBuild doc is still keyed by
- *  companyId — see `paths.liveBuild`. */
-export function buildStoragePrefix(buildSessionId: string): string {
-  return `builds/preview/${buildSessionId}`;
+/** Storage path prefix for a build's files. Namespaced by companyId THEN
+ *  buildSessionId — a company can only ever write/read under its own companyId
+ *  prefix. (Namespacing by buildSessionId alone let any company that could mint a
+ *  valid liveBuild doc for an arbitrary buildSessionId overwrite another company's
+ *  public preview at the same storage key — see the finalizeBuild cross-tenant
+ *  guard below, which this prefix now backs up structurally.) */
+export function buildStoragePrefix(companyId: string, buildSessionId: string): string {
+  return `builds/${companyId}/${buildSessionId}`;
 }
 
 /** Absolute preview URL for a finished build, built from the request's own origin. */
-export function previewUrlFor(origin: string, buildSessionId: string): string {
-  return `${origin}/preview/${buildSessionId}`;
+export function previewUrlFor(origin: string, companyId: string, buildSessionId: string): string {
+  return `${origin}/preview/${companyId}/${buildSessionId}`;
 }
 
 export interface FinalizeResult {
@@ -36,24 +38,40 @@ export async function finalizeBuild(args: {
 }): Promise<FinalizeResult> {
   const { companyId, buildSessionId, origin, status, body } = args;
 
-  // Bind this finalize to the caller's OWN build before touching Storage or charging.
-  // liveBuild docs are keyed under companies/{companyId}/liveBuilds/{buildSessionId} — a
+  const db = adminDb();
+  const liveRef = db.doc(paths.liveBuild(companyId, buildSessionId));
+
+  // Bind this finalize to the caller's OWN build, and CLAIM it, atomically. liveBuild
+  // docs are keyed under companies/{companyId}/liveBuilds/{buildSessionId} — a
   // buildSessionId belonging to a different company simply can't exist under this
   // companyId's collection, so a missing doc means either a bogus id or (critically) an
   // attempt to post another company's buildSessionId to overwrite its public preview /
   // fake its charge. `ended === true` means this build was already finalized once (e.g.
   // the sandbox launcher's EXIT trap firing twice) — treat as an idempotent no-op so we
   // never double-store or double-charge.
-  const liveRef = adminDb().doc(paths.liveBuild(companyId, buildSessionId));
-  const liveSnap = await liveRef.get();
-  if (!liveSnap.exists) {
-    return { ok: false, reason: 'no_such_build' };
-  }
-  if (liveSnap.data()?.ended === true) {
-    return { ok: false, reason: 'already_ended' };
+  //
+  // The read-then-write here MUST be atomic: two concurrent finalize calls for the same
+  // build could otherwise both read `ended !== true` before either writes it, and both
+  // proceed to store + charge (a TOCTOU double-charge race). Wrapping the check and the
+  // `ended: true` claim in a transaction closes that window — Storage can't be inside a
+  // Firestore transaction, so uploads/charging happen only AFTER the claim succeeds.
+  const claim: FinalizeResult = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(liveRef);
+    if (!snap.exists) {
+      return { ok: false, reason: 'no_such_build' };
+    }
+    if (snap.data()?.ended === true) {
+      return { ok: false, reason: 'already_ended' };
+    }
+    tx.set(liveRef, { ended: true, tokens: body.tokens }, { merge: true });
+    return { ok: true };
+  });
+
+  if (!claim.ok) {
+    return claim;
   }
 
-  const prefix = buildStoragePrefix(buildSessionId);
+  const prefix = buildStoragePrefix(companyId, buildSessionId);
   const bucket = adminStorage();
 
   // Store each web file. `f.path` is used verbatim as the storage key — it is already
@@ -67,16 +85,13 @@ export async function finalizeBuild(args: {
     ),
   );
 
-  const previewUrl = status === 'ok' ? previewUrlFor(origin, buildSessionId) : undefined;
-  await liveRef.set(
-    { ended: true, tokens: body.tokens, ...(previewUrl ? { previewUrl } : {}) },
-    { merge: true },
-  );
-
   // Charge exactly on success — increment today's per-company usage doc's route.build.calls,
   // the same field `creditsFromUsage` sums (calls × creditCostForRoute(key)); no separate
   // "charge credit" write exists elsewhere to reuse.
   if (status === 'ok') {
+    const previewUrl = previewUrlFor(origin, companyId, buildSessionId);
+    await liveRef.set({ previewUrl }, { merge: true });
+
     const day = dayKey(new Date());
     await adminDb()
       .doc(`companies/${companyId}/usage/${day}`)

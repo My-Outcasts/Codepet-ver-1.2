@@ -79,7 +79,7 @@ export function adminDb(): Firestore {
 }
 
 /** Admin Storage bucket handle for the cloud build's compiled site output
- *  (builds/preview/{buildSessionId}/...). `initializeApp` above does not set a
+ *  (builds/{companyId}/{buildSessionId}/...). `initializeApp` above does not set a
  *  default `storageBucket`, so the bucket name must come from env — this is only
  *  required for cloud builds and is intentionally read lazily so its absence
  *  doesn't break any other feature. Requires the same service account as

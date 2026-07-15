@@ -1,4 +1,4 @@
-// Pure extension -> content-type mapping for the /preview/[buildSessionId] route.
+// Pure extension -> content-type mapping for the /preview/[companyId]/[buildSessionId] route.
 // No I/O — unit-tested directly.
 
 const TYPES: Record<string, string> = {
