@@ -38,6 +38,8 @@ export interface LiveState {
   /** Real recap stats self-reported by the demo copy-paste command (no toolkit
    *  install required), so remote testers see real commits/files-changed. */
   recap?: DemoRecap;
+  /** Hosted preview URL, set by the finalize route; preserved through live events. */
+  previewUrl?: string;
 }
 
 export interface DemoRecap {

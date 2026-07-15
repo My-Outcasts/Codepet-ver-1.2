@@ -202,3 +202,17 @@ describe('sanitizeDemoRecap', () => {
     ).toEqual({ buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } });
   });
 });
+
+describe('previewUrl survives live events', () => {
+  it('carries previewUrl through a reduce', () => {
+    const withPreview = { ...initialLive(0), previewUrl: 'https://app/preview/b1' };
+    const next = reduceLive(withPreview, {
+      buildSessionId: 'b1',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+      ts: 1,
+    });
+    expect(next.previewUrl).toBe('https://app/preview/b1');
+  });
+});
