@@ -1535,13 +1535,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         case 'locked': {
           const prereq = blockedBy && d?.tasks.find((x) => nm(x.t) === nm(blockedBy));
+          // If the prerequisite is already drafted (just not approved yet), point to
+          // that draft to review/approve — NOT "Start", which would re-run and
+          // duplicate it.
+          const prereqDrafted = !!prereq && !!prereq.out?.trim();
           brief(
             blockedBy
-              ? `“${title}” unlocks once “${blockedBy}” is done — let's start there.`
+              ? prereqDrafted
+                ? `“${title}” unlocks once you approve “${blockedBy}” — let's review that draft.`
+                : `“${title}” unlocks once “${blockedBy}” is done — let's start there.`
               : `“${title}” needs an earlier step finished first.`,
             prereq
               ? {
-                  action: { label: `Start: ${prereq.t}`, deptK, taskTitle: prereq.t, inline: true },
+                  action: {
+                    label: `${prereqDrafted ? 'Review' : 'Start'}: ${prereq.t}`,
+                    deptK,
+                    taskTitle: prereq.t,
+                    inline: true,
+                  },
                 }
               : {},
           );
@@ -1925,6 +1936,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             role: 'byte',
             text: `“${t.t}” isn’t one I can produce right here — open it in ${d.name} and I’ll help you finish it.`,
             ts: Date.now(),
+          },
+        ]);
+        return;
+      }
+      // Idempotent: if this task already has a draft, surface THAT instead of
+      // re-generating. Re-running duplicates the deliverable (and its saved library
+      // copy) — the bug when a locked step's "Start: <prereq>" is tapped for a prereq
+      // that's already drafted-but-not-approved. Show the existing draft so the founder
+      // can approve/revise it, not a second copy.
+      if (t.out?.trim()) {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: msgId,
+            role: 'byte',
+            text: `You already have a draft of “${t.t}” — here it is. Approve it (or Revise) to move on.`,
+            ts: Date.now(),
+            result: { deptK, taskTitle, type },
           },
         ]);
         return;

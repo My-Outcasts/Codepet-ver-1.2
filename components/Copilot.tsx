@@ -1025,7 +1025,9 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
               </div>
             )}
             <div className="composer">
-              <input
+              <textarea
+                className="composer-in"
+                rows={1}
                 placeholder={
                   buildIntakeActive
                     ? 'Tell Byte what to build — every message adds to the brief…'
@@ -1034,7 +1036,9 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  // Enter sends; Shift+Enter inserts a newline so a longer message can
+                  // wrap and stay fully visible (the box grows via CSS field-sizing).
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     submit();
                   }
