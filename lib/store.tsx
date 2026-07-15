@@ -65,7 +65,7 @@ import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
 import { LoadingScreen } from '../components/LoadingScreen';
 import { streamByteChat, summarizeThread, ChatError } from './ai/chat';
-import { planThreadSummary } from './ai/threadSummary';
+import { planThreadSummary, type TurnRef } from './ai/threadSummary';
 import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
 import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
 import { type NextStep } from './ai/nextStep';
@@ -2196,15 +2196,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // into the thread's rolling summary (best-effort — a failure just leaves the summary as-is
   // and the next batch retries). The summary rides along on the next chat call as grounding.
   const maybeSummarizeThread = useCallback(
-    async (threadId: string, turns: { role: 'me' | 'byte'; text: string }[]) => {
+    async (threadId: string, turns: TurnRef[]) => {
       if (!companyId) return;
       const thread = threads.find((t) => t.id === threadId);
       if (!thread) return;
-      const plan = planThreadSummary(turns, thread.summarizedThrough ?? 0);
+      const plan = planThreadSummary(turns, thread.summarizedThroughTs ?? 0);
       if (plan.turns.length === 0) return;
       const summary = await summarizeThread(thread.summary ?? '', plan.turns);
       if (summary == null || !summary.trim()) return;
-      const updated: ThreadMeta = { ...thread, summary, summarizedThrough: plan.through };
+      const updated: ThreadMeta = { ...thread, summary, summarizedThroughTs: plan.throughTs };
       setThreads((prev) => prev.map((t) => (t.id === threadId ? updated : t)));
       persistThread(companyId, updated).catch((err) =>
         console.error('[store] persistThread(summary) failed', err),
@@ -2214,7 +2214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const runByteStream = useCallback(
-    (byteMsgId: string, byteTs: number, history: { role: 'me' | 'byte'; text: string }[]) => {
+    (byteMsgId: string, byteTs: number, history: TurnRef[]) => {
       chatAbort.current?.abort();
       const ac = new AbortController();
       chatAbort.current = ac;
@@ -2386,7 +2386,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Long-thread memory: after a real exchange, fold any turns that have scrolled past
         // the window into the thread's rolling summary (best-effort, only when a batch drops).
         if (!failed && activeThreadId) {
-          const turns = acc.trim() ? [...history, { role: 'byte' as const, text: acc }] : history;
+          const turns: TurnRef[] = acc.trim()
+            ? [...history, { role: 'byte' as const, text: acc, ts: byteTs }]
+            : history;
           void maybeSummarizeThread(activeThreadId, turns);
         }
         // byte decided to run a task — produce it inline now.
@@ -2423,7 +2425,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
 
       // Build the history to send BEFORE the empty byte placeholder is added.
-      const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
+      const history = [...chatMessages, userMsg].map((m) => ({
+        role: m.role,
+        text: m.text,
+        ts: m.ts,
+      }));
       setChatMessages((prev) => [...prev, userMsg, byteMsg]);
       track('chat.send', {});
 
@@ -2466,7 +2472,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!target) return;
       const history = chatMessages
         .filter((m) => m.id !== byteMsgId)
-        .map((m) => ({ role: m.role, text: m.text }));
+        .map((m) => ({ role: m.role, text: m.text, ts: m.ts }));
       setChatMessages((prev) =>
         prev.map((m) =>
           m.id === byteMsgId

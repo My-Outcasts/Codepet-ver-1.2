@@ -13,30 +13,43 @@ import { MAX_CHAT_TURNS, type ChatTurn } from './chatMessages';
  */
 export const SUMMARY_BATCH = 8;
 
+/** A chat turn carrying its timestamp — the marker is a ts, not a count (see below). */
+export interface TurnRef extends ChatTurn {
+  /** Message timestamp; the rolling-summary high-water mark is the newest folded ts. */
+  ts: number;
+}
+
 export interface SummarizePlan {
   /** The dropped, not-yet-summarized turns to fold into the summary now (empty ⇒ skip). */
   turns: ChatTurn[];
-  /** New high-water mark: how many leading turns are covered once these are folded in. */
-  through: number;
+  /** New high-water mark: the newest turn ts now covered by the summary. */
+  throughTs: number;
 }
 
 /**
- * Decide which turns to roll into the thread summary. A thread of `total` turns keeps the
- * most recent `window` verbatim; everything before that is "dropped". We summarize the
- * dropped turns beyond `summarizedThrough`, but only once at least `batch` of them have
- * accumulated — so short threads and single-turn drops never trigger a summarizer call.
+ * Decide which turns to roll into the thread summary. The most recent `window` turns stay
+ * verbatim; everything before that is "dropped". We fold the dropped turns *newer than*
+ * `summarizedThroughTs`, but only once at least `batch` of them have accumulated.
+ *
+ * The marker is a TIMESTAMP, not a count, on purpose: on reload only the last
+ * CHAT_LOAD_LIMIT messages hydrate, so an absolute count would no longer line up with the
+ * truncated in-memory history and summarization would silently stall. A ts marker is
+ * coordinate-independent — it works against whatever slice of the thread is in memory.
  */
 export function planThreadSummary(
-  history: ChatTurn[],
-  summarizedThrough: number,
+  history: TurnRef[],
+  summarizedThroughTs: number,
   window = MAX_CHAT_TURNS,
   batch = SUMMARY_BATCH,
 ): SummarizePlan {
-  const covered = Math.max(0, Math.floor(summarizedThrough) || 0);
-  const droppedCount = Math.max(0, history.length - window); // no longer sent verbatim
-  const pending = droppedCount - covered; // dropped but not yet in the summary
-  if (pending < batch) return { turns: [], through: covered };
-  return { turns: history.slice(covered, droppedCount), through: droppedCount };
+  const marker = Number.isFinite(summarizedThroughTs) ? summarizedThroughTs : 0;
+  const dropCount = Math.max(0, history.length - window); // no longer sent verbatim
+  // Dropped turns not yet folded = those past the window AND newer than the marker.
+  const pending = history.slice(0, dropCount).filter((t) => t.ts > marker);
+  if (pending.length < batch) return { turns: [], throughTs: marker };
+  const turns = pending.map((t) => ({ role: t.role, text: t.text }));
+  const throughTs = pending.reduce((mx, t) => Math.max(mx, t.ts), marker);
+  return { turns, throughTs };
 }
 
 /** The prompt block injected into byte's system prompt (empty when there's no summary). */
