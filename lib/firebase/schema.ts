@@ -150,8 +150,9 @@ export interface ThreadMeta {
   /** Rolling summary of turns that have scrolled past the chat window — long-thread memory
    *  so byte keeps a long conversation's earlier context. Maintained by /api/summarize-thread. */
   summary?: string;
-  /** How many leading turns are already folded into `summary` (incremental high-water mark). */
-  summarizedThrough?: number;
+  /** Timestamp of the newest turn already folded into `summary` (incremental high-water mark).
+   *  A ts (not a count) so it survives the CHAT_LOAD_LIMIT reload cap — see planThreadSummary. */
+  summarizedThroughTs?: number;
 }
 
 // ---- Collection / document path helpers (single source of truth) ----
