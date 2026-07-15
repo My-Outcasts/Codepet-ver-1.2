@@ -8,8 +8,7 @@
 // the per-user daily deliverable cap. The org-level Anthropic spend limit is the
 // backstop; the client caches the result so it only re-runs on real state changes.
 import { verifyIdToken } from '@/lib/firebase/admin';
-import { briefToContext } from '@/lib/ai/brief';
-import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { loadGrounding } from '@/lib/ai/serverGrounding';
 import { usageSink } from '@/lib/firebase/serverUsage';
 import { getClient, generateJson, aiErrorResponse, LIGHT_MODEL } from '@/lib/ai/client';
 import { aiClientFor } from '@/lib/firebase/serverUserKey';
@@ -78,8 +77,9 @@ export async function POST(req: Request): Promise<Response> {
   // A single open task is trivially the next step — skip the model call.
   if (tasks.length === 1) return Response.json({ pick: 0, why: '' });
 
-  const serverBrief = await loadServerBrief(uid, idToken);
-  const context = briefToContext(serverBrief) ?? CODEPET_CONTEXT;
+  // Ground on the full project model (brief + locked-in decisions), not the brief alone,
+  // so the pick never surfaces a next step that re-opens a settled decision.
+  const context = (await loadGrounding(uid, idToken)).context || CODEPET_CONTEXT;
 
   const schema = {
     type: 'object',

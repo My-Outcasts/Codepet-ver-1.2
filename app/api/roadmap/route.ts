@@ -3,10 +3,9 @@
 // company-building roadmap tailored to their product — phases → department-tagged tasks →
 // dependencies. POST generates (and persists); GET returns the last-generated roadmap.
 import { verifyIdToken } from '@/lib/firebase/admin';
-import { loadServerBrief } from '@/lib/firebase/serverBrief';
+import { loadGrounding } from '@/lib/ai/serverGrounding';
 import { writeServerRoadmap, loadServerRoadmap } from '@/lib/firebase/serverRoadmap';
 import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
-import { briefToContext } from '@/lib/ai/brief';
 import {
   ROADMAP_PHASE_KEYS,
   ROADMAP_DEPT_KEYS,
@@ -14,7 +13,6 @@ import {
   type GeneratedRoadmap,
 } from '@/lib/overview/roadmapGenerated';
 import { ROADMAP_PHASES } from '@/lib/overview/roadmapTemplate';
-import type { CompanyBrief } from '@/lib/firebase/schema';
 
 export const runtime = 'nodejs';
 
@@ -112,10 +110,17 @@ export async function POST(req: Request): Promise<Response> {
     // body optional; the server-loaded brief is preferred anyway
   }
 
-  const serverBrief = await loadServerBrief(uid, idToken);
-  const context =
-    briefToContext(serverBrief as CompanyBrief) ?? briefToContext(body.brief as CompanyBrief);
-  if (!context) {
+  // Ground on the full project model — brief + locked-in decisions + a digest of shipped
+  // work — so the roadmap respects decisions and doesn't re-plan work already done.
+  const {
+    context,
+    brief: serverBrief,
+    hasBrief,
+  } = await loadGrounding(uid, idToken, {
+    withShipped: true,
+    fallbackBrief: body.brief,
+  });
+  if (!hasBrief) {
     // No real brief → don't invent a company; the client keeps the canonical template.
     return Response.json({ roadmap: null, noBrief: true });
   }
