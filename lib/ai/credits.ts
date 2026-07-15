@@ -20,6 +20,7 @@ export const CREDIT_COSTS = {
   light: 1, // extraction / selection
   medium: 2, // structured multi-part generation
   heavy: 4, // full deliverables
+  build: 5, // cloud demo build
 } as const;
 
 // Map each usage route key (the exact string passed to usageSink) to its credit cost.
@@ -34,6 +35,7 @@ const ROUTE_CREDITS: Readonly<Record<string, number>> = {
   scaffold: CREDIT_COSTS.medium,
   runTask: CREDIT_COSTS.heavy,
   personalize: CREDIT_COSTS.heavy,
+  build: CREDIT_COSTS.build,
 };
 
 /**
@@ -42,6 +44,11 @@ const ROUTE_CREDITS: Readonly<Record<string, number>> = {
  */
 export function creditCostForRoute(routeKey: string): number {
   return ROUTE_CREDITS[routeKey] ?? CREDIT_COSTS.light;
+}
+
+/** Whether a company can afford one cloud build against its included allowance. */
+export function canAffordBuild(usedCredits: number, allowance: number): boolean {
+  return creditsRemaining(usedCredits, allowance) >= creditCostForRoute('build');
 }
 
 /** Pro plan's monthly included credit allowance (locked Jul 14). */
