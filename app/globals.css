@@ -3429,9 +3429,9 @@ body {
   gap: 12px;
 }
 .bub {
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.55;
-  color: var(--t-2);
+  color: var(--t-1);
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 13px;
@@ -3736,9 +3736,9 @@ body {
   border: none;
   outline: none;
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: 14.5px;
   line-height: 1.4;
-  color: var(--t-2);
+  color: var(--t-1);
   background: none;
   /* Auto-grow with content (native), wrapping longer messages so the caret and
      the text you're editing stay visible instead of scrolling off a single line. */
