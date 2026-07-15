@@ -147,6 +147,11 @@ export interface ThreadMeta {
   createdAt: Millis;
   /** Bumped on each new message; drives list sort + relative time. */
   updatedAt: Millis;
+  /** Rolling summary of turns that have scrolled past the chat window — long-thread memory
+   *  so byte keeps a long conversation's earlier context. Maintained by /api/summarize-thread. */
+  summary?: string;
+  /** How many leading turns are already folded into `summary` (incremental high-water mark). */
+  summarizedThrough?: number;
 }
 
 // ---- Collection / document path helpers (single source of truth) ----

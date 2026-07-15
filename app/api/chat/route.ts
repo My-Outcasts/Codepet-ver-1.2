@@ -9,6 +9,7 @@ import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
+import { formatThreadSummaryBlock } from '@/lib/ai/threadSummary';
 import { getClient, streamMessage, aiErrorResponse, errorCodeOf } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
 import { NAV_DESTINATIONS } from '@/lib/ai/navChip';
@@ -205,6 +206,9 @@ interface ChatBody {
   /** The department in focus (active dept view → else CURRENT NEXT STEP's dept).
    *  Drives the Copilot's voice-per-department persona; omitted → byte. */
   focusDeptKey?: unknown;
+  /** Rolling summary of this thread's turns that have scrolled past the window, so a long
+   *  conversation keeps its earlier context. Maintained by /api/summarize-thread. */
+  threadSummary?: unknown;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -316,7 +320,12 @@ export async function POST(req: Request): Promise<Response> {
   const focusDeptKey = typeof body.focusDeptKey === 'string' ? body.focusDeptKey : undefined;
   // P2.1: ground byte in the Second Brain ledger when recall is enabled (best-effort, gated).
   const secondBrainBlock = await recallBlock(uid, lastFounderMsg);
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionForDept(focusDeptKey).id)}`;
+  // Rolling summary of this thread's turns that scrolled past the window — keeps a long
+  // conversation's earlier context (maintained client-side via /api/summarize-thread).
+  const threadSummaryBlock = formatThreadSummaryBlock(
+    typeof body.threadSummary === 'string' ? body.threadSummary : '',
+  );
+  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${threadSummaryBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionForDept(focusDeptKey).id)}`;
 
   try {
     const mstream = streamMessage({

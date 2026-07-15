@@ -64,7 +64,8 @@ import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
 import { LoadingScreen } from '../components/LoadingScreen';
-import { streamByteChat, ChatError } from './ai/chat';
+import { streamByteChat, summarizeThread, ChatError } from './ai/chat';
+import { planThreadSummary } from './ai/threadSummary';
 import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
 import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
 import { type NextStep } from './ai/nextStep';
@@ -2191,12 +2192,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // existing byte bubble (`byteMsgId`) against `history`. Aborts any prior in-flight stream,
   // handles action/nav/setup/memory events, gives distinct copy per failure, and flags the
   // bubble for Retry when it fails. Company context is snapshotted fresh on each run.
+  // Long-thread memory: once a batch of turns has scrolled past the chat window, fold them
+  // into the thread's rolling summary (best-effort — a failure just leaves the summary as-is
+  // and the next batch retries). The summary rides along on the next chat call as grounding.
+  const maybeSummarizeThread = useCallback(
+    async (threadId: string, turns: { role: 'me' | 'byte'; text: string }[]) => {
+      if (!companyId) return;
+      const thread = threads.find((t) => t.id === threadId);
+      if (!thread) return;
+      const plan = planThreadSummary(turns, thread.summarizedThrough ?? 0);
+      if (plan.turns.length === 0) return;
+      const summary = await summarizeThread(thread.summary ?? '', plan.turns);
+      if (summary == null || !summary.trim()) return;
+      const updated: ThreadMeta = { ...thread, summary, summarizedThrough: plan.through };
+      setThreads((prev) => prev.map((t) => (t.id === threadId ? updated : t)));
+      persistThread(companyId, updated).catch((err) =>
+        console.error('[store] persistThread(summary) failed', err),
+      );
+    },
+    [companyId, threads],
+  );
+
   const runByteStream = useCallback(
     (byteMsgId: string, byteTs: number, history: { role: 'me' | 'byte'; text: string }[]) => {
       chatAbort.current?.abort();
       const ac = new AbortController();
       chatAbort.current = ac;
       setChatStreaming(true);
+      const activeThread = threads.find((t) => t.id === activeThreadId);
 
       // A compact snapshot of the departments so byte talks about THIS company — plus the
       // single next step byte already picked, so chat and the map beacon never disagree.
@@ -2234,6 +2257,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             openTasks,
             envSetup,
             focusDeptKey,
+            activeThread?.summary,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -2359,11 +2383,26 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
           persistMsg({ id: byteMsgId, role: 'byte', text: finalText, ts: byteTs });
         }
+        // Long-thread memory: after a real exchange, fold any turns that have scrolled past
+        // the window into the thread's rolling summary (best-effort, only when a batch drops).
+        if (!failed && activeThreadId) {
+          const turns = acc.trim() ? [...history, { role: 'byte' as const, text: acc }] : history;
+          void maybeSummarizeThread(activeThreadId, turns);
+        }
         // byte decided to run a task — produce it inline now.
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, focusDeptKey, runTaskInChat, persistMsg],
+    [
+      companyId,
+      nextStep,
+      focusDeptKey,
+      runTaskInChat,
+      persistMsg,
+      threads,
+      activeThreadId,
+      maybeSummarizeThread,
+    ],
   );
 
   const sendChat = useCallback(

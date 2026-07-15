@@ -50,12 +50,20 @@ export async function* streamByteChat(
   openTasks?: RunnableTask[],
   envSetup?: SetupItem[],
   focusDeptKey?: string,
+  threadSummary?: string,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ messages: history, deptSummary, openTasks, envSetup, focusDeptKey }),
+    body: JSON.stringify({
+      messages: history,
+      deptSummary,
+      openTasks,
+      envSetup,
+      focusDeptKey,
+      threadSummary,
+    }),
     signal,
   });
   if (!res.ok || !res.body) {
@@ -159,5 +167,28 @@ export async function* streamByteChat(
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */
     }
+  }
+}
+
+/**
+ * Fold a batch of scrolled-off turns into the thread's rolling summary via
+ * /api/summarize-thread. Best-effort: any failure returns null and the caller keeps the
+ * prior summary (long-thread memory just doesn't advance this round).
+ */
+export async function summarizeThread(
+  priorSummary: string,
+  turns: ChatTurn[],
+): Promise<string | null> {
+  try {
+    const res = await fetch('/api/summarize-thread', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ priorSummary, turns }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as { summary?: unknown };
+    return typeof data.summary === 'string' ? data.summary : null;
+  } catch {
+    return null;
   }
 }
