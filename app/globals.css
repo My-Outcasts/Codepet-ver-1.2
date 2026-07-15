@@ -3723,21 +3723,29 @@ body {
 }
 .composer {
   display: flex;
-  align-items: center;
+  /* flex-end so the send button hugs the bottom line as the textarea grows */
+  align-items: flex-end;
   gap: 8px;
   background: var(--surface);
   border: 1px solid var(--hairline);
   border-radius: 11px;
   padding: 8px 11px;
 }
-.composer input {
+.composer-in {
   flex: 1;
   border: none;
   outline: none;
   font-family: var(--sans);
   font-size: 13px;
+  line-height: 1.4;
   color: var(--t-2);
   background: none;
+  /* Auto-grow with content (native), wrapping longer messages so the caret and
+     the text you're editing stay visible instead of scrolling off a single line. */
+  resize: none;
+  field-sizing: content;
+  max-height: 120px;
+  overflow-y: auto;
 }
 .composer .send {
   width: 28px;
