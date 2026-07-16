@@ -576,6 +576,76 @@ function RepoPicker() {
   );
 }
 
+// The "How hands-on?" autonomy dial, shared by the existing-repo/local arm step and the
+// new-project form so both fork sides offer the same choice.
+function AutonomyPicker() {
+  const { buildAutonomy, setBuildAutonomy } = useApp();
+  return (
+    <div className="cop-auto">
+      <span>How hands-on?</span>
+      <div className="cop-auto-opts">
+        {(
+          [
+            ['suggest', 'Ask me', 'Approve each risky step'],
+            ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+            ['autopilot', 'Autopilot', 'Run everything without asking'],
+          ] as const
+        ).map(([mode, label, hint]) => (
+          <button
+            key={mode}
+            className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+            onClick={() => setBuildAutonomy(mode)}
+            title={hint}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// New-project fork (buildTarget === 'new'): the founder names a project and Byte creates a
+// fresh Next.js repo on their GitHub, then arms the build into it (createProject → armBuild).
+// Replaces RepoPicker's slot in the start-building block for the "New project" side.
+function NewProjectForm() {
+  const { createProject } = useApp();
+  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const create = () => {
+    const n = name.trim();
+    if (!n || creating) return;
+    setCreating(true);
+    // createProject navigates the flow on success; reset on the error path so the button
+    // becomes usable again if creation failed.
+    createProject(n).finally(() => setCreating(false));
+  };
+  return (
+    <>
+      <label className="cop-proj">
+        <span>New project name</span>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="my-next-app"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              create();
+            }
+          }}
+          autoFocus
+        />
+        <span>A new Next.js project will be created on your GitHub.</span>
+      </label>
+      <AutonomyPicker />
+      <button className="bub-act" onClick={create} disabled={!name.trim() || creating}>
+        {creating ? 'Creating your project…' : 'Create & build'}
+      </button>
+    </>
+  );
+}
+
 function ThreadList() {
   const {
     threads,
@@ -667,11 +737,11 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
     buildProject,
     setBuildProject,
     buildRepo,
+    buildTarget,
+    chooseBuildTarget,
     demoLetsBuild,
     buildPlan,
     setBuildPlanSteps,
-    buildAutonomy,
-    setBuildAutonomy,
     navigateTo,
     focusCompanionId,
     chatHistoryOpen,
@@ -809,6 +879,21 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                       <SetupCard m={m} />
                     </div>
                   );
+                if (m.fork) {
+                  // New-vs-Existing fork: the two choices seed buildTarget, drop these
+                  // buttons, and open the brainstorm (chooseBuildTarget, Task 6).
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-act" onClick={() => chooseBuildTarget('new')}>
+                        ✨ New project
+                      </button>
+                      <button className="bub-act" onClick={() => chooseBuildTarget('existing')}>
+                        🔧 Existing project
+                      </button>
+                    </div>
+                  );
+                }
                 if (m.advance) {
                   return (
                     <div key={m.id} className="bub">
@@ -899,6 +984,10 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                           const isRepoCloudBuild = cloudRepoBuild && !demoLetsBuild;
                           const needsProject = !demoLetsBuild && !isRepoCloudBuild;
                           const needsRepo = isRepoCloudBuild && !buildRepo;
+                          // The "New project" fork side names + creates a repo, then arms
+                          // itself (NewProjectForm/createProject) — so it supplies its own
+                          // autonomy dial + Create button and skips the shared arm step.
+                          const isNewProject = isRepoCloudBuild && buildTarget === 'new';
                           return (
                             <>
                               {demoLetsBuild ? (
@@ -909,7 +998,10 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                                     Demo — builds a throwaway page in <code>~/codepet-demo</code>
                                   </span>
                                 </div>
+                              ) : isNewProject ? (
+                                <NewProjectForm />
                               ) : isRepoCloudBuild ? (
+                                // 'existing' — and the safe default when buildTarget is null.
                                 <RepoPicker />
                               ) : (
                                 <label className="cop-proj">
@@ -939,56 +1031,38 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                                   )}
                                 </label>
                               )}
-                              <div className="cop-auto">
-                                <span>How hands-on?</span>
-                                <div className="cop-auto-opts">
-                                  {(
-                                    [
-                                      ['suggest', 'Ask me', 'Approve each risky step'],
-                                      [
-                                        'copilot',
-                                        'Co-pilot',
-                                        'Auto-approve safe work, ask on risky',
-                                      ],
-                                      ['autopilot', 'Autopilot', 'Run everything without asking'],
-                                    ] as const
-                                  ).map(([mode, label, hint]) => (
-                                    <button
-                                      key={mode}
-                                      className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                                      onClick={() => setBuildAutonomy(mode)}
-                                      title={hint}
-                                    >
-                                      {label}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                              <button
-                                className="bub-act"
-                                onClick={() => armBuild()}
-                                disabled={
-                                  buildArming ||
-                                  steps.every((s) => !s.trim()) ||
-                                  (needsProject && !buildProject.trim()) ||
-                                  needsRepo
-                                }
-                                title={
-                                  needsProject && !buildProject.trim()
-                                    ? 'Pick a project first'
-                                    : needsRepo
-                                      ? 'Pick a repo first'
-                                      : undefined
-                                }
-                              >
-                                {buildArming
-                                  ? 'Opening your session…'
-                                  : needsProject && !buildProject.trim()
-                                    ? 'Pick a project to start'
-                                    : needsRepo
-                                      ? 'Pick a repo to start'
-                                      : m.buildAction.label}
-                              </button>
+                              {/* The new-project form carries its own autonomy dial + Create
+                                  button; the existing/local/demo paths use the shared arm step. */}
+                              {!isNewProject && (
+                                <>
+                                  <AutonomyPicker />
+                                  <button
+                                    className="bub-act"
+                                    onClick={() => armBuild()}
+                                    disabled={
+                                      buildArming ||
+                                      steps.every((s) => !s.trim()) ||
+                                      (needsProject && !buildProject.trim()) ||
+                                      needsRepo
+                                    }
+                                    title={
+                                      needsProject && !buildProject.trim()
+                                        ? 'Pick a project first'
+                                        : needsRepo
+                                          ? 'Pick a repo first'
+                                          : undefined
+                                    }
+                                  >
+                                    {buildArming
+                                      ? 'Opening your session…'
+                                      : needsProject && !buildProject.trim()
+                                        ? 'Pick a project to start'
+                                        : needsRepo
+                                          ? 'Pick a repo to start'
+                                          : m.buildAction.label}
+                                  </button>
+                                </>
+                              )}
                             </>
                           );
                         })()}
