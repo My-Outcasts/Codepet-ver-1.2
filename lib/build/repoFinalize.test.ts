@@ -66,7 +66,7 @@ beforeEach(() => {
 });
 
 describe('finalizeRepoBuild', () => {
-  it("returns no_such_build and never claims or charges when there is no live doc (cross-tenant / bogus buildSessionId guard)", async () => {
+  it('returns no_such_build and never claims or charges when there is no live doc (cross-tenant / bogus buildSessionId guard)', async () => {
     const db = fakeDb(false);
     mockAdminDb.mockReturnValue(db as unknown as ReturnType<typeof adminDb>);
 

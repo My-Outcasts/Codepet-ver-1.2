@@ -142,10 +142,12 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   // Only written after a successful boot — never charges, never leaks a key/token.
-  await db.doc(paths.liveBuild(companyId, buildSessionId)).set(
-    { companyId, mode: 'repo', repo: targetRepo, ended: false, startedAt: Date.now() },
-    { merge: true },
-  );
+  await db
+    .doc(paths.liveBuild(companyId, buildSessionId))
+    .set(
+      { companyId, mode: 'repo', repo: targetRepo, ended: false, startedAt: Date.now() },
+      { merge: true },
+    );
 
   return Response.json({ buildSessionId });
 }
