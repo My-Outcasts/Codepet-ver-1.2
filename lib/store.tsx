@@ -2720,7 +2720,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // A project is required — never fall back to '.' (the app server's own cwd),
     // which would let Byte build inside whatever directory the server runs from.
     // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
-    if (!buildPlan || !companyId || buildArming || (!demoLetsBuild && !buildProject.trim())) return;
+    // A build needs a target: a demo, a local project, OR (repo-cloud) a selected repo.
+    // Without the buildRepo exception the repo-cloud branch below is unreachable.
+    if (
+      !buildPlan ||
+      !companyId ||
+      buildArming ||
+      (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && buildRepo))
+    )
+      return;
     setBuildArming(true);
     buildEndedNudged.current = false;
     setBuildResumed(false);
