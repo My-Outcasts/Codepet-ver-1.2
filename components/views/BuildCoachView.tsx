@@ -85,6 +85,7 @@ function DuringStep({
   onStatus,
   tokens,
   today,
+  isCloud,
 }: {
   plan: BytePlan | null;
   live: LiveState | null;
@@ -100,6 +101,7 @@ function DuringStep({
   onStatus: (status: string) => void;
   tokens: number | null;
   today: number | null;
+  isCloud: boolean;
 }) {
   const target = plan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const actions = live?.actionCount ?? 0;
@@ -132,7 +134,9 @@ function DuringStep({
             ? "Whoa, we're using a lot of steps! Let's slow down and double-check before we go further 😟"
             : live
               ? "Byte's watching your session — every step lands here in real time 👀"
-              : 'Byte is waiting to see your session start…')
+              : isCloud
+                ? 'Byte is building your demo in the cloud — watch it happen ✨'
+                : 'Byte is waiting to see your session start…')
         }
         lens="🐷 It's like feeding a piggy bank"
         learn={
@@ -478,6 +482,9 @@ export function BuildCoachView() {
   const sessionId = buildLive?.sessionId ?? null;
   const target = buildPlan?.budgetActions ?? DEFAULT_BUDGET_ACTIONS;
   const unlocked = budgetState(Math.min(100, Math.round((actions / target) * 100))).unlock;
+  // A cloud build is an active demo build that's neither local nor a copy-paste
+  // remote command — the E2B sandbox is running the session server-side.
+  const isCloud = demoLetsBuild && !buildLocal && !buildLaunchCommand;
 
   // Live session status (reported by LiveChat) + a two-step confirm for "Wrap up":
   // wrapping up tears the session down, so a mid-work click needs a second look.
@@ -537,14 +544,14 @@ export function BuildCoachView() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
             >
               <a
-                href={DEMO_URL}
+                href={buildLive?.previewUrl ?? DEMO_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none' }}
               >
                 Open demo →
               </a>
-              {!buildLocal && (
+              {!buildLocal && !buildLive?.previewUrl && (
                 <span style={{ fontSize: 11, opacity: 0.6 }}>(after you run the command)</span>
               )}
             </span>
@@ -578,6 +585,7 @@ export function BuildCoachView() {
             onStatus={setLiveStatus}
             tokens={buildLive?.tokens ?? null}
             today={today}
+            isCloud={isCloud}
           />
         )}
         {step === 'end' && (

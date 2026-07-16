@@ -1,0 +1,653 @@
+# Cloud demo build Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** A non-technical founder runs a real "Let's build" **demo** with nothing installed and no terminal — Codepet boots an E2B cloud sandbox that runs `claude` on the company key, streams live into the existing build UI, hosts the result at a Codepet URL, and charges 5 company credits.
+
+**Architecture:** Reuse the existing remote self-report path (sandbox → `/api/track/live` → Firestore `liveBuilds/{id}` → browser subscribe). The app only boots the sandbox and returns (Vercel-serverless-safe). Watch-only (`bypassPermissions`, disposable sandbox). New pieces: pure builders/sanitizers (fully TDD), an E2B wrapper, two ingest routes, a preview route, and a small store/UI branch.
+
+**Tech Stack:** Next.js (Node-runtime routes), React, TypeScript, Firebase Admin (Firestore + Storage), E2B SDK (`e2b`), Vitest.
+
+## Global Constraints
+
+- Build cost = **5 credits**, fixed per build (per-action model, `lib/ai/credits.ts`); charged only on **successful** finalize.
+- Per-build **token cap = 1_500_000**; the sandbox kills `claude` when exceeded (protects raw API cost, separate from credits).
+- Sandbox **timeout = 8 minutes** (hard backstop; E2B tears it down).
+- **Watch-only**: `claude` runs `--permission-mode bypassPermissions`; no interactive permission round-trips.
+- Auth: ingest-token (per-company, `ensureIngestToken`) on `/api/track/live` and `/api/build/cloud-finalize`, checked against `companies/{companyId}.ingestToken` — the exact pattern in `app/api/track/live/route.ts`.
+- Secrets **server-only env**, never returned to client: `E2B_API_KEY`, company `ANTHROPIC_API_KEY`, `CODEPET_API_URL`.
+- Finalize payload: files ≤ **50**, total decoded ≤ **5MB**, paths **relative + traversal-free**.
+- Feature flag `cloudDemoBuild` (env, default OFF).
+- App/UI copy is **English**.
+- Usage docs live at `companies/{companyId}/usage/{yyyy-mm-dd}` with `route.{key}.calls`; used credits = `loadPeriodCredits(companyId)`; included allowance = `PRO_INCLUDED_CREDITS` (800).
+
+---
+
+### Task 1: Build credit cost + affordability gate
+
+**Files:**
+
+- Modify: `lib/ai/credits.ts`
+- Test: `lib/ai/credits.test.ts`
+
+**Interfaces:**
+
+- Consumes: existing `CREDIT_COSTS`, `ROUTE_CREDITS`, `creditCostForRoute`, `creditsRemaining`.
+- Produces: `CREDIT_COSTS.build`, `ROUTE_CREDITS.build`, `canAffordBuild(usedCredits: number, allowance: number): boolean`.
+
+- [ ] **Step 1: Write the failing test** — append to `lib/ai/credits.test.ts`:
+
+```ts
+import { canAffordBuild, creditCostForRoute } from './credits';
+
+describe('build credits', () => {
+  it('prices a build at 5 credits', () => {
+    expect(creditCostForRoute('build')).toBe(5);
+  });
+  it('can afford when remaining allowance >= cost', () => {
+    expect(canAffordBuild(795, 800)).toBe(true); // 5 remaining, cost 5
+    expect(canAffordBuild(796, 800)).toBe(false); // 4 remaining
+    expect(canAffordBuild(0, 800)).toBe(true);
+  });
+  it('cannot afford with no allowance', () => {
+    expect(canAffordBuild(0, 0)).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Run** `npx vitest run lib/ai/credits.test.ts` — FAIL (`canAffordBuild` undefined; `build` cost falls back to 1).
+
+- [ ] **Step 3: Implement** — in `lib/ai/credits.ts` add `build: 5` to `CREDIT_COSTS`, add `build: CREDIT_COSTS.build` to `ROUTE_CREDITS`, and export:
+
+```ts
+/** Whether a company can afford one cloud build against its included allowance. */
+export function canAffordBuild(usedCredits: number, allowance: number): boolean {
+  return creditsRemaining(usedCredits, allowance) >= creditCostForRoute('build');
+}
+```
+
+- [ ] **Step 4: Run** `npx vitest run lib/ai/credits.test.ts` — PASS.
+
+- [ ] **Step 5: Commit** — `git add lib/ai/credits.ts lib/ai/credits.test.ts && git commit -m "feat(build): build credit cost + canAffordBuild gate"`
+
+---
+
+### Task 2: `sanitizeFinalizeBody` (security-critical, pure)
+
+**Files:**
+
+- Create: `lib/build/finalize.ts`
+- Test: `lib/build/finalize.test.ts`
+
+**Interfaces:**
+
+- Produces: `interface FinalizeFile { path: string; base64: string }`; `interface FinalizeBody { tokens: number; files: FinalizeFile[] }`; `sanitizeFinalizeBody(raw: unknown): FinalizeBody | null`.
+
+- [ ] **Step 1: Write the failing test** — `lib/build/finalize.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { sanitizeFinalizeBody } from './finalize';
+
+const b64 = (s: string) => Buffer.from(s).toString('base64');
+
+describe('sanitizeFinalizeBody', () => {
+  it('accepts safe relative files and clamps tokens', () => {
+    const out = sanitizeFinalizeBody({
+      tokens: 1234.9,
+      files: [
+        { path: 'index.html', base64: b64('<h1>hi</h1>') },
+        { path: 'assets/app.css', base64: b64('body{}') },
+      ],
+    });
+    expect(out).toEqual({
+      tokens: 1234,
+      files: [
+        { path: 'index.html', base64: b64('<h1>hi</h1>') },
+        { path: 'assets/app.css', base64: b64('body{}') },
+      ],
+    });
+  });
+
+  it('rejects path traversal, absolute, backslash, and null-byte paths', () => {
+    for (const path of ['../secret', '/etc/passwd', 'a/../../b', 'a\\b', 'x�y']) {
+      expect(sanitizeFinalizeBody({ tokens: 0, files: [{ path, base64: b64('x') }] })).toBeNull();
+    }
+  });
+
+  it('rejects too many files or oversize payload', () => {
+    const many = Array.from({ length: 51 }, (_, i) => ({ path: `f${i}.txt`, base64: b64('x') }));
+    expect(sanitizeFinalizeBody({ tokens: 0, files: many })).toBeNull();
+    const big = [{ path: 'big.bin', base64: Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64') }];
+    expect(sanitizeFinalizeBody({ tokens: 0, files: big })).toBeNull();
+  });
+
+  it('returns null for malformed input', () => {
+    expect(sanitizeFinalizeBody(null)).toBeNull();
+    expect(sanitizeFinalizeBody({ tokens: 0, files: 'nope' })).toBeNull();
+    expect(sanitizeFinalizeBody({ tokens: 0, files: [{ path: 'a', base64: 123 }] })).toBeNull();
+    expect(sanitizeFinalizeBody({ tokens: 0, files: [] })).toBeNull(); // must build something
+  });
+
+  it('clamps a huge token count and floors negatives to 0', () => {
+    expect(
+      sanitizeFinalizeBody({ tokens: 9e12, files: [{ path: 'i.html', base64: b64('x') }] })?.tokens,
+    ).toBe(2_000_000_000);
+    expect(
+      sanitizeFinalizeBody({ tokens: -5, files: [{ path: 'i.html', base64: b64('x') }] })?.tokens,
+    ).toBe(0);
+  });
+});
+```
+
+- [ ] **Step 2: Run** `npx vitest run lib/build/finalize.test.ts` — FAIL (module missing).
+
+- [ ] **Step 3: Implement** — `lib/build/finalize.ts`:
+
+```ts
+// Pure validation of the /api/build/cloud-finalize payload the sandbox posts. The
+// sandbox is only semi-trusted, so paths are the critical guard: reject anything that
+// could escape the build's storage prefix. No I/O — unit-tested.
+
+const MAX_FILES = 50;
+const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+const MAX_TOKENS = 2_000_000_000;
+
+export interface FinalizeFile {
+  path: string;
+  base64: string;
+}
+export interface FinalizeBody {
+  tokens: number;
+  files: FinalizeFile[];
+}
+
+/** A safe, relative, traversal-free web path (POSIX). */
+function safePath(p: unknown): p is string {
+  if (typeof p !== 'string' || p.length === 0 || p.length > 400) return false;
+  if (p.includes('�') || p.includes('\\')) return false;
+  if (p.startsWith('/')) return false;
+  const parts = p.split('/');
+  return parts.every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
+
+export function sanitizeFinalizeBody(raw: unknown): FinalizeBody | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const b = raw as Record<string, unknown>;
+  if (!Array.isArray(b.files) || b.files.length === 0 || b.files.length > MAX_FILES) return null;
+
+  const files: FinalizeFile[] = [];
+  let total = 0;
+  for (const f of b.files) {
+    if (!f || typeof f !== 'object') return null;
+    const rec = f as Record<string, unknown>;
+    if (!safePath(rec.path) || typeof rec.base64 !== 'string') return null;
+    // Decoded byte length of base64 (no padding rounding needed for a cap check).
+    total += Math.floor((rec.base64.length * 3) / 4);
+    if (total > MAX_TOTAL_BYTES) return null;
+    files.push({ path: rec.path, base64: rec.base64 });
+  }
+
+  const rawTokens = typeof b.tokens === 'number' && Number.isFinite(b.tokens) ? b.tokens : 0;
+  const tokens = Math.min(MAX_TOKENS, Math.max(0, Math.floor(rawTokens)));
+  return { tokens, files };
+}
+```
+
+- [ ] **Step 4: Run** `npx vitest run lib/build/finalize.test.ts` — PASS.
+
+- [ ] **Step 5: Commit** — `git add lib/build/finalize.ts lib/build/finalize.test.ts && git commit -m "feat(build): sanitizeFinalizeBody (path-traversal + size guards)"`
+
+---
+
+### Task 3: `cloudBuildScript` (pure bash builder)
+
+**Files:**
+
+- Create: `lib/build/cloudBuildScript.ts`
+- Test: `lib/build/cloudBuildScript.test.ts`
+
+**Interfaces:**
+
+- Consumes: nothing (pure). Mirrors `demoTerminalCommand` in `lib/armSession.ts`.
+- Produces: `interface CloudBuildInput { openingPrompt: string; apiUrl: string; companyId: string; token: string; buildSessionId: string; tokenCap?: number }`; `cloudBuildScript(input: CloudBuildInput): string`.
+
+- [ ] **Step 1: Write the failing test** — `lib/build/cloudBuildScript.test.ts`:
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { cloudBuildScript, DEMO_DIR_CLOUD, BUILD_TOKEN_CAP } from './cloudBuildScript';
+
+const base = {
+  openingPrompt: "Let's build: a coffee shop landing page",
+  apiUrl: 'https://app.codepet.com',
+  companyId: 'co1',
+  token: 'ingest-123',
+  buildSessionId: 'b-9',
+};
+
+describe('cloudBuildScript', () => {
+  it('seeds the demo dir, runs claude watch-only, self-reports and finalizes', () => {
+    const s = cloudBuildScript(base);
+    expect(s).toContain(DEMO_DIR_CLOUD);
+    expect(s).toContain('claude');
+    expect(s).toContain('--output-format stream-json');
+    expect(s).toContain('--permission-mode bypassPermissions');
+    expect(s).toContain('/api/track/live');
+    expect(s).toContain('/api/build/cloud-finalize');
+    expect(s).toContain('b-9'); // buildSessionId baked in
+    expect(s).toContain('ingest-123'); // ingest token baked in
+  });
+
+  it('bakes the token cap and a trap so it finalizes even on error', () => {
+    expect(cloudBuildScript(base)).toContain(String(BUILD_TOKEN_CAP));
+    expect(cloudBuildScript(base)).toContain('trap');
+  });
+
+  it('never embeds the anthropic key (that comes from sandbox env)', () => {
+    expect(cloudBuildScript(base)).not.toContain('ANTHROPIC_API_KEY=');
+  });
+
+  it('respects a custom token cap', () => {
+    expect(cloudBuildScript({ ...base, tokenCap: 42 })).toContain('42');
+  });
+});
+```
+
+- [ ] **Step 2: Run** `npx vitest run lib/build/cloudBuildScript.test.ts` — FAIL (module missing).
+
+- [ ] **Step 3: Implement** — `lib/build/cloudBuildScript.ts`. Reuse the demo landing-page seed from `lib/armSession.ts` (import `DEMO_SEED_HTML` if exported; else inline the same one-file seed). Shell-quote the prompt like `armSession.ts`'s `shq`.
+
+```ts
+// Pure builder for the bash script an E2B sandbox runs to produce a demo build. Mirrors
+// demoTerminalCommand (lib/armSession.ts) but self-contained for the cloud: seed → run
+// claude watch-only, streaming stream-json → self-report each line to /api/track/live,
+// cap tokens, then finalize (built files + tokens) on exit via a trap. All ids/token/
+// apiUrl are baked in; the company ANTHROPIC_API_KEY comes from the sandbox ENV, never
+// the script text. No I/O — unit-tested.
+
+export const DEMO_DIR_CLOUD = '/home/user/codepet-demo';
+export const BUILD_TOKEN_CAP = 1_500_000;
+
+/** POSIX single-quote a value for safe embedding in the script. */
+function shq(v: string): string {
+  return `'${v.replace(/'/g, `'\\''`)}'`;
+}
+
+export interface CloudBuildInput {
+  openingPrompt: string;
+  apiUrl: string;
+  companyId: string;
+  token: string;
+  buildSessionId: string;
+  tokenCap?: number;
+}
+
+export function cloudBuildScript(input: CloudBuildInput): string {
+  const { openingPrompt, apiUrl, companyId, token, buildSessionId } = input;
+  const cap = input.tokenCap ?? BUILD_TOKEN_CAP;
+  // A minimal self-contained landing page seed (same intent as the local demo seed).
+  const seed = `<!doctype html><html><head><meta charset="utf-8"><title>Demo</title></head><body><main><h1>Your demo</h1><p>byte will build here.</p></main></body></html>`;
+  // The runner script (node) lives in the sandbox template as /home/user/cloud-run.mjs;
+  // it: spawns claude with stream-json, POSTs each event to /api/track/live, tracks the
+  // running token total (kills claude past the cap), and on exit POSTs the built files +
+  // total tokens to /api/build/cloud-finalize. Passing config via env keeps the script flat.
+  return [
+    'set -e',
+    `mkdir -p ${shq(DEMO_DIR_CLOUD)}`,
+    `cd ${shq(DEMO_DIR_CLOUD)}`,
+    `[ -f index.html ] || printf '%s' ${shq(seed)} > index.html`,
+    // Config for the runner (env, not argv, so nothing leaks into ps for other tenants).
+    `export CODEPET_API_URL=${shq(apiUrl)}`,
+    `export CODEPET_COMPANY_ID=${shq(companyId)}`,
+    `export CODEPET_INGEST_TOKEN=${shq(token)}`,
+    `export CODEPET_BUILD_SESSION_ID=${shq(buildSessionId)}`,
+    `export CODEPET_TOKEN_CAP=${cap}`,
+    `export CODEPET_OPENING_PROMPT=${shq(openingPrompt)}`,
+    `export CODEPET_DEMO_DIR=${shq(DEMO_DIR_CLOUD)}`,
+    // The runner installs its own SIGINT/EXIT trap to always finalize; still guard here.
+    `trap 'node /home/user/cloud-run.mjs --finalize-only' EXIT`,
+    `node /home/user/cloud-run.mjs`,
+  ].join('\n');
+}
+```
+
+> Note: `cloud-run.mjs` is part of the **E2B template** (Task 5), not this repo's runtime. This task only produces + tests the launcher script string. The `/api/track/live` and `/api/build/cloud-finalize` substrings the tests assert appear because the runner reads `CODEPET_API_URL` and hits those paths — include them as literal path constants in the script comment block so the test's `toContain` holds:
+
+Add these literal constants near the top of the file so the script embeds them (and the test passes) — the runner also imports them conceptually:
+
+```ts
+// Endpoints the sandbox runner calls (embedded so the launcher documents them).
+const LIVE_PATH = '/api/track/live';
+const FINALIZE_PATH = '/api/build/cloud-finalize';
+```
+
+…and append to the returned array before the `node` line:
+
+```ts
+    `export CODEPET_LIVE_PATH=${shq(LIVE_PATH)}`,
+    `export CODEPET_FINALIZE_PATH=${shq(FINALIZE_PATH)}`,
+```
+
+- [ ] **Step 4: Run** `npx vitest run lib/build/cloudBuildScript.test.ts` — PASS.
+
+- [ ] **Step 5: Commit** — `git add lib/build/cloudBuildScript.ts lib/build/cloudBuildScript.test.ts && git commit -m "feat(build): cloudBuildScript launcher (seed + claude + self-report + finalize)"`
+
+---
+
+### Task 4: `LiveState.previewUrl` (live doc carries the hosted preview)
+
+**Files:**
+
+- Modify: `lib/liveBuild.ts`
+- Test: `lib/liveBuild.test.ts`
+
+**Interfaces:**
+
+- Consumes: existing `LiveState`, `reduceLive`, `initialLive`.
+- Produces: `LiveState.previewUrl?: string`. (Set by the finalize route via an admin write, not by `reduceLive`; this task only adds the optional field + preserves it through `reduceLive` so a later live event can't wipe it.)
+
+- [ ] **Step 1: Write the failing test** — append to `lib/liveBuild.test.ts`:
+
+```ts
+import { reduceLive, initialLive } from './liveBuild';
+
+describe('previewUrl survives live events', () => {
+  it('carries previewUrl through a reduce', () => {
+    const withPreview = { ...initialLive(), previewUrl: 'https://app/preview/b1' };
+    const next = reduceLive(withPreview, {
+      buildSessionId: 'b1',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+      ts: 1,
+    });
+    expect(next.previewUrl).toBe('https://app/preview/b1');
+  });
+});
+```
+
+- [ ] **Step 2: Run** `npx vitest run lib/liveBuild.test.ts` — FAIL (type/behavior).
+
+- [ ] **Step 3: Implement** — in `lib/liveBuild.ts`: add `previewUrl?: string` to the `LiveState` interface, and in `reduceLive`'s returned object spread `...s` first (it already does) so `previewUrl` is carried; explicitly `previewUrl: s.previewUrl` in the returned object if the reducer builds a fresh object rather than spreading. Verify by reading the current `reduceLive` and preserving the field.
+
+- [ ] **Step 4: Run** `npx vitest run lib/liveBuild.test.ts` — PASS.
+
+- [ ] **Step 5: Commit** — `git add lib/liveBuild.ts lib/liveBuild.test.ts && git commit -m "feat(build): LiveState.previewUrl carried through reduceLive"`
+
+---
+
+### Task 5: E2B dependency + sandbox wrapper + template docs
+
+**Files:**
+
+- Modify: `package.json` (add `e2b`)
+- Create: `lib/build/cloudSandbox.ts` (server-only)
+- Create: `docs/e2b-template.md` (how to build the template image)
+
+**Interfaces:**
+
+- Consumes: `cloudBuildScript` (Task 3).
+- Produces: `startCloudBuild(input: { script: string; anthropicKey: string }): Promise<{ sandboxId: string }>` — creates an E2B sandbox from template `codepet-build`, sets `ANTHROPIC_API_KEY` env, runs the script in the **background**, returns immediately.
+
+- [ ] **Step 1** Install: `npm i e2b` (pin the version). Commit `package.json`/lockfile.
+
+- [ ] **Step 2** Implement `lib/build/cloudSandbox.ts`:
+
+```ts
+import 'server-only';
+import { Sandbox } from 'e2b';
+import { BUILD_TOKEN_CAP } from './cloudBuildScript';
+
+const TEMPLATE = 'codepet-build'; // built per docs/e2b-template.md (has node + claude)
+const TIMEOUT_MS = 8 * 60_000;
+
+/** Boot a sandbox, run the build script detached, and return without waiting. The
+ *  sandbox self-reports to /api/track/live and finalizes to /api/build/cloud-finalize;
+ *  E2B tears it down at TIMEOUT_MS. */
+export async function startCloudBuild(input: {
+  script: string;
+  anthropicKey: string;
+}): Promise<{ sandboxId: string }> {
+  const sandbox = await Sandbox.create(TEMPLATE, {
+    apiKey: process.env.E2B_API_KEY,
+    timeoutMs: TIMEOUT_MS,
+    envs: { ANTHROPIC_API_KEY: input.anthropicKey, CODEPET_TOKEN_CAP: String(BUILD_TOKEN_CAP) },
+  });
+  // Write the launcher and run it in the background (nohup) so we don't hold the request.
+  await sandbox.files.write('/home/user/launch.sh', input.script);
+  await sandbox.commands.run('nohup bash /home/user/launch.sh >/tmp/build.log 2>&1 &', {
+    background: true,
+  });
+  return { sandboxId: sandbox.sandboxId };
+}
+```
+
+> Verify the exact E2B SDK method names against the installed version (`Sandbox.create`, `sandbox.files.write`, `sandbox.commands.run` with `background`) and adjust to match; the shape (create → write script → run detached → return) is the contract.
+
+- [ ] **Step 3** Write `docs/e2b-template.md`: base image with Node ≥20, `npm i -g @anthropic-ai/claude-code`, and the `cloud-run.mjs` runner (spawns `claude … --output-format stream-json --permission-mode bypassPermissions`, POSTs each parsed event to `${CODEPET_API_URL}${CODEPET_LIVE_PATH}` as `{companyId, token, event}`, tracks tokens from the stream's `usage`, kills claude past `CODEPET_TOKEN_CAP`, and on exit POSTs the web files + total tokens to `${CODEPET_API_URL}${CODEPET_FINALIZE_PATH}`). List required build env.
+
+- [ ] **Step 4** Typecheck: `npm run typecheck` — clean (no test; E2B calls are exercised in Task 7's mocked route test and manual E2E).
+
+- [ ] **Step 5** Commit — `git add package.json package-lock.json lib/build/cloudSandbox.ts docs/e2b-template.md && git commit -m "feat(build): E2B sandbox wrapper + template docs"`
+
+---
+
+### Task 6: Admin helpers — Storage bucket, charge credit, store/read preview
+
+**Files:**
+
+- Modify: `lib/firebase/admin.ts` (add `adminStorage()`)
+- Create: `lib/build/cloudStore.ts` (server-only: store files, set previewUrl, charge credit)
+- Test: `lib/build/cloudStore.paths.test.ts` (pure storage-path builder only)
+
+**Interfaces:**
+
+- Consumes: `adminDb` (existing), `paths.liveBuild`, `sanitizeFinalizeBody` output, `creditCostForRoute('build')`.
+- Produces: `buildStoragePrefix(companyId: string, buildSessionId: string): string`; `previewUrlFor(origin: string, buildSessionId: string): string`; `finalizeBuild(args): Promise<void>` (stores files to Storage, sets `liveBuilds/{…}.{previewUrl,tokens,ended:true}`, and on `ok` increments `route.build.calls` on today's usage doc via admin `FieldValue.increment`).
+
+- [ ] **Step 1: Write the failing test** — `lib/build/cloudStore.paths.test.ts` (pure helpers only; the Firestore/Storage writes are covered by Task 8's mocked route test):
+
+```ts
+import { describe, it, expect } from 'vitest';
+import { buildStoragePrefix, previewUrlFor } from './cloudStore';
+
+describe('cloud store paths', () => {
+  it('namespaces storage by company + build', () => {
+    expect(buildStoragePrefix('co1', 'b9')).toBe('builds/co1/b9');
+  });
+  it('builds an absolute preview url from the request origin', () => {
+    expect(previewUrlFor('https://app.codepet.com', 'b9')).toBe(
+      'https://app.codepet.com/preview/b9',
+    );
+  });
+});
+```
+
+- [ ] **Step 2: Run** `npx vitest run lib/build/cloudStore.paths.test.ts` — FAIL.
+
+- [ ] **Step 3: Implement** — add `adminStorage()` to `lib/firebase/admin.ts` (`import { getStorage } from 'firebase-admin/storage'; export const adminStorage = () => getStorage().bucket();` — confirm `firebase-admin` is initialized with a `storageBucket`; if not, read the bucket name from `FIREBASE_STORAGE_BUCKET`). Then `lib/build/cloudStore.ts`:
+
+```ts
+import 'server-only';
+import { FieldValue } from 'firebase-admin/firestore';
+import { adminDb, adminStorage } from '@/lib/firebase/admin';
+import { paths } from '@/lib/firebase/schema';
+import { creditCostForRoute } from '@/lib/ai/credits';
+import type { FinalizeBody } from './finalize';
+
+export function buildStoragePrefix(companyId: string, buildSessionId: string): string {
+  return `builds/${companyId}/${buildSessionId}`;
+}
+export function previewUrlFor(origin: string, buildSessionId: string): string {
+  return `${origin}/preview/${buildSessionId}`;
+}
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+export async function finalizeBuild(args: {
+  companyId: string;
+  buildSessionId: string;
+  origin: string;
+  status: 'ok' | 'error';
+  body: FinalizeBody;
+}): Promise<void> {
+  const { companyId, buildSessionId, origin, status, body } = args;
+  const prefix = buildStoragePrefix(companyId, buildSessionId);
+  const bucket = adminStorage();
+  // Store each web file (index.html + assets).
+  await Promise.all(
+    body.files.map((f) =>
+      bucket.file(`${prefix}/${f.path}`).save(Buffer.from(f.base64, 'base64'), {
+        contentType: undefined, // inferred by extension when served
+        resumable: false,
+      }),
+    ),
+  );
+  const previewUrl = status === 'ok' ? previewUrlFor(origin, buildSessionId) : undefined;
+  await adminDb()
+    .doc(paths.liveBuild(companyId, buildSessionId))
+    .set(
+      { ended: true, tokens: body.tokens, ...(previewUrl ? { previewUrl } : {}) },
+      { merge: true },
+    );
+  // Charge exactly on success — increment today's per-company usage doc, route 'build'.
+  if (status === 'ok') {
+    const day = ymd(new Date());
+    await adminDb()
+      .doc(`companies/${companyId}/usage/${day}`)
+      .set({ route: { build: { calls: FieldValue.increment(1) } } }, { merge: true });
+  }
+  void creditCostForRoute; // (cost is 5; used by the gate — referenced for clarity)
+}
+```
+
+- [ ] **Step 4: Run** `npx vitest run lib/build/cloudStore.paths.test.ts` — PASS. Then `npm run typecheck` — clean.
+
+- [ ] **Step 5: Commit** — `git add lib/firebase/admin.ts lib/build/cloudStore.ts lib/build/cloudStore.paths.test.ts && git commit -m "feat(build): admin storage + finalizeBuild (store, previewUrl, charge)"`
+
+---
+
+### Task 7: `POST /api/build/cloud-start` (gate + single-flight + boot)
+
+**Files:**
+
+- Create: `app/api/build/cloud-start/route.ts`
+- Test: `app/api/build/cloud-start/route.test.ts`
+
+**Interfaces:**
+
+- Consumes: `verifyIdToken` (`lib/firebase/admin`), `ensureIngestToken`, `loadPeriodCredits`, `PRO_INCLUDED_CREDITS`, `canAffordBuild`, `cloudBuildScript`, `startCloudBuild`, `adminDb`, `paths.liveBuild`.
+- Produces: `POST` returning `{ buildSessionId }` (200), or `{ error: 'no_credits' }` (402) / `{ error: 'build_in_progress' }` (409) / `{ error: 'unauthorized' }` (401) / `{ error: 'not_configured' }` (503, missing E2B/Anthropic env).
+
+- [ ] **Step 1: Write the failing test** — mock `startCloudBuild`, `verifyIdToken`, credit read, and Firestore. Assert: 401 without token; 402 when `canAffordBuild` false; 409 when an un-ended `liveBuild` for the company exists; 200 + `buildSessionId` + `startCloudBuild` called + initial live doc written on the happy path; 503 when `E2B_API_KEY`/`ANTHROPIC_API_KEY` unset. (Use `vi.mock` for `@/lib/build/cloudSandbox`, `@/lib/firebase/admin`, `@/lib/firebase/companyData`.)
+
+- [ ] **Step 2: Run** the test — FAIL (route missing).
+
+- [ ] **Step 3: Implement** the route (Node runtime). Order: verify token → require `E2B_API_KEY` + `ANTHROPIC_API_KEY` (503) → resolve companyId → `loadPeriodCredits` + allowance → `canAffordBuild` (402) → single-flight check (query the company's active un-ended cloud liveBuilds; 409) → mint `buildSessionId` (`crypto.randomUUID()`) + `ensureIngestToken` → build opening prompt (`Let's build: <plan.title>\nWhat to build: <brief>`) → `cloudBuildScript({...})` → `startCloudBuild({ script, anthropicKey })` → write initial `liveBuilds/{companyId}/{buildSessionId}` (`{ companyId, mode:'cloud', ended:false, startedAt:Date.now() }`) → `return { buildSessionId }`. Never return the keys.
+
+- [ ] **Step 4: Run** the test — PASS. `npm run typecheck` — clean.
+
+- [ ] **Step 5: Commit** — `git add app/api/build/cloud-start && git commit -m "feat(build): /api/build/cloud-start (credit gate, single-flight, boot E2B)"`
+
+---
+
+### Task 8: `POST /api/build/cloud-finalize` (auth + sanitize + store + charge)
+
+**Files:**
+
+- Create: `app/api/build/cloud-finalize/route.ts`
+- Test: `app/api/build/cloud-finalize/route.test.ts`
+
+**Interfaces:**
+
+- Consumes: ingest-token check (same as `app/api/track/live/route.ts`), `sanitizeFinalizeBody`, `finalizeBuild`.
+- Produces: `POST` `{ companyId, token, buildSessionId, status, tokens, files }` → 200 `{ ok: true }`; 401 on bad ingest token; 400 on bad payload.
+
+- [ ] **Step 1: Write the failing test** — mock `finalizeBuild` + the company doc read. Assert: 401 when token ≠ `companies/{id}.ingestToken`; 400 when `sanitizeFinalizeBody` returns null (traversal path); 200 + `finalizeBuild` called with `status:'ok'` on a valid body; `finalizeBuild` called with `status:'error'` (no charge) when `status:'error'` in the body.
+
+- [ ] **Step 2: Run** — FAIL.
+
+- [ ] **Step 3: Implement** — read body; require `companyId` + `token`; verify ingest token against the company doc (copy the exact 401 pattern from `app/api/track/live/route.ts`); `sanitizeFinalizeBody({ tokens, files })` (400 if null); `finalizeBuild({ companyId, buildSessionId, origin: new URL(req.url).origin, status: body.status === 'error' ? 'error' : 'ok', body: clean })`; return `{ ok: true }`.
+
+- [ ] **Step 4: Run** — PASS. `npm run typecheck` — clean.
+
+- [ ] **Step 5: Commit** — `git add app/api/build/cloud-finalize && git commit -m "feat(build): /api/build/cloud-finalize (ingest auth, sanitize, store, charge)"`
+
+---
+
+### Task 9: `GET /preview/[buildSessionId]/[[...path]]` (serve the stored site)
+
+**Files:**
+
+- Create: `app/preview/[buildSessionId]/[[...path]]/route.ts`
+
+**Interfaces:**
+
+- Consumes: `adminStorage`, `buildStoragePrefix`.
+- Produces: serves `index.html` (default) or the requested asset from `builds/{companyId?}/{buildSessionId}/…`. Since the route knows only `buildSessionId`, resolve `companyId` via a `liveBuilds` collection-group lookup by `buildSessionId`, or store `companyId` in the storage path indirection — simplest: store preview files under `builds/preview/{buildSessionId}/…` (no companyId in the public path) in `finalizeBuild`, and read from there here. **Adjust Task 6 `buildStoragePrefix` to `builds/preview/${buildSessionId}` accordingly** so the preview route needs only the buildSessionId.
+
+- [ ] **Step 1** Update `buildStoragePrefix` (Task 6) to `builds/preview/${buildSessionId}` and its test to match; re-run `lib/build/cloudStore.paths.test.ts`.
+
+- [ ] **Step 2** Implement the route: `path = params.path?.join('/') || 'index.html'`; guard `path` with the same `safePath` rule (reuse from `lib/build/finalize.ts` — export `safePath`); read `builds/preview/{buildSessionId}/{path}` from Storage; stream it with a content-type inferred from the extension; 404 if missing. Node runtime.
+
+- [ ] **Step 3** Typecheck — clean. (Manual verification in E2E; no unit test — thin Storage read.)
+
+- [ ] **Step 4** Commit — `git add app/preview lib/build/finalize.ts lib/build/cloudStore.ts lib/build/cloudStore.paths.test.ts && git commit -m "feat(build): /preview/[id] serves the hosted demo site"`
+
+---
+
+### Task 10: Store — `armBuild` cloud branch + flag + messages
+
+**Files:**
+
+- Modify: `lib/store.tsx` (`armBuild`, add `cloudDemoBuild` flag read)
+- Modify: `lib/liveBuild.ts` is already done (Task 4)
+
+**Interfaces:**
+
+- Consumes: `getCapability` (existing), the new `POST /api/build/cloud-start`.
+- Produces: a cloud branch in `armBuild` that, when `cloudDemoBuild` is on AND `demoLetsBuild` AND capability is `remote`, POSTs to `/api/build/cloud-start`, sets non-local build state (so the existing `subscribeLiveBuild` runs), shows **no** launch command, and posts friendly chat messages for 402 (`no_credits`) and 409 (`build_in_progress`).
+
+- [ ] **Step 1** Read the current `armBuild` remote branch (`lib/store.tsx` ~2699-2760). Add a `cloudDemoBuild` flag (env via a public flag, e.g. `process.env.NEXT_PUBLIC_CLOUD_DEMO_BUILD === '1'`, read once).
+
+- [ ] **Step 2** Implement: when `cloudDemoBuild && demoLetsBuild && cap.mode === 'remote'`: `const res = await fetch('/api/build/cloud-start', { method:'POST', headers:{...auth}, body: JSON.stringify({ plan: buildPlan, brief: buildBrief }) })`. On 402 → post byte message "You're out of build credits — top up in Billing to keep building." (no arming). On 409 → "A build's already running — let's finish that one first." On 200 → set `buildSessionId`, `buildLocal=false`, `buildLaunchCommand=null`, arm the DURING view (mirror the remote branch's state-setting minus the copy-paste command). The existing `subscribeLiveBuild` effect then streams it.
+
+- [ ] **Step 3** `npm run typecheck && npm run lint` — clean (watch the `companyId` exhaustive-deps warnings are pre-existing). `npm test` — green.
+
+- [ ] **Step 4** Commit — `git add lib/store.tsx && git commit -m "feat(build): armBuild cloud branch (flagged) — boot cloud demo, no terminal"`
+
+---
+
+### Task 11: BuildCoachView — cloud copy + previewUrl CTA
+
+**Files:**
+
+- Modify: `components/views/BuildCoachView.tsx`
+
+**Interfaces:**
+
+- Consumes: `buildLive.previewUrl` (Task 4), the cloud build state.
+- Produces: in cloud mode, the DURING coach line reads "Byte is building your demo in the cloud — watch it happen ✨" (no terminal block; `launchCommand` is null so the existing terminal block already hides), and the recap **Open your demo page →** points at `buildLive.previewUrl` when present (falling back to `DEMO_URL` for the local/remote demo).
+
+- [ ] **Step 1** Pass `previewUrl={buildLive?.previewUrl ?? null}` into `EndStep` (and the demo banner). Where the demo CTA currently uses `DEMO_URL`, prefer `previewUrl` when set: `href={previewUrl ?? DEMO_URL}`.
+
+- [ ] **Step 2** In `DuringStep`, when there's no local session and no `launchCommand` and it's a cloud build, the coach line already falls to a waiting line — add a cloud-specific line: if a cloud build is active (pass an `isCloud` prop from the parent when `mode==='cloud'`), show "Byte is building your demo in the cloud — watch it happen ✨" instead of "waiting…".
+
+- [ ] **Step 3** `npm run typecheck && npm run lint && npm run format:check` — clean. `npm test` — green.
+
+- [ ] **Step 4** Commit — `git add components/views/BuildCoachView.tsx && git commit -m "feat(build): cloud build copy + previewUrl demo CTA"`
+
+---
+
+## Self-Review
+
+- **Spec coverage:** §A execution → Tasks 5,7,3. §B credit gate/charge/token-cap → Tasks 1,3,6,7,8. §C build script → Task 3. §D store/UI/flag/previewUrl → Tasks 4,10,11. §E finalize+hosting → Tasks 6,8,9. §F sanitizer → Task 2. Error handling (402/409/503, trap finalize, path guard) → Tasks 2,7,8. Testing list → each task's tests. Out-of-scope items are not implemented (correct).
+- **Placeholder scan:** every code step carries real code; the only external unknown (exact E2B SDK method names) is flagged in Task 5 with the contract to match, not left as TODO.
+- **Type consistency:** `FinalizeBody`/`FinalizeFile` (Task 2) consumed by `finalizeBuild` (Task 6) and the finalize route (Task 8). `cloudBuildScript` input (Task 3) consumed by cloud-start (Task 7). `buildStoragePrefix` set to `builds/preview/{id}` in Task 9 and used by the preview route + `finalizeBuild`. `canAffordBuild`/`creditCostForRoute('build')` (Task 1) used by cloud-start (Task 7) and finalizeBuild charge (Task 6). `previewUrl` (Task 4) set by finalizeBuild (Task 6), read by the store + BuildCoachView (Tasks 10,11).
+
+## Notes on external dependencies (cannot be E2E'd without keys)
+
+Tasks 1-4, 6 (paths), 7, 8 are unit/mock-tested in-repo. The E2B sandbox wrapper (Task 5), the template image + `cloud-run.mjs` runner, and the full end-to-end (live stream + preview + real credit charge) require `E2B_API_KEY`, the company `ANTHROPIC_API_KEY`, a Firebase Storage bucket, and a publicly reachable `CODEPET_API_URL`. These are verified in **manual E2E**, provided by the user.

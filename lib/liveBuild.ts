@@ -38,6 +38,13 @@ export interface LiveState {
   /** Real recap stats self-reported by the demo copy-paste command (no toolkit
    *  install required), so remote testers see real commits/files-changed. */
   recap?: DemoRecap;
+  /** Hosted preview URL, set by the finalize route; preserved through live events. */
+  previewUrl?: string;
+  /** Durable per-build field set by cloud-start ('cloud' for a cloud demo build);
+   *  preserved across events so the single-flight query keeps matching. */
+  mode?: string;
+  /** Durable per-build field set by cloud-start; preserved across events. */
+  companyId?: string;
 }
 
 export interface DemoRecap {
@@ -74,7 +81,19 @@ function prune(state: LiveState): LiveState {
  *  event's session id. Never mutates the input. */
 export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState {
   const sessionId = event.sessionId || state?.sessionId || '';
-  if (event.kind === 'start') return initialLive(event.ts, sessionId);
+  if (event.kind === 'start') {
+    const fresh = initialLive(event.ts, sessionId);
+    // Preserve the durable fields cloud-start wrote (and any previewUrl a prior
+    // finalize set) across a `start` event — otherwise the first live event after
+    // boot wipes them and the single-flight query (mode=='cloud', ended==false)
+    // stops matching, and a late start would erase a previewUrl/ended already set.
+    return prune({
+      ...fresh,
+      mode: state?.mode,
+      companyId: state?.companyId,
+      previewUrl: state?.previewUrl,
+    });
+  }
   const s = state ?? initialLive(event.ts, sessionId);
   if (event.kind === 'tool') {
     const recentTools = event.tool

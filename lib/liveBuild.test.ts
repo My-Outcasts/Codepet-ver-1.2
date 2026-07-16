@@ -202,3 +202,36 @@ describe('sanitizeDemoRecap', () => {
     ).toEqual({ buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } });
   });
 });
+
+describe('previewUrl survives live events', () => {
+  it('carries previewUrl through a reduce', () => {
+    const withPreview = { ...initialLive(0), previewUrl: 'https://app/preview/b1' };
+    const next = reduceLive(withPreview, {
+      buildSessionId: 'b1',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+      ts: 1,
+    });
+    expect(next.previewUrl).toBe('https://app/preview/b1');
+  });
+});
+
+describe('mode/companyId survive a start event', () => {
+  it('a start event preserves mode, companyId, and previewUrl from the prior state', () => {
+    const prior = {
+      ...initialLive(0, 's1'),
+      mode: 'cloud',
+      companyId: 'co1',
+      previewUrl: 'u',
+    };
+    const next = reduceLive(prior, { ...base, kind: 'start', ts: 100 });
+    expect(next.mode).toBe('cloud');
+    expect(next.companyId).toBe('co1');
+    expect(next.previewUrl).toBe('u');
+    // A start still resets the activity counters.
+    expect(next.ended).toBe(false);
+    expect(next.actionCount).toBe(0);
+    expect(next.startedAt).toBe(100);
+  });
+});

@@ -15,6 +15,8 @@ import { jwtVerify, createRemoteJWKSet, type JWTPayload } from 'jose';
 // need the Admin SDK's Firestore, which does not hit the jwks-rsa ESM problem.
 import { initializeApp, getApps, getApp, cert, type App } from 'firebase-admin/app';
 import { getFirestore, type Firestore } from 'firebase-admin/firestore';
+import { getStorage } from 'firebase-admin/storage';
+import type { Bucket } from '@google-cloud/storage';
 
 // Firebase's public keys for Secure Token Service ID tokens, in JWK Set form.
 // createRemoteJWKSet caches them and refreshes on key rotation / unknown `kid`.
@@ -74,4 +76,18 @@ function getAdminApp(): App {
  *  verify-only credentials cannot write. */
 export function adminDb(): Firestore {
   return getFirestore(getAdminApp());
+}
+
+/** Admin Storage bucket handle for the cloud build's compiled site output
+ *  (builds/{companyId}/{buildSessionId}/...). `initializeApp` above does not set a
+ *  default `storageBucket`, so the bucket name must come from env — this is only
+ *  required for cloud builds and is intentionally read lazily so its absence
+ *  doesn't break any other feature. Requires the same service account as
+ *  `adminDb` (FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY) to write. */
+export function adminStorage(): Bucket {
+  const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+  if (!bucketName) {
+    throw new Error('FIREBASE_STORAGE_BUCKET is not configured.');
+  }
+  return getStorage(getAdminApp()).bucket(bucketName);
 }

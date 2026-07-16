@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CREDIT_COSTS,
   creditCostForRoute,
+  canAffordBuild,
   PRO_INCLUDED_CREDITS,
   OVERAGE_USD_PER_CREDIT,
   creditsRemaining,
@@ -68,5 +69,19 @@ describe('Pro overage (billed, not blocked)', () => {
   it('counts and prices credits beyond the allowance', () => {
     expect(overageCredits(900, PRO_INCLUDED_CREDITS)).toBe(100);
     expect(overageUsd(900, PRO_INCLUDED_CREDITS)).toBeCloseTo(100 * OVERAGE_USD_PER_CREDIT);
+  });
+});
+
+describe('build credits', () => {
+  it('prices a build at 5 credits', () => {
+    expect(creditCostForRoute('build')).toBe(5);
+  });
+  it('can afford when remaining allowance >= cost', () => {
+    expect(canAffordBuild(795, 800)).toBe(true); // 5 remaining, cost 5
+    expect(canAffordBuild(796, 800)).toBe(false); // 4 remaining
+    expect(canAffordBuild(0, 800)).toBe(true);
+  });
+  it('cannot afford with no allowance', () => {
+    expect(canAffordBuild(0, 0)).toBe(false);
   });
 });

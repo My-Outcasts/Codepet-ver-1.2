@@ -24,6 +24,7 @@ import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
+import { getFirebaseAuth, isFirebaseConfigured } from './firebase/client';
 import { fetchProjectAnalysis } from './ai/analyzeProject';
 import { isUsableAnalysis, type ProjectAnalysis } from './ai/projectAnalysis';
 import {
@@ -163,6 +164,21 @@ const newId = (): string =>
 // from past messages, so the thread never accumulates a trail of live buttons a stray
 // tap could re-fire. See isTransientBuildTrigger for which kinds are consumed.
 const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] => stripBuildTriggers(msgs);
+
+// Hosted-demo-only: boots a cloud (E2B) build instead of showing a copy-paste terminal
+// command, so a tester with no local toolkit can still watch "Build this" happen live.
+// Gated behind a public flag so local/self-hosted installs keep the existing REMOTE
+// (copy-paste command) behavior untouched.
+const cloudDemoBuild = process.env.NEXT_PUBLIC_CLOUD_DEMO_BUILD === '1';
+
+// Attaches the signed-in user's Firebase ID token, same pattern as lib/ai/buildPlan.ts's
+// authHeader — the server derives companyId from this token, never from the body.
+async function cloudBuildAuthHeader(): Promise<Record<string, string>> {
+  if (!isFirebaseConfigured) return {};
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return {};
+  return { authorization: `Bearer ${await user.getIdToken()}` };
+}
 import type { CompanyBrief } from './firebase/schema';
 import {
   buildRevealSummary,
@@ -2687,6 +2703,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Non-null only in remote mode (a copy-paste command is shown); drives the honest
         // "paste this" message vs the local "I'm watching" one.
         let launchCommand: string | null = null;
+        // Posts a byte chat message and signals the caller to STOP arming (no state is
+        // touched — buildArming still flips off via the outer `finally`).
+        const stopWithMessage = (text: string) => {
+          const now = Date.now();
+          const msg: ChatMessage = { id: newId(), role: 'byte', text, ts: now };
+          setChatMessages((prev) => [...prev, msg]);
+          persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+        };
         if (demoLetsBuild) {
           const cap = await getCapability();
           if (cap.mode === 'local') {
@@ -2696,6 +2720,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setBuildLocal(true);
             setBuildLaunchCommand(null);
             setBuildSessionId(id);
+            setBuildLive(null);
+            setBuildStep('during');
+          } else if (cloudDemoBuild) {
+            // Hosted demo: boot a cloud (E2B) sandbox instead of showing a copy-paste
+            // terminal command — no local toolkit required. The server derives companyId
+            // from the verified Firebase token; NEVER send companyId in the body (a prior
+            // review flagged that as a cross-tenant IDOR).
+            setBuildLocal(false);
+            setBuildProjectDir(DEMO_DIR);
+            setBuildCheckpoint(null); // throwaway target — no rewind
+            const res = await fetch('/api/build/cloud-start', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+              body: JSON.stringify({ plan: buildPlan, brief: buildBrief }),
+            });
+            if (res.status === 402) {
+              stopWithMessage("You're out of build credits — top up in Billing to keep building.");
+              return;
+            }
+            if (res.status === 409) {
+              stopWithMessage("A build's already running — let's finish that one first.");
+              return;
+            }
+            if (!res.ok) {
+              stopWithMessage(
+                "Byte couldn't start the cloud build just now — try again in a moment.",
+              );
+              return;
+            }
+            const { buildSessionId: cloudSessionId } = (await res.json()) as {
+              buildSessionId: string;
+            };
+            setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+            setBuildSessionId(cloudSessionId);
             setBuildLive(null);
             setBuildStep('during');
           } else {
