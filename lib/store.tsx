@@ -2744,7 +2744,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               return;
             }
             if (!res.ok) {
-              stopWithMessage("Byte couldn't start the cloud build just now — try again in a moment.");
+              stopWithMessage(
+                "Byte couldn't start the cloud build just now — try again in a moment.",
+              );
               return;
             }
             const { buildSessionId: cloudSessionId } = (await res.json()) as {

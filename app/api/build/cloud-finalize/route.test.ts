@@ -85,9 +85,7 @@ describe('POST /api/build/cloud-finalize', () => {
   });
 
   it('400s when the payload fails sanitization (path traversal) and never calls finalizeBuild', async () => {
-    const res = await POST(
-      req({ ...validBody, files: [{ path: '../evil', base64: 'eA==' }] }),
-    );
+    const res = await POST(req({ ...validBody, files: [{ path: '../evil', base64: 'eA==' }] }));
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid payload' });
     expect(mockFinalizeBuild).not.toHaveBeenCalled();
@@ -127,7 +125,7 @@ describe('POST /api/build/cloud-finalize', () => {
     expect(mockFinalizeBuild.mock.calls[0][0].status).toBe('error');
   });
 
-  it('404s with no_such_build when finalizeBuild reports the buildSessionId is not this company\'s build', async () => {
+  it("404s with no_such_build when finalizeBuild reports the buildSessionId is not this company's build", async () => {
     mockFinalizeBuild.mockResolvedValue({ ok: false, reason: 'no_such_build' });
     const res = await POST(req(validBody));
     expect(res.status).toBe(404);

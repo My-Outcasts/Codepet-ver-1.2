@@ -40,8 +40,11 @@ function fakeDb(liveExists: boolean, liveData: Record<string, unknown> = {}) {
   const runTransaction = vi.fn(async (updateFn: (tx: unknown) => unknown) => {
     const tx = {
       get: (ref: { get: () => unknown }) => ref.get(),
-      set: (ref: { set: (data: unknown, opts?: unknown) => unknown }, data: unknown, opts?: unknown) =>
-        ref.set(data, opts),
+      set: (
+        ref: { set: (data: unknown, opts?: unknown) => unknown },
+        data: unknown,
+        opts?: unknown,
+      ) => ref.set(data, opts),
     };
     return updateFn(tx);
   });
@@ -73,7 +76,7 @@ beforeEach(() => {
 });
 
 describe('finalizeBuild', () => {
-  it('returns no_such_build and never stores or charges when the buildSessionId is not this company\'s build (cross-tenant guard)', async () => {
+  it("returns no_such_build and never stores or charges when the buildSessionId is not this company's build (cross-tenant guard)", async () => {
     const db = fakeDb(false);
     const bucket = fakeBucket();
     mockAdminDb.mockReturnValue(db as unknown as ReturnType<typeof adminDb>);
@@ -115,7 +118,7 @@ describe('finalizeBuild', () => {
     expect(db.__usageSet).not.toHaveBeenCalled();
   });
 
-  it('stores files under the companyId-scoped prefix, claims (ended) inside the transaction, and charges once on an ok status for the caller\'s own build', async () => {
+  it("stores files under the companyId-scoped prefix, claims (ended) inside the transaction, and charges once on an ok status for the caller's own build", async () => {
     const db = fakeDb(true, { ended: false });
     const bucket = fakeBucket();
     mockAdminDb.mockReturnValue(db as unknown as ReturnType<typeof adminDb>);

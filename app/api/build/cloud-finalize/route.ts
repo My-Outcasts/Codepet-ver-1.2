@@ -36,8 +36,14 @@ export async function POST(req: Request): Promise<Response> {
   } catch {
     return NextResponse.json({ error: 'invalid json' }, { status: 400 });
   }
-  const { companyId, token, buildSessionId, status: rawStatus, tokens, files } = (body ??
-    {}) as CloudFinalizeBody;
+  const {
+    companyId,
+    token,
+    buildSessionId,
+    status: rawStatus,
+    tokens,
+    files,
+  } = (body ?? {}) as CloudFinalizeBody;
   if (!companyId || !token || !buildSessionId) {
     return NextResponse.json(
       { error: 'missing companyId or token or buildSessionId' },

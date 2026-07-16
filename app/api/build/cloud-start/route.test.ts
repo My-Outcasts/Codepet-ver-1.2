@@ -80,9 +80,7 @@ beforeEach(() => {
   mockLoadPeriodCreditsAdmin.mockResolvedValue(0);
   mockEnsureIngestTokenAdmin.mockResolvedValue('ingest-token');
   mockStartCloudBuild.mockResolvedValue({ sandboxId: 'sbx1' });
-  mockAdminDb.mockReturnValue(
-    fakeDb(false) as unknown as ReturnType<typeof adminDb>,
-  );
+  mockAdminDb.mockReturnValue(fakeDb(false) as unknown as ReturnType<typeof adminDb>);
 });
 
 describe('POST /api/build/cloud-start', () => {
@@ -211,9 +209,8 @@ describe('POST /api/build/cloud-start', () => {
     expect(fake.collection).toHaveBeenCalledWith('companies/co1/liveBuilds');
     expect(fake.collection).not.toHaveBeenCalledWith('companies/someone-elses-company/liveBuilds');
     expect(fake.doc).toHaveBeenCalledWith(`companies/co1/liveBuilds/${json.buildSessionId}`);
-    expect(fake.__setSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ companyId: 'co1' }),
-      { merge: true },
-    );
+    expect(fake.__setSpy).toHaveBeenCalledWith(expect.objectContaining({ companyId: 'co1' }), {
+      merge: true,
+    });
   });
 });

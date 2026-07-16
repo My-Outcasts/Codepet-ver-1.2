@@ -87,7 +87,12 @@ export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState
     // finalize set) across a `start` event — otherwise the first live event after
     // boot wipes them and the single-flight query (mode=='cloud', ended==false)
     // stops matching, and a late start would erase a previewUrl/ended already set.
-    return prune({ ...fresh, mode: state?.mode, companyId: state?.companyId, previewUrl: state?.previewUrl });
+    return prune({
+      ...fresh,
+      mode: state?.mode,
+      companyId: state?.companyId,
+      previewUrl: state?.previewUrl,
+    });
   }
   const s = state ?? initialLive(event.ts, sessionId);
   if (event.kind === 'tool') {

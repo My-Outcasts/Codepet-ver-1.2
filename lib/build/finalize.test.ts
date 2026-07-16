@@ -42,7 +42,11 @@ describe('sanitizeFinalizeBody', () => {
   });
 
   it('clamps a huge token count and floors negatives to 0', () => {
-    expect(sanitizeFinalizeBody({ tokens: 9e12, files: [{ path: 'i.html', base64: b64('x') }] })?.tokens).toBe(2_000_000_000);
-    expect(sanitizeFinalizeBody({ tokens: -5, files: [{ path: 'i.html', base64: b64('x') }] })?.tokens).toBe(0);
+    expect(
+      sanitizeFinalizeBody({ tokens: 9e12, files: [{ path: 'i.html', base64: b64('x') }] })?.tokens,
+    ).toBe(2_000_000_000);
+    expect(
+      sanitizeFinalizeBody({ tokens: -5, files: [{ path: 'i.html', base64: b64('x') }] })?.tokens,
+    ).toBe(0);
   });
 });

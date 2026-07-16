@@ -48,10 +48,10 @@ permissions) are later sub-projects.
   `ended`) and `sanitizeDemoRecap`.
 - `lib/ai/credits.ts` — **per-action** credit model: `CREDIT_COSTS` (chat .25 / light 1 /
   medium 2 / heavy 4), `ROUTE_CREDITS`, `creditCostForRoute(key)`, `PRO_INCLUDED_CREDITS`
-  (800), `creditsRemaining(used, included)`. **Note in the file:** this core is *not yet
-  wired into any route* — this feature is the **first real credit gate + charge**.
+  (800), `creditsRemaining(used, included)`. **Note in the file:** this core is _not yet
+  wired into any route_ — this feature is the **first real credit gate + charge**.
 - `lib/billing.ts` — `creditsFromUsage(docs)` (Σ calls × route cost), `creditMeter(used,
-  allowance)`.
+allowance)`.
 - `usageSink(uid, idToken, routeKey)` (`lib/firebase/serverUsage`) records a route call
   into the day's usage doc (how `chat` is metered today).
 - `app/actions/build.ts` `scaffoldDemoProject` seeds the throwaway landing page locally.
@@ -80,7 +80,7 @@ sandbox and adds credit + preview. It does **not** rebuild the live UI.
    - run the **build script** (§C) in the **background** inside the sandbox (detached), then
      **return `{ buildSessionId }` immediately** (fast — within the serverless limit);
    - write an initial `liveBuilds/{buildSessionId}` doc (`{ startedAt, mode: 'cloud',
-     companyId, ended: false }`).
+companyId, ended: false }`).
 3. **Browser**: `armBuild` sets non-local build state + `subscribeLiveBuild(...)` (existing).
    The DURING view shows the piggy bank / tokens / step feed live from Firestore.
 4. Sandbox finishes (or the token cap / timeout fires) → the script calls
@@ -109,10 +109,11 @@ sandbox and adds credit + preview. It does **not** rebuild the live UI.
 
 A pure function `cloudBuildScript(input): string` (mirrors `demoTerminalCommand`) that
 returns a bash script the sandbox runs. Testable without a network. It:
+
 - seeds the throwaway landing page into `~/codepet-demo` (the demo seed, same HTML as
   `scaffoldDemoProject`);
 - runs `claude "<opening prompt>" --output-format stream-json --verbose
-  --permission-mode bypassPermissions` in `~/codepet-demo`;
+--permission-mode bypassPermissions` in `~/codepet-demo`;
 - **pipes each stream-json line** to a small self-report loop → `POST {apiUrl}/api/track/live`
   (the existing live endpoint) with `{ companyId, token, buildSessionId, event }`, so the
   browser sees steps/tokens live;
@@ -121,7 +122,7 @@ returns a bash script the sandbox runs. Testable without a network. It:
 - on exit (success **or** error — a bash `trap`), gathers the built web files under
   `~/codepet-demo` (excluding `.git`, capped at 5MB total) and `POST`s
   `/api/build/cloud-finalize` with `{ companyId, token, buildSessionId, status, tokens,
-  files: [{ path, base64 }] }`, then exits so E2B tears the sandbox down.
+files: [{ path, base64 }] }`, then exits so E2B tears the sandbox down.
 
 All ids/tokens/apiUrl are baked into the script at boot; the company Anthropic key is set
 via the sandbox **env**, never written into the script text or returned to the client.
@@ -133,8 +134,8 @@ via the sandbox **env**, never written into the script text or returned to the c
   build state (so the existing `subscribeLiveBuild` runs), and shows **no** copy-paste
   command. On `402 no_credits` → a friendly chat message linking to Billing; on `409` → a
   "a build's already running" message.
-- DURING copy in cloud mode: byte says *"Byte is building your demo in the cloud — watch
-  it happen ✨"* (no terminal instructions; `launchCommand` stays null).
+- DURING copy in cloud mode: byte says _"Byte is building your demo in the cloud — watch
+  it happen ✨"_ (no terminal instructions; `launchCommand` stays null).
 - END recap: **Open your demo page →** points at the build's `previewUrl` (from Firestore)
   when cloud, instead of `DEMO_URL`.
 - Add `previewUrl?: string` to `LiveState`/`liveBuilds` doc and surface it in the recap.
@@ -155,6 +156,7 @@ via the sandbox **env**, never written into the script text or returned to the c
 ### F. `sanitizeFinalizeBody` (`lib/build/finalize.ts`, pure — security-critical)
 
 `sanitizeFinalizeBody(body): { tokens: number; files: {path,base64}[] } | null` —
+
 - `tokens`: floored, ≥0, capped at `2_000_000_000`;
 - `files`: each `path` must be a **relative, normalized, traversal-free** web path
   (reject `..`, leading `/`, backslashes, null bytes); each `base64` a valid string;
