@@ -7,25 +7,37 @@ vi.mock('@/lib/firebase/admin', () => ({
 
 vi.mock('@/lib/firebase/companyDataAdmin', () => ({
   getCompanyGithub: vi.fn(),
+  getCompanyGithubUserToken: vi.fn(),
 }));
 
 vi.mock('@/lib/github/repos', () => ({
   listInstallationRepos: vi.fn(),
   createRepoFromTemplate: vi.fn(),
+  addRepoToInstallation: vi.fn(),
 }));
 
 import { GET, POST } from './route';
 import { verifyIdToken } from '@/lib/firebase/admin';
-import { getCompanyGithub } from '@/lib/firebase/companyDataAdmin';
-import { listInstallationRepos, createRepoFromTemplate } from '@/lib/github/repos';
+import { getCompanyGithub, getCompanyGithubUserToken } from '@/lib/firebase/companyDataAdmin';
+import {
+  listInstallationRepos,
+  createRepoFromTemplate,
+  addRepoToInstallation,
+} from '@/lib/github/repos';
 
 const mockVerifyIdToken = verifyIdToken as MockedFunction<typeof verifyIdToken>;
 const mockGetCompanyGithub = getCompanyGithub as MockedFunction<typeof getCompanyGithub>;
+const mockGetCompanyGithubUserToken = getCompanyGithubUserToken as MockedFunction<
+  typeof getCompanyGithubUserToken
+>;
 const mockListInstallationRepos = listInstallationRepos as MockedFunction<
   typeof listInstallationRepos
 >;
 const mockCreateRepoFromTemplate = createRepoFromTemplate as MockedFunction<
   typeof createRepoFromTemplate
+>;
+const mockAddRepoToInstallation = addRepoToInstallation as MockedFunction<
+  typeof addRepoToInstallation
 >;
 
 function req(opts: { auth?: string; method?: string; body?: unknown } = {}): Request {
@@ -43,8 +55,10 @@ function req(opts: { auth?: string; method?: string; body?: unknown } = {}): Req
 beforeEach(() => {
   mockVerifyIdToken.mockReset();
   mockGetCompanyGithub.mockReset();
+  mockGetCompanyGithubUserToken.mockReset();
   mockListInstallationRepos.mockReset();
   mockCreateRepoFromTemplate.mockReset();
+  mockAddRepoToInstallation.mockReset();
 
   mockVerifyIdToken.mockResolvedValue({ uid: 'co1' } as Awaited<ReturnType<typeof verifyIdToken>>);
 });
@@ -86,19 +100,57 @@ describe('POST /api/github/repos', () => {
     expect(res.status).toBe(401);
   });
 
-  it('400s on a blank name', async () => {
-    const res = await POST(req({ method: 'POST', body: { name: '  ' } }));
+  it('400s with bad_request on a name that fails sanitize', async () => {
+    const res = await POST(req({ method: 'POST', body: { name: 'a b' } }));
     expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'bad_request' });
     expect(mockCreateRepoFromTemplate).not.toHaveBeenCalled();
   });
 
-  it('501s with create_not_available (Phase 1 has no stored user token yet)', async () => {
-    const res = await POST(req({ method: 'POST', body: { name: 'my-app' } }));
-    expect(res.status).toBe(501);
-    expect(await res.json()).toEqual({
-      error: 'create_not_available',
-      message: 'Repo creation is coming soon — connect an existing repo for now.',
-    });
+  it('400s with reconnect_github when no user token is stored', async () => {
+    mockGetCompanyGithubUserToken.mockResolvedValue(null);
+    const res = await POST(req({ method: 'POST', body: { name: 'myapp' } }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'reconnect_github' });
     expect(mockCreateRepoFromTemplate).not.toHaveBeenCalled();
+  });
+
+  it('200s with { repo: { owner, name } } on success — no token, no id leaked', async () => {
+    mockGetCompanyGithubUserToken.mockResolvedValue('ghu_tok');
+    mockGetCompanyGithub.mockResolvedValue({ installationId: 'inst9', login: 'acme' });
+    mockCreateRepoFromTemplate.mockResolvedValue({ owner: 'acme', name: 'myapp', id: 12345 });
+    mockAddRepoToInstallation.mockResolvedValue();
+
+    const res = await POST(req({ method: 'POST', body: { name: 'myapp' } }));
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toEqual({ repo: { owner: 'acme', name: 'myapp' } });
+    expect(JSON.stringify(json)).not.toContain('ghu_tok');
+    expect(JSON.stringify(json)).not.toContain('12345');
+
+    expect(mockCreateRepoFromTemplate).toHaveBeenCalledWith('ghu_tok', 'myapp');
+    expect(mockAddRepoToInstallation).toHaveBeenCalledWith('ghu_tok', 'inst9', 12345);
+  });
+
+  it('422s with create_failed when createRepoFromTemplate throws', async () => {
+    mockGetCompanyGithubUserToken.mockResolvedValue('ghu_tok');
+    mockGetCompanyGithub.mockResolvedValue({ installationId: 'inst9', login: 'acme' });
+    mockCreateRepoFromTemplate.mockRejectedValue(new Error('nope'));
+
+    const res = await POST(req({ method: 'POST', body: { name: 'myapp' } }));
+    expect(res.status).toBe(422);
+    expect(await res.json()).toEqual({ error: 'create_failed' });
+    expect(mockAddRepoToInstallation).not.toHaveBeenCalled();
+  });
+
+  it('502s with coverage_failed when addRepoToInstallation throws', async () => {
+    mockGetCompanyGithubUserToken.mockResolvedValue('ghu_tok');
+    mockGetCompanyGithub.mockResolvedValue({ installationId: 'inst9', login: 'acme' });
+    mockCreateRepoFromTemplate.mockResolvedValue({ owner: 'acme', name: 'myapp', id: 12345 });
+    mockAddRepoToInstallation.mockRejectedValue(new Error('nope'));
+
+    const res = await POST(req({ method: 'POST', body: { name: 'myapp' } }));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: 'coverage_failed' });
   });
 });
