@@ -171,6 +171,11 @@ const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] => stripBuildTrig
 // (copy-paste command) behavior untouched.
 const cloudDemoBuild = process.env.NEXT_PUBLIC_CLOUD_DEMO_BUILD === '1';
 
+// GitHub-backed cloud build — like cloudDemoBuild but boots into a real, founder-owned
+// repo instead of an ephemeral demo dir. Gated behind its own public flag so demo-only
+// deployments (and local/self-hosted installs) keep their existing behavior untouched.
+const cloudRepoBuild = process.env.NEXT_PUBLIC_CLOUD_REPO_BUILD === '1';
+
 // Attaches the signed-in user's Firebase ID token, same pattern as lib/ai/buildPlan.ts's
 // authHeader — the server derives companyId from this token, never from the body.
 async function cloudBuildAuthHeader(): Promise<Record<string, string>> {
@@ -383,6 +388,13 @@ interface AppState {
   buildStep: BuildStep;
   buildProject: string;
   setBuildProject: (v: string) => void;
+  /** The GitHub repo picked to build into (GitHub-backed cloud build), or null when
+   *  none is selected yet. */
+  buildRepo: { owner: string; name: string } | null;
+  setBuildRepo: (v: { owner: string; name: string } | null) => void;
+  /** Start the GitHub App install flow: fetches a signed install URL from
+   *  /api/github/connect and navigates the browser there. */
+  connectGithub: () => void;
   demoLetsBuild: boolean;
   setDemoLetsBuild: (v: boolean) => void;
   buildBrief: string;
@@ -568,6 +580,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
   const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
+  const [buildRepo, setBuildRepo] = useState<{ owner: string; name: string } | null>(null);
   const [demoLetsBuild, setDemoLetsBuildState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem('codepet:demoLetsBuild') !== '0'; // default ON
@@ -2689,6 +2702,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildPlanState((p) => (p ? { ...p, steps } : p));
   }, []);
 
+  // Kicks off the GitHub App install: fetches a signed install URL from
+  // /api/github/connect (the server mints it from the verified Firebase token — never
+  // trust a companyId supplied by the client) and navigates the browser there. GitHub
+  // redirects back to /api/github/callback once the founder finishes installing.
+  const connectGithub = useCallback(async () => {
+    const res = await fetch('/api/github/connect', {
+      headers: { ...(await cloudBuildAuthHeader()) },
+    });
+    if (res.ok) {
+      const { url } = (await res.json()) as { url: string };
+      window.location.href = url;
+    }
+  }, []);
+
   const armBuild = useCallback(() => {
     // A project is required — never fall back to '.' (the app server's own cwd),
     // which would let Byte build inside whatever directory the server runs from.
@@ -2796,6 +2823,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setBuildSessionId(id);
             setBuildLive(null);
             setBuildStep('during');
+          } else if (cloudRepoBuild) {
+            // GitHub-backed cloud build: boots into the founder's OWN connected repo
+            // (via /api/build/repo-start) instead of showing a copy-paste terminal
+            // command — no local toolkit required. The server derives companyId from
+            // the verified Firebase token; NEVER send companyId in the body (same IDOR
+            // guard as cloudDemoBuild's /api/build/cloud-start call above).
+            if (!buildRepo) {
+              stopWithMessage('Pick a GitHub repo (or connect GitHub) to build in the cloud.');
+              return;
+            }
+            const res = await fetch('/api/build/repo-start', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+              body: JSON.stringify({ repo: buildRepo, plan: buildPlan, brief: buildBrief }),
+            });
+            if (res.status === 402) {
+              stopWithMessage("You're out of build credits — top up in Billing.");
+              return;
+            }
+            if (res.status === 403) {
+              stopWithMessage(
+                "That repo isn't connected to Codepet — pick one you've granted access to.",
+              );
+              return;
+            }
+            if (res.status === 404) {
+              stopWithMessage('Connect GitHub first to build in the cloud.');
+              return;
+            }
+            if (res.status === 409) {
+              stopWithMessage("A build's already running — let's finish that one first.");
+              return;
+            }
+            if (!res.ok) {
+              stopWithMessage("Byte couldn't start the cloud build just now — try again.");
+              return;
+            }
+            const { buildSessionId: repoSessionId } = (await res.json()) as {
+              buildSessionId: string;
+            };
+            setBuildLocal(false);
+            setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+            setBuildSessionId(repoSessionId);
+            setBuildLive(null);
+            setBuildStep('during');
           } else {
             setBuildLocal(false);
             const token = await ensureIngestToken(companyId);
@@ -2841,7 +2913,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setBuildArming(false);
       }
     })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, demoLetsBuild, persistMsg]);
+  }, [
+    buildPlan,
+    companyId,
+    buildArming,
+    buildProject,
+    buildBrief,
+    demoLetsBuild,
+    buildRepo,
+    persistMsg,
+  ]);
 
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
@@ -2982,6 +3063,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildStep,
       buildProject,
       setBuildProject,
+      buildRepo,
+      setBuildRepo,
+      connectGithub,
       demoLetsBuild,
       setDemoLetsBuild,
       buildBrief,
@@ -3100,6 +3184,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildStep,
       buildProject,
       setBuildProject,
+      buildRepo,
+      setBuildRepo,
+      connectGithub,
       demoLetsBuild,
       setDemoLetsBuild,
       buildBrief,
