@@ -49,3 +49,25 @@ export async function installationToken(
   const data = (await resp.json()) as { token: string };
   return data.token;
 }
+
+/** Exchange a GitHub App user-to-server OAuth `code` for a (non-expiring) user access
+ *  token. Returns null on any failure — the caller treats a missing token as "not able
+ *  to create repos yet" rather than a hard error. Never logs the token. */
+export async function exchangeUserCode(code: string): Promise<string | null> {
+  try {
+    const resp = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: process.env.GITHUB_APP_CLIENT_ID,
+        client_secret: process.env.GITHUB_APP_CLIENT_SECRET,
+        code,
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as { access_token?: string };
+    return data.access_token ?? null;
+  } catch {
+    return null;
+  }
+}

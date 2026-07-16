@@ -54,7 +54,10 @@ export async function listInstallationRepos(installationId: string): Promise<Rep
  *
  * SECURITY: never log `userToken`.
  */
-export async function createRepoFromTemplate(userToken: string, name: string): Promise<RepoRef> {
+export async function createRepoFromTemplate(
+  userToken: string,
+  name: string,
+): Promise<{ owner: string; name: string; id: number }> {
   const resp = await fetch(`https://api.github.com/repos/${CODEPET_TEMPLATE}/generate`, {
     method: 'POST',
     headers: {
@@ -68,6 +71,28 @@ export async function createRepoFromTemplate(userToken: string, name: string): P
   if (!resp.ok) {
     throw new Error(`GitHub create-repo-from-template request failed: ${resp.status}`);
   }
-  const data = (await resp.json()) as { owner: { login: string }; name: string };
-  return { owner: data.owner.login, name: data.name };
+  const data = (await resp.json()) as { owner: { login: string }; name: string; id: number };
+  return { owner: data.owner.login, name: data.name, id: data.id };
+}
+
+/** Add a just-created repo to the company's installation so an installation token can reach
+ *  it (needed when the App is installed on "select" repos). Uses the USER token (adding a
+ *  repo to an installation is a user action). Throws with status only on failure. */
+export async function addRepoToInstallation(
+  userToken: string,
+  installationId: string,
+  repoId: number,
+): Promise<void> {
+  const resp = await fetch(
+    `https://api.github.com/user/installations/${installationId}/repositories/${repoId}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${userToken}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    },
+  );
+  if (!resp.ok) throw new Error(`GitHub add-repo-to-installation failed: ${resp.status}`);
 }
