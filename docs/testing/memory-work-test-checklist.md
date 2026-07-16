@@ -98,6 +98,27 @@ conversation, so earlier context survives.
 
 ---
 
+## 5. Locked-in decisions survive deleting the chat
+
+**What this proves:** the flip side of 4b. A durable **decision** you lock in during a chat is
+promoted to **project memory** (the company's decisions), which lives independently of the
+conversation — so deleting the chat does **not** lose it. (Only general conversation context,
+per 4b, goes with the thread.)
+
+**Steps:**
+
+1. Start a new chat and tell byte a clear decision, e.g.
+   **"Lock this in: our pricing is $29/month flat, no free tier."**
+2. Watch for a small **"Noted"** chip under byte's reply — that's the fact being captured.
+3. **Delete that entire chat thread**, then **refresh the page**.
+4. Start a **brand-new chat** and ask: **"What's our pricing?"**
+
+- [ ] **Pass:** byte answers **"$29/month flat, no free tier"** even though the chat where you
+      said it is gone. (You can also open the decisions/memory panel and see the entry still
+      listed.)
+
+---
+
 ## Status reference
 
 | #       | Item                                       | PR   | State             |
@@ -107,6 +128,7 @@ conversation, so earlier context survives.
 | 3       | Roadmap/plans respect your decisions       | #143 | merged to develop |
 | 4       | Byte remembers earlier in long chats       | #145 | merged to develop |
 | 4a / 4b | Reload + delete-thread hardening           | #147 | merged to develop |
+| 5       | Locked-in decisions survive chat deletion  | #145 | merged to develop |
 
 > Reminder: everything is on **`develop`**. Promote `develop → main` to put it in front of
 > real users on prod.
