@@ -5,7 +5,8 @@
 // otherwise unauthenticated, so we never let it (or any other query param) name the
 // company: a forged/expired `state` must 401 with nothing written to Firestore.
 import { verifyState } from '@/lib/github/state';
-import { setCompanyGithub } from '@/lib/firebase/companyDataAdmin';
+import { setCompanyGithub, setCompanyGithubUserToken } from '@/lib/firebase/companyDataAdmin';
+import { exchangeUserCode } from '@/lib/github/appAuth';
 
 export const runtime = 'nodejs';
 
@@ -24,6 +25,14 @@ export async function GET(req: Request): Promise<Response> {
   }
 
   await setCompanyGithub(st.companyId, { installationId, login: '' });
+
+  // Best-effort: a failed/absent code exchange must never block the install binding
+  // or the redirect — repo creation just falls back to "not connected yet".
+  const code = searchParams.get('code');
+  if (code) {
+    const userToken = await exchangeUserCode(code);
+    if (userToken) await setCompanyGithubUserToken(st.companyId, userToken);
+  }
 
   return Response.redirect(new URL('/', req.url), 302);
 }
