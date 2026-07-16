@@ -81,6 +81,7 @@ import {
   appendBrief,
   stepForLive,
   INTAKE_OPENING,
+  FORK_PROMPT,
   decideIntakeStep,
   stripBuildTriggers,
   type BuildStep,
@@ -132,6 +133,8 @@ export interface ChatMessage {
   buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
   buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
+  /** The New-vs-Existing fork prompt: the UI renders two buttons for a `fork` message. */
+  fork?: boolean;
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
   /** A first-run enrichment question (goal / traction / problem). While `answered` is
@@ -428,6 +431,12 @@ interface AppState {
    *  hook→Firestore feed for them); the live view reports each reading here. */
   applyLocalLive: (s: LiveState) => void;
   startBuildIntake: () => void;
+  /** Which side of the New-vs-Existing fork the founder picked (repo-cloud only), or null. */
+  buildTarget: 'new' | 'existing' | null;
+  /** Answer the New-vs-Existing fork: records the choice, drops the fork buttons, opens the brainstorm. */
+  chooseBuildTarget: (t: 'new' | 'existing') => void;
+  /** Create a new GitHub repo from the starter template, then arm the build into it. */
+  createProject: (name: string) => Promise<void>;
   /** Leave intake without building — the composer goes back to normal chat. */
   cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
@@ -607,6 +616,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // Which side of the New-vs-Existing fork the founder picked this intake (repo-cloud only).
+  const [buildTarget, setBuildTarget] = useState<'new' | 'existing' | null>(null);
   // The running brainstorm transcript (Byte questions + founder answers) that
   // /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
   // interrupted intake just falls back to typing more.
@@ -2566,6 +2577,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildBrief('');
     setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
     setBuildPlanState(null);
+    setBuildTarget(null);
+    // Repo-cloud (non-demo) builds ask New-vs-Existing first; the brainstorm opener is
+    // deferred to chooseBuildTarget. Capability/remote isn't known synchronously here, so
+    // the MVP gate is cloudRepoBuild && !demoLetsBuild — the arm step handles remote.
+    if (cloudRepoBuild && !demoLetsBuild) {
+      const fork: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: FORK_PROMPT,
+        ts: Date.now(),
+        fork: true,
+      };
+      setChatMessages((prev) => [...stripBuildButtons(prev), fork]);
+      persistMsg({ id: fork.id, role: 'byte', text: fork.text, ts: fork.ts });
+      track('build.intake.start', {});
+      return;
+    }
     const opening: ChatMessage = {
       id: newId(),
       role: 'byte',
@@ -2577,7 +2605,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatMessages((prev) => [...stripBuildButtons(prev), opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
-  }, [companyId, persistMsg, buildIntakeActive]);
+  }, [companyId, persistMsg, buildIntakeActive, demoLetsBuild]);
+
+  const chooseBuildTarget = useCallback(
+    (t: 'new' | 'existing') => {
+      setBuildTarget(t);
+      // Drop the fork buttons: strip build triggers AND clear the `fork` flag so the
+      // choice can't be re-tapped, then post the brainstorm opener (mirrors startBuildIntake).
+      setChatMessages((prev) =>
+        stripBuildButtons(prev).map((m) => (m.fork ? { ...m, fork: false } : m)),
+      );
+      const opening: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: INTAKE_OPENING,
+        ts: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, opening]);
+      persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
+      track('build.fork.choose', { target: t });
+    },
+    [persistMsg],
+  );
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
@@ -2950,6 +2999,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     persistMsg,
   ]);
 
+  // Create a brand-new GitHub repo from the Codepet starter template, then arm the build
+  // into it. On failure, Byte says so in-chat (400 ⇒ reconnect GitHub; else a soft retry).
+  const createProject = useCallback(
+    async (name: string) => {
+      const res = await fetch('/api/github/repos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const { repo } = (await res.json()) as { repo: { owner: string; name: string } };
+        setBuildRepo(repo);
+        armBuild();
+        return;
+      }
+      const text =
+        res.status === 400
+          ? "Couldn't create the project — reconnect GitHub and try again."
+          : "Byte couldn't create the project just now — try again in a moment.";
+      const m: ChatMessage = { id: newId(), role: 'byte', text, ts: Date.now() };
+      setChatMessages((prev) => [...prev, m]);
+      persistMsg({ id: m.id, role: 'byte', text: m.text, ts: m.ts });
+    },
+    [armBuild, persistMsg],
+  );
+
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
   const endBuild = useCallback(() => setBuildStep('end'), []);
@@ -3108,6 +3183,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      buildTarget,
+      chooseBuildTarget,
+      createProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
@@ -3230,6 +3308,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      buildTarget,
+      chooseBuildTarget,
+      createProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
