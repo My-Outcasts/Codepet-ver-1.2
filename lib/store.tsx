@@ -3026,10 +3026,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         armBuild(repo);
         return;
       }
+      // Distinguish the two 400s: a bad name is the founder's to fix, a missing user
+      // token means the GitHub connection needs re-doing — conflating them tells someone
+      // who typed "my app" to go reconnect GitHub, which is just wrong.
+      const err = (await res.json().catch(() => null))?.error as string | undefined;
       const text =
-        res.status === 400
+        err === 'reconnect_github'
           ? "Couldn't create the project — reconnect GitHub and try again."
-          : "Byte couldn't create the project just now — try again in a moment.";
+          : err === 'bad_request'
+            ? "That project name won't work — use letters, numbers, dots, dashes or underscores (no spaces)."
+            : "Byte couldn't create the project just now — try again in a moment.";
       const m: ChatMessage = { id: newId(), role: 'byte', text, ts: Date.now() };
       setChatMessages((prev) => [...prev, m]);
       persistMsg({ id: m.id, role: 'byte', text: m.text, ts: m.ts });
