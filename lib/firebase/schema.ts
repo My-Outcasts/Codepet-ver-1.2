@@ -97,7 +97,7 @@ export interface CompanyDoc {
   ingestToken?: string;
   /** GitHub App installation connected to this company, for cloud builds. Absent ⇒
    *  no GitHub connection yet. */
-  github?: { installationId: string; login: string; connectedAt: Millis };
+  github?: { installationId: string; login: string; connectedAt: Millis; userToken?: string };
   /** Local projects reported by the scan CLI (POST /api/projects) — names + paths
    *  only, never file contents. Feeds the Build Coach's "Which project?" picker. */
   projects?: ScannedProject[];

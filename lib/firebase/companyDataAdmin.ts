@@ -66,3 +66,18 @@ export async function getCompanyGithub(
   if (typeof github?.installationId !== 'string' || !github.installationId) return null;
   return { installationId: github.installationId, login: github.login ?? '' };
 }
+
+/** Store the GitHub App user access token for repo creation (server-only secret). */
+export async function setCompanyGithubUserToken(
+  companyId: string,
+  userToken: string,
+): Promise<void> {
+  await adminDb().doc(paths.company(companyId)).set({ github: { userToken } }, { merge: true });
+}
+
+/** Read the stored GitHub user token, or null. Server-only. */
+export async function getCompanyGithubUserToken(companyId: string): Promise<string | null> {
+  const snap = await adminDb().doc(paths.company(companyId)).get();
+  const t = snap.data()?.github?.userToken;
+  return typeof t === 'string' && t ? t : null;
+}
