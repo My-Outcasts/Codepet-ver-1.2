@@ -395,6 +395,10 @@ interface AppState {
   /** Start the GitHub App install flow: fetches a signed install URL from
    *  /api/github/connect and navigates the browser there. */
   connectGithub: () => void;
+  /** Fetches the connected GitHub App installation's repos (GET /api/github/repos).
+   *  `{ notConnected: true }` means GitHub isn't connected yet — the caller should offer
+   *  connectGithub() instead of a repo picker. */
+  loadRepos: () => Promise<{ repos: { owner: string; name: string }[] } | { notConnected: true }>;
   demoLetsBuild: boolean;
   setDemoLetsBuild: (v: boolean) => void;
   buildBrief: string;
@@ -2716,6 +2720,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Lists the connected GitHub App installation's repos for the "Build into: [repo]"
+  // picker. A 404 (or any non-OK response) reads as "not connected" so the UI falls back
+  // to the Connect GitHub button rather than showing a broken/empty picker.
+  const loadRepos = useCallback(async (): Promise<
+    { repos: { owner: string; name: string }[] } | { notConnected: true }
+  > => {
+    const res = await fetch('/api/github/repos', {
+      headers: { ...(await cloudBuildAuthHeader()) },
+    });
+    if (!res.ok) return { notConnected: true };
+    const { repos } = (await res.json()) as { repos: { owner: string; name: string }[] };
+    return { repos };
+  }, []);
+
   const armBuild = useCallback(() => {
     // A project is required — never fall back to '.' (the app server's own cwd),
     // which would let Byte build inside whatever directory the server runs from.
@@ -3074,6 +3092,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildRepo,
       setBuildRepo,
       connectGithub,
+      loadRepos,
       demoLetsBuild,
       setDemoLetsBuild,
       buildBrief,
@@ -3195,6 +3214,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildRepo,
       setBuildRepo,
       connectGithub,
+      loadRepos,
       demoLetsBuild,
       setDemoLetsBuild,
       buildBrief,

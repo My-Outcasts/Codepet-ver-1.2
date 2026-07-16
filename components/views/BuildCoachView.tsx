@@ -244,6 +244,8 @@ function EndStep({
   demo,
   buildTokens,
   today,
+  prUrl,
+  repo,
 }: {
   companyId: string | null;
   sessionId: string | null;
@@ -257,6 +259,10 @@ function EndStep({
   demo: boolean;
   buildTokens: number | null;
   today: number | null;
+  /** GitHub-backed cloud build: the PR opened for this build's changes, once ready. */
+  prUrl?: string;
+  /** GitHub-backed cloud build: the repo this build ran in. */
+  repo?: { owner: string; name: string };
 }) {
   const [ev, setEv] = useState<TrackEvent | null>(null);
   const [fetched, setFetched] = useState(false);
@@ -364,6 +370,31 @@ function EndStep({
               </div>
             </div>
           </div>
+          {prUrl && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
+                margin: '8px 0',
+              }}
+            >
+              <a
+                href={prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ fontWeight: 700, color: '#7DE3FF', textDecoration: 'none' }}
+              >
+                View the pull request →
+              </a>
+              {repo && (
+                <span style={{ fontSize: 11, opacity: 0.6 }}>
+                  built into {repo.owner}/{repo.name}
+                </span>
+              )}
+            </div>
+          )}
           {(buildTokens || today != null) && (
             <div className="bc-tokens" style={{ fontSize: 12, color: 'var(--t-4)', marginTop: 6 }}>
               🔢{' '}
@@ -602,6 +633,8 @@ export function BuildCoachView() {
             demo={demoLetsBuild}
             buildTokens={buildLive?.tokens ?? buildLive?.recap?.tokens ?? null}
             today={today}
+            prUrl={buildLive?.prUrl}
+            repo={buildLive?.repo}
           />
         )}
 

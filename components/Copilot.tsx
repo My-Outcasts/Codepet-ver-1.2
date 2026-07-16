@@ -13,6 +13,11 @@ import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
 import { sortThreadsByRecent, relativeTime } from '@/lib/chat/threads';
 
+// GitHub-backed cloud build (Task 12/13): when on, the start-building block offers a
+// repo picker instead of a local project picker. Mirrors the same public flag read in
+// lib/store.tsx's armBuild — gated so demo-only/local/self-hosted installs are untouched.
+const cloudRepoBuild = process.env.NEXT_PUBLIC_CLOUD_REPO_BUILD === '1';
+
 // Quick-start prompts shown only before the first message — they send to byte.
 const CHIPS = [
   'What should I focus on first?',
@@ -494,6 +499,83 @@ function ByokNudgeCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// GitHub-backed cloud build's repo picker: fetches the connected GitHub App
+// installation's repos on mount and renders either a "Connect GitHub" button (not
+// connected yet) or a "Build into: owner/name" dropdown, defaulting to the first repo
+// once loaded so armBuild always has a target. Replaces the demo notice / local project
+// picker for a repo-cloud build (see the start-building block below).
+function RepoPicker() {
+  const { buildRepo, setBuildRepo, connectGithub, loadRepos } = useApp();
+  const [repos, setRepos] = useState<{ owner: string; name: string }[] | null>(null);
+  const [notConnected, setNotConnected] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadRepos().then((res) => {
+      if (cancelled) return;
+      if ('notConnected' in res) {
+        setNotConnected(true);
+        return;
+      }
+      setRepos(res.repos);
+      // Default to the first repo so the arm button has a target without forcing a
+      // choice — the founder can still switch via the dropdown before arming.
+      if (!buildRepo && res.repos.length > 0) setBuildRepo(res.repos[0]);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only fetch — buildRepo is read for its value at fetch time (no interaction
+    // is possible before the dropdown renders), not tracked as a re-fetch trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (notConnected) {
+    return (
+      <div className="cop-proj">
+        <span>Connect GitHub to build into your own repo</span>
+        <button className="bub-act" onClick={connectGithub}>
+          Connect GitHub
+        </button>
+      </div>
+    );
+  }
+
+  if (!repos) {
+    return (
+      <div className="cop-proj">
+        <span>Loading your repos…</span>
+      </div>
+    );
+  }
+
+  return (
+    <label className="cop-proj">
+      <span>Build into:</span>
+      {repos.length > 0 ? (
+        <select
+          value={buildRepo ? `${buildRepo.owner}/${buildRepo.name}` : ''}
+          onChange={(e) => {
+            const found = repos.find((r) => `${r.owner}/${r.name}` === e.target.value);
+            if (found) setBuildRepo(found);
+          }}
+        >
+          <option value="" disabled>
+            Choose a repo…
+          </option>
+          {repos.map((r) => (
+            <option key={`${r.owner}/${r.name}`} value={`${r.owner}/${r.name}`}>
+              {r.owner}/{r.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span>No repos found — grant Codepet access to a repo on GitHub first.</span>
+      )}
+    </label>
+  );
+}
+
 function ThreadList() {
   const {
     threads,
@@ -584,6 +666,7 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
     projects,
     buildProject,
     setBuildProject,
+    buildRepo,
     demoLetsBuild,
     buildPlan,
     setBuildPlanSteps,
@@ -808,87 +891,107 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                           </ol>
                         )}
                       </div>
-                      {m.buildAction?.kind === 'start-building' && (
-                        <>
-                          {demoLetsBuild ? (
-                            // Demo mode targets a throwaway ~/codepet-demo, so no project pick —
-                            // showing one would confuse internal testers.
-                            <div className="cop-proj">
-                              <span>
-                                Demo — builds a throwaway page in <code>~/codepet-demo</code>
-                              </span>
-                            </div>
-                          ) : (
-                            <label className="cop-proj">
-                              <span>Which project?</span>
-                              {projects.length > 0 ? (
-                                <select
-                                  value={buildProject}
-                                  onChange={(e) => setBuildProject(e.target.value)}
-                                >
-                                  {/* A project is required — building "nowhere" would land
-                                    in the app server's own folder. */}
-                                  <option value="" disabled>
-                                    Choose a project…
-                                  </option>
-                                  {projects.map((name) => (
-                                    <option key={name} value={name}>
-                                      {name}
-                                    </option>
-                                  ))}
-                                </select>
+                      {m.buildAction?.kind === 'start-building' &&
+                        (() => {
+                          // A repo-cloud build boots into the founder's own connected GitHub
+                          // repo instead of a demo dir or a local project — see armBuild's
+                          // cloudRepoBuild branch in lib/store.tsx.
+                          const isRepoCloudBuild = cloudRepoBuild && !demoLetsBuild;
+                          const needsProject = !demoLetsBuild && !isRepoCloudBuild;
+                          const needsRepo = isRepoCloudBuild && !buildRepo;
+                          return (
+                            <>
+                              {demoLetsBuild ? (
+                                // Demo mode targets a throwaway ~/codepet-demo, so no project
+                                // pick — showing one would confuse internal testers.
+                                <div className="cop-proj">
+                                  <span>
+                                    Demo — builds a throwaway page in <code>~/codepet-demo</code>
+                                  </span>
+                                </div>
+                              ) : isRepoCloudBuild ? (
+                                <RepoPicker />
                               ) : (
-                                <input
-                                  value={buildProject}
-                                  onChange={(e) => setBuildProject(e.target.value)}
-                                  placeholder="Type a project folder path (or run the project scan)…"
-                                />
+                                <label className="cop-proj">
+                                  <span>Which project?</span>
+                                  {projects.length > 0 ? (
+                                    <select
+                                      value={buildProject}
+                                      onChange={(e) => setBuildProject(e.target.value)}
+                                    >
+                                      {/* A project is required — building "nowhere" would land
+                                        in the app server's own folder. */}
+                                      <option value="" disabled>
+                                        Choose a project…
+                                      </option>
+                                      {projects.map((name) => (
+                                        <option key={name} value={name}>
+                                          {name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      value={buildProject}
+                                      onChange={(e) => setBuildProject(e.target.value)}
+                                      placeholder="Type a project folder path (or run the project scan)…"
+                                    />
+                                  )}
+                                </label>
                               )}
-                            </label>
-                          )}
-                          <div className="cop-auto">
-                            <span>How hands-on?</span>
-                            <div className="cop-auto-opts">
-                              {(
-                                [
-                                  ['suggest', 'Ask me', 'Approve each risky step'],
-                                  ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
-                                  ['autopilot', 'Autopilot', 'Run everything without asking'],
-                                ] as const
-                              ).map(([mode, label, hint]) => (
-                                <button
-                                  key={mode}
-                                  className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                                  onClick={() => setBuildAutonomy(mode)}
-                                  title={hint}
-                                >
-                                  {label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <button
-                            className="bub-act"
-                            onClick={armBuild}
-                            disabled={
-                              buildArming ||
-                              steps.every((s) => !s.trim()) ||
-                              (!demoLetsBuild && !buildProject.trim())
-                            }
-                            title={
-                              !demoLetsBuild && !buildProject.trim()
-                                ? 'Pick a project first'
-                                : undefined
-                            }
-                          >
-                            {buildArming
-                              ? 'Opening your session…'
-                              : !demoLetsBuild && !buildProject.trim()
-                                ? 'Pick a project to start'
-                                : m.buildAction.label}
-                          </button>
-                        </>
-                      )}
+                              <div className="cop-auto">
+                                <span>How hands-on?</span>
+                                <div className="cop-auto-opts">
+                                  {(
+                                    [
+                                      ['suggest', 'Ask me', 'Approve each risky step'],
+                                      [
+                                        'copilot',
+                                        'Co-pilot',
+                                        'Auto-approve safe work, ask on risky',
+                                      ],
+                                      ['autopilot', 'Autopilot', 'Run everything without asking'],
+                                    ] as const
+                                  ).map(([mode, label, hint]) => (
+                                    <button
+                                      key={mode}
+                                      className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+                                      onClick={() => setBuildAutonomy(mode)}
+                                      title={hint}
+                                    >
+                                      {label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <button
+                                className="bub-act"
+                                onClick={armBuild}
+                                disabled={
+                                  buildArming ||
+                                  steps.every((s) => !s.trim()) ||
+                                  (needsProject && !buildProject.trim()) ||
+                                  needsRepo
+                                }
+                                title={
+                                  needsProject && !buildProject.trim()
+                                    ? 'Pick a project first'
+                                    : needsRepo
+                                      ? 'Pick a repo first'
+                                      : undefined
+                                }
+                              >
+                                {buildArming
+                                  ? 'Opening your session…'
+                                  : needsProject && !buildProject.trim()
+                                    ? 'Pick a project to start'
+                                    : needsRepo
+                                      ? 'Pick a repo to start'
+                                      : m.buildAction.label}
+                              </button>
+                            </>
+                          );
+                        })()}
                     </div>
                   );
                 }
