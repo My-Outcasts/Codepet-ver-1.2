@@ -60,6 +60,9 @@ export async function getCompanyGithub(
   const ref = adminDb().doc(paths.company(companyId));
   const snap = await ref.get();
   const github = snap.data()?.github;
-  if (!github?.installationId || !github?.login) return null;
-  return { installationId: github.installationId, login: github.login };
+  // "Connected" is defined by the installationId alone — `login` is cosmetic and may be
+  // empty right after the callback (enriched later). Requiring login here would make a
+  // successful connect read back as "not connected" and break the whole flow.
+  if (typeof github?.installationId !== 'string' || !github.installationId) return null;
+  return { installationId: github.installationId, login: github.login ?? '' };
 }
