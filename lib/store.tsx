@@ -441,7 +441,7 @@ interface AppState {
   cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
   generateBuildPlan: () => void;
-  armBuild: () => void;
+  armBuild: (repoOverride?: { owner: string; name: string }) => void;
   resetBuildFlow: () => void;
 }
 
@@ -2783,17 +2783,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { repos };
   }, []);
 
-  const armBuild = useCallback(() => {
+  const armBuild = useCallback((repoOverride?: { owner: string; name: string }) => {
     // A project is required — never fall back to '.' (the app server's own cwd),
     // which would let Byte build inside whatever directory the server runs from.
     // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
     // A build needs a target: a demo, a local project, OR (repo-cloud) a selected repo.
     // Without the buildRepo exception the repo-cloud branch below is unreachable.
+    // repoOverride lets createProject arm into a freshly-created repo without waiting
+    // for the setBuildRepo state update to flush (avoids a stale-closure no-op). Guard
+    // against being passed a React event (onClick={armBuild}) — only accept a real repo.
+    const effectiveRepo =
+      repoOverride && typeof repoOverride === 'object' && 'owner' in repoOverride
+        ? repoOverride
+        : buildRepo;
     if (
       !buildPlan ||
       !companyId ||
       buildArming ||
-      (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && buildRepo))
+      (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && effectiveRepo))
     )
       return;
     setBuildArming(true);
@@ -2904,14 +2911,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             // command — no local toolkit required. The server derives companyId from
             // the verified Firebase token; NEVER send companyId in the body (same IDOR
             // guard as cloudDemoBuild's /api/build/cloud-start call above).
-            if (!buildRepo) {
+            if (!effectiveRepo) {
               stopWithMessage('Pick a GitHub repo (or connect GitHub) to build in the cloud.');
               return;
             }
             const res = await fetch('/api/build/repo-start', {
               method: 'POST',
               headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
-              body: JSON.stringify({ repo: buildRepo, plan: buildPlan, brief: buildBrief }),
+              body: JSON.stringify({ repo: effectiveRepo, plan: buildPlan, brief: buildBrief }),
             });
             if (res.status === 402) {
               stopWithMessage("You're out of build credits — top up in Billing.");
@@ -3011,7 +3018,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const { repo } = (await res.json()) as { repo: { owner: string; name: string } };
         setBuildRepo(repo);
-        armBuild();
+        armBuild(repo);
         return;
       }
       const text =

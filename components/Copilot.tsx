@@ -966,7 +966,7 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                               </div>
                               <button
                                 className="bub-act"
-                                onClick={armBuild}
+                                onClick={() => armBuild()}
                                 disabled={
                                   buildArming ||
                                   steps.every((s) => !s.trim()) ||
