@@ -2783,228 +2783,233 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return { repos };
   }, []);
 
-  const armBuild = useCallback((repoOverride?: { owner: string; name: string }) => {
-    // A project is required — never fall back to '.' (the app server's own cwd),
-    // which would let Byte build inside whatever directory the server runs from.
-    // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
-    // A build needs a target: a demo, a local project, OR (repo-cloud) a selected repo.
-    // Without the buildRepo exception the repo-cloud branch below is unreachable.
-    // repoOverride lets createProject arm into a freshly-created repo without waiting
-    // for the setBuildRepo state update to flush (avoids a stale-closure no-op). Guard
-    // against being passed a React event (onClick={armBuild}) — only accept a real repo.
-    const effectiveRepo =
-      repoOverride && typeof repoOverride === 'object' && 'owner' in repoOverride
-        ? repoOverride
-        : buildRepo;
-    if (
-      !buildPlan ||
-      !companyId ||
-      buildArming ||
-      (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && effectiveRepo))
-    )
-      return;
-    setBuildArming(true);
-    buildEndedNudged.current = false;
-    setBuildResumed(false);
-    (async () => {
-      try {
-        const id = crypto.randomUUID();
-        // Non-null only in remote mode (a copy-paste command is shown); drives the honest
-        // "paste this" message vs the local "I'm watching" one.
-        let launchCommand: string | null = null;
-        // Posts a byte chat message and signals the caller to STOP arming (no state is
-        // touched — buildArming still flips off via the outer `finally`).
-        const stopWithMessage = (text: string) => {
-          const now = Date.now();
-          const msg: ChatMessage = { id: newId(), role: 'byte', text, ts: now };
-          setChatMessages((prev) => [...prev, msg]);
-          persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
-        };
-        if (demoLetsBuild) {
-          const cap = await getCapability();
-          if (cap.mode === 'local') {
-            const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
-            setBuildProjectDir(dir);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            setBuildLocal(true);
-            setBuildLaunchCommand(null);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else if (cloudDemoBuild) {
-            // Hosted demo: boot a cloud (E2B) sandbox instead of showing a copy-paste
-            // terminal command — no local toolkit required. The server derives companyId
-            // from the verified Firebase token; NEVER send companyId in the body (a prior
-            // review flagged that as a cross-tenant IDOR).
-            setBuildLocal(false);
-            setBuildProjectDir(DEMO_DIR);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            const res = await fetch('/api/build/cloud-start', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
-              body: JSON.stringify({ plan: buildPlan, brief: buildBrief }),
-            });
-            if (res.status === 402) {
-              stopWithMessage("You're out of build credits — top up in Billing to keep building.");
-              return;
-            }
-            if (res.status === 409) {
-              stopWithMessage("A build's already running — let's finish that one first.");
-              return;
-            }
-            if (!res.ok) {
-              stopWithMessage(
-                "Byte couldn't start the cloud build just now — try again in a moment.",
-              );
-              return;
-            }
-            const { buildSessionId: cloudSessionId } = (await res.json()) as {
-              buildSessionId: string;
-            };
-            setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
-            setBuildSessionId(cloudSessionId);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else {
-            setBuildLocal(false);
-            setBuildProjectDir(DEMO_DIR);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            const token = await ensureIngestToken(companyId);
-            await armBuildSession({
-              buildSessionId: id,
-              projectDir: DEMO_DIR,
-              plan: buildPlan,
-              brief: buildBrief,
-              companyId,
-              token,
-              apiUrl: window.location.origin,
-            });
-            // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
-            launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
-              apiUrl: window.location.origin,
-              companyId,
-              buildSessionId: id,
-              token,
-            });
-            setBuildLaunchCommand(launchCommand);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          }
-        } else {
-          const dirs = await loadProjectDirs(companyId);
-          const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
-          setBuildProjectDir(dir);
-          const cap = await getCapability();
-          if (cap.mode === 'local') {
-            // Snapshot the project BEFORE the session touches anything, so END can offer
-            // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
-            setBuildCheckpoint(await createCheckpoint(dir));
-            setBuildLocal(true);
-            setBuildLaunchCommand(null);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else if (cloudRepoBuild) {
-            // GitHub-backed cloud build: boots into the founder's OWN connected repo
-            // (via /api/build/repo-start) instead of showing a copy-paste terminal
-            // command — no local toolkit required. The server derives companyId from
-            // the verified Firebase token; NEVER send companyId in the body (same IDOR
-            // guard as cloudDemoBuild's /api/build/cloud-start call above).
-            if (!effectiveRepo) {
-              stopWithMessage('Pick a GitHub repo (or connect GitHub) to build in the cloud.');
-              return;
-            }
-            const res = await fetch('/api/build/repo-start', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
-              body: JSON.stringify({ repo: effectiveRepo, plan: buildPlan, brief: buildBrief }),
-            });
-            if (res.status === 402) {
-              stopWithMessage("You're out of build credits — top up in Billing.");
-              return;
-            }
-            if (res.status === 403) {
-              stopWithMessage(
-                "That repo isn't connected to Codepet — pick one you've granted access to.",
-              );
-              return;
-            }
-            if (res.status === 404) {
-              stopWithMessage('Connect GitHub first to build in the cloud.');
-              return;
-            }
-            if (res.status === 409) {
-              stopWithMessage("A build's already running — let's finish that one first.");
-              return;
-            }
-            if (!res.ok) {
-              stopWithMessage("Byte couldn't start the cloud build just now — try again.");
-              return;
-            }
-            const { buildSessionId: repoSessionId } = (await res.json()) as {
-              buildSessionId: string;
-            };
-            setBuildLocal(false);
-            setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
-            setBuildSessionId(repoSessionId);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else {
-            setBuildLocal(false);
-            const token = await ensureIngestToken(companyId);
-            // Self-report tokens too (best-effort, same as the demo path) so remote testers'
-            // real usage shows up without a toolkit install.
-            const command =
-              terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
-              tokenReportSuffix({
+  const armBuild = useCallback(
+    (repoOverride?: { owner: string; name: string }) => {
+      // A project is required — never fall back to '.' (the app server's own cwd),
+      // which would let Byte build inside whatever directory the server runs from.
+      // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
+      // A build needs a target: a demo, a local project, OR (repo-cloud) a selected repo.
+      // Without the buildRepo exception the repo-cloud branch below is unreachable.
+      // repoOverride lets createProject arm into a freshly-created repo without waiting
+      // for the setBuildRepo state update to flush (avoids a stale-closure no-op). Guard
+      // against being passed a React event (onClick={armBuild}) — only accept a real repo.
+      const effectiveRepo =
+        repoOverride && typeof repoOverride === 'object' && 'owner' in repoOverride
+          ? repoOverride
+          : buildRepo;
+      if (
+        !buildPlan ||
+        !companyId ||
+        buildArming ||
+        (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && effectiveRepo))
+      )
+        return;
+      setBuildArming(true);
+      buildEndedNudged.current = false;
+      setBuildResumed(false);
+      (async () => {
+        try {
+          const id = crypto.randomUUID();
+          // Non-null only in remote mode (a copy-paste command is shown); drives the honest
+          // "paste this" message vs the local "I'm watching" one.
+          let launchCommand: string | null = null;
+          // Posts a byte chat message and signals the caller to STOP arming (no state is
+          // touched — buildArming still flips off via the outer `finally`).
+          const stopWithMessage = (text: string) => {
+            const now = Date.now();
+            const msg: ChatMessage = { id: newId(), role: 'byte', text, ts: now };
+            setChatMessages((prev) => [...prev, msg]);
+            persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+          };
+          if (demoLetsBuild) {
+            const cap = await getCapability();
+            if (cap.mode === 'local') {
+              const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
+              setBuildProjectDir(dir);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              setBuildLocal(true);
+              setBuildLaunchCommand(null);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else if (cloudDemoBuild) {
+              // Hosted demo: boot a cloud (E2B) sandbox instead of showing a copy-paste
+              // terminal command — no local toolkit required. The server derives companyId
+              // from the verified Firebase token; NEVER send companyId in the body (a prior
+              // review flagged that as a cross-tenant IDOR).
+              setBuildLocal(false);
+              setBuildProjectDir(DEMO_DIR);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              const res = await fetch('/api/build/cloud-start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+                body: JSON.stringify({ plan: buildPlan, brief: buildBrief }),
+              });
+              if (res.status === 402) {
+                stopWithMessage(
+                  "You're out of build credits — top up in Billing to keep building.",
+                );
+                return;
+              }
+              if (res.status === 409) {
+                stopWithMessage("A build's already running — let's finish that one first.");
+                return;
+              }
+              if (!res.ok) {
+                stopWithMessage(
+                  "Byte couldn't start the cloud build just now — try again in a moment.",
+                );
+                return;
+              }
+              const { buildSessionId: cloudSessionId } = (await res.json()) as {
+                buildSessionId: string;
+              };
+              setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+              setBuildSessionId(cloudSessionId);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else {
+              setBuildLocal(false);
+              setBuildProjectDir(DEMO_DIR);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              const token = await ensureIngestToken(companyId);
+              await armBuildSession({
+                buildSessionId: id,
+                projectDir: DEMO_DIR,
+                plan: buildPlan,
+                brief: buildBrief,
+                companyId,
+                token,
+                apiUrl: window.location.origin,
+              });
+              // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
+              launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
                 apiUrl: window.location.origin,
                 companyId,
                 buildSessionId: id,
                 token,
               });
-            const res = await armBuildSession({
-              buildSessionId: id,
-              projectDir: dir,
-              plan: buildPlan,
-              brief: buildBrief,
-              companyId,
-              token,
-              apiUrl: window.location.origin,
-            });
-            launchCommand = res.ok && res.launched ? null : command;
-            setBuildLaunchCommand(launchCommand);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
+              setBuildLaunchCommand(launchCommand);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            }
+          } else {
+            const dirs = await loadProjectDirs(companyId);
+            const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
+            setBuildProjectDir(dir);
+            const cap = await getCapability();
+            if (cap.mode === 'local') {
+              // Snapshot the project BEFORE the session touches anything, so END can offer
+              // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
+              setBuildCheckpoint(await createCheckpoint(dir));
+              setBuildLocal(true);
+              setBuildLaunchCommand(null);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else if (cloudRepoBuild) {
+              // GitHub-backed cloud build: boots into the founder's OWN connected repo
+              // (via /api/build/repo-start) instead of showing a copy-paste terminal
+              // command — no local toolkit required. The server derives companyId from
+              // the verified Firebase token; NEVER send companyId in the body (same IDOR
+              // guard as cloudDemoBuild's /api/build/cloud-start call above).
+              if (!effectiveRepo) {
+                stopWithMessage('Pick a GitHub repo (or connect GitHub) to build in the cloud.');
+                return;
+              }
+              const res = await fetch('/api/build/repo-start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+                body: JSON.stringify({ repo: effectiveRepo, plan: buildPlan, brief: buildBrief }),
+              });
+              if (res.status === 402) {
+                stopWithMessage("You're out of build credits — top up in Billing.");
+                return;
+              }
+              if (res.status === 403) {
+                stopWithMessage(
+                  "That repo isn't connected to Codepet — pick one you've granted access to.",
+                );
+                return;
+              }
+              if (res.status === 404) {
+                stopWithMessage('Connect GitHub first to build in the cloud.');
+                return;
+              }
+              if (res.status === 409) {
+                stopWithMessage("A build's already running — let's finish that one first.");
+                return;
+              }
+              if (!res.ok) {
+                stopWithMessage("Byte couldn't start the cloud build just now — try again.");
+                return;
+              }
+              const { buildSessionId: repoSessionId } = (await res.json()) as {
+                buildSessionId: string;
+              };
+              setBuildLocal(false);
+              setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+              setBuildSessionId(repoSessionId);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else {
+              setBuildLocal(false);
+              const token = await ensureIngestToken(companyId);
+              // Self-report tokens too (best-effort, same as the demo path) so remote testers'
+              // real usage shows up without a toolkit install.
+              const command =
+                terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
+                tokenReportSuffix({
+                  apiUrl: window.location.origin,
+                  companyId,
+                  buildSessionId: id,
+                  token,
+                });
+              const res = await armBuildSession({
+                buildSessionId: id,
+                projectDir: dir,
+                plan: buildPlan,
+                brief: buildBrief,
+                companyId,
+                token,
+                apiUrl: window.location.origin,
+              });
+              launchCommand = res.ok && res.launched ? null : command;
+              setBuildLaunchCommand(launchCommand);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            }
           }
+          setView('build');
+          const live: ChatMessage = {
+            id: newId(),
+            role: 'byte',
+            text: launchCommand
+              ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
+              : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+            ts: Date.now(),
+          };
+          setChatMessages((prev) => [...prev, live]);
+          persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
+          track('build.arm', { demo: demoLetsBuild });
+        } finally {
+          setBuildArming(false);
         }
-        setView('build');
-        const live: ChatMessage = {
-          id: newId(),
-          role: 'byte',
-          text: launchCommand
-            ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
-            : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
-          ts: Date.now(),
-        };
-        setChatMessages((prev) => [...prev, live]);
-        persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
-        track('build.arm', { demo: demoLetsBuild });
-      } finally {
-        setBuildArming(false);
-      }
-    })();
-  }, [
-    buildPlan,
-    companyId,
-    buildArming,
-    buildProject,
-    buildBrief,
-    demoLetsBuild,
-    buildRepo,
-    persistMsg,
-  ]);
+      })();
+    },
+    [
+      buildPlan,
+      companyId,
+      buildArming,
+      buildProject,
+      buildBrief,
+      demoLetsBuild,
+      buildRepo,
+      persistMsg,
+    ],
+  );
 
   // Create a brand-new GitHub repo from the Codepet starter template, then arm the build
   // into it. On failure, Byte says so in-chat (400 ⇒ reconnect GitHub; else a soft retry).
