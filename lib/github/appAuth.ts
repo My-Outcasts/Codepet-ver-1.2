@@ -17,3 +17,35 @@ export function appJwt(nowSec: number): string {
     algorithm: 'RS256',
   });
 }
+
+/**
+ * Mint a short-lived installation access token scoped to `repositories` (repo NAMES
+ * only, e.g. ['web'] — GitHub resolves them within the installation's account). Pass
+ * `[]` to get a token scoped to every repo the installation covers.
+ *
+ * SECURITY: never log the returned token. On a non-2xx response we throw with just
+ * the status — not the response body, which may itself contain sensitive detail.
+ */
+export async function installationToken(
+  installationId: string,
+  repositories: string[],
+): Promise<string> {
+  const resp = await fetch(
+    `https://api.github.com/app/installations/${installationId}/access_tokens`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${appJwt(Math.floor(Date.now() / 1000))}`,
+        Accept: 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ repositories }),
+    },
+  );
+  if (!resp.ok) {
+    throw new Error(`GitHub installation token request failed: ${resp.status}`);
+  }
+  const data = (await resp.json()) as { token: string };
+  return data.token;
+}

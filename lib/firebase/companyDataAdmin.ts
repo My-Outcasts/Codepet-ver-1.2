@@ -43,3 +43,23 @@ export async function ensureIngestTokenAdmin(companyId: string): Promise<string>
   await ref.set({ ingestToken: token, updatedAt: Date.now() }, { merge: true });
   return token;
 }
+
+/** Persist which GitHub App installation this company connected (cloud builds). */
+export async function setCompanyGithub(
+  companyId: string,
+  gh: { installationId: string; login: string },
+): Promise<void> {
+  const ref = adminDb().doc(paths.company(companyId));
+  await ref.set({ github: { ...gh, connectedAt: Date.now() } }, { merge: true });
+}
+
+/** Read back the company's connected GitHub App installation, if any. */
+export async function getCompanyGithub(
+  companyId: string,
+): Promise<{ installationId: string; login: string } | null> {
+  const ref = adminDb().doc(paths.company(companyId));
+  const snap = await ref.get();
+  const github = snap.data()?.github;
+  if (!github?.installationId || !github?.login) return null;
+  return { installationId: github.installationId, login: github.login };
+}
