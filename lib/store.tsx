@@ -1760,6 +1760,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email: t.email,
         calendar: t.calendar,
         legal: t.legal,
+        doc: t.doc,
         dms: t.dms,
         checklist: t.checklist,
         plan: t.plan,
@@ -2447,9 +2448,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
         setChatStreaming(false);
         chatAbort.current = null;
-        // Persist byte's reply if it's a real answer or a run lead-in (not the error
-        // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
+        // Persist byte's reply: a real answer, a run lead-in, OR an honest failure line. We
+        // persist the error fallback too (byteMsgId is stable, so a later Retry overwrites it)
+        // — otherwise the founder's question, which sendChat already persisted, is left dangling
+        // with no reply after a reload. The inline result card itself stays transient.
+        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild || errored)) {
           persistMsg({ id: byteMsgId, role: 'byte', text: finalText, ts: byteTs });
         }
         // Long-thread memory: after a real exchange, fold any turns that have scrolled past
