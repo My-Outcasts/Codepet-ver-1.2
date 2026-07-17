@@ -151,6 +151,16 @@ export function effectivePhase(
 /** Build the per-node `done`/`approve` overrides from the live department tasks, matched first by
  *  the stable roadmap↔task link and then by normalized title. The single source of truth so the
  *  map, the beacon, the chat, and the after-completion nudge all agree on what's done. */
+/** Canonical title key: lowercased, non-alphanumerics collapsed to single spaces, trimmed.
+ *  The single normalizer every roadmap↔task title match shares, so the map, beacon, and chat
+ *  can't drift apart on punctuation/casing (see beaconTarget.resolveBeaconTask). */
+export function normalizeTitle(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 export function roadmapOverrides(
   defs: RoadmapTaskDef[],
   depts: {
@@ -158,11 +168,7 @@ export function roadmapOverrides(
     tasks: { t: string; done?: boolean; drafted?: boolean; roadmapNodeId?: string }[];
   }[],
 ): Partial<Record<string, RoadmapState>> {
-  const nm = (s: string) =>
-    s
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
+  const nm = normalizeTitle;
   const byNode = new Map<string, { done?: boolean; drafted?: boolean }>();
   const byKey = new Map<string, { done?: boolean; drafted?: boolean }>();
   for (const d of depts) {

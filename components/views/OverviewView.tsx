@@ -22,7 +22,8 @@ import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
 import { clusterEvents } from '@/lib/overview/featureClusters';
 import { runSecondBrainBackfill } from '@/lib/ai/recallClient';
 import { taskState } from '@/lib/helpers';
-import { nextAction, stageWatermark } from '@/lib/roadmap';
+import { stageWatermark } from '@/lib/roadmap';
+import { resolveBeaconTask } from '@/lib/overview/beaconTarget';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
 import { examplePlanBanner } from '@/lib/examplePlan';
 import StageRibbon from '@/components/views/overview/StageRibbon';
@@ -559,16 +560,15 @@ export default function OverviewView() {
   );
 
   // The beacon reads byte's single next step (the same value chat reads, so they
-  // never disagree). Resolve it to the live dept+task; until byte's pick lands (or
-  // if it fails) fall back to the authored golden path so the beacon is never blank.
+  // never disagree). Resolve it to the live dept+task via the shared roadmap↔task link
+  // (roadmapNodeId, then normalized title). If it can't resolve, the beacon stays dark —
+  // we never light a DIFFERENT task from a legacy model, so map and chat can't diverge.
   const here = useMemo(() => {
-    if (nextStep) {
-      const dept = DEPTS.find((d) => d.k === nextStep.deptK);
-      const task = dept?.tasks.find((t) => t.t === nextStep.taskTitle && !t.done);
-      if (dept && task) return { dept, task };
-    }
-    const fb = nextAction();
-    return fb ? { dept: fb.dept, task: fb.task } : null;
+    const hit = resolveBeaconTask(nextStep, DEPTS);
+    if (!hit) return null;
+    const dept = DEPTS.find((d) => d.k === hit.deptK);
+    const task = dept?.tasks[hit.index];
+    return dept && task ? { dept, task } : null;
   }, [tick, nextStep]);
 
   // The beacon: the map node for the single next action. It's brightened and
