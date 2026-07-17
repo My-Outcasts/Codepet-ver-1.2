@@ -10,6 +10,9 @@ export interface NextStep {
   deptK: string;
   taskTitle: string;
   why: string;
+  /** The roadmap node id this step came from — the stable link the Overview beacon resolves
+   *  against (see beaconTarget.resolveBeaconTask) so the map and chat name the same task. */
+  nodeId?: string;
 }
 
 export interface NextStepTask {

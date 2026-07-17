@@ -707,7 +707,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [roadmapDefs, brief.stage]);
   const computeNextStep = useCallback(() => {
     const move = computeRoadmapNext();
-    setNextStep(move ? { deptK: move.deptK, taskTitle: move.title, why: '' } : null);
+    setNextStep(
+      move ? { deptK: move.deptK, taskTitle: move.title, nodeId: move.id, why: '' } : null,
+    );
   }, [computeRoadmapNext]);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -931,7 +933,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // the same next step the beacon shows (one source of truth for "what's next").
       const move = computeRoadmapNext();
       const next: NextStep | null = move
-        ? { deptK: move.deptK, taskTitle: move.title, why: '' }
+        ? { deptK: move.deptK, taskTitle: move.title, nodeId: move.id, why: '' }
         : null;
       setNextStep(next);
       seed(next);
