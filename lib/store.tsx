@@ -678,9 +678,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
-  // never disagree. Set instantly to the authored golden path (so nothing is ever
-  // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
-  // on hydrate and after every approval. On failure the authored fallback stands.
+  // never disagree. Derived synchronously from the roadmap itself (computeRoadmapNext →
+  // selectRoadmap().move), so it's instant and never blank. Recomputed on hydrate and
+  // after every completion. Carries the roadmap node id so the beacon resolves it exactly.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
   // byte's model availability, so the hub can show ONE honest "offline" state up front instead
   // of per-message "temporarily unavailable" confusion. Set to the failure code (e.g.
@@ -902,10 +902,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // The "best first move" hand-off: byte's landing greeting with the single best first
-  // move as a one-tap INLINE action (produces the deliverable in-thread). Seeds immediately
-  // from the authored fallback, then upgrades to byte's own pick when /api/next-step
-  // resolves — the greeting message updates in place (stable id). Runs AFTER the first-run
-  // enrichment interview, or immediately when the brief already has every plan-shaping field.
+  // move as a one-tap INLINE action (produces the deliverable in-thread). The move comes
+  // straight from the roadmap (computeRoadmapNext), so it matches the beacon exactly. Runs
+  // AFTER the first-run enrichment interview, or immediately when the brief already has every
+  // plan-shaping field.
   const seedBestFirstMove = useCallback(
     (briefData: CompanyBrief) => {
       const gid = newId();
