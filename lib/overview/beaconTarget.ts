@@ -57,3 +57,26 @@ export function resolveBeaconTask(
 
   return null;
 }
+
+/**
+ * The roadmap node id to stamp onto a task when it IS the current beacon step but is being
+ * completed OFF the portal (chat run / department view). Stamping makes the roadmap↔task link
+ * exact (by node id) instead of a title heuristic, so completing the beacon step still advances
+ * the map even if the title later drifts, collides, or the roadmap regenerates.
+ *
+ * Returns null when the task isn't the live beacon target, already carries a link, or the move
+ * has no node id — i.e. only the one task the beacon currently points at ever gets stamped.
+ */
+export function beaconLinkFor(
+  move: BeaconMove | null | undefined,
+  depts: BeaconDept[],
+  deptK: string,
+  taskIndex: number,
+): string | null {
+  if (!move?.nodeId) return null;
+  const task = depts.find((d) => d.k === deptK)?.tasks[taskIndex];
+  if (!task || task.roadmapNodeId) return null;
+  const hit = resolveBeaconTask(move, depts);
+  if (!hit || hit.deptK !== deptK || hit.index !== taskIndex) return null;
+  return move.nodeId;
+}

@@ -76,6 +76,7 @@ import { loadSavedRoadmap, generateRoadmap } from './ai/generateRoadmap';
 import { ROADMAP_TEMPLATE } from './overview/roadmapTemplate';
 import { stageToPhase } from './overview/roadmapProgress';
 import { selectRoadmap } from './overview/roadmapSelector';
+import { beaconLinkFor } from './overview/beaconTarget';
 import type { RoadmapTaskDef } from './overview/roadmapModel';
 import {
   appendBrief,
@@ -1733,6 +1734,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
+      // If this is the current beacon step being completed off the portal (chat/dept view),
+      // stamp the exact roadmap node link so the map advances by node id — robust to title
+      // drift/collision — instead of relying on a title heuristic. No-op for any other task.
+      const beaconNode = beaconLinkFor(nextStep, DEPTS, d.k, d.tasks.indexOf(t));
+      if (beaconNode) t.roadmapNodeId = beaconNode;
       t.done = true;
       d.pend = Math.max(0, (d.pend || 0) - 1);
       if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
@@ -1804,6 +1810,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       guideAfterCompletion,
       library,
       maybeNudgeByok,
+      nextStep,
     ],
   );
 
@@ -1816,6 +1823,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const d = DEPTS.find((x) => x.k === deptK);
       const t = d?.tasks.find((x) => x.t === taskTitle);
       if (!d || !t || t.done) return;
+      // Same beacon-step link as approveTask: stamp the exact node id before completing so a
+      // founder-task done off the portal still advances the map by node link (see beaconLinkFor).
+      const beaconNode = beaconLinkFor(nextStep, DEPTS, d.k, d.tasks.indexOf(t));
+      if (beaconNode) t.roadmapNodeId = beaconNode;
       t.done = true;
       t.drafted = false;
       d.pend = Math.max(0, (d.pend || 0) - 1);
@@ -1830,7 +1841,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       maybeOfferAdvance(); // …and if that finished the stage, offer to move up
       guideAfterCompletion(taskTitle); // …otherwise acknowledge it + nudge the next move in chat
     },
-    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
+    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion, nextStep],
   );
 
   // The literal "add your input": save a founder task's captured OUTPUTS into company memory
