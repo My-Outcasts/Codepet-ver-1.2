@@ -160,11 +160,14 @@ export async function POST(req: Request): Promise<Response> {
   const { schema, instruction } = KINDS[kind];
   // Voice-per-department: the persona is the department's fixed pet (byte for Engineering,
   // Nova for Marketing, …), resolved from deptKey — not a global companion pick.
-  // Cache-safe split: the stable company context goes in the system (cached across the
-  // session's generations); only the per-task prompt varies call to call. The persona
-  // override is appended last so it wins over the "You are byte…" opening; it feeds
-  // BOTH generation call sites below (structured + plain text) since they share `system`.
-  const system = composeRunSystem(context) + personaOverride(companionForDept(fields.deptKey).id);
+  // Cache-safe split: the stable company context (byte system + company model) is the cached
+  // prefix; the per-department persona goes in the volatile block so consecutive runs in
+  // different departments still hit that prefix instead of fragmenting it. Feeds BOTH
+  // generation call sites below (structured + plain text) since they share `system`.
+  const system = {
+    stable: composeRunSystem(context),
+    volatile: personaOverride(companionForDept(fields.deptKey).id),
+  };
   const prompt = buildTaskPrompt({ instruction, priorWork, fields });
   const onUsage = usageSink(uid, idToken, 'runTask');
 

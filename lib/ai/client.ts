@@ -145,8 +145,21 @@ function logFailure(label: string, kind: string, status: number): void {
 // cache_read/cache_write and in onUsage. One place — see the header note.
 const CACHE: Anthropic.CacheControlEphemeral = { type: 'ephemeral' };
 
-function cachedSystem(system: string): Anthropic.TextBlockParam[] {
-  return [{ type: 'text', text: system, cache_control: CACHE }];
+/** A route's system prompt. A plain string is cached whole (one breakpoint at its end). An
+ *  object splits it: only `stable` is marked cacheable, so the breakpoint lands after it and
+ *  the per-request `volatile` half is billed normally — the way to make a route with dynamic
+ *  grounding still get a cache HIT on its stable prefix. */
+export type SystemInput = string | { stable: string; volatile?: string };
+
+export function cachedSystem(system: SystemInput): Anthropic.TextBlockParam[] {
+  if (typeof system === 'string') {
+    return [{ type: 'text', text: system, cache_control: CACHE }];
+  }
+  const blocks: Anthropic.TextBlockParam[] = [
+    { type: 'text', text: system.stable, cache_control: CACHE },
+  ];
+  if (system.volatile) blocks.push({ type: 'text', text: system.volatile });
+  return blocks;
 }
 
 /** Mark the tool set cacheable by tagging the last tool (cache_control applies to the whole
@@ -170,7 +183,7 @@ function extractText(message: Anthropic.Message): string {
 /** A non-streaming generation. `prompt` is sugar for a single user turn. */
 export interface GenerateOptions {
   client: Anthropic;
-  system: string;
+  system: SystemInput;
   /** Provide exactly one of `prompt` (single user turn) or `messages` (full history). */
   prompt?: string;
   messages?: Anthropic.MessageParam[];
@@ -245,7 +258,7 @@ export async function generateJson<T>(
 
 export interface StreamOptions {
   client: Anthropic;
-  system: string;
+  system: SystemInput;
   messages: Anthropic.MessageParam[];
   maxTokens: number;
   label: string;

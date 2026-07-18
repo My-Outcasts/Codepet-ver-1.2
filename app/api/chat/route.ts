@@ -333,7 +333,14 @@ export async function POST(req: Request): Promise<Response> {
   const threadSummaryBlock = formatThreadSummaryBlock(
     typeof body.threadSummary === 'string' ? body.threadSummary : '',
   );
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${secondBrainBlock}${threadSummaryBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${deptExpertiseBlock}${personaOverride(companionForDept(focusDeptKey).id)}`;
+  // Cache the stable prefix (byte's system + the company model) and bill the per-message
+  // grounding normally. composeProjectModel is deterministic from brief+decisions+shipped, so
+  // the stable half repeats byte-for-byte across turns that don't change a decision or ship —
+  // i.e. most turns → a real cache hit. See docs/superpowers/specs/2026-07-17-prompt-cache-effective-hits-design.md.
+  const system = {
+    stable: `${BYTE_SYSTEM}\n\nThe founder's company: ${context}`,
+    volatile: `${relevantBlock}${secondBrainBlock}${threadSummaryBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${deptExpertiseBlock}${personaOverride(companionForDept(focusDeptKey).id)}`,
+  };
 
   try {
     const mstream = streamMessage({

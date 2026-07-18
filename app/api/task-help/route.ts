@@ -139,10 +139,13 @@ export async function POST(req: Request): Promise<Response> {
     }) || CODEPET_CONTEXT;
 
   // Voice-per-department: the persona is the department's fixed pet, resolved from deptKey.
-  // Cache-safe split: the stable company context goes in the (cached) system; the persona
-  // override is appended last so it wins over the "You are byte…" opening. Only the per-task
-  // prompt below varies call to call.
-  const system = composeRunSystem(context) + personaOverride(companionForDept(fields.deptKey).id);
+  // Cache-safe split: the stable company context (byte system + company model) is the cached
+  // prefix; the per-department persona goes in the volatile block so consecutive runs in
+  // different departments still hit that prefix instead of fragmenting it.
+  const system = {
+    stable: composeRunSystem(context),
+    volatile: personaOverride(companionForDept(fields.deptKey).id),
+  };
   const prompt = buildTaskHelpPrompt(fields);
   const onUsage = usageSink(uid, idToken, 'runTask');
 
