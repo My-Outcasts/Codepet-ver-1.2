@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFailureKind, errorInfo, errorCodeOf, GenerationError, cachedSystem } from './client';
+import {
+  classifyFailureKind,
+  errorInfo,
+  errorCodeOf,
+  GenerationError,
+  cachedSystem,
+} from './client';
 
 describe('errorInfo', () => {
   it('reads status + message off any error shape (duck-typed, not instanceof)', () => {
