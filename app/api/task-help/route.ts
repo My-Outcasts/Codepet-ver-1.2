@@ -142,7 +142,12 @@ export async function POST(req: Request): Promise<Response> {
   // Cache-safe split: the stable company context goes in the (cached) system; the persona
   // override is appended last so it wins over the "You are byte…" opening. Only the per-task
   // prompt below varies call to call.
-  const system = composeRunSystem(context) + personaOverride(companionForDept(fields.deptKey).id);
+  // Persona is per-department; keep it OUT of the cached prefix so consecutive runs in
+  // different departments still hit the cached stable system (byte system + company model).
+  const system = {
+    stable: composeRunSystem(context),
+    volatile: personaOverride(companionForDept(fields.deptKey).id),
+  };
   const prompt = buildTaskHelpPrompt(fields);
   const onUsage = usageSink(uid, idToken, 'runTask');
 

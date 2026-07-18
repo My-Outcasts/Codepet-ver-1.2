@@ -164,7 +164,12 @@ export async function POST(req: Request): Promise<Response> {
   // session's generations); only the per-task prompt varies call to call. The persona
   // override is appended last so it wins over the "You are byte…" opening; it feeds
   // BOTH generation call sites below (structured + plain text) since they share `system`.
-  const system = composeRunSystem(context) + personaOverride(companionForDept(fields.deptKey).id);
+  // Persona is per-department; keep it OUT of the cached prefix so consecutive runs in
+  // different departments still hit the cached stable system (byte system + company model).
+  const system = {
+    stable: composeRunSystem(context),
+    volatile: personaOverride(companionForDept(fields.deptKey).id),
+  };
   const prompt = buildTaskPrompt({ instruction, priorWork, fields });
   const onUsage = usageSink(uid, idToken, 'runTask');
 
