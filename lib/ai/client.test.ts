@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyFailureKind, errorInfo, errorCodeOf, GenerationError } from './client';
+import { classifyFailureKind, errorInfo, errorCodeOf, GenerationError, cachedSystem } from './client';
 
 describe('errorInfo', () => {
   it('reads status + message off any error shape (duck-typed, not instanceof)', () => {
@@ -63,5 +63,34 @@ describe('errorCodeOf', () => {
   });
   it('unknown error → fallback', () => {
     expect(errorCodeOf(new Error('boom'), 'fb')).toBe('fb');
+  });
+});
+
+describe('cachedSystem', () => {
+  const CC = { type: 'ephemeral' };
+
+  it('string input → exactly one cached block (backward compat)', () => {
+    expect(cachedSystem('hello')).toEqual([{ type: 'text', text: 'hello', cache_control: CC }]);
+  });
+
+  it('{stable, volatile} → stable cached first, volatile uncached second, in order', () => {
+    const blocks = cachedSystem({ stable: 'S', volatile: 'V' });
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toEqual({ type: 'text', text: 'S', cache_control: CC });
+    expect(blocks[1]).toEqual({ type: 'text', text: 'V' });
+    expect(blocks[1].cache_control).toBeUndefined();
+  });
+
+  it('{stable} with absent or empty volatile → one cached block, no empty trailing block', () => {
+    const expected = [{ type: 'text', text: 'S', cache_control: CC }];
+    expect(cachedSystem({ stable: 'S' })).toEqual(expected);
+    expect(cachedSystem({ stable: 'S', volatile: '' })).toEqual(expected);
+  });
+
+  it('passes stable/volatile text through unmodified (byte-identical prefix preserved)', () => {
+    const stable = '  leading and trailing whitespace kept  ';
+    const blocks = cachedSystem({ stable, volatile: 'x' });
+    expect(blocks[0].text).toBe(stable);
+    expect(blocks[1].text).toBe('x');
   });
 });
