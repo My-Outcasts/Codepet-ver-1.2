@@ -2797,13 +2797,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // trust a companyId supplied by the client) and navigates the browser there. GitHub
   // redirects back to /api/github/callback once the founder finishes installing.
   const connectGithub = useCallback(async () => {
+    // Open the GitHub install in a NEW tab so the current tab keeps the build-intake state
+    // (a full-page redirect here would drop the in-progress fork/plan). Open the tab
+    // synchronously inside the click — before the await — so the popup blocker doesn't kill
+    // it; then point it at the install URL once fetched. If the popup was blocked (win is
+    // null), fall back to a same-tab redirect so connecting still works.
+    // (No 'noopener' — that makes window.open return null, and we need the handle to point
+    // the tab at the install URL after the fetch. The target is GitHub's own install page.)
+    const win = window.open('about:blank', '_blank');
     const res = await fetch('/api/github/connect', {
       headers: { ...(await cloudBuildAuthHeader()) },
     });
-    if (res.ok) {
-      const { url } = (await res.json()) as { url: string };
-      window.location.href = url;
+    if (!res.ok) {
+      if (win) win.close();
+      return;
     }
+    const { url } = (await res.json()) as { url: string };
+    if (win) win.location.href = url;
+    else window.location.href = url;
   }, []);
 
   // Lists the connected GitHub App installation's repos for the "Build into: [repo]"

@@ -508,25 +508,38 @@ function RepoPicker() {
   const { buildRepo, setBuildRepo, connectGithub, loadRepos } = useApp();
   const [repos, setRepos] = useState<{ owner: string; name: string }[] | null>(null);
   const [notConnected, setNotConnected] = useState(false);
+  // Read the *current* selection inside the (mount-time) fetch closure, so a re-scan on
+  // refocus never overwrites a repo the founder already picked.
+  const buildRepoRef = useRef(buildRepo);
+  useEffect(() => {
+    buildRepoRef.current = buildRepo;
+  }, [buildRepo]);
 
   useEffect(() => {
     let cancelled = false;
-    loadRepos().then((res) => {
-      if (cancelled) return;
-      if ('notConnected' in res) {
-        setNotConnected(true);
-        return;
-      }
-      setRepos(res.repos);
-      // Default to the first repo so the arm button has a target without forcing a
-      // choice — the founder can still switch via the dropdown before arming.
-      if (!buildRepo && res.repos.length > 0) setBuildRepo(res.repos[0]);
-    });
+    const refresh = () => {
+      loadRepos().then((res) => {
+        if (cancelled) return;
+        if ('notConnected' in res) {
+          setNotConnected(true);
+          return;
+        }
+        setNotConnected(false);
+        setRepos(res.repos);
+        // Default to the first repo so the arm button has a target without forcing a
+        // choice — the founder can still switch via the dropdown before arming.
+        if (!buildRepoRef.current && res.repos.length > 0) setBuildRepo(res.repos[0]);
+      });
+    };
+    refresh();
+    // Connect GitHub opens a NEW tab; when the founder finishes there and returns, re-scan
+    // on focus so the freshly-granted repos appear without a manual reload.
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
     return () => {
       cancelled = true;
+      window.removeEventListener('focus', onFocus);
     };
-    // Mount-only fetch — buildRepo is read for its value at fetch time (no interaction
-    // is possible before the dropdown renders), not tracked as a re-fetch trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
