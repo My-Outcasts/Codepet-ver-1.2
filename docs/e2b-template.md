@@ -7,8 +7,10 @@ This is the sandbox image `lib/build/cloudSandbox.ts` (`startCloudBuild`) boots 
 
 ## Base image
 
-- Any Linux base with **Node ≥ 20** (the runner uses top-level `for await`, `AbortController`,
-  etc. — nothing exotic, just modern Node).
+- Any Linux base with **Node ≥ 20** (the runner uses `readline` over the child's stdout, the
+  global `fetch`, and `child_process` — nothing exotic, just modern Node). The canonical
+  runner source lives in the repo at `e2b/codepet-build/` (see its README); build the template
+  from there.
 - Install the Claude Code CLI globally so `claude` is on `PATH`:
   ```sh
   npm i -g @anthropic-ai/claude-code

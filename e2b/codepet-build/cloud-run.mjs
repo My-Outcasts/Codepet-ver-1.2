@@ -108,10 +108,12 @@ export function includeDemoFile(relPath) {
   return WEB_EXT.has(ext);
 }
 
-/** A repo build charges only when a real PR was pushed — mirror /api/build/repo-finalize,
- *  which credits solely on status==='ok' && pushed===true. */
-export function repoFinalizeStatus({ pushed, prUrl }) {
-  return pushed && typeof prUrl === 'string' && prUrl ? 'ok' : 'error';
+/** A repo build charges only on a clean, real, pushed PR — mirror /api/build/repo-finalize
+ *  (credits solely on status==='ok' && pushed===true). A token-cap kill is an incomplete
+ *  build: still push the partial work as a PR, but report non-'ok' so it isn't charged
+ *  (matches the demo path, which never charges a capped build). */
+export function repoFinalizeStatus({ pushed, prUrl, capped }) {
+  return !capped && pushed && typeof prUrl === 'string' && prUrl ? 'ok' : 'error';
 }
 
 /** Demo build status: only a clean completion charges; a token-cap kill or a non-zero
@@ -168,18 +170,38 @@ async function postLive(c, event) {
 }
 
 async function postFinalize(c, payload) {
-  const res = await fetch(`${c.apiUrl}${c.finalizePath}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      companyId: c.companyId,
-      token: c.ingestToken,
-      buildSessionId: c.buildSessionId,
-      ...payload,
-    }),
-  });
-  return res.ok;
+  // Returns true only on a 2xx. A thrown fetch (network blip) → false, so the caller leaves
+  // no marker and the bash trap's --finalize-only fallback still ends the build.
+  try {
+    const res = await fetch(`${c.apiUrl}${c.finalizePath}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        companyId: c.companyId,
+        token: c.ingestToken,
+        buildSessionId: c.buildSessionId,
+        ...payload,
+      }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
+
+// Sent when a demo build produced no collectable web files (e.g. claude removed index.html):
+// cloud-finalize rejects an empty files array, so a non-empty fallback guarantees the build
+// still gets marked ended instead of hanging in "building" forever.
+const DEMO_FALLBACK_FILES = [
+  {
+    path: 'index.html',
+    base64: Buffer.from(
+      '<!doctype html><meta charset="utf-8"><title>Codepet build</title>' +
+        '<p>This build produced no previewable files.</p>',
+      'utf8',
+    ).toString('base64'),
+  },
+];
 
 /** Run `claude`, streaming stream-json: self-report live events, sum tokens, kill past the
  *  cap. Resolves { tokens, capped, exitCode, sessionId }. */
@@ -338,9 +360,10 @@ async function commitPushPR(c) {
 }
 
 async function finalizeDemo(c, { tokens, status, files }) {
-  // cloud-finalize rejects an empty file list, so always send at least the seeded index.html.
-  const payload = { status, tokens, files };
-  await postFinalize(c, payload);
+  // cloud-finalize rejects an empty file list, so fall back to a placeholder index.html — a
+  // build that produced nothing collectable must still end (not hang), just un-previewable.
+  const payload = { status, tokens, files: files.length ? files : DEMO_FALLBACK_FILES };
+  return postFinalize(c, payload);
 }
 
 async function main() {
@@ -357,17 +380,18 @@ async function main() {
       await postFinalize(c, { status: 'error', tokens: 0, pushed: false, branch: c.branch });
     } else {
       const files = await collectDemoFiles(c.demoDir);
-      if (files.length) await finalizeDemo(c, { tokens: 0, status: 'error', files });
+      await finalizeDemo(c, { tokens: 0, status: 'error', files });
     }
     return;
   }
 
   const { tokens, capped, exitCode } = await runClaude(c);
 
+  let finalized;
   if (isRepo) {
     const { pushed, prUrl } = await commitPushPR(c);
-    await postFinalize(c, {
-      status: repoFinalizeStatus({ pushed, prUrl }),
+    finalized = await postFinalize(c, {
+      status: repoFinalizeStatus({ pushed, prUrl, capped }),
       tokens,
       prUrl,
       branch: c.branch,
@@ -375,9 +399,16 @@ async function main() {
     });
   } else {
     const files = await collectDemoFiles(c.demoDir);
-    await finalizeDemo(c, { tokens, status: demoFinalizeStatus({ capped, exitCode }), files });
+    finalized = await finalizeDemo(c, {
+      tokens,
+      status: demoFinalizeStatus({ capped, exitCode }),
+      files,
+    });
   }
 
+  // Only claim "done" (suppressing the trap's fallback finalize) if the server accepted it.
+  // A failed finalize leaves no marker, so --finalize-only still ends the build.
+  if (!finalized) return;
   try {
     fs.writeFileSync(marker, '1');
   } catch {

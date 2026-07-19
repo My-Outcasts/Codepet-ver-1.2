@@ -91,10 +91,13 @@ describe('includeDemoFile', () => {
 });
 
 describe('finalize status', () => {
-  it('repo charges only on a real pushed PR', () => {
-    expect(repoFinalizeStatus({ pushed: true, prUrl: 'https://github.com/o/r/pull/1' })).toBe('ok');
-    expect(repoFinalizeStatus({ pushed: true, prUrl: undefined })).toBe('error');
-    expect(repoFinalizeStatus({ pushed: false, prUrl: 'https://x' })).toBe('error');
+  it('repo charges only on a clean, real pushed PR', () => {
+    const pr = 'https://github.com/o/r/pull/1';
+    expect(repoFinalizeStatus({ pushed: true, prUrl: pr, capped: false })).toBe('ok');
+    expect(repoFinalizeStatus({ pushed: true, prUrl: undefined, capped: false })).toBe('error');
+    expect(repoFinalizeStatus({ pushed: false, prUrl: pr, capped: false })).toBe('error');
+    // A token-capped build still pushes a PR but must NOT charge.
+    expect(repoFinalizeStatus({ pushed: true, prUrl: pr, capped: true })).toBe('error');
   });
   it('demo charges only on a clean completion', () => {
     expect(demoFinalizeStatus({ capped: false, exitCode: 0 })).toBe('ok');
