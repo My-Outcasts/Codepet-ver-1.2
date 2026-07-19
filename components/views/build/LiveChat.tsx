@@ -162,7 +162,14 @@ export function LiveChat({
       <div className="lc-head">
         {chip && <span className={`lc-chip ${chip.cls}`}>{chip.label}</span>}
         {active && (
-          <button className="lc-stop" onClick={stop} title="Stop the session">
+          <button
+            className="lc-stop"
+            onClick={() => {
+              if (window.confirm('Stop the build now? Byte will stop watching this session.'))
+                stop();
+            }}
+            title="Stop the session"
+          >
             ⏹ Stop
           </button>
         )}
@@ -222,7 +229,7 @@ export function LiveChat({
             awaiting
               ? 'Reply to Claude…'
               : idle
-                ? 'Session is not active'
+                ? 'This session has wrapped up — start a new build to keep going'
                 : 'Type your next instruction — I’ll queue it…'
           }
           disabled={idle}
