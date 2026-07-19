@@ -16,8 +16,10 @@ export function repoInInstallation(repos: RepoRef[], target: RepoRef): boolean {
   return repos.some((r) => key(r) === want);
 }
 
-/** Template repo cloud builds are generated from. */
-export const CODEPET_TEMPLATE = 'codepet-templates/starter';
+/** Template repo new-project cloud builds are generated from (a GitHub template repo — a
+ *  minimal Next.js app). Lives under the My-Outcasts org alongside the Codepet app; must stay
+ *  a public "Template repository" so createRepoFromTemplate's /generate call works. */
+export const CODEPET_TEMPLATE = 'My-Outcasts/starter';
 
 /**
  * List every repo the App installation covers. Mints an all-repos installation
