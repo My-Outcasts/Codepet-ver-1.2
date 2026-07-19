@@ -8,7 +8,7 @@
 // `locked` ("needs earlier steps"); `overrides` let richer per-task truth (from DEPTS — e.g. a
 // task awaiting approval) win when we have it.
 //
-// Pure and unit-tested; fed the live brief.stage + /api/next-step + DEPTS by OverviewSection.
+// Pure and unit-tested; fed the live brief.stage + roadmap defs + DEPTS by OverviewSection.
 import { ROADMAP_PHASES } from './roadmapTemplate';
 import type { RoadmapState, RoadmapTask, RoadmapTaskDef } from './roadmapModel';
 
@@ -35,8 +35,8 @@ export function stageToPhase(obStage: string | undefined | null): string {
 export interface ProgressInput {
   /** Phase key the founder is currently in (see stageToPhase). */
   currentPhase: string;
-  /** The single task byte says to do next (from /api/next-step), lit as `current`. Its
-   *  prerequisites are treated as done (you can't be "here" otherwise). */
+  /** The single task to do next (the roadmap's own next move, via selectRoadmap), lit as
+   *  `current`. Its prerequisites are treated as done (you can't be "here" otherwise). */
   currentTaskId?: string | null;
   /** Per-task state overrides (from real DEPTS data) — win over the derived state. Use for
    *  richer truth like a specific task awaiting approval (`approve`). */

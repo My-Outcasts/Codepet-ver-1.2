@@ -9,7 +9,7 @@ import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
 export const metadata = { title: 'Roadmap preview — Codepet' };
 
 // Derive states from a founder's position — as the live app will (brief.stage → phase,
-// /api/next-step → the current move, real DEPTS → the per-task overrides). Here: a founder
+// selectRoadmap → the current move, real DEPTS → the per-task overrides). Here: a founder
 // at the "Private beta" stage (Ship phase), billing is byte's next move, and two Ship tasks
 // carry richer states an override would supply.
 const tasks = applyProgress(ROADMAP_TEMPLATE, {

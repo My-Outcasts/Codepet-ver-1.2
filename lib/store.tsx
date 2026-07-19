@@ -76,6 +76,7 @@ import { loadSavedRoadmap, generateRoadmap } from './ai/generateRoadmap';
 import { ROADMAP_TEMPLATE } from './overview/roadmapTemplate';
 import { stageToPhase } from './overview/roadmapProgress';
 import { selectRoadmap } from './overview/roadmapSelector';
+import { beaconLinkFor } from './overview/beaconTarget';
 import type { RoadmapTaskDef } from './overview/roadmapModel';
 import {
   appendBrief,
@@ -705,9 +706,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
-  // never disagree. Set instantly to the authored golden path (so nothing is ever
-  // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
-  // on hydrate and after every approval. On failure the authored fallback stands.
+  // never disagree. Derived synchronously from the roadmap itself (computeRoadmapNext →
+  // selectRoadmap().move), so it's instant and never blank. Recomputed on hydrate and
+  // after every completion. Carries the roadmap node id so the beacon resolves it exactly.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
   // byte's model availability, so the hub can show ONE honest "offline" state up front instead
   // of per-message "temporarily unavailable" confusion. Set to the failure code (e.g.
@@ -929,10 +930,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // The "best first move" hand-off: byte's landing greeting with the single best first
-  // move as a one-tap INLINE action (produces the deliverable in-thread). Seeds immediately
-  // from the authored fallback, then upgrades to byte's own pick when /api/next-step
-  // resolves — the greeting message updates in place (stable id). Runs AFTER the first-run
-  // enrichment interview, or immediately when the brief already has every plan-shaping field.
+  // move as a one-tap INLINE action (produces the deliverable in-thread). The move comes
+  // straight from the roadmap (computeRoadmapNext), so it matches the beacon exactly. Runs
+  // AFTER the first-run enrichment interview, or immediately when the brief already has every
+  // plan-shaping field.
   const seedBestFirstMove = useCallback(
     (briefData: CompanyBrief) => {
       const gid = newId();
@@ -1761,6 +1762,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
+      // If this is the current beacon step being completed off the portal (chat/dept view),
+      // stamp the exact roadmap node link so the map advances by node id — robust to title
+      // drift/collision — instead of relying on a title heuristic. No-op for any other task.
+      const beaconNode = beaconLinkFor(nextStep, DEPTS, d.k, d.tasks.indexOf(t));
+      if (beaconNode) t.roadmapNodeId = beaconNode;
       t.done = true;
       d.pend = Math.max(0, (d.pend || 0) - 1);
       if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
@@ -1782,6 +1788,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email: t.email,
         calendar: t.calendar,
         legal: t.legal,
+        doc: t.doc,
         dms: t.dms,
         checklist: t.checklist,
         plan: t.plan,
@@ -1832,6 +1839,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       guideAfterCompletion,
       library,
       maybeNudgeByok,
+      nextStep,
     ],
   );
 
@@ -1844,6 +1852,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const d = DEPTS.find((x) => x.k === deptK);
       const t = d?.tasks.find((x) => x.t === taskTitle);
       if (!d || !t || t.done) return;
+      // Same beacon-step link as approveTask: stamp the exact node id before completing so a
+      // founder-task done off the portal still advances the map by node link (see beaconLinkFor).
+      const beaconNode = beaconLinkFor(nextStep, DEPTS, d.k, d.tasks.indexOf(t));
+      if (beaconNode) t.roadmapNodeId = beaconNode;
       t.done = true;
       t.drafted = false;
       d.pend = Math.max(0, (d.pend || 0) - 1);
@@ -1858,7 +1870,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       maybeOfferAdvance(); // …and if that finished the stage, offer to move up
       guideAfterCompletion(taskTitle); // …otherwise acknowledge it + nudge the next move in chat
     },
-    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion],
+    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion, nextStep],
   );
 
   // The literal "add your input": save a founder task's captured OUTPUTS into company memory
@@ -2464,9 +2476,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
         setChatStreaming(false);
         chatAbort.current = null;
-        // Persist byte's reply if it's a real answer or a run lead-in (not the error
-        // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
+        // Persist byte's reply: a real answer, a run lead-in, OR an honest failure line. We
+        // persist the error fallback too (byteMsgId is stable, so a later Retry overwrites it)
+        // — otherwise the founder's question, which sendChat already persisted, is left dangling
+        // with no reply after a reload. The inline result card itself stays transient.
+        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild || errored)) {
           persistMsg({ id: byteMsgId, role: 'byte', text: finalText, ts: byteTs });
         }
         // Long-thread memory: after a real exchange, fold any turns that have scrolled past

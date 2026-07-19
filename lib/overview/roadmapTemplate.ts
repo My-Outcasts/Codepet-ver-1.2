@@ -3,7 +3,7 @@
 // Like the "How to Build a Company" reference, the roadmap is a fixed playbook every
 // founder follows: six phases, each recruiting multiple departments, tasks that unlock the
 // next. A founder's real progress overlays onto this via task state (a later step wires the
-// live done/available/current values off DEPTS + /api/next-step). Progress is derived by
+// live done/available/current values off DEPTS + the roadmap's own next move). Progress is derived by
 // applyProgress (roadmapProgress.ts) from the founder's position, so tasks carry no state here.
 //
 // Note the phases run Find → Foundation → Build → Ship → Launch → Grow — Foundation is the

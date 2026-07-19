@@ -137,6 +137,7 @@ export async function* streamByteChat(
         target?: unknown;
         setup?: unknown;
         noted?: unknown;
+        offerBuild?: unknown;
       };
       // The action tools are mutually exclusive; memory (noted) is orthogonal and may
       // accompany any of them, so it's yielded independently of the action branch.
@@ -164,6 +165,9 @@ export async function* streamByteChat(
           .map((n) => ({ topic: n.topic, statement: n.statement }));
         if (items.length) yield { type: 'noted', items };
       }
+      // A build offer folded into the action mark (byte captured a fact AND offered to build in
+      // one turn). Orthogonal to the action/noted branches, so yield it independently.
+      if (a.offerBuild === true) yield { type: 'build-offer' };
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */
     }

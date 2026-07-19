@@ -464,9 +464,13 @@ export async function POST(req: Request): Promise<Response> {
           }
 
           if (Object.keys(mark).length) {
+            // A build offer is orthogonal to memory/actions — byte can capture a fact AND offer
+            // to build in one turn. Fold it into the action mark so it isn't lost (the action and
+            // build marks are separate control frames and the client only reads the first one).
+            if (offerUse) mark.offerBuild = true;
             controller.enqueue(encoder.encode(ACTION_MARK + JSON.stringify(mark)));
           } else if (offerUse) {
-            // Mutually exclusive with the action mark: a plain "Let's build" offer.
+            // A plain "Let's build" offer with nothing else to carry — its own frame.
             controller.enqueue(encoder.encode(BUILD_MARK));
           }
         } catch (err) {
