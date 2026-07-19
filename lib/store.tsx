@@ -135,6 +135,9 @@ export interface ChatMessage {
   buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
   /** The New-vs-Existing fork prompt: the UI renders two buttons for a `fork` message. */
   fork?: boolean;
+  /** Existing-project step: the UI renders the repo picker (scan/Connect GitHub) + a
+   *  Continue button that starts the brainstorm once a repo is chosen. */
+  pickRepo?: boolean;
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
   /** A first-run enrichment question (goal / traction / problem). While `answered` is
@@ -434,6 +437,8 @@ interface AppState {
   buildTarget: 'new' | 'existing' | null;
   /** Answer the New-vs-Existing fork: records the choice, drops the fork buttons, opens the brainstorm. */
   chooseBuildTarget: (t: 'new' | 'existing') => void;
+  /** Existing-project path: repo chosen up front — drop the picker and open the brainstorm. */
+  confirmRepoAndBrainstorm: () => void;
   /** Create a new GitHub repo from the starter template, then arm the build into it. */
   createProject: (name: string) => Promise<void>;
   /** Leave intake without building — the composer goes back to normal chat. */
@@ -2606,22 +2611,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (t: 'new' | 'existing') => {
       setBuildTarget(t);
       // Drop the fork buttons: strip build triggers AND clear the `fork` flag so the
-      // choice can't be re-tapped, then post the brainstorm opener (mirrors startBuildIntake).
+      // choice can't be re-tapped.
       setChatMessages((prev) =>
         stripBuildButtons(prev).map((m) => (m.fork ? { ...m, fork: false } : m)),
       );
-      const opening: ChatMessage = {
-        id: newId(),
-        role: 'byte',
-        text: INTAKE_OPENING,
-        ts: Date.now(),
-      };
-      setChatMessages((prev) => [...prev, opening]);
-      persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
+      // Existing project: pick the repo FIRST (scan repos / connect GitHub) before the
+      // brainstorm, so the founder chooses which project they're adding to up front. New
+      // project: straight into the brainstorm (the repo is created from a name at the arm step).
+      const msg: ChatMessage =
+        t === 'existing'
+          ? {
+              id: newId(),
+              role: 'byte',
+              text: 'Which project are we building into? Pick one of your repos below — or connect GitHub to grant access.',
+              ts: Date.now(),
+              pickRepo: true,
+            }
+          : { id: newId(), role: 'byte', text: INTAKE_OPENING, ts: Date.now() };
+      setChatMessages((prev) => [...prev, msg]);
+      persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
       track('build.fork.choose', { target: t });
     },
     [persistMsg],
   );
+
+  // Existing-project path: the repo was chosen up front — drop the picker and open the
+  // brainstorm (posts INTAKE_OPENING, same opener the New path and startBuildIntake use).
+  const confirmRepoAndBrainstorm = useCallback(() => {
+    setChatMessages((prev) => prev.map((m) => (m.pickRepo ? { ...m, pickRepo: false } : m)));
+    const opening: ChatMessage = {
+      id: newId(),
+      role: 'byte',
+      text: INTAKE_OPENING,
+      ts: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, opening]);
+    persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
+  }, [persistMsg]);
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
@@ -3197,6 +3223,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startBuildIntake,
       buildTarget,
       chooseBuildTarget,
+      confirmRepoAndBrainstorm,
       createProject,
       cancelBuildIntake,
       addIntakeTurn,
@@ -3321,6 +3348,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       startBuildIntake,
       buildTarget,
       chooseBuildTarget,
+      confirmRepoAndBrainstorm,
       createProject,
       cancelBuildIntake,
       addIntakeTurn,
