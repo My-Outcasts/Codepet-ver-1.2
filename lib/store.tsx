@@ -81,6 +81,7 @@ import {
   appendBrief,
   stepForLive,
   INTAKE_OPENING,
+  FORK_PROMPT,
   decideIntakeStep,
   stripBuildTriggers,
   type BuildStep,
@@ -132,6 +133,8 @@ export interface ChatMessage {
   buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
   buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
+  /** The New-vs-Existing fork prompt: the UI renders two buttons for a `fork` message. */
+  fork?: boolean;
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
   /** A first-run enrichment question (goal / traction / problem). While `answered` is
@@ -170,6 +173,11 @@ const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] => stripBuildTrig
 // Gated behind a public flag so local/self-hosted installs keep the existing REMOTE
 // (copy-paste command) behavior untouched.
 const cloudDemoBuild = process.env.NEXT_PUBLIC_CLOUD_DEMO_BUILD === '1';
+
+// GitHub-backed cloud build — like cloudDemoBuild but boots into a real, founder-owned
+// repo instead of an ephemeral demo dir. Gated behind its own public flag so demo-only
+// deployments (and local/self-hosted installs) keep their existing behavior untouched.
+const cloudRepoBuild = process.env.NEXT_PUBLIC_CLOUD_REPO_BUILD === '1';
 
 // Attaches the signed-in user's Firebase ID token, same pattern as lib/ai/buildPlan.ts's
 // authHeader — the server derives companyId from this token, never from the body.
@@ -383,6 +391,17 @@ interface AppState {
   buildStep: BuildStep;
   buildProject: string;
   setBuildProject: (v: string) => void;
+  /** The GitHub repo picked to build into (GitHub-backed cloud build), or null when
+   *  none is selected yet. */
+  buildRepo: { owner: string; name: string } | null;
+  setBuildRepo: (v: { owner: string; name: string } | null) => void;
+  /** Start the GitHub App install flow: fetches a signed install URL from
+   *  /api/github/connect and navigates the browser there. */
+  connectGithub: () => void;
+  /** Fetches the connected GitHub App installation's repos (GET /api/github/repos).
+   *  `{ notConnected: true }` means GitHub isn't connected yet — the caller should offer
+   *  connectGithub() instead of a repo picker. */
+  loadRepos: () => Promise<{ repos: { owner: string; name: string }[] } | { notConnected: true }>;
   demoLetsBuild: boolean;
   setDemoLetsBuild: (v: boolean) => void;
   buildBrief: string;
@@ -412,11 +431,17 @@ interface AppState {
    *  hook→Firestore feed for them); the live view reports each reading here. */
   applyLocalLive: (s: LiveState) => void;
   startBuildIntake: () => void;
+  /** Which side of the New-vs-Existing fork the founder picked (repo-cloud only), or null. */
+  buildTarget: 'new' | 'existing' | null;
+  /** Answer the New-vs-Existing fork: records the choice, drops the fork buttons, opens the brainstorm. */
+  chooseBuildTarget: (t: 'new' | 'existing') => void;
+  /** Create a new GitHub repo from the starter template, then arm the build into it. */
+  createProject: (name: string) => Promise<void>;
   /** Leave intake without building — the composer goes back to normal chat. */
   cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
   generateBuildPlan: () => void;
-  armBuild: () => void;
+  armBuild: (repoOverride?: { owner: string; name: string }) => void;
   resetBuildFlow: () => void;
 }
 
@@ -568,6 +593,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
   const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
+  const [buildRepo, setBuildRepo] = useState<{ owner: string; name: string } | null>(null);
   const [demoLetsBuild, setDemoLetsBuildState] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     return window.localStorage.getItem('codepet:demoLetsBuild') !== '0'; // default ON
@@ -590,6 +616,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // Which side of the New-vs-Existing fork the founder picked this intake (repo-cloud only).
+  const [buildTarget, setBuildTarget] = useState<'new' | 'existing' | null>(null);
   // The running brainstorm transcript (Byte questions + founder answers) that
   // /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
   // interrupted intake just falls back to typing more.
@@ -2551,6 +2579,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildBrief('');
     setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
     setBuildPlanState(null);
+    setBuildTarget(null);
+    // Repo-cloud (non-demo) builds ask New-vs-Existing first; the brainstorm opener is
+    // deferred to chooseBuildTarget. Capability/remote isn't known synchronously here, so
+    // the MVP gate is cloudRepoBuild && !demoLetsBuild — the arm step handles remote.
+    if (cloudRepoBuild && !demoLetsBuild) {
+      const fork: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: FORK_PROMPT,
+        ts: Date.now(),
+        fork: true,
+      };
+      setChatMessages((prev) => [...stripBuildButtons(prev), fork]);
+      persistMsg({ id: fork.id, role: 'byte', text: fork.text, ts: fork.ts });
+      track('build.intake.start', {});
+      return;
+    }
     const opening: ChatMessage = {
       id: newId(),
       role: 'byte',
@@ -2562,7 +2607,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatMessages((prev) => [...stripBuildButtons(prev), opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
     track('build.intake.start', {});
-  }, [companyId, persistMsg, buildIntakeActive]);
+  }, [companyId, persistMsg, buildIntakeActive, demoLetsBuild]);
+
+  const chooseBuildTarget = useCallback(
+    (t: 'new' | 'existing') => {
+      setBuildTarget(t);
+      // Drop the fork buttons: strip build triggers AND clear the `fork` flag so the
+      // choice can't be re-tapped, then post the brainstorm opener (mirrors startBuildIntake).
+      setChatMessages((prev) =>
+        stripBuildButtons(prev).map((m) => (m.fork ? { ...m, fork: false } : m)),
+      );
+      const opening: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: INTAKE_OPENING,
+        ts: Date.now(),
+      };
+      setChatMessages((prev) => [...prev, opening]);
+      persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
+      track('build.fork.choose', { target: t });
+    },
+    [persistMsg],
+  );
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
@@ -2691,159 +2757,293 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildPlanState((p) => (p ? { ...p, steps } : p));
   }, []);
 
-  const armBuild = useCallback(() => {
-    // A project is required — never fall back to '.' (the app server's own cwd),
-    // which would let Byte build inside whatever directory the server runs from.
-    // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
-    if (!buildPlan || !companyId || buildArming || (!demoLetsBuild && !buildProject.trim())) return;
-    setBuildArming(true);
-    buildEndedNudged.current = false;
-    setBuildResumed(false);
-    (async () => {
-      try {
-        const id = crypto.randomUUID();
-        // Non-null only in remote mode (a copy-paste command is shown); drives the honest
-        // "paste this" message vs the local "I'm watching" one.
-        let launchCommand: string | null = null;
-        // Posts a byte chat message and signals the caller to STOP arming (no state is
-        // touched — buildArming still flips off via the outer `finally`).
-        const stopWithMessage = (text: string) => {
-          const now = Date.now();
-          const msg: ChatMessage = { id: newId(), role: 'byte', text, ts: now };
-          setChatMessages((prev) => [...prev, msg]);
-          persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
-        };
-        if (demoLetsBuild) {
-          const cap = await getCapability();
-          if (cap.mode === 'local') {
-            const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
-            setBuildProjectDir(dir);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            setBuildLocal(true);
-            setBuildLaunchCommand(null);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else if (cloudDemoBuild) {
-            // Hosted demo: boot a cloud (E2B) sandbox instead of showing a copy-paste
-            // terminal command — no local toolkit required. The server derives companyId
-            // from the verified Firebase token; NEVER send companyId in the body (a prior
-            // review flagged that as a cross-tenant IDOR).
-            setBuildLocal(false);
-            setBuildProjectDir(DEMO_DIR);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            const res = await fetch('/api/build/cloud-start', {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
-              body: JSON.stringify({ plan: buildPlan, brief: buildBrief }),
-            });
-            if (res.status === 402) {
-              stopWithMessage("You're out of build credits — top up in Billing to keep building.");
-              return;
-            }
-            if (res.status === 409) {
-              stopWithMessage("A build's already running — let's finish that one first.");
-              return;
-            }
-            if (!res.ok) {
-              stopWithMessage(
-                "Byte couldn't start the cloud build just now — try again in a moment.",
-              );
-              return;
-            }
-            const { buildSessionId: cloudSessionId } = (await res.json()) as {
-              buildSessionId: string;
-            };
-            setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
-            setBuildSessionId(cloudSessionId);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else {
-            setBuildLocal(false);
-            setBuildProjectDir(DEMO_DIR);
-            setBuildCheckpoint(null); // throwaway target — no rewind
-            const token = await ensureIngestToken(companyId);
-            await armBuildSession({
-              buildSessionId: id,
-              projectDir: DEMO_DIR,
-              plan: buildPlan,
-              brief: buildBrief,
-              companyId,
-              token,
-              apiUrl: window.location.origin,
-            });
-            // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
-            launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
-              apiUrl: window.location.origin,
-              companyId,
-              buildSessionId: id,
-              token,
-            });
-            setBuildLaunchCommand(launchCommand);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          }
-        } else {
-          const dirs = await loadProjectDirs(companyId);
-          const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
-          setBuildProjectDir(dir);
-          const cap = await getCapability();
-          if (cap.mode === 'local') {
-            // Snapshot the project BEFORE the session touches anything, so END can offer
-            // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
-            setBuildCheckpoint(await createCheckpoint(dir));
-            setBuildLocal(true);
-            setBuildLaunchCommand(null);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
-          } else {
-            setBuildLocal(false);
-            const token = await ensureIngestToken(companyId);
-            // Self-report tokens too (best-effort, same as the demo path) so remote testers'
-            // real usage shows up without a toolkit install.
-            const command =
-              terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
-              tokenReportSuffix({
+  // Kicks off the GitHub App install: fetches a signed install URL from
+  // /api/github/connect (the server mints it from the verified Firebase token — never
+  // trust a companyId supplied by the client) and navigates the browser there. GitHub
+  // redirects back to /api/github/callback once the founder finishes installing.
+  const connectGithub = useCallback(async () => {
+    const res = await fetch('/api/github/connect', {
+      headers: { ...(await cloudBuildAuthHeader()) },
+    });
+    if (res.ok) {
+      const { url } = (await res.json()) as { url: string };
+      window.location.href = url;
+    }
+  }, []);
+
+  // Lists the connected GitHub App installation's repos for the "Build into: [repo]"
+  // picker. A 404 (or any non-OK response) reads as "not connected" so the UI falls back
+  // to the Connect GitHub button rather than showing a broken/empty picker.
+  const loadRepos = useCallback(async (): Promise<
+    { repos: { owner: string; name: string }[] } | { notConnected: true }
+  > => {
+    const res = await fetch('/api/github/repos', {
+      headers: { ...(await cloudBuildAuthHeader()) },
+    });
+    if (!res.ok) return { notConnected: true };
+    const { repos } = (await res.json()) as { repos: { owner: string; name: string }[] };
+    return { repos };
+  }, []);
+
+  const armBuild = useCallback(
+    (repoOverride?: { owner: string; name: string }) => {
+      // A project is required — never fall back to '.' (the app server's own cwd),
+      // which would let Byte build inside whatever directory the server runs from.
+      // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
+      // A build needs a target: a demo, a local project, OR (repo-cloud) a selected repo.
+      // Without the buildRepo exception the repo-cloud branch below is unreachable.
+      // repoOverride lets createProject arm into a freshly-created repo without waiting
+      // for the setBuildRepo state update to flush (avoids a stale-closure no-op). Guard
+      // against being passed a React event (onClick={armBuild}) — only accept a real repo.
+      const effectiveRepo =
+        repoOverride && typeof repoOverride === 'object' && 'owner' in repoOverride
+          ? repoOverride
+          : buildRepo;
+      if (
+        !buildPlan ||
+        !companyId ||
+        buildArming ||
+        (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && effectiveRepo))
+      )
+        return;
+      setBuildArming(true);
+      buildEndedNudged.current = false;
+      setBuildResumed(false);
+      (async () => {
+        try {
+          const id = crypto.randomUUID();
+          // Non-null only in remote mode (a copy-paste command is shown); drives the honest
+          // "paste this" message vs the local "I'm watching" one.
+          let launchCommand: string | null = null;
+          // Posts a byte chat message and signals the caller to STOP arming (no state is
+          // touched — buildArming still flips off via the outer `finally`).
+          const stopWithMessage = (text: string) => {
+            const now = Date.now();
+            const msg: ChatMessage = { id: newId(), role: 'byte', text, ts: now };
+            setChatMessages((prev) => [...prev, msg]);
+            persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+          };
+          if (demoLetsBuild) {
+            const cap = await getCapability();
+            if (cap.mode === 'local') {
+              const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
+              setBuildProjectDir(dir);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              setBuildLocal(true);
+              setBuildLaunchCommand(null);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else if (cloudDemoBuild) {
+              // Hosted demo: boot a cloud (E2B) sandbox instead of showing a copy-paste
+              // terminal command — no local toolkit required. The server derives companyId
+              // from the verified Firebase token; NEVER send companyId in the body (a prior
+              // review flagged that as a cross-tenant IDOR).
+              setBuildLocal(false);
+              setBuildProjectDir(DEMO_DIR);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              const res = await fetch('/api/build/cloud-start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+                body: JSON.stringify({ plan: buildPlan, brief: buildBrief }),
+              });
+              if (res.status === 402) {
+                stopWithMessage(
+                  "You're out of build credits — top up in Billing to keep building.",
+                );
+                return;
+              }
+              if (res.status === 409) {
+                stopWithMessage("A build's already running — let's finish that one first.");
+                return;
+              }
+              if (!res.ok) {
+                stopWithMessage(
+                  "Byte couldn't start the cloud build just now — try again in a moment.",
+                );
+                return;
+              }
+              const { buildSessionId: cloudSessionId } = (await res.json()) as {
+                buildSessionId: string;
+              };
+              setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+              setBuildSessionId(cloudSessionId);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else {
+              setBuildLocal(false);
+              setBuildProjectDir(DEMO_DIR);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              const token = await ensureIngestToken(companyId);
+              await armBuildSession({
+                buildSessionId: id,
+                projectDir: DEMO_DIR,
+                plan: buildPlan,
+                brief: buildBrief,
+                companyId,
+                token,
+                apiUrl: window.location.origin,
+              });
+              // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
+              launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
                 apiUrl: window.location.origin,
                 companyId,
                 buildSessionId: id,
                 token,
               });
-            const res = await armBuildSession({
-              buildSessionId: id,
-              projectDir: dir,
-              plan: buildPlan,
-              brief: buildBrief,
-              companyId,
-              token,
-              apiUrl: window.location.origin,
-            });
-            launchCommand = res.ok && res.launched ? null : command;
-            setBuildLaunchCommand(launchCommand);
-            setBuildSessionId(id);
-            setBuildLive(null);
-            setBuildStep('during');
+              setBuildLaunchCommand(launchCommand);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            }
+          } else {
+            const dirs = await loadProjectDirs(companyId);
+            const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
+            setBuildProjectDir(dir);
+            const cap = await getCapability();
+            if (cap.mode === 'local') {
+              // Snapshot the project BEFORE the session touches anything, so END can offer
+              // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
+              setBuildCheckpoint(await createCheckpoint(dir));
+              setBuildLocal(true);
+              setBuildLaunchCommand(null);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else if (cloudRepoBuild) {
+              // GitHub-backed cloud build: boots into the founder's OWN connected repo
+              // (via /api/build/repo-start) instead of showing a copy-paste terminal
+              // command — no local toolkit required. The server derives companyId from
+              // the verified Firebase token; NEVER send companyId in the body (same IDOR
+              // guard as cloudDemoBuild's /api/build/cloud-start call above).
+              if (!effectiveRepo) {
+                stopWithMessage('Pick a GitHub repo (or connect GitHub) to build in the cloud.');
+                return;
+              }
+              const res = await fetch('/api/build/repo-start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+                body: JSON.stringify({ repo: effectiveRepo, plan: buildPlan, brief: buildBrief }),
+              });
+              if (res.status === 402) {
+                stopWithMessage("You're out of build credits — top up in Billing.");
+                return;
+              }
+              if (res.status === 403) {
+                stopWithMessage(
+                  "That repo isn't connected to Codepet — pick one you've granted access to.",
+                );
+                return;
+              }
+              if (res.status === 404) {
+                stopWithMessage('Connect GitHub first to build in the cloud.');
+                return;
+              }
+              if (res.status === 409) {
+                stopWithMessage("A build's already running — let's finish that one first.");
+                return;
+              }
+              if (!res.ok) {
+                stopWithMessage("Byte couldn't start the cloud build just now — try again.");
+                return;
+              }
+              const { buildSessionId: repoSessionId } = (await res.json()) as {
+                buildSessionId: string;
+              };
+              setBuildLocal(false);
+              setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+              setBuildSessionId(repoSessionId);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else {
+              setBuildLocal(false);
+              const token = await ensureIngestToken(companyId);
+              // Self-report tokens too (best-effort, same as the demo path) so remote testers'
+              // real usage shows up without a toolkit install.
+              const command =
+                terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
+                tokenReportSuffix({
+                  apiUrl: window.location.origin,
+                  companyId,
+                  buildSessionId: id,
+                  token,
+                });
+              const res = await armBuildSession({
+                buildSessionId: id,
+                projectDir: dir,
+                plan: buildPlan,
+                brief: buildBrief,
+                companyId,
+                token,
+                apiUrl: window.location.origin,
+              });
+              launchCommand = res.ok && res.launched ? null : command;
+              setBuildLaunchCommand(launchCommand);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            }
           }
+          setView('build');
+          const live: ChatMessage = {
+            id: newId(),
+            role: 'byte',
+            text: launchCommand
+              ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
+              : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+            ts: Date.now(),
+          };
+          setChatMessages((prev) => [...prev, live]);
+          persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
+          track('build.arm', { demo: demoLetsBuild });
+        } finally {
+          setBuildArming(false);
         }
-        setView('build');
-        const live: ChatMessage = {
-          id: newId(),
-          role: 'byte',
-          text: launchCommand
-            ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
-            : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
-          ts: Date.now(),
-        };
-        setChatMessages((prev) => [...prev, live]);
-        persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
-        track('build.arm', { demo: demoLetsBuild });
-      } finally {
-        setBuildArming(false);
+      })();
+    },
+    [
+      buildPlan,
+      companyId,
+      buildArming,
+      buildProject,
+      buildBrief,
+      demoLetsBuild,
+      buildRepo,
+      persistMsg,
+    ],
+  );
+
+  // Create a brand-new GitHub repo from the Codepet starter template, then arm the build
+  // into it. On failure, Byte says so in-chat (400 ⇒ reconnect GitHub; else a soft retry).
+  const createProject = useCallback(
+    async (name: string) => {
+      const res = await fetch('/api/github/repos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const { repo } = (await res.json()) as { repo: { owner: string; name: string } };
+        setBuildRepo(repo);
+        armBuild(repo);
+        return;
       }
-    })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, demoLetsBuild, persistMsg]);
+      // Distinguish the two 400s: a bad name is the founder's to fix, a missing user
+      // token means the GitHub connection needs re-doing — conflating them tells someone
+      // who typed "my app" to go reconnect GitHub, which is just wrong.
+      const err = (await res.json().catch(() => null))?.error as string | undefined;
+      const text =
+        err === 'reconnect_github'
+          ? "Couldn't create the project — reconnect GitHub and try again."
+          : err === 'bad_request'
+            ? "That project name won't work — use letters, numbers, dots, dashes or underscores (no spaces)."
+            : "Byte couldn't create the project just now — try again in a moment.";
+      const m: ChatMessage = { id: newId(), role: 'byte', text, ts: Date.now() };
+      setChatMessages((prev) => [...prev, m]);
+      persistMsg({ id: m.id, role: 'byte', text: m.text, ts: m.ts });
+    },
+    [armBuild, persistMsg],
+  );
 
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
@@ -2984,6 +3184,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildStep,
       buildProject,
       setBuildProject,
+      buildRepo,
+      setBuildRepo,
+      connectGithub,
+      loadRepos,
       demoLetsBuild,
       setDemoLetsBuild,
       buildBrief,
@@ -2999,6 +3203,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      buildTarget,
+      chooseBuildTarget,
+      createProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
@@ -3102,6 +3309,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildStep,
       buildProject,
       setBuildProject,
+      buildRepo,
+      setBuildRepo,
+      connectGithub,
+      loadRepos,
       demoLetsBuild,
       setDemoLetsBuild,
       buildBrief,
@@ -3117,6 +3328,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      buildTarget,
+      chooseBuildTarget,
+      createProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,

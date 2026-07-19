@@ -45,6 +45,10 @@ export interface LiveState {
   mode?: string;
   /** Durable per-build field set by cloud-start; preserved across events. */
   companyId?: string;
+  /** Durable per-build field: GitHub PR URL, preserved across events. */
+  prUrl?: string;
+  /** Durable per-build field: repository owner and name, preserved across events. */
+  repo?: { owner: string; name: string };
 }
 
 export interface DemoRecap {
@@ -92,6 +96,8 @@ export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState
       mode: state?.mode,
       companyId: state?.companyId,
       previewUrl: state?.previewUrl,
+      prUrl: state?.prUrl,
+      repo: state?.repo,
     });
   }
   const s = state ?? initialLive(event.ts, sessionId);

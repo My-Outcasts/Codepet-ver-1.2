@@ -12,6 +12,9 @@ export type BuildStep = 'during' | 'end';
 /** Byte's opening intake question — natural, warm, one question. */
 export const INTAKE_OPENING = `Ooh, let's build something! Tell me what you have in mind — who's it for, and what does "done" look like? 💭`;
 
+/** The New-vs-Existing fork Byte asks before the brainstorm (repo-cloud builds only). */
+export const FORK_PROMPT = `First up — are we starting a brand-new project, or adding to one you already have? 🌱`;
+
 /** Byte's single scripted follow-up, shown after the founder's first answer. */
 export const INTAKE_FOLLOWUP = `Love it! Anything else it must do? Add as much as you like — when you're ready, hit "Turn this into a plan". 😎`;
 

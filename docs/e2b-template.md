@@ -7,8 +7,10 @@ This is the sandbox image `lib/build/cloudSandbox.ts` (`startCloudBuild`) boots 
 
 ## Base image
 
-- Any Linux base with **Node ≥ 20** (the runner uses top-level `for await`, `AbortController`,
-  etc. — nothing exotic, just modern Node).
+- Any Linux base with **Node ≥ 20** (the runner uses `readline` over the child's stdout, the
+  global `fetch`, and `child_process` — nothing exotic, just modern Node). The canonical
+  runner source lives in the repo at `e2b/codepet-build/` (see its README); build the template
+  from there.
 - Install the Claude Code CLI globally so `claude` is on `PATH`:
   ```sh
   npm i -g @anthropic-ai/claude-code
@@ -123,3 +125,89 @@ The runner is the only piece of logic that has to ship inside the template image
 - A `CODEPET_API_URL` reachable **from E2B's network** — i.e. the Codepet deployment must
   be publicly reachable (or reachable from wherever E2B sandboxes egress to), since the
   runner POSTs back to it over the open internet, not a private link.
+
+## Repo build runner (real GitHub repo)
+
+The GitHub-backed cloud build reuses the exact same `codepet-build` template and the
+same `cloud-run.mjs` entrypoint — there is no second image. What differs is the launch
+script: for a **repo build**, `lib/build/repoBuildScript.ts` (the repo-build counterpart
+of `cloudBuildScript`) exports a different set of `CODEPET_*` env vars, and the runner
+branches on their presence to clone a real repo, open a branch, and push a PR instead of
+just POSTing files back for sandbox storage.
+
+### Repo-build env vars (set by `lib/build/repoBuildScript.ts`)
+
+- `CODEPET_REPO` — `owner/name` of the connected GitHub repository.
+- `CODEPET_BRANCH` — the branch the runner creates and pushes to, `codepet/<buildSessionId>`.
+- `CODEPET_INSTALL_TOKEN` — a short-lived GitHub App installation token, scoped to
+  `CODEPET_REPO`, used for both the clone/push and the PR-creation API call. Never baked
+  into the image or the launch script on disk beyond this one env var.
+- `CODEPET_FINALIZE_PATH=/api/build/repo-finalize` — repo-build finalize endpoint (distinct
+  from the demo build's `/api/build/cloud-finalize`).
+- `CODEPET_LIVE_PATH=/api/track/live` — same live-event ingest endpoint as the demo build.
+- `CODEPET_TOKEN_CAP` — max total tokens before the runner kills `claude`, `3_000_000` for
+  repo builds (higher than the demo build's cap since repo builds tend to touch more code).
+- `CODEPET_OPENING_PROMPT` — first message handed to `claude`, same convention as the demo
+  build.
+- `CODEPET_API_URL`, `CODEPET_COMPANY_ID`, `CODEPET_INGEST_TOKEN`, `CODEPET_BUILD_SESSION_ID`,
+  `CODEPET_CLAUDE_CMD` — same meaning as the demo build (see above).
+
+### Runner steps for a repo build
+
+When `CODEPET_REPO` is present, `cloud-run.mjs` follows this sequence instead of the
+demo-build's seed-dir + finalize-with-files flow:
+
+1. **Clone**: `git clone https://x-access-token:$CODEPET_INSTALL_TOKEN@github.com/$CODEPET_REPO.git`
+   — the installation token is embedded in the URL only for this one command; it isn't
+   passed as argv elsewhere and isn't logged.
+2. **Branch**: `git checkout -b $CODEPET_BRANCH` inside the clone.
+3. **Run Claude**: spawn `$CODEPET_CLAUDE_CMD "$CODEPET_OPENING_PROMPT"` in the repo root,
+   streaming stdout exactly as the demo build does — parse newline-delimited `stream-json`
+   events, self-report each one to `${CODEPET_API_URL}${CODEPET_LIVE_PATH}` as
+   `{ companyId: CODEPET_COMPANY_ID, token: CODEPET_INGEST_TOKEN, event }` (fire-and-forget),
+   and sum `message.usage` tokens the same way. Once the running total exceeds
+   `CODEPET_TOKEN_CAP`, kill the `claude` child (`SIGTERM` then `SIGKILL`) and stop reading.
+4. **Commit**: `git add -A && git commit` with a runner-authored commit message.
+5. **Push**: `git push origin $CODEPET_BRANCH` (still over the `x-access-token` remote URL
+   from step 1, or an equivalent `Authorization: token` credential helper).
+6. **Open a PR**: `POST /repos/$CODEPET_REPO/pulls` against the GitHub API, with
+   `base` = the repository's default branch (read from the repo metadata, not hardcoded
+   `main`/`master`), `head` = `$CODEPET_BRANCH`, and header
+   `Authorization: token $CODEPET_INSTALL_TOKEN`.
+7. **Finalize**: POST once to `${CODEPET_API_URL}${CODEPET_FINALIZE_PATH}` as:
+   ```json
+   {
+     "companyId": "<CODEPET_COMPANY_ID>",
+     "token": "<CODEPET_INGEST_TOKEN>",
+     "buildSessionId": "<CODEPET_BUILD_SESSION_ID>",
+     "status": "ok" | "capped" | "error",
+     "tokens": <running total>,
+     "prUrl": "<PR html_url from step 6>",
+     "branch": "<CODEPET_BRANCH>",
+     "pushed": true | false
+   }
+   ```
+   As with the demo build, guard this against double-finalize (own exit handler vs. the
+   launcher's `trap ... EXIT`). If the commit/push/PR steps fail partway (e.g. nothing to
+   commit, push rejected, PR API error), still finalize with `pushed: false` and an
+   appropriate `status`/omitted `prUrl` rather than hanging — the server-side finalize
+   route is what decides whether to charge credit, and it only credits on a real, pushed PR.
+
+### Registering the Codepet Builder GitHub App
+
+The GitHub App itself is a one-time, out-of-repo setup (done once per environment) via
+github.com → Settings → Developer settings → GitHub Apps → New GitHub App:
+
+- **Permissions**: Repository permissions → **Contents: Read & write**,
+  **Pull requests: Read & write**, **Metadata: Read-only**. No other repository or
+  account permissions are needed.
+- **Callback URL**: `<app>/api/github/callback` (where `<app>` is the Codepet deployment's
+  base URL) — used for the connect flow's OAuth-style redirect back into the app.
+- **Webhook**: not required for the build flow as specified; can be left inactive.
+- After creation, generate a private key and note the App ID, Client ID, Client secret,
+  and the App's slug (from its public `github.com/apps/<slug>` page).
+
+Required env once registered — see the GitHub App section in `.env.example`:
+`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`,
+`GITHUB_APP_SLUG`, `GITHUB_STATE_SECRET`, and the client flag `NEXT_PUBLIC_CLOUD_REPO_BUILD`
+to turn the repo-build UI path on.

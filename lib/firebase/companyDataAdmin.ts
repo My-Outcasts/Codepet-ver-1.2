@@ -43,3 +43,41 @@ export async function ensureIngestTokenAdmin(companyId: string): Promise<string>
   await ref.set({ ingestToken: token, updatedAt: Date.now() }, { merge: true });
   return token;
 }
+
+/** Persist which GitHub App installation this company connected (cloud builds). */
+export async function setCompanyGithub(
+  companyId: string,
+  gh: { installationId: string; login: string },
+): Promise<void> {
+  const ref = adminDb().doc(paths.company(companyId));
+  await ref.set({ github: { ...gh, connectedAt: Date.now() } }, { merge: true });
+}
+
+/** Read back the company's connected GitHub App installation, if any. */
+export async function getCompanyGithub(
+  companyId: string,
+): Promise<{ installationId: string; login: string } | null> {
+  const ref = adminDb().doc(paths.company(companyId));
+  const snap = await ref.get();
+  const github = snap.data()?.github;
+  // "Connected" is defined by the installationId alone — `login` is cosmetic and may be
+  // empty right after the callback (enriched later). Requiring login here would make a
+  // successful connect read back as "not connected" and break the whole flow.
+  if (typeof github?.installationId !== 'string' || !github.installationId) return null;
+  return { installationId: github.installationId, login: github.login ?? '' };
+}
+
+/** Store the GitHub App user access token for repo creation (server-only secret). */
+export async function setCompanyGithubUserToken(
+  companyId: string,
+  userToken: string,
+): Promise<void> {
+  await adminDb().doc(paths.company(companyId)).set({ github: { userToken } }, { merge: true });
+}
+
+/** Read the stored GitHub user token, or null. Server-only. */
+export async function getCompanyGithubUserToken(companyId: string): Promise<string | null> {
+  const snap = await adminDb().doc(paths.company(companyId)).get();
+  const t = snap.data()?.github?.userToken;
+  return typeof t === 'string' && t ? t : null;
+}

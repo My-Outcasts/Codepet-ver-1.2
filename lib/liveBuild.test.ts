@@ -235,3 +235,12 @@ describe('mode/companyId survive a start event', () => {
     expect(next.startedAt).toBe(100);
   });
 });
+
+describe('prUrl + repo survive live events', () => {
+  it('carries prUrl and repo through a start reset', () => {
+    const s = { ...initialLive(0), prUrl: 'https://gh/pr/1', repo: { owner: 'acme', name: 'web' } };
+    const next = reduceLive(s, { buildSessionId: 'b1', sessionId: 's', kind: 'start', ts: 1 });
+    expect(next.prUrl).toBe('https://gh/pr/1');
+    expect(next.repo).toEqual({ owner: 'acme', name: 'web' });
+  });
+});

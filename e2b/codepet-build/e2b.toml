@@ -1,0 +1,6 @@
+# E2B template config for the Codepet build sandbox. Build/push with:
+#   cd e2b/codepet-build && e2b template build
+# The template name MUST stay `codepet-build` — lib/build/cloudSandbox.ts boots it by that
+# name via Sandbox.create('codepet-build', …).
+template_name = "codepet-build"
+dockerfile = "Dockerfile"
