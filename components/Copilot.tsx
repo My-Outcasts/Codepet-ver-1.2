@@ -576,6 +576,21 @@ function RepoPicker() {
   );
 }
 
+// Existing-project step, rendered inline in chat right after the founder picks "Existing":
+// scan/pick a repo (or Connect GitHub), then Continue into the brainstorm. Continue stays
+// disabled until a repo is selected, so a build always has a target.
+function RepoPickStep() {
+  const { buildRepo, confirmRepoAndBrainstorm } = useApp();
+  return (
+    <>
+      <RepoPicker />
+      <button className="bub-act" disabled={!buildRepo} onClick={confirmRepoAndBrainstorm}>
+        Continue
+      </button>
+    </>
+  );
+}
+
 // The "How hands-on?" autonomy dial, shared by the existing-repo/local arm step and the
 // new-project form so both fork sides offer the same choice.
 function AutonomyPicker() {
@@ -891,6 +906,16 @@ export function Copilot({ inline = false }: { inline?: boolean } = {}) {
                       <button className="bub-act" onClick={() => chooseBuildTarget('existing')}>
                         🔧 Existing project
                       </button>
+                    </div>
+                  );
+                }
+                if (m.pickRepo) {
+                  // Existing-project: choose the repo up front (scan / Connect GitHub), then
+                  // Continue to the brainstorm.
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <RepoPickStep />
                     </div>
                   );
                 }
