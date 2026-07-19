@@ -404,7 +404,6 @@ interface AppState {
    *  connectGithub() instead of a repo picker. */
   loadRepos: () => Promise<{ repos: { owner: string; name: string }[] } | { notConnected: true }>;
   demoLetsBuild: boolean;
-  setDemoLetsBuild: (v: boolean) => void;
   buildBrief: string;
   buildPlan: BytePlan | null;
   /** Edit the generated plan's steps in place before arming (founder can refine intent). */
@@ -595,15 +594,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
   const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
   const [buildRepo, setBuildRepo] = useState<{ owner: string; name: string } | null>(null);
-  const [demoLetsBuild, setDemoLetsBuildState] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return window.localStorage.getItem('codepet:demoLetsBuild') !== '0'; // default ON
-  });
-  const setDemoLetsBuild = useCallback((v: boolean) => {
-    setDemoLetsBuildState(v);
-    if (typeof window !== 'undefined')
-      window.localStorage.setItem('codepet:demoLetsBuild', v ? '1' : '0');
-  }, []);
+  // Demo "Let's build" (a throwaway ~/codepet-demo landing page) is retired: every build now
+  // goes through the New/Existing project fork into a real project. Kept as a const `false` so
+  // the (now unreachable) demo branches in armBuild still compile — they can be deleted in a
+  // follow-up cleanup.
+  const demoLetsBuild = false;
   const [buildBrief, setBuildBrief] = useState(restoredBuild?.brief ?? '');
   const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(restoredBuild?.plan ?? null);
   const [buildSessionId, setBuildSessionId] = useState<string | null>(
@@ -3203,7 +3198,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       connectGithub,
       loadRepos,
       demoLetsBuild,
-      setDemoLetsBuild,
       buildBrief,
       buildPlan,
       setBuildPlanSteps,
@@ -3328,7 +3322,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       connectGithub,
       loadRepos,
       demoLetsBuild,
-      setDemoLetsBuild,
       buildBrief,
       buildPlan,
       setBuildPlanSteps,
