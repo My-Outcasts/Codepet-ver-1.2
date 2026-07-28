@@ -33,7 +33,9 @@ import {
   type ScannedProject,
   type ChatMessageDoc,
   type ThreadMeta,
+  type LedgerEvent,
 } from './schema';
+import { eventKey } from '../overview/ledger';
 import { deriveThreadTitle, needsBackfill, sortThreadsByRecent } from '../chat/threads';
 import { projectNames } from '../projects';
 import {
@@ -175,6 +177,23 @@ export interface CompanyData {
   activeThreadId: string | null;
   /** Durable company decisions byte maintains (the memory the founder can curate). */
   decisions: DecisionEntry[];
+  /** Second Brain event ledger, newest-first. */
+  events: LedgerEvent[];
+}
+
+/** Append a ledger event. Idempotent when the event carries refType+refId; fail-open —
+ *  a ledger write must never block or surface an error on the main flow. */
+export async function appendEvent(companyId: string, event: LedgerEvent): Promise<void> {
+  try {
+    const db = getDb();
+    if (event.refType && event.refId) {
+      await setDoc(doc(db, paths.event(companyId, eventKey(event.refType, event.refId))), event);
+    } else {
+      await addDoc(collection(db, paths.events(companyId)), event);
+    }
+  } catch (err) {
+    console.warn('[second-brain] appendEvent failed (ignored)', err);
+  }
 }
 
 /** How many recent chat messages to hydrate on load. */
@@ -193,11 +212,12 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   // Start from a clean per-account baseline before applying this account's data.
   resetCompanyData();
   const db = getDb();
-  const [deptSnap, libSnap, companySnap, threadSnap] = await Promise.all([
+  const [deptSnap, libSnap, companySnap, threadSnap, eventsSnap] = await Promise.all([
     getDocs(collection(db, paths.departments(companyId))),
     getDocs(query(collection(db, paths.library(companyId)), orderBy('createdAt', 'desc'))),
     getDoc(doc(db, paths.company(companyId))),
     getDocs(collection(db, paths.threads(companyId))),
+    getDocs(query(collection(db, paths.events(companyId)), orderBy('ts', 'desc'))),
   ]);
 
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
@@ -235,6 +255,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     activeThreadId,
     decisions: normalizeDecisions(company?.decisions),
     projectAnalysis: company?.projectAnalysis as ProjectAnalysis | undefined,
+    events: eventsSnap.docs.map((d) => d.data() as LedgerEvent),
   };
 }
 

@@ -17,7 +17,12 @@ import * as THREE from 'three';
 // @ts-ignore - addons ship without bundled types in some setups
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { useApp } from '@/lib/store';
-import { DEPTS, DCOL, type Dept, type Task } from '@/lib/data';
+import { DEPTS, DCOL, type Dept, type Task, type LibItem } from '@/lib/data';
+import { buildKnowledgeGraph } from '@/lib/overview/knowledgeGraph';
+import { askSecondBrain, runSecondBrainBackfill, type RecallHit } from '@/lib/ai/recallClient';
+import { filterEvents, relativeTime, type TimelineFilter } from '@/lib/overview/timeline';
+import SecondBrainPanel from '@/components/views/overview/SecondBrainPanel';
+import { Copilot } from '@/components/Copilot';
 import { taskState } from '@/lib/helpers';
 import { nextAction, stageWatermark } from '@/lib/roadmap';
 import { stageComplete, nextStageOf, nextPhaseName } from '@/lib/stages';
@@ -47,6 +52,17 @@ const STATE_HEX: Record<string, string> = {
   'st-you': '#3B82F6',
   'st-done': '#34D399',
 };
+// Second Brain v2 — warm-nebula palette (mostly amber/gold like the reference, with a couple of
+// cool accents for variety): deliverable/session/fact are the warm field; decision/milestone pop.
+const KG_HEX: Record<string, string> = {
+  deliverable: '#F6A23C',
+  decision: '#2DD4BF',
+  fact: '#FFD98A',
+  session: '#FFB454',
+  milestone: '#FF6B9D',
+  task: '#FDB022',
+};
+const SECOND_BRAIN_V2 = process.env.NEXT_PUBLIC_SECOND_BRAIN_V2 === '1';
 const STATUS_ALPHA: Record<string, number> = { attention: 1, ready: 0.85, idle: 0.5 };
 const DIM_NODE = 'rgba(150,150,170,0.09)';
 const DIM_LINK = 'rgba(150,150,170,0.03)';
@@ -69,7 +85,18 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 interface GNode {
   id: string;
   name: string;
-  kind: 'project' | 'dept' | 'task';
+  kind:
+    | 'project'
+    | 'dept'
+    | 'task'
+    | 'milestone'
+    | 'deliverable'
+    | 'decision'
+    | 'fact'
+    | 'session';
+  refType?: string;
+  refId?: string;
+  sbLabel?: boolean;
   color: string;
   val: number;
   deptColor?: string;
@@ -90,7 +117,17 @@ interface GLink {
   target: string;
   color: string;
   hex: string;
-  kind: 'pd' | 'dt';
+  kind:
+    | 'pd'
+    | 'dt'
+    | 'belongs_to'
+    | 'produced'
+    | 'advances'
+    | 'depends_on'
+    | 'references'
+    | 'supersedes'
+    | 'grounds'
+    | 'spine';
   active?: boolean;
 }
 
@@ -176,6 +213,36 @@ function makeGlowSprite(colorHex: string, size: number): THREE.Sprite {
   return sprite;
 }
 
+// A firefly: hot near-white core → warm color → transparent, additive-blended so overlapping
+// dots add up into bright cluster cores (the Second Brain nebula read from the reference).
+function makeFireflySprite(colorHex: string, size: number): THREE.Sprite {
+  const S = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = S;
+  canvas.height = S;
+  const ctx = canvas.getContext('2d')!;
+  const g = ctx.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, 'rgba(255,253,245,0.98)');
+  g.addColorStop(0.16, colorHex);
+  g.addColorStop(0.42, colorHex);
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2, 0, Math.PI * 2);
+  ctx.fill();
+  const tex = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(
+    new THREE.SpriteMaterial({
+      map: tex,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    }),
+  );
+  sprite.scale.set(size, size, 1);
+  return sprite;
+}
+
 export default function OverviewView() {
   const {
     openDept,
@@ -200,6 +267,11 @@ export default function OverviewView() {
     clearGrowthSignal,
     introSeen,
     markIntroSeen,
+    events,
+    library,
+    openDeliverable,
+    tracking,
+    companionId,
   } = useApp();
   const examplePlan = examplePlanBanner({ planTailored, scaffoldFailure });
   // Enough signal to tailor from (mirrors briefToContext's threshold, incl. notes-only) →
@@ -229,6 +301,14 @@ export default function OverviewView() {
   const tookControlRef = useRef(false); // once the user moves/clicks, stop auto-fitting
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  // "Ask your Second Brain" (P2 recall) — inert unless the server feature is on.
+  const [askQuery, setAskQuery] = useState('');
+  const [askHits, setAskHits] = useState<RecallHit[] | null>(null);
+  const [asking, setAsking] = useState(false);
+  // Timeline panel (P3) — "what changed", filtered by event type.
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [timelineFilter, setTimelineFilter] = useState<TimelineFilter>('all');
+  const [backfilling, setBackfilling] = useState(false);
   // Transient unlock reveal: which dept keys just grew in, cleared after the flash.
   const [revealKeys, setRevealKeys] = useState<Set<string>>(() => new Set());
 
@@ -248,6 +328,90 @@ export default function OverviewView() {
   }, []);
 
   const { data, adj } = useMemo(() => {
+    if (SECOND_BRAIN_V2) {
+      // P1: render the derived knowledge graph (ledger → typed, cross-linked nodes)
+      // instead of the authored company→dept→task tree. The renderer is untouched;
+      // only the data feeding it changes.
+      const kg = buildKnowledgeGraph(events, DEPTS);
+      // Organic clusters (not one even sphere): departments anchor on a spread sphere, and each
+      // knowledge node seeds INSIDE its department's cloud. The force sim + the dense references
+      // links then relax each cluster into a nebula blob — the Chitti read.
+      const deptNodes = kg.nodes.filter((n) => n.kind === 'department');
+      const deptPos = new Map<string, { x: number; y: number; z: number }>();
+      deptNodes.forEach((d, di) => {
+        const denom = Math.max(1, deptNodes.length - 1);
+        const yy = deptNodes.length > 1 ? 1 - (di / denom) * 2 : 0;
+        const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+        const th = GOLDEN * di;
+        deptPos.set(d.id, {
+          x: Math.cos(th) * rr * DEPT_R,
+          y: yy * DEPT_R * 0.55, // flatten toward a horizontal nebula
+          z: Math.sin(th) * rr * DEPT_R,
+        });
+      });
+      const clusterN = new Map<string, number>();
+      const CLOUD = 66;
+      const vnodes: GNode[] = kg.nodes.map((n) => {
+        const gkind: GNode['kind'] =
+          n.kind === 'company' ? 'project' : n.kind === 'department' ? 'dept' : n.kind;
+        const hex =
+          n.kind === 'department' ? '#FDB022' : (KG_HEX[n.kind] ?? HEX['--accent']);
+        const common = {
+          id: n.id,
+          name: n.name,
+          kind: gkind,
+          sbLabel: n.label,
+          refType: n.refType,
+          refId: n.refId,
+          color: rgba(hex, n.kind === 'company' ? 0.95 : 0.85),
+          val: n.kind === 'company' ? 12 : 0.7 + Math.min(6, n.weight),
+          deptColor: hex,
+        };
+        if (n.kind === 'company') return { ...common, x: 0, y: 0, z: 0 };
+        if (n.kind === 'department') {
+          const p = deptPos.get(n.id)!;
+          return { ...common, x: p.x, y: p.y, z: p.z };
+        }
+        // Knowledge node: seed inside its department's cloud (decisions with no dept form a
+        // looser central halo). Golden-angle spread within the cloud keeps seeds non-overlapping.
+        const homeId = n.deptK && deptPos.has(`dept:${n.deptK}`) ? `dept:${n.deptK}` : null;
+        const c = homeId ? deptPos.get(homeId)! : { x: 0, y: 0, z: 0 };
+        const key = homeId ?? 'halo';
+        const ci = clusterN.get(key) ?? 0;
+        clusterN.set(key, ci + 1);
+        const R = homeId ? CLOUD : 150;
+        const yy = 1 - ((ci % 7) / 6) * 2;
+        const rr = Math.sqrt(Math.max(0, 1 - yy * yy));
+        const th = GOLDEN * (ci + 1);
+        return {
+          ...common,
+          x: c.x + Math.cos(th) * rr * R,
+          y: c.y + yy * R * 0.55,
+          z: c.z + Math.sin(th) * rr * R,
+        };
+      });
+      const vlinks: GLink[] = kg.edges.map((e) => {
+        // Warm, faint web; spine a touch brighter, the intra-cluster references threads soft.
+        const lhex = e.kind === 'spine' ? '#FDB022' : '#F6A23C';
+        return {
+          source: e.source,
+          target: e.target,
+          color: rgba(lhex, e.kind === 'spine' ? 0.3 : e.kind === 'references' ? 0.14 : 0.2),
+          hex: lhex,
+          kind: e.kind,
+        };
+      });
+      const vadj = new Map<string, Set<string>>();
+      vlinks.forEach((l) => {
+        const s = linkId(l.source),
+          t = linkId(l.target);
+        if (!vadj.has(s)) vadj.set(s, new Set());
+        if (!vadj.has(t)) vadj.set(t, new Set());
+        vadj.get(s)!.add(t);
+        vadj.get(t)!.add(s);
+      });
+      return { data: { nodes: vnodes, links: vlinks }, adj: vadj };
+    }
     const nodes: GNode[] = [];
     const links: GLink[] = [];
     nodes.push({
@@ -333,7 +497,7 @@ export default function OverviewView() {
       adj.get(l.target)!.add(l.source);
     });
     return { data: { nodes, links }, adj };
-  }, [tick, brief.projectName, revealKeys]);
+  }, [tick, brief.projectName, revealKeys, events]);
 
   const inFocus = useCallback(
     (id: string) => !hoverId || id === hoverId || adj.get(hoverId)?.has(id),
@@ -547,10 +711,21 @@ export default function OverviewView() {
     const fg = fgRef.current as any;
     if (!fg) return;
     try {
-      fg.d3Force('charge')?.strength(-90);
-      fg.d3Force('link')
-        ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
-        .strength(0.25);
+      if (SECOND_BRAIN_V2) {
+        // Tight clusters: intra-cluster references pull short so departments condense into
+        // nebula blobs; the spine holds clusters apart; stronger repulsion spreads the field.
+        fg.d3Force('charge')?.strength(-45);
+        fg.d3Force('link')
+          ?.distance((l: GLink) =>
+            l.kind === 'spine' ? 130 : l.kind === 'references' ? 20 : 40,
+          )
+          .strength((l: GLink) => (l.kind === 'references' ? 0.5 : 0.18));
+      } else {
+        fg.d3Force('charge')?.strength(-90);
+        fg.d3Force('link')
+          ?.distance((l: GLink) => (l.kind === 'pd' ? 95 : 36))
+          .strength(0.25);
+      }
     } catch {
       /* forces not ready */
     }
@@ -585,7 +760,10 @@ export default function OverviewView() {
     // bloom (not the whole field, which washed the canvas to grey).
     // radius ~0 keeps the glow tight on each node instead of spreading a
     // full-frame haze across the coarse mip (which washed the field to purple).
-    const bloom = new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
+    // Warmer, stronger glow for the Second Brain nebula; the classic tighter bloom otherwise.
+    const bloom = SECOND_BRAIN_V2
+      ? new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.8, 0.35, 0.5)
+      : new UnrealBloomPass(new THREE.Vector2(dims.w, dims.h), 0.45, 0.0, 0.8);
     composer.addPass(bloom);
     bloomRef.current = bloom;
   }, [dims.w]);
@@ -641,7 +819,56 @@ export default function OverviewView() {
     if (!tookControlRef.current) fitView();
   };
 
+  const runAsk = async () => {
+    const q = askQuery.trim();
+    if (!q || asking) return;
+    setAsking(true);
+    const hits = await askSecondBrain(q);
+    setAskHits(hits);
+    setAsking(false);
+  };
+  // Open a recall hit at its source: a deliverable → its library item; otherwise reframe.
+  const openHit = (h: RecallHit) => {
+    if (h.refType === 'library') {
+      const item = library.find((it) => it.title === h.title);
+      if (item) return openDeliverable(item as LibItem);
+    }
+    fitView();
+  };
+  // A timeline row shares the same source-routing as a recall hit.
+  const openEvent = (refType: string | undefined, title: string) =>
+    openHit({ refType, title, refId: undefined, summary: '', score: 0 });
+
   const nodeThreeObject = (n: GNode): any => {
+    // Second Brain v2: render EVERY node as a firefly (hot core + warm glow, additive-blended),
+    // no hard sphere — the nebula read from the reference. Roots/departments are bigger and always
+    // labeled; high-weight knowledge nodes carry a label too, the rest are hover-only.
+    if (SECOND_BRAIN_V2) {
+      const radius = Math.cbrt(n.val) * 2.2;
+      const isRoot = n.kind === 'project';
+      const isDept = n.kind === 'dept';
+      const glowHex = isRoot ? '#FFE7A8' : (n.deptColor ?? '#FDB022');
+      const size = radius * (isRoot ? 9 : isDept ? 7 : 5.5);
+      const group = new THREE.Group();
+      group.add(makeFireflySprite(glowHex, size));
+      if (isRoot || isDept || n.sbLabel) {
+        const lbl = new SpriteText(n.name);
+        lbl.color = '#FFFFFF';
+        lbl.textHeight = isRoot ? 5 : isDept ? 4.3 : 3.6;
+        lbl.fontFace = 'Inter, system-ui, sans-serif';
+        lbl.fontWeight = '700';
+        // Solid dark pill + a dark stroke so the text stays legible over the bright additive glow.
+        (lbl as any).backgroundColor = 'rgba(6,5,14,0.9)';
+        (lbl as any).padding = 3;
+        (lbl as any).borderRadius = 4;
+        lbl.strokeColor = 'rgba(0,0,0,0.85)';
+        lbl.strokeWidth = 0.6;
+        // Lift the label clear of the glow so the bloom halo doesn't wash over the text.
+        (lbl as any).position.set(0, size * 0.6 + 5, 0);
+        group.add(lbl);
+      }
+      return group;
+    }
     if (n.kind === 'task') return undefined; // default sphere; label on hover
 
     // Label — for departments, append the progress count.
@@ -824,26 +1051,152 @@ export default function OverviewView() {
           ✦ {revealKeys.size} {revealKeys.size === 1 ? 'area' : 'areas'} unlocked
         </div>
       )}
-      <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
+      {/* The classic progress HUD lives bottom-left — where the Second Brain chat rail now is —
+          and duplicates the right panel's STATUS/DO-THIS-NEXT, so it's hidden in v2. */}
+      {!SECOND_BRAIN_V2 && (
+        <OverviewProgressHud progress={progress} nextStage={nextMilestone} />
+      )}
 
       <div
         style={{
           position: 'absolute',
           top: 58,
-          left: 26,
-          right: 26,
+          left: SECOND_BRAIN_V2 ? 346 : 26,
+          right: SECOND_BRAIN_V2 ? 326 : 26,
           maxWidth: 640,
           zIndex: 5,
           pointerEvents: 'none',
         }}
       >
         <h1 style={{ fontSize: 21, fontWeight: 600, color: '#F5F3FF', letterSpacing: '-.3px' }}>
-          Overview
+          {SECOND_BRAIN_V2 ? 'Second Brain' : 'Overview'}
         </h1>
         <div style={{ fontSize: 13, color: 'rgba(245,243,255,.55)', marginTop: 3 }}>
-          Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click
-          a node to open it.
+          {SECOND_BRAIN_V2
+            ? 'Everything you and byte have made, connected — ask it anything, or click a star to open it.'
+            : 'Your whole company as a living map — drag to orbit, scroll to zoom, hover to focus, click a node to open it.'}
         </div>
+        {/* Second Brain v2 empty-state: the spine still renders, so this is never a blank screen —
+            just an honest invitation for a brand-new account with no ledger events yet. */}
+        {SECOND_BRAIN_V2 && events.length === 0 && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 12.5, color: 'rgba(125,227,255,.75)' }}>
+              Your Second Brain fills in as you and byte work — approve a deliverable or lock a
+              decision to see it join the graph.
+            </div>
+            <button
+              onClick={async () => {
+                if (backfilling) return;
+                setBackfilling(true);
+                const r = await runSecondBrainBackfill();
+                if (r.backfilled > 0) window.location.reload();
+                else setBackfilling(false);
+              }}
+              style={{
+                pointerEvents: 'auto',
+                marginTop: 8,
+                fontSize: 12.5,
+                fontWeight: 700,
+                padding: '6px 14px',
+                borderRadius: 999,
+                border: '1px solid rgba(125,227,255,0.4)',
+                background: 'rgba(125,227,255,0.12)',
+                color: '#7DE3FF',
+                cursor: backfilling ? 'default' : 'pointer',
+                opacity: backfilling ? 0.6 : 1,
+              }}
+            >
+              {backfilling ? 'Loading your history…' : 'Load my past work'}
+            </button>
+          </div>
+        )}
+        {/* Ask your Second Brain (P2 recall). Inert server-side without SECOND_BRAIN_RECALL +
+            VOYAGE_API_KEY — the route returns no hits, so this quietly shows nothing found. */}
+        {SECOND_BRAIN_V2 && (
+          <div style={{ pointerEvents: 'auto', marginTop: 12, maxWidth: 420 }}>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void runAsk();
+              }}
+              style={{ display: 'flex', gap: 8 }}
+            >
+              <input
+                value={askQuery}
+                onChange={(e) => setAskQuery(e.target.value)}
+                placeholder="Ask your Second Brain…"
+                style={{
+                  flex: 1,
+                  fontSize: 13,
+                  padding: '7px 12px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(125,227,255,0.35)',
+                  background: 'rgba(16,14,28,0.85)',
+                  color: '#F5F3FF',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+              />
+              <button
+                type="submit"
+                disabled={asking || !askQuery.trim()}
+                style={{
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  padding: '7px 14px',
+                  borderRadius: 999,
+                  border: '1px solid rgba(125,227,255,0.4)',
+                  background: 'rgba(125,227,255,0.12)',
+                  color: '#7DE3FF',
+                  cursor: asking || !askQuery.trim() ? 'default' : 'pointer',
+                  opacity: asking || !askQuery.trim() ? 0.55 : 1,
+                }}
+              >
+                {asking ? '…' : 'Ask'}
+              </button>
+            </form>
+            {askHits !== null && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {askHits.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'rgba(245,243,255,.45)' }}>
+                    Nothing in your Second Brain matched that yet.
+                  </div>
+                ) : (
+                  askHits.map((h, i) => (
+                    <button
+                      key={`${h.refType}:${h.refId}:${i}`}
+                      onClick={() => openHit(h)}
+                      style={{
+                        textAlign: 'left',
+                        padding: '7px 11px',
+                        borderRadius: 10,
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        background: 'rgba(16,14,28,0.7)',
+                        color: '#F5F3FF',
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                      }}
+                    >
+                      <div style={{ fontSize: 12.5, fontWeight: 600 }}>{h.title}</div>
+                      <div
+                        style={{
+                          fontSize: 11.5,
+                          color: 'rgba(245,243,255,.5)',
+                          marginTop: 2,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {h.summary}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {/* Honest signal: until byte's scaffold lands, this map is the built-in example —
             never let a seeded map pass for a plan tailored to the founder's product. */}
         {examplePlan && (
@@ -883,14 +1236,171 @@ export default function OverviewView() {
             </button>
           </div>
         )}
+        {SECOND_BRAIN_V2 && (
+          <div style={{ marginTop: 10, display: 'flex', gap: 8, pointerEvents: 'auto' }}>
+            <button
+              onClick={() => setTimelineOpen((v) => !v)}
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: timelineOpen ? 'rgba(125,227,255,0.12)' : 'rgba(16,14,28,0.7)',
+                color: timelineOpen ? '#7DE3FF' : 'rgba(245,243,255,.7)',
+                cursor: 'pointer',
+              }}
+            >
+              {timelineOpen ? 'Hide timeline' : 'Timeline'}
+            </button>
+            <button
+              onClick={async () => {
+                if (backfilling) return;
+                setBackfilling(true);
+                const r = await runSecondBrainBackfill();
+                if (r.backfilled > 0) window.location.reload();
+                else setBackfilling(false);
+              }}
+              title="Pull all your deliverables, decisions and completed tasks into the graph"
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                padding: '5px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(16,14,28,0.7)',
+                color: 'rgba(245,243,255,.7)',
+                cursor: backfilling ? 'default' : 'pointer',
+                opacity: backfilling ? 0.6 : 1,
+              }}
+            >
+              {backfilling ? 'Syncing…' : 'Sync history'}
+            </button>
+          </div>
+        )}
       </div>
+
+      {SECOND_BRAIN_V2 && timelineOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 58,
+            right: 338,
+            bottom: 26,
+            width: 320,
+            maxWidth: '42vw',
+            zIndex: 6,
+            pointerEvents: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            background: 'rgba(12,10,22,0.92)',
+            border: '1px solid rgba(255,255,255,0.09)',
+            borderRadius: 14,
+            padding: 12,
+            backdropFilter: 'blur(6px)',
+          }}
+        >
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#F5F3FF', marginBottom: 8 }}>
+            What changed
+          </div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {(['all', 'deliverable', 'decision', 'milestone', 'task'] as TimelineFilter[]).map(
+              (f) => (
+                <button
+                  key={f}
+                  onClick={() => setTimelineFilter(f)}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    padding: '3px 9px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: timelineFilter === f ? 'rgba(125,227,255,0.16)' : 'transparent',
+                    color: timelineFilter === f ? '#7DE3FF' : 'rgba(245,243,255,.55)',
+                    cursor: 'pointer',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {f}
+                </button>
+              ),
+            )}
+          </div>
+          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {(() => {
+              const rows = filterEvents(events, timelineFilter);
+              const now = Date.now();
+              if (rows.length === 0)
+                return (
+                  <div style={{ fontSize: 12, color: 'rgba(245,243,255,.4)' }}>Nothing here yet.</div>
+                );
+              return rows.map((e, i) => (
+                <button
+                  key={`${e.refType}:${e.refId}:${e.ts}:${i}`}
+                  onClick={() => openEvent(e.refType, e.title)}
+                  style={{
+                    textAlign: 'left',
+                    padding: '7px 10px',
+                    borderRadius: 9,
+                    border: '1px solid rgba(255,255,255,0.06)',
+                    background: 'rgba(255,255,255,0.02)',
+                    color: '#F5F3FF',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 8,
+                      alignItems: 'baseline',
+                    }}
+                  >
+                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>{e.title}</span>
+                    <span style={{ fontSize: 11, color: 'rgba(245,243,255,.4)', flexShrink: 0 }}>
+                      {relativeTime(e.ts, now)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'rgba(125,227,255,.6)', marginTop: 2 }}>
+                    {e.type.replace(/_/g, ' ')}
+                  </div>
+                </button>
+              ));
+            })()}
+          </div>
+        </div>
+      )}
+
+      {SECOND_BRAIN_V2 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 58,
+            right: 26,
+            bottom: 26,
+            width: 300,
+            maxWidth: '38vw',
+            zIndex: 6,
+            pointerEvents: 'auto',
+          }}
+        >
+          <SecondBrainPanel
+            events={events}
+            nextStep={nextStep}
+            tracking={tracking}
+            companionId={companionId}
+            onTopic={(k) => flyTo(`dept:${k}`)}
+          />
+        </div>
+      )}
 
       {stageComplete() && <AdvanceCard next={nextStageOf(brief.stage)} onAdvance={advanceStage} />}
       <div
         style={{
           position: 'absolute',
           bottom: 20,
-          left: 26,
+          left: SECOND_BRAIN_V2 ? 346 : 26,
           zIndex: 5,
           display: 'flex',
           gap: 16,
@@ -900,12 +1410,24 @@ export default function OverviewView() {
           pointerEvents: 'none',
         }}
       >
-        <Legend dot="#F4F1FF" label="Project" />
-        <Legend dot="#8B5CF6" label="byte does" />
-        <Legend dot="#FDB022" label="Needs approval" />
-        <Legend dot="#3B82F6" label="Needs you" />
-        <Legend dot="#34D399" label="Done" />
-        {introPhase === 'done' && (
+        {SECOND_BRAIN_V2 ? (
+          <>
+            <Legend dot="#FFE7A8" label="Company" />
+            <Legend dot="#FDB022" label="Department" />
+            <Legend dot="#F6A23C" label="Deliverable" />
+            <Legend dot="#2DD4BF" label="Decision" />
+            <Legend dot="#FF6B9D" label="Milestone" />
+          </>
+        ) : (
+          <>
+            <Legend dot="#F4F1FF" label="Project" />
+            <Legend dot="#8B5CF6" label="byte does" />
+            <Legend dot="#FDB022" label="Needs approval" />
+            <Legend dot="#3B82F6" label="Needs you" />
+            <Legend dot="#34D399" label="Done" />
+          </>
+        )}
+        {!SECOND_BRAIN_V2 && introPhase === 'done' && (
           <button
             type="button"
             onClick={() => setIntroPhase('intro')}
@@ -926,7 +1448,31 @@ export default function OverviewView() {
         )}
       </div>
 
-      <div ref={wrapRef} style={{ position: 'absolute', inset: 0 }}>
+      {/* Second Brain v2: left chat rail (reuses byte's chat inline). The app-shell's right
+          dock is suppressed in this mode (AppRoot), so this is the only chat instance. */}
+      {SECOND_BRAIN_V2 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            bottom: 0,
+            width: 320,
+            zIndex: 7,
+            pointerEvents: 'auto',
+          }}
+        >
+          <Copilot inline />
+        </div>
+      )}
+      <div
+        ref={wrapRef}
+        style={
+          SECOND_BRAIN_V2
+            ? { position: 'absolute', top: 0, bottom: 0, left: 320, right: 326 }
+            : { position: 'absolute', inset: 0 }
+        }
+      >
         {mapDimmed && (
           <div
             aria-hidden
@@ -964,7 +1510,7 @@ export default function OverviewView() {
               if (tourDim) return tourLit(n.id) ? n.color : DIM_NODE;
               return inFocus(n.id) ? n.color : DIM_NODE;
             }}
-            nodeOpacity={0.95}
+            nodeOpacity={SECOND_BRAIN_V2 ? 0 : 0.95}
             nodeResolution={18}
             nodeRelSize={2.2}
             nodeThreeObjectExtend
@@ -1010,12 +1556,24 @@ export default function OverviewView() {
               return pathLinkIds.has(key) ? 3 : 1.8;
             }}
             linkDirectionalParticleSpeed={0.006}
-            enableNodeDrag
+            // Node dragging is off: this is an orbit/zoom/click map (positions are seeded), and
+            // three's DragControls forwards a pointercancel into OrbitControls.onPointerUp that
+            // crashes on an untracked pointer ("reading 'x'"). Disabling it removes that path.
+            enableNodeDrag={false}
             cooldownTime={4000}
             d3AlphaDecay={0.05}
             d3VelocityDecay={0.45}
             onEngineStop={onEngineStop}
             onNodeClick={(n) => {
+              if (SECOND_BRAIN_V2) {
+                // Route a knowledge node back to its source record where we have one.
+                if (n.refType === 'library') {
+                  const item = library.find((it) => it.title === n.name);
+                  if (item) return openDeliverable(item as LibItem);
+                }
+                if (n.kind === 'dept') return openDept(n.id.replace(/^dept:/, ''));
+                return fitView();
+              }
               if (n.kind === 'dept' && n.dept) openDept(n.dept.k);
               else if (n.kind === 'task' && n.task && n.dept) {
                 if (n.task.done) openDept(n.dept.k);
@@ -1194,7 +1752,7 @@ function AdvanceCard({ next, onAdvance }: { next: string | null; onAdvance: () =
       style={{
         position: 'absolute',
         top: 126,
-        left: 26,
+        left: SECOND_BRAIN_V2 ? 346 : 26,
         zIndex: 6,
         width: 264,
         padding: '15px 17px 16px',
