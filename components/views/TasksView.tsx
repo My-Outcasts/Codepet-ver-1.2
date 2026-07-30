@@ -2,7 +2,8 @@
 import { useApp } from '@/lib/store';
 import { companionById } from '@/lib/companions';
 import { DEPTS, type Dept, type Task } from '@/lib/data';
-import { taskState } from '@/lib/helpers';
+import { taskState, artType } from '@/lib/helpers';
+import { liveKind } from '@/lib/ai/applyResult';
 
 interface Row {
   d: Dept;
@@ -36,7 +37,7 @@ const COLS: Array<{ key: string; label: string; dot: string; test: (x: Row) => b
 ];
 
 export function TasksView() {
-  const { tick, runTask, viewItem, library, companionId } = useApp();
+  const { tick, runTask, viewItem, library, companionId, startRunInTheater } = useApp();
   const companionName = companionById(companionId).name;
   void tick;
   const ALL: Row[] = [];
@@ -53,10 +54,26 @@ export function TasksView() {
   };
 
   const card = ({ d, t }: Row, key: number) => {
+    // Only tasks the agent can actually produce get the theater entry point — the same
+    // liveKind gate the run itself uses, so the button never appears on a task it
+    // would refuse to run.
+    const runnable = !t.done && !!liveKind(artType(t));
     return (
       <div className="kb-card" key={key} onClick={() => open({ d, t })}>
         <div className="kb-dept">{d.name}</div>
         <div className="kb-title">{t.t}</div>
+        {runnable ? (
+          <button
+            className="rt-open"
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              startRunInTheater(d.k, t.t);
+            }}
+          >
+            Run it here
+          </button>
+        ) : null}
       </div>
     );
   };
