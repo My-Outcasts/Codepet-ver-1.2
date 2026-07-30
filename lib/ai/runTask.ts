@@ -6,6 +6,8 @@
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase/client';
 import type { CompanyBrief } from '../firebase/schema';
 import type { TaskHelp } from './taskHelp';
+import type { RunEvent } from './runTrace';
+import { createEventDecoder } from './runStream';
 
 export async function authHeader(): Promise<Record<string, string>> {
   if (!isFirebaseConfigured) return {};
@@ -66,6 +68,53 @@ export async function runByteTask(args: RunArgs): Promise<RunResult> {
     throw new GenerateError(data.error || `http_${res.status}`);
   }
   return (await res.json()) as RunResult;
+}
+
+/** Run a task and observe the real phases as they land. Same request as runByteTask —
+ *  the route answers with NDJSON. `onEvent` fires per event so the run theater can
+ *  render a phase the moment the server finishes it; the promise resolves with the
+ *  deliverable in the identical shape runByteTask returns, so applyResult is unchanged.
+ *
+ *  A response that is NOT NDJSON (an older deployment, or a proxy that rewrote it) is
+ *  read as one JSON body instead — the theater then shows the finished run without
+ *  intermediate phases rather than failing. */
+export async function runByteTaskStreaming(
+  args: RunArgs,
+  onEvent: (ev: RunEvent) => void,
+): Promise<RunResult> {
+  const res = await fetch('/api/run-task', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...(await authHeader()) },
+    body: JSON.stringify(args),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new GenerateError(data.error || `http_${res.status}`);
+  }
+  const streamed = (res.headers.get('content-type') || '').includes('x-ndjson');
+  if (!streamed || !res.body) {
+    const result = (await res.json()) as RunResult;
+    onEvent({ type: 'result', ...result });
+    return result;
+  }
+
+  const reader = res.body.getReader();
+  const utf8 = new TextDecoder();
+  const decode = createEventDecoder();
+  let result: RunResult | null = null;
+  let failure: string | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    for (const ev of decode(utf8.decode(value, { stream: true }))) {
+      onEvent(ev);
+      if (ev.type === 'result') result = { text: ev.text, payload: ev.payload };
+      if (ev.type === 'error') failure = ev.code;
+    }
+  }
+  if (failure) throw new GenerateError(failure);
+  if (!result) throw new GenerateError('generation_failed');
+  return result;
 }
 
 export interface TaskHelpArgs {
