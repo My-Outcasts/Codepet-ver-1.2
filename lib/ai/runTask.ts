@@ -57,17 +57,13 @@ export class GenerateError extends Error {
   }
 }
 
+/** Run a task and wait for the finished deliverable, ignoring the phases along the way.
+ *  The route streams NDJSON, so this delegates to the streaming reader with a no-op
+ *  observer rather than calling res.json() — a multi-line body would throw SyntaxError.
+ *  Callers that don't render a live rail (the chat run path, the department run modal)
+ *  use this and are unaffected by the framing. */
 export async function runByteTask(args: RunArgs): Promise<RunResult> {
-  const res = await fetch('/api/run-task', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify(args),
-  });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new GenerateError(data.error || `http_${res.status}`);
-  }
-  return (await res.json()) as RunResult;
+  return runByteTaskStreaming(args, () => {});
 }
 
 /** Run a task and observe the real phases as they land. Same request as runByteTask —
