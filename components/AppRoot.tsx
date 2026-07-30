@@ -22,6 +22,7 @@ import { InstallModal } from './InstallModal';
 import { SettingsView } from './views/SettingsView';
 import { BillingView } from './views/BillingView';
 import { BuildCoachView } from './views/BuildCoachView';
+import { RunTheater } from './run/RunTheater';
 
 // Overview tab — the roadmap (default) with the 3D force-graph behind a "Map" sub-tab.
 // OverviewSection lazy-loads the three.js map internally, so WebGL is fetched only when
@@ -52,6 +53,8 @@ function Shell() {
       <TasksView />
     ) : view === 'build' ? null : view === 'library' ? ( // Rendered by the persistent keep-alive slot below, not here.
       <LibraryView />
+    ) : view === 'run' ? (
+      <RunTheater />
     ) : view === 'settings' ? (
       <SettingsView />
     ) : view === 'billing' ? (
