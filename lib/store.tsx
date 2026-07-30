@@ -15,7 +15,14 @@ import React, {
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType, buildLog, type LogStep } from './helpers';
-import { runByteTask, GenerateError, postEnrichAnswer, fetchTaskHelp } from './ai/runTask';
+import {
+  runByteTask,
+  runByteTaskStreaming,
+  GenerateError,
+  postEnrichAnswer,
+  fetchTaskHelp,
+} from './ai/runTask';
+import { newRun, reduceRun, type LiveRun } from './ai/liveRun';
 import { getByok } from './ai/byokClient';
 import { mergeDecisions } from './ai/decisions';
 import type { TaskHelp } from './ai/taskHelp';
@@ -209,7 +216,8 @@ export type View =
   | 'env'
   | 'settings'
   | 'billing'
-  | 'build';
+  | 'build'
+  | 'run';
 
 export type Modal =
   { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
@@ -366,6 +374,14 @@ interface AppState {
   retryChat: (byteMsgId: string) => void;
   /** Produce a task's deliverable inline in chat (byte's "run it from here"). */
   runTaskInChat: (deptK: string, taskTitle: string) => void;
+  /** The run the founder is currently watching in the run theater, or null. */
+  liveRun: LiveRun | null;
+  /** Start a task in the full-width run theater (view 'run') and stream its phases. */
+  startRunInTheater: (deptK: string, taskTitle: string) => void;
+  /** Leave the theater. A finished run's deliverable is already applied; nothing is lost. */
+  closeRunTheater: () => void;
+  /** Re-run the task in the theater after a failure, from a clean trace. */
+  retryRun: () => void;
   /** Revise an inline chat result against byte's feedback, updating the card in place.
    * An empty note is a plain regenerate. */
   reviseTaskInChat: (msgId: string, deptK: string, taskTitle: string, note: string) => void;
@@ -1973,6 +1989,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  const [liveRun, setLiveRun] = useState<LiveRun | null>(null);
+
+  // Run a task in the theater. Same generation as runTaskInChat (runByteTaskStreaming →
+  // applyResult), but the phases stream into a LiveRun the theater renders, and the
+  // founder stays on a full-width surface instead of a 320px card.
+  const startRunInTheater = useCallback(
+    async (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t) return;
+      const type = artType(t);
+      const kind = liveKind(type);
+      if (!kind) return; // not producible here — the chat path explains why
+      setLiveRun(
+        newRun({
+          deptK,
+          taskTitle: t.t,
+          deptName: d.name,
+          type,
+          startedAt: Date.now(),
+        }),
+      );
+      setView('run');
+      track('run.theater_open', { dept: d.k, type });
+      try {
+        const res = await runByteTaskStreaming(
+          {
+            kind,
+            taskTitle: t.t,
+            taskHint: t.d,
+            deptName: d.name,
+            deptKey: d.k,
+            brief,
+            companionId,
+          },
+          (ev) => setLiveRun((prev) => (prev ? reduceRun(prev, ev, Date.now()) : prev)),
+        );
+        applyResult(t, type, res);
+        creditToolkitUse(t.t, type);
+        bump();
+        persistTaskDraft(d.k, t.t);
+        setAiOffline(null);
+      } catch (err) {
+        const code = err instanceof GenerateError ? err.code : 'generation_failed';
+        const limited = code === 'rate_limited' || code === 'http_429';
+        if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
+        // The stream may already have delivered an `error` event; reduceRun ignores a
+        // second one because a finished run is immutable.
+        setLiveRun((prev) => (prev ? reduceRun(prev, { type: 'error', code }, Date.now()) : prev));
+      }
+    },
+    [brief, bump, persistTaskDraft, creditToolkitUse, companionId],
+  );
+
+  const closeRunTheater = useCallback(() => {
+    setLiveRun(null);
+    setView('overview');
+  }, []);
+
+  const retryRun = useCallback(() => {
+    if (liveRun) startRunInTheater(liveRun.deptK, liveRun.taskTitle);
+  }, [liveRun, startRunInTheater]);
+
   // Produce a task's deliverable INLINE in chat — byte's "run it from here." Runs the
   // exact same generation the department panel uses (runByteTask → applyResult), then
   // leaves a result card in the thread for the founder to approve. Reads live DEPTS, so
@@ -3215,6 +3294,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearAllChats,
       toggleChatHistory,
       retryChat,
+      liveRun,
+      startRunInTheater,
+      closeRunTheater,
+      retryRun,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
@@ -3340,6 +3423,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       clearAllChats,
       toggleChatHistory,
       retryChat,
+      liveRun,
+      startRunInTheater,
+      closeRunTheater,
+      retryRun,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
