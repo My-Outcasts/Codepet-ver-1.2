@@ -1,6 +1,6 @@
 // Roadmap stage logic — ported from the draft. These read the live `done`
 // state off DEPTS, so they must be called on each render (post-mutation).
-import { DEPTS, STAGE_TASKS, NODES, type Dept, type Task } from './data';
+import { DEPTS, STAGE_TASKS, type Dept, type Task } from './data';
 
 export interface StageTaskRef {
   dept: Dept;
@@ -52,23 +52,4 @@ export function eff(n: any): 'done' | 'locked' | 'now' | 'next' {
   if (n.n < watermark) return 'done';
   if (n.n === watermark) return 'now';
   return 'next';
-}
-
-// The authored golden-path "next step": the single task to do next, from the
-// current stage. This is the deterministic FALLBACK the beacon and byte both read
-// when byte's own ranking (/api/next-step) hasn't resolved or is unavailable — so
-// the two surfaces always agree even offline. Reads live DEPTS, so call per render.
-export function nextAction(): StageTaskRef | null {
-  const now = NODES.find((n) => eff(n) === 'now');
-  if (!now) return null;
-  const refs = stageTasks(now.n);
-  const open = refs.filter((r) => !r.task.done);
-  // what needs the founder first, then anything still in flight
-  return (
-    open.find((r) => r.task.who === 'you') ||
-    open.find((r) => r.task.who === 'draft') ||
-    open[0] ||
-    refs[refs.length - 1] ||
-    null
-  );
 }

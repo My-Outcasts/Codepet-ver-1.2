@@ -8,7 +8,7 @@
 import { verifyIdToken } from '@/lib/firebase/admin';
 import { loadServerBrief, writeServerBrief } from '@/lib/firebase/serverBrief';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { getClient, generateJson, aiErrorResponse, LIGHT_MODEL } from '@/lib/ai/client';
 import {
   INTERVIEW_SCHEMA,
   buildDistillPrompt,
@@ -83,6 +83,8 @@ export async function POST(req: Request): Promise<Response> {
       maxTokens: 512,
       label: `enrich-answer:${gap}`,
       schema: INTERVIEW_SCHEMA,
+      // Distilling one short answer into a brief field → cheaper tier.
+      model: LIGHT_MODEL,
       onUsage: usageSink(uid, idToken, 'enrichAnswer'),
     });
     const merged = mergeAnswer(brief, gap, distilled);

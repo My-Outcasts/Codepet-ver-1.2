@@ -20,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.107.0",
     "@sentry/nextjs": "^10.62.0",
+    "e2b": "^2.33.1",
     "firebase": "^11.10.0",
     "firebase-admin": "^14.1.0",
     "jose": "^6.2.3",

@@ -74,7 +74,7 @@ function TaskCard({ t, dept }: { t: Task; dept: Dept }) {
           </button>
         ) : (
           <button className="btn" onClick={() => runTask(t, dept)}>
-            {t.who === 'draft' ? 'Have byte draft it' : 'Have byte do it'}
+            {t.who === 'draft' ? 'Have Codepet draft it' : 'Have Codepet do it'}
           </button>
         )}
       </div>

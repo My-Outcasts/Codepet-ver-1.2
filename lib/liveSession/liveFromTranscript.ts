@@ -34,5 +34,6 @@ export function liveFromTranscript(t: TranscriptState, startedAt: Millis, now: M
   };
   if (lastSay !== undefined) out.lastSay = lastSay;
   if (pendingAsk !== undefined) out.pendingAsk = pendingAsk;
+  out.tokens = t.tokens;
   return out;
 }

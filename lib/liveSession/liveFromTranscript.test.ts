@@ -70,4 +70,8 @@ describe('liveFromTranscript', () => {
   it('carries the claude session id through', () => {
     expect(liveFromTranscript(at({ sessionId: 'sess-1' }), 0, 0).sessionId).toBe('sess-1');
   });
+
+  it('carries the summed token count through', () => {
+    expect(liveFromTranscript(at({ tokens: 42 }), 0, 0).tokens).toBe(42);
+  });
 });

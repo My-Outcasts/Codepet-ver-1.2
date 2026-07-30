@@ -9,6 +9,7 @@ import { loadServerLibrary } from '@/lib/firebase/serverLibrary';
 import { selectPriorWork, composePriorWorkContext } from '@/lib/ai/priorWork';
 import { enforceDailyLimit, usageSink } from '@/lib/firebase/serverUsage';
 import { toClaudeMessages, type ChatTurn } from '@/lib/ai/chatMessages';
+import { formatThreadSummaryBlock } from '@/lib/ai/threadSummary';
 import { getClient, streamMessage, aiErrorResponse, errorCodeOf } from '@/lib/ai/client';
 import { composeProjectModel } from '@/lib/ai/projectModel';
 import { NAV_DESTINATIONS } from '@/lib/ai/navChip';
@@ -17,7 +18,9 @@ import { writeServerDecisions } from '@/lib/firebase/serverDecisions';
 import { mergeDecisions } from '@/lib/ai/decisions';
 import { REMEMBER_FACT_SCHEMA, coerceMemory, newOrChanged } from '@/lib/ai/chatMemory';
 import { needsFallbackReply, REFUSAL_FALLBACK } from '@/lib/ai/chatFallback';
-import { personaOverride } from '@/lib/companions';
+import { companionForDept, personaOverride } from '@/lib/companions';
+import { departmentBrief } from '@/lib/ai/departments';
+import { recallBlock } from '@/lib/ai/secondBrainRecall';
 
 export const runtime = 'nodejs';
 
@@ -27,7 +30,7 @@ You are in a chat with the founder. Be warm, plain-spoken, specific, and brief �
 
 You can DO the work here, not only talk about it. When the founder asks you to run, make, draft, write, finish, or execute a task — or says "do it" / "run that for me" about the task you're discussing — call the run_task tool with the matching entry from RUNNABLE TASKS. The deliverable is produced right here in the chat for them to approve; never tell them to go open the task somewhere else. Say one short lead-in line first (e.g. "On it — running the willingness-to-pay survey.") and then call the tool. Rules: only call run_task for a task that is actually in RUNNABLE TASKS, using its exact deptK and taskTitle; if it's unclear which task they mean, ask a one-line clarifying question instead of guessing; and for questions, advice, or status, just reply — don't call the tool.
 
-If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now (it's what the map's beacon shows too). When they ask what to do next, lead with that exact task — you may add sequencing or detail, but never name a different task as the headline "next step," or the app will contradict itself.
+If the context names a CURRENT NEXT STEP, that is the founder's single agreed focus right now — it's exactly what the map's beacon and roadmap show. Whenever they ask what to do or focus on — first, next, or right now — your headline answer MUST be that exact task and its department. You may add sequencing, rationale, or detail, but never lead with or substitute a different task, even if another move seems strategically better: naming a different headline focus makes the app contradict itself.
 
 Codepet also has a "Let's build" flow that walks the founder through a real Claude Code coding session — think first, build live, then review. When the founder wants to build, code, create, or make a new feature, app, script, tool, or website themselves with the coding agent, call the offer_build tool to surface a one-tap "Let's build" button; say one short encouraging line first. Don't call offer_build for the runnable deliverable tasks, or for plain questions, advice, or status.
 
@@ -201,7 +204,12 @@ interface ChatBody {
   deptSummary?: unknown;
   openTasks?: unknown;
   envSetup?: unknown;
-  companionId?: unknown;
+  /** The department in focus (active dept view → else CURRENT NEXT STEP's dept).
+   *  Drives the Copilot's voice-per-department persona; omitted → byte. */
+  focusDeptKey?: unknown;
+  /** Rolling summary of this thread's turns that have scrolled past the window, so a long
+   *  conversation keeps its earlier context. Maintained by /api/summarize-thread. */
+  threadSummary?: unknown;
 }
 
 export async function POST(req: Request): Promise<Response> {
@@ -279,7 +287,7 @@ export async function POST(req: Request): Promise<Response> {
   const relevantBlock = relevantWork ? `\n\n${relevantWork}` : '';
   const deptSummary =
     typeof body.deptSummary === 'string' && body.deptSummary.trim()
-      ? `\n\nWhere their departments stand right now:\n${body.deptSummary.trim().slice(0, 1200)}`
+      ? `\n\nWhere their departments stand right now:\n${body.deptSummary.trim().slice(0, 1800)}`
       : '';
 
   // The tasks byte is allowed to run from chat. Included in the prompt so byte uses
@@ -307,8 +315,32 @@ export async function POST(req: Request): Promise<Response> {
   const memoryBlock = MEMORY_ON
     ? '\n\nMEMORY: When the founder states a durable decision or material fact about their company (a real waitlist/user/revenue number, a goal, a milestone, a pricing/positioning/naming/scope/timeline choice), also call the remember_fact tool to record it — in addition to your normal reply. Capture their real words and numbers exactly; never invent. Do not call it for questions, requests to you, opinions, or small talk.'
     : '';
-  const companionId = typeof body.companionId === 'string' ? body.companionId : undefined;
-  const system = `${BYTE_SYSTEM}\n\nThe founder's company: ${context}${relevantBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${personaOverride(companionId)}`;
+  // Voice-per-department: the Copilot speaks as the focus department's pet — the department
+  // the founder is viewing, else the CURRENT NEXT STEP's department, resolved client-side and
+  // sent as focusDeptKey. Omitted (no department in focus) → byte, the default.
+  const focusDeptKey = typeof body.focusDeptKey === 'string' ? body.focusDeptKey : undefined;
+  // Department expertise: give the Copilot the SAME per-department foundation (mandate + core
+  // skills, see lib/ai/departments) that the generation routes already read, so chat reasons
+  // from the department's operator brain — not just its voice. departmentBrief returns '' when
+  // no department is in focus, so general chat is unchanged. Placed before the persona override
+  // so the voice identity stays the final instruction.
+  const deptExpertise = departmentBrief(focusDeptKey);
+  const deptExpertiseBlock = deptExpertise ? `\n\n${deptExpertise}` : '';
+  // P2.1: ground byte in the Second Brain ledger when recall is enabled (best-effort, gated).
+  const secondBrainBlock = await recallBlock(uid, lastFounderMsg);
+  // Rolling summary of this thread's turns that scrolled past the window — keeps a long
+  // conversation's earlier context (maintained client-side via /api/summarize-thread).
+  const threadSummaryBlock = formatThreadSummaryBlock(
+    typeof body.threadSummary === 'string' ? body.threadSummary : '',
+  );
+  // Cache the stable prefix (byte's system + the company model) and bill the per-message
+  // grounding normally. composeProjectModel is deterministic from brief+decisions+shipped, so
+  // the stable half repeats byte-for-byte across turns that don't change a decision or ship —
+  // i.e. most turns → a real cache hit. See docs/superpowers/specs/2026-07-17-prompt-cache-effective-hits-design.md.
+  const system = {
+    stable: `${BYTE_SYSTEM}\n\nThe founder's company: ${context}`,
+    volatile: `${relevantBlock}${secondBrainBlock}${threadSummaryBlock}${deptSummary}${runnableBlock}${setupBlock}${memoryBlock}${deptExpertiseBlock}${personaOverride(companionForDept(focusDeptKey).id)}`,
+  };
 
   try {
     const mstream = streamMessage({
@@ -432,9 +464,13 @@ export async function POST(req: Request): Promise<Response> {
           }
 
           if (Object.keys(mark).length) {
+            // A build offer is orthogonal to memory/actions — byte can capture a fact AND offer
+            // to build in one turn. Fold it into the action mark so it isn't lost (the action and
+            // build marks are separate control frames and the client only reads the first one).
+            if (offerUse) mark.offerBuild = true;
             controller.enqueue(encoder.encode(ACTION_MARK + JSON.stringify(mark)));
           } else if (offerUse) {
-            // Mutually exclusive with the action mark: a plain "Let's build" offer.
+            // A plain "Let's build" offer with nothing else to carry — its own frame.
             controller.enqueue(encoder.encode(BUILD_MARK));
           }
         } catch (err) {

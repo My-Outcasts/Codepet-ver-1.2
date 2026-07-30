@@ -4,7 +4,9 @@
 // the stage's why, its authored checklist, and byte's next move / advance-stage.
 import { useApp } from '@/lib/store';
 import { byN, DEPTS } from '@/lib/data';
-import { eff, nextAction } from '@/lib/roadmap';
+import { companionById } from '@/lib/companions';
+import { eff } from '@/lib/roadmap';
+import { resolveBeaconTask } from '@/lib/overview/beaconTarget';
 import { stageComplete, nextStageOf } from '@/lib/stages';
 
 export const Lock = () => (
@@ -15,8 +17,17 @@ export const Lock = () => (
 );
 
 export function StageDrawer() {
-  const { selStage, drawerOpen, closeStage, nextStep, portalToTask, advanceStage, brief } =
-    useApp();
+  const {
+    selStage,
+    drawerOpen,
+    closeStage,
+    nextStep,
+    portalToTask,
+    advanceStage,
+    brief,
+    companionId,
+  } = useApp();
+  const companionName = companionById(companionId).name;
   const n = byN(selStage);
   if (!n) return null;
   const e = eff(n);
@@ -24,13 +35,11 @@ export function StageDrawer() {
   const nextStage = nextStageOf(brief.stage);
 
   const here = (() => {
-    if (nextStep) {
-      const d = DEPTS.find((x) => x.k === nextStep.deptK);
-      const t = d?.tasks.find((x) => x.t === nextStep.taskTitle && !x.done);
-      if (d && t) return { d, t };
-    }
-    const fb = nextAction();
-    return fb ? { d: fb.dept, t: fb.task } : null;
+    const hit = resolveBeaconTask(nextStep, DEPTS);
+    if (!hit) return null;
+    const d = DEPTS.find((x) => x.k === hit.deptK);
+    const t = d?.tasks[hit.index];
+    return d && t ? { d, t } : null;
   })();
   const sLbl =
     e === 'done' ? 'Complete' : e === 'now' ? 'In progress' : e === 'next' ? 'Up next' : 'Locked';
@@ -86,7 +95,7 @@ export function StageDrawer() {
       </div>
     ) : e === 'now' && here ? (
       <div className="jd-next">
-        <div className="jd-next-lbl">byte&apos;s next move</div>
+        <div className="jd-next-lbl">{companionName}&apos;s next move</div>
         <div className="jd-next-t">{here.t.t}</div>
         <div className="jd-next-s">{here.d.name}</div>
         <button className="jd-next-go" onClick={() => portalToTask(here.d.k, here.t.t)}>

@@ -11,8 +11,10 @@ import { verifyIdToken } from '@/lib/firebase/admin';
 import { briefToContext } from '@/lib/ai/brief';
 import { departmentBlock } from '@/lib/ai/departments';
 import { loadServerBrief, writeServerBrief } from '@/lib/firebase/serverBrief';
+import { loadServerCompany } from '@/lib/firebase/serverCompany';
+import { composeDecisions } from '@/lib/ai/projectModel';
 import { usageSink } from '@/lib/firebase/serverUsage';
-import { getClient, generateJson, aiErrorResponse } from '@/lib/ai/client';
+import { getClient, generateJson, aiErrorResponse, LIGHT_MODEL } from '@/lib/ai/client';
 import {
   ENRICH_SCHEMA,
   buildEnrichPrompt,
@@ -42,6 +44,9 @@ async function enrichBrief(
       prompt: buildEnrichPrompt(brief),
       maxTokens: 1024,
       label: 'enrich',
+      // Faithful distillation is extraction — the cheaper shared tier handles it,
+      // matching next-step/remember. The heavier scaffold generation stays on MODEL.
+      model: LIGHT_MODEL,
       schema: ENRICH_SCHEMA,
       onUsage: usageSink(uid, idToken, 'enrich'),
     });
@@ -187,6 +192,10 @@ export async function POST(req: Request): Promise<Response> {
     // No real brief anywhere → don't invent a company. Keep the honest example seed.
     return Response.json({ scaffold: { departments: [] }, noBrief: true });
   }
+  // Fold the founder's locked-in decisions into the grounding so department/task
+  // generation respects them (pricing, positioning, naming) rather than the brief alone.
+  const { decisions } = await loadServerCompany(uid, idToken);
+  const groundedContext = decisions.length ? `${context}\n${composeDecisions(decisions)}` : context;
   const rawStage =
     serverBrief && typeof serverBrief === 'object'
       ? (serverBrief as { stage?: unknown }).stage
@@ -196,7 +205,7 @@ export async function POST(req: Request): Promise<Response> {
   const deptList = DEPARTMENTS.map(
     (d) => `- ${d.k} (${d.name}):\n${departmentBlock(d.k, stage)}`,
   ).join('\n\n');
-  const prompt = `Company: ${context}
+  const prompt = `Company: ${groundedContext}
 
 The founder's current stage: ${stage}.
 

@@ -7,7 +7,7 @@ import type { CompanyBrief } from '@/lib/firebase/schema';
 import { track } from '@/lib/analytics';
 import { useParallax } from '@/lib/ui/useParallax';
 import { Starfield } from '@/components/ui/Starfield';
-import { CompanionPicker } from './CompanionPicker';
+import { companionById } from '@/lib/companions';
 
 interface ObData {
   name: string;
@@ -149,8 +149,7 @@ function StageBar({ stage, setStage }: { stage: number; setStage: (n: number) =>
 }
 
 export function Onboarding() {
-  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding, companionId, setCompanion } =
-    useApp();
+  const { onboarding, finishOnboarding, toast, scaffoldFromOnboarding, companionId } = useApp();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<ObData>({
     name: '',
@@ -169,7 +168,8 @@ export function Onboarding() {
   const [anDone, setAnDone] = useState(false);
   const [reveal, setReveal] = useState<RevealSummary | null>(null);
   const [slow, setSlow] = useState(false);
-  const [pick, setPick] = useState(companionId);
+  // The chrome shows byte as the neutral default mark (companionId is pinned to byte).
+  const companionName = companionById(companionId).name;
   const nameRef = useRef<HTMLInputElement>(null);
   const coldRef = useRef<HTMLDivElement>(null);
   useParallax(coldRef);
@@ -246,8 +246,8 @@ export function Onboarding() {
       () =>
         toast(
           ok
-            ? 'Your roadmap is ready — byte mapped your company across your departments.'
-            : 'You’re in — I’ll tailor your map as soon as byte’s back. For now it’s an example you can regenerate anytime.',
+            ? 'Your roadmap is ready — Codepet mapped your company across your departments.'
+            : 'You’re in — I’ll tailor your map as soon as Codepet’s back. For now it’s an example you can regenerate anytime.',
         ),
       400,
     );
@@ -483,7 +483,9 @@ export function Onboarding() {
   } else if (step === 6) {
     body = (
       <>
-        <h2>byte is reading {data.projName || 'your project'}…</h2>
+        <h2>
+          {companionName} is reading {data.projName || 'your project'}…
+        </h2>
         <p>Turning what you told me into a full company plan.</p>
         <div className="ob-an">
           {AN_LINES.slice(0, anShown).map((t, i) => {
@@ -567,27 +569,7 @@ export function Onboarding() {
         </div>
       </>
     );
-    foot = <Foot label="Choose your companion" onClick={() => setStep(8)} />;
-  } else {
-    // step 8 — choose the companion that rides along for the project.
-    body = (
-      <>
-        <h2>Choose your companion.</h2>
-        <p>
-          Pick who&apos;ll accompany you as you build. You can change this anytime in the sidebar.
-        </p>
-        <CompanionPicker selected={pick} onSelect={setPick} />
-      </>
-    );
-    foot = (
-      <Foot
-        label="Start building"
-        onClick={() => {
-          setCompanion(pick);
-          finish();
-        }}
-      />
-    );
+    foot = <Foot label="Start building" onClick={finish} />;
   }
 
   return (

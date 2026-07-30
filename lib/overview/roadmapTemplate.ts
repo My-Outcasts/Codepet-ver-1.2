@@ -3,12 +3,12 @@
 // Like the "How to Build a Company" reference, the roadmap is a fixed playbook every
 // founder follows: six phases, each recruiting multiple departments, tasks that unlock the
 // next. A founder's real progress overlays onto this via task state (a later step wires the
-// live done/available/current values off DEPTS + /api/next-step); here the states are a
-// representative snapshot so the view has something real to render.
+// live done/available/current values off DEPTS + the roadmap's own next move). Progress is derived by
+// applyProgress (roadmapProgress.ts) from the founder's position, so tasks carry no state here.
 //
 // Note the phases run Find → Foundation → Build → Ship → Launch → Grow — Foundation is the
 // company shell (incorporate, bank, brand) the product-shaped phases used to skip.
-import type { RoadmapPhase, RoadmapTask } from './roadmapModel';
+import type { RoadmapPhase, RoadmapTaskDef } from './roadmapModel';
 
 export const ROADMAP_PHASES: RoadmapPhase[] = [
   { key: 'find', name: 'Find' },
@@ -20,14 +20,13 @@ export const ROADMAP_PHASES: RoadmapPhase[] = [
 ];
 
 // Department keys match lib/data.ts DEPTS: eng · mkt · ops · fin · legal · design · sales · support.
-export const ROADMAP_TEMPLATE: RoadmapTask[] = [
+export const ROADMAP_TEMPLATE: RoadmapTaskDef[] = [
   // Find — the business bet
   {
     id: 'find-validate',
     phase: 'find',
     dept: 'mkt',
     title: 'Validate the idea',
-    state: 'done',
     dependsOn: [],
   },
   {
@@ -35,7 +34,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'find',
     dept: 'mkt',
     title: 'Name your audience',
-    state: 'done',
     dependsOn: ['find-validate'],
   },
 
@@ -45,7 +43,7 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'foundation',
     dept: 'legal',
     title: 'Incorporate LLC',
-    state: 'done',
+    actor: 'you', // only the founder can sign the incorporation
     dependsOn: ['find-validate'],
   },
   {
@@ -53,7 +51,7 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'foundation',
     dept: 'fin',
     title: 'Business bank account',
-    state: 'done',
+    actor: 'you', // only the founder can open the bank account
     dependsOn: ['found-incorporate'],
   },
   {
@@ -61,7 +59,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'foundation',
     dept: 'design',
     title: 'Brand & voice',
-    state: 'done',
     dependsOn: ['find-audience'],
   },
 
@@ -70,16 +67,15 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     id: 'build-core',
     phase: 'build',
     dept: 'eng',
+    // the company exists → start building; product work doesn't wait on Brand & voice
     title: 'Core product flow',
-    state: 'done',
-    dependsOn: ['found-brand'],
+    dependsOn: ['found-incorporate'],
   },
   {
     id: 'build-onboard',
     phase: 'build',
     dept: 'ops',
     title: 'User onboarding',
-    state: 'done',
     dependsOn: ['build-core'],
   },
   {
@@ -87,7 +83,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'build',
     dept: 'eng',
     title: 'Auth & accounts',
-    state: 'done',
     dependsOn: ['build-core'],
   },
 
@@ -97,7 +92,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'ship',
     dept: 'mkt',
     title: 'Landing site',
-    state: 'done',
     dependsOn: ['build-core'],
   },
   {
@@ -105,23 +99,22 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'ship',
     dept: 'fin',
     title: 'Set up billing',
-    state: 'current',
     dependsOn: ['build-auth'],
   },
   {
     id: 'ship-terms',
     phase: 'ship',
     dept: 'legal',
+    // depends on Auth & accounts (adjacent Build column, same row) → a clean straight
+    // connector, instead of spanning back to Foundation across the Build column
     title: 'Terms & privacy',
-    state: 'needsYou',
-    dependsOn: ['found-incorporate'],
+    dependsOn: ['build-auth'],
   },
   {
     id: 'ship-help',
     phase: 'ship',
     dept: 'support',
     title: 'Stand up help center',
-    state: 'approve',
     dependsOn: ['build-onboard'],
   },
 
@@ -131,7 +124,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'launch',
     dept: 'mkt',
     title: 'Launch campaign',
-    state: 'locked',
     dependsOn: ['ship-billing', 'ship-site'],
   },
   {
@@ -139,7 +131,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'launch',
     dept: 'eng',
     title: 'Launch app',
-    state: 'locked',
     dependsOn: ['ship-billing'],
   },
   {
@@ -147,7 +138,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'launch',
     dept: 'sales',
     title: 'First sales outreach',
-    state: 'locked',
     dependsOn: ['ship-help'],
   },
 
@@ -157,7 +147,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'grow',
     dept: 'sales',
     title: 'Sales pipeline',
-    state: 'locked',
     dependsOn: ['launch-sales'],
   },
   {
@@ -165,7 +154,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'grow',
     dept: 'mkt',
     title: 'SEO content engine',
-    state: 'locked',
     dependsOn: ['launch-campaign'],
   },
   {
@@ -173,7 +161,6 @@ export const ROADMAP_TEMPLATE: RoadmapTask[] = [
     phase: 'grow',
     dept: 'ops',
     title: 'Hire first contractor',
-    state: 'locked',
     dependsOn: ['launch-app'],
   },
 ];
@@ -193,12 +180,13 @@ export const DEPT_LABEL: Record<string, string> = {
 /** Department accent colors for the chip dots — a categorical palette kept distinct from
  *  the task-STATE colors (state lives on the badge, department on the chip). */
 export const DEPT_COLOR: Record<string, string> = {
-  eng: '#6366f1',
-  mkt: '#f97316',
-  ops: '#14b8a6',
-  fin: '#eab308',
+  // the app's warm semantic palette (globals.css tokens) so dept dots match the rest of the app
+  eng: '#2563eb', // --blue
+  mkt: '#ff8c42', // --clay
+  ops: '#2dd4bf', // --teal
+  fin: '#fdb022', // --gold
   legal: '#64748b',
-  design: '#a855f7',
-  sales: '#ec4899',
+  design: '#9333ea', // --violet
+  sales: '#ff6b9d', // --rose
   support: '#06b6d4',
 };

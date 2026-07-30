@@ -1,6 +1,7 @@
 'use client';
 import { useState, type ReactNode } from 'react';
 import { useApp } from '@/lib/store';
+import { companionById } from '@/lib/companions';
 import { fmt } from '@/lib/helpers';
 import { computeSheetModel } from '@/lib/ai/sheetModel';
 
@@ -34,9 +35,9 @@ function download(filename: string, text: string, type: string) {
 // wording stays consistent across viewers.
 const DELIV_NOTE: Record<'sheet' | 'legal' | 'doc', string> = {
   sheet:
-    'Projections byte drafted from your inputs — not financial advice. Verify the figures before you rely on them.',
+    'Projections Codepet drafted from your inputs — not financial advice. Verify the figures before you rely on them.',
   legal: 'Draft, not legal advice — have a lawyer review before you publish or rely on it.',
-  doc: 'byte’s recommendation, drafted from your context — your call to verify and decide.',
+  doc: 'Codepet’s recommendation, drafted from your context — your call to verify and decide.',
 };
 
 function DelivNote({ kind }: { kind: keyof typeof DELIV_NOTE }) {
@@ -118,6 +119,8 @@ export function ScreensViewer({
   screens: any[];
 }) {
   const [i, setI] = useState(0);
+  const { companionId } = useApp();
+  const companionName = companionById(companionId).name;
   const S = screens;
   const art = (s: any) => {
     if (s.art === 'connect')
@@ -157,7 +160,7 @@ export function ScreensViewer({
     return (
       <div className="sa-mid">
         <div className="sa-card">
-          <h4>byte · recap</h4>
+          <h4>{companionName} · recap</h4>
           <p>You wired OAuth into the login flow and refactored the session store.</p>
           <div className="sa-term">
             <span>OAuth</span>
@@ -329,7 +332,7 @@ export function PostViewer({ post }: { post: any }) {
       <div className="post-card">
         <div className="post-top">
           <span className="out-byte">
-            <img src="/byte.png" alt="byte" />
+            <img src="/byte.png" alt="Codepet" />
           </span>
           <span className="pa">
             <span className="pn">{post.author}</span>

@@ -15,12 +15,23 @@ import React, {
 } from 'react';
 import { DEPTS, ENV, type Dept, type Task, type LibItem } from './data';
 import { artMeta, artType, buildLog, type LogStep } from './helpers';
-import { runByteTask, GenerateError, postEnrichAnswer } from './ai/runTask';
+import {
+  runByteTask,
+  runByteTaskStreaming,
+  GenerateError,
+  postEnrichAnswer,
+  fetchTaskHelp,
+} from './ai/runTask';
+import { newRun, reduceRun, type LiveRun } from './ai/liveRun';
+import { getByok } from './ai/byokClient';
+import { mergeDecisions } from './ai/decisions';
+import type { TaskHelp } from './ai/taskHelp';
 import { detectGaps, QUESTION_FOR, type Gap } from './ai/enrichInterview';
 import { rememberApproval } from './ai/remember';
 import { applyResult, liveKind, currentDraft } from './ai/applyResult';
 import { track } from './analytics';
 import { useAuth } from './firebase/auth';
+import { getFirebaseAuth, isFirebaseConfigured } from './firebase/client';
 import { fetchProjectAnalysis } from './ai/analyzeProject';
 import { isUsableAnalysis, type ProjectAnalysis } from './ai/projectAnalysis';
 import {
@@ -31,7 +42,6 @@ import {
   persistDepartmentTasks,
   persistEnv,
   persistRoadmapStage,
-  persistCompanion,
   persistIntroSeen,
   persistBrief,
   persistChatMessage,
@@ -49,32 +59,52 @@ import {
   persistThread,
   updateThreadTitle,
   deleteThreadAndMessages,
+  appendEvent,
 } from './firebase/companyData';
+import { eventFromLibItem, eventFromDecision, eventFromStageAdvance } from './overview/ledger';
 import { persistWithRetry } from '@/lib/firebase/persistWithRetry';
+import { cleanCompanyName, normalizeBrief } from '@/lib/companyName';
 import { deriveThreadTitle, pickFallbackThreadId } from './chat/threads';
-import type { ThreadMeta } from './firebase/schema';
+import type { ThreadMeta, LedgerEvent } from './firebase/schema';
 import { toolkitUsedFor, appendTaskUse } from './ai/toolkitUse';
-import { DEFAULT_COMPANION_ID } from './companions';
+import { DEFAULT_COMPANION_ID, companionForDept } from './companions';
 import { type DecisionEntry } from './ai/projectModel';
 import { scaffoldCompany } from './ai/scaffold';
 import { unlockedKeys, type GrowthSignal } from './overview/growth';
 import { LoadingScreen } from '../components/LoadingScreen';
-import { streamByteChat, ChatError } from './ai/chat';
+import { streamByteChat, summarizeThread, ChatError } from './ai/chat';
+import { planThreadSummary, type TurnRef } from './ai/threadSummary';
 import { resolveNavChip, type NavChip, type NavDest } from './ai/navChip';
 import { collectSetupItems, resolveEnvIndex } from './ai/envSetup';
-import { fetchNextStep, type NextStep } from './ai/nextStep';
-import { nextAction, setStageWatermark } from './roadmap';
+import { type NextStep } from './ai/nextStep';
+import { setStageWatermark } from './roadmap';
 import { roadmapWatermarkFor, nextStageOf, stageComplete } from './stages';
+import { loadSavedRoadmap, generateRoadmap } from './ai/generateRoadmap';
+import { ROADMAP_TEMPLATE } from './overview/roadmapTemplate';
+import { stageToPhase } from './overview/roadmapProgress';
+import { selectRoadmap } from './overview/roadmapSelector';
+import { beaconLinkFor } from './overview/beaconTarget';
+import type { RoadmapTaskDef } from './overview/roadmapModel';
 import {
   appendBrief,
   stepForLive,
   INTAKE_OPENING,
-  INTAKE_FOLLOWUP,
+  FORK_PROMPT,
+  decideIntakeStep,
+  stripBuildTriggers,
   type BuildStep,
 } from './buildFlow';
 import { requestBuildPlan } from './ai/buildPlan';
-import { buildOpeningPrompt, terminalCommand } from './armSession';
-import { armBuildSession } from '@/app/actions/build';
+import { requestBuildBrainstorm } from './ai/buildBrainstorm';
+import type { BrainstormTurn } from './ai/brainstorm';
+import {
+  buildOpeningPrompt,
+  terminalCommand,
+  demoTerminalCommand,
+  tokenReportSuffix,
+  DEMO_DIR,
+} from './armSession';
+import { armBuildSession, scaffoldDemoProject } from '@/app/actions/build';
 import { createCheckpoint, rewindToCheckpoint } from '@/app/actions/checkpoint';
 import { getCapability, getStatus } from '@/app/actions/install';
 import { shouldPromptInstall, INSTALL_PROMPTED_KEY } from './installPrompt';
@@ -88,10 +118,14 @@ export interface ChatMessage {
   role: 'me' | 'byte';
   text: string;
   ts: number;
+  /** Which pet spoke this turn — stamped at creation so a past reply keeps its voice's face
+   *  even after the founder navigates elsewhere. Absent on older/system turns → the renderer
+   *  falls back to the task's department pet (for deliverables) or the current focus pet. */
+  companionId?: string;
   /** An optional one-tap action byte offers in-chat (e.g. "Start: <task>").
    * `inline: true` ⇒ produce the deliverable in-thread (runTaskInChat) instead of
    * opening the department run modal (runBriefedTask). */
-  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean };
+  action?: { label: string; deptK: string; taskTitle: string; inline?: boolean; done?: boolean };
   /** A one-tap "take me there" chip byte offers when the founder asks where an app
    * function is. Tapping it navigates (never auto-navigates). */
   nav?: NavChip;
@@ -107,12 +141,23 @@ export interface ChatMessage {
   buildPlan?: BytePlan;
   /** A build-flow button Byte offers in chat (turn intake into a plan, or start the session). */
   buildAction?: { kind: 'begin-intake' | 'to-plan' | 'start-building'; label: string };
+  /** The New-vs-Existing fork prompt: the UI renders two buttons for a `fork` message. */
+  fork?: boolean;
+  /** Existing-project step: the UI renders the repo picker (scan/Connect GitHub) + a
+   *  Continue button that starts the brainstorm once a repo is chosen. */
+  pickRepo?: boolean;
   /** A one-tap "turn this on" card byte offers for an off toolkit item (reads live ENV). */
   setup?: { category: string; name: string };
   /** A first-run enrichment question (goal / traction / problem). While `answered` is
    * falsy, the chat renders an answer input + Skip; once answered/skipped it's a plain
    * past question. See lib/ai/enrichInterview. */
   interview?: { gap: Gap; answered?: boolean };
+  /** Assisted founder task: a generated how-to + optional capture form for a "needs your input"
+   * task. Rendered as a rich card; submitting the capture writes decisions + marks it done. */
+  help?: { deptK: string; taskTitle: string; nodeId?: string; data: TaskHelp; captured?: boolean };
+  /** A one-time, subtle nudge to add your own Anthropic key (Add my key / Not now). Transient —
+   * never persisted — and shown at most once per account (see maybeNudgeByok). */
+  byokNudge?: boolean;
   /** The execute-log steps for this run — streamed live in the card, then kept as the
    * "What byte did" record. Generated once (buildLog) when the run starts. */
   steps?: LogStep[];
@@ -129,14 +174,30 @@ const newId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-// Strip the tap-to-continue "Turn this into a plan" buttons from past messages, so
-// the thread never accumulates a trail of live buttons — only the newest carries one.
-const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] =>
-  msgs.map((m) => {
-    if (!m.buildAction || m.buildAction.kind !== 'to-plan') return m;
-    const { buildAction: _drop, ...rest } = m;
-    return rest;
-  });
+// Strip the one-shot build TRIGGER buttons ("Turn this into a plan", "Let's build it")
+// from past messages, so the thread never accumulates a trail of live buttons a stray
+// tap could re-fire. See isTransientBuildTrigger for which kinds are consumed.
+const stripBuildButtons = (msgs: ChatMessage[]): ChatMessage[] => stripBuildTriggers(msgs);
+
+// Hosted-demo-only: boots a cloud (E2B) build instead of showing a copy-paste terminal
+// command, so a tester with no local toolkit can still watch "Build this" happen live.
+// Gated behind a public flag so local/self-hosted installs keep the existing REMOTE
+// (copy-paste command) behavior untouched.
+const cloudDemoBuild = process.env.NEXT_PUBLIC_CLOUD_DEMO_BUILD === '1';
+
+// GitHub-backed cloud build — like cloudDemoBuild but boots into a real, founder-owned
+// repo instead of an ephemeral demo dir. Gated behind its own public flag so demo-only
+// deployments (and local/self-hosted installs) keep their existing behavior untouched.
+const cloudRepoBuild = process.env.NEXT_PUBLIC_CLOUD_REPO_BUILD === '1';
+
+// Attaches the signed-in user's Firebase ID token, same pattern as lib/ai/buildPlan.ts's
+// authHeader — the server derives companyId from this token, never from the body.
+async function cloudBuildAuthHeader(): Promise<Record<string, string>> {
+  if (!isFirebaseConfigured) return {};
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return {};
+  return { authorization: `Bearer ${await user.getIdToken()}` };
+}
 import type { CompanyBrief } from './firebase/schema';
 import {
   buildRevealSummary,
@@ -155,7 +216,8 @@ export type View =
   | 'env'
   | 'settings'
   | 'billing'
-  | 'build';
+  | 'build'
+  | 'run';
 
 export type Modal =
   { kind: 'run'; task: Task; dept: Dept; walk?: boolean } | { kind: 'view'; item: LibItem } | null;
@@ -175,9 +237,6 @@ interface AppState {
   closeStage: () => void;
   copilotCollapsed: boolean;
   toggleCopilot: (collapsed?: boolean) => void;
-  /** Sidebar collapsed to an icon-only rail (persisted) — frees width for the main + chat. */
-  sideCollapsed: boolean;
-  toggleSide: (collapsed?: boolean) => void;
   onboarding: boolean;
   finishOnboarding: (brief?: CompanyBrief) => void;
   /** Reopen the onboarding wizard (e.g. to add a brief after skipping). */
@@ -201,6 +260,10 @@ interface AppState {
    *  (e.g. 'refused', 'rate_limited', 'network'); null when nothing failed, so the
    *  example-plan banner can name the actual cause rather than just "not generated yet". */
   scaffoldFailure: string | null;
+  /** byte's model availability — the failure code ('ai_unavailable' = out of credits,
+   *  'rate_limited' = daily cap) when a chat/run last failed that way, else null. Drives the
+   *  hub's single honest "byte is offline" banner. */
+  aiOffline: { code: string; at: number } | null;
   /** Advance to the next product stage (confirmed): move the map + re-plan the company. */
   advanceStage: () => void;
   brief: CompanyBrief;
@@ -218,10 +281,12 @@ interface AppState {
   deleteDecision: (index: number) => void;
   installed: boolean;
   setInstalled: (value: boolean) => void;
-  /** The founder's chosen companion character id (default 'byte'). */
+  /** The default companion mark shown in the app chrome (byte). Voice is per-department
+   *  (see lib/companions companionForDept); there is no global companion pick. */
   companionId: string;
-  /** Set the active companion (persists). */
-  setCompanion: (id: string) => void;
+  /** The pet that voices AND fronts the Copilot right now: the department in focus
+   *  (viewed dept → CURRENT NEXT STEP's dept → byte). Drives the chat avatar + name. */
+  focusCompanionId: string;
   /** Whether this account has seen the Overview first-run intro. */
   introSeen: boolean;
   /** Mark the first-run intro seen for this account (idempotent; persists). */
@@ -232,6 +297,8 @@ interface AppState {
   openInstallPrompt: () => void;
   closeInstallPrompt: () => void;
   library: LibItem[];
+  /** Second Brain event ledger, newest-first (P0/P1). */
+  events: LedgerEvent[];
   /** Real Claude Code activity rolled up for the Summary (empty until events arrive). */
   tracking: TrackingSummary;
   /** Distinct local projects the tracker has reported (empty until events arrive). */
@@ -244,6 +311,30 @@ interface AppState {
   portalSignal: { deptK: string; n: number } | null;
   /** Portal into a task from anywhere (e.g. the Roadmap): go to the map, byte arrives in chat, camera flies to its dept. */
   portalToTask: (deptK: string, taskTitle: string) => void;
+  /** Act on a roadmap cell by its state: run/review it inline in chat when byte can, guide the
+   *  founder when it's theirs, explain what's blocking a locked step, or open a finished one. */
+  guideRoadmapTask: (input: {
+    deptK: string;
+    title: string;
+    state: string;
+    blockedBy?: string;
+    nodeId?: string;
+    actor?: string;
+  }) => void;
+  /** Mark a founder-owned task done from an in-chat chip (the "tell me when it's done" path):
+   *  flips the roadmap node to Done, unlocks its dependents, and offers stage-advance. */
+  markTaskDone: (deptK: string, taskTitle: string) => void;
+  /** Open assisted help for a founder-owned task: post a generated how-to + capture form in chat
+   *  (falls back to a plain "this one's yours" brief when the guide can't be fetched). */
+  openTaskHelp: (deptK: string, title: string, nodeId?: string, actor?: string) => void;
+  /** Save a founder task's captured outputs into company memory (decisions) and mark it done. */
+  captureTaskInput: (
+    deptK: string,
+    taskTitle: string,
+    values: { key: string; label: string; value: string }[],
+  ) => void;
+  /** Dismiss the one-time BYOK nudge card by message id. */
+  dismissByokNudge: (msgId: string) => void;
   /** Run a task named by an in-chat action chip (deptK + taskTitle). */
   runBriefedTask: (deptK: string, taskTitle: string) => void;
   viewItem: (item: LibItem) => void;
@@ -274,6 +365,8 @@ interface AppState {
   renameThread: (id: string, title: string) => void;
   /** Delete a thread and its messages; falls back to another thread or a new chat. */
   deleteThread: (id: string) => void;
+  /** Delete every thread and its messages, then drop into a fresh empty chat. */
+  clearAllChats: () => void;
   /** Open/close the chat-history list. */
   toggleChatHistory: (open?: boolean) => void;
   /** Re-run a byte reply that failed — re-streams into the same bubble against the same
@@ -281,6 +374,14 @@ interface AppState {
   retryChat: (byteMsgId: string) => void;
   /** Produce a task's deliverable inline in chat (byte's "run it from here"). */
   runTaskInChat: (deptK: string, taskTitle: string) => void;
+  /** The run the founder is currently watching in the run theater, or null. */
+  liveRun: LiveRun | null;
+  /** Start a task in the full-width run theater (view 'run') and stream its phases. */
+  startRunInTheater: (deptK: string, taskTitle: string) => void;
+  /** Leave the theater. A finished run's deliverable is already applied; nothing is lost. */
+  closeRunTheater: () => void;
+  /** Re-run the task in the theater after a failure, from a clean trace. */
+  retryRun: () => void;
   /** Revise an inline chat result against byte's feedback, updating the card in place.
    * An empty note is a plain regenerate. */
   reviseTaskInChat: (msgId: string, deptK: string, taskTitle: string, note: string) => void;
@@ -300,6 +401,9 @@ interface AppState {
   persistTaskDraft: (deptK: string, taskTitle: string) => void;
   /** byte's single next step — the one value the beacon AND chat both read. */
   nextStep: NextStep | null;
+  /** byte's per-company roadmap (generated once, else null → consumers use the template). Owned
+   *  here so the beacon, chat, and nudge derive "what's next" from the same source. */
+  roadmapDefs: RoadmapTaskDef[] | null;
   toastMsg: string;
   toast: (msg: string) => void;
   /** "Let's build" flow — lifted from BuildCoachView so the chat panel drives START
@@ -307,6 +411,18 @@ interface AppState {
   buildStep: BuildStep;
   buildProject: string;
   setBuildProject: (v: string) => void;
+  /** The GitHub repo picked to build into (GitHub-backed cloud build), or null when
+   *  none is selected yet. */
+  buildRepo: { owner: string; name: string } | null;
+  setBuildRepo: (v: { owner: string; name: string } | null) => void;
+  /** Start the GitHub App install flow: fetches a signed install URL from
+   *  /api/github/connect and navigates the browser there. */
+  connectGithub: () => void;
+  /** Fetches the connected GitHub App installation's repos (GET /api/github/repos).
+   *  `{ notConnected: true }` means GitHub isn't connected yet — the caller should offer
+   *  connectGithub() instead of a repo picker. */
+  loadRepos: () => Promise<{ repos: { owner: string; name: string }[] } | { notConnected: true }>;
+  demoLetsBuild: boolean;
   buildBrief: string;
   buildPlan: BytePlan | null;
   /** Edit the generated plan's steps in place before arming (founder can refine intent). */
@@ -334,11 +450,19 @@ interface AppState {
    *  hook→Firestore feed for them); the live view reports each reading here. */
   applyLocalLive: (s: LiveState) => void;
   startBuildIntake: () => void;
+  /** Which side of the New-vs-Existing fork the founder picked (repo-cloud only), or null. */
+  buildTarget: 'new' | 'existing' | null;
+  /** Answer the New-vs-Existing fork: records the choice, drops the fork buttons, opens the brainstorm. */
+  chooseBuildTarget: (t: 'new' | 'existing') => void;
+  /** Existing-project path: repo chosen up front — drop the picker and open the brainstorm. */
+  confirmRepoAndBrainstorm: () => void;
+  /** Create a new GitHub repo from the starter template, then arm the build into it. */
+  createProject: (name: string) => Promise<void>;
   /** Leave intake without building — the composer goes back to normal chat. */
   cancelBuildIntake: () => void;
   addIntakeTurn: (text: string) => void;
   generateBuildPlan: () => void;
-  armBuild: () => void;
+  armBuild: (repoOverride?: { owner: string; name: string }) => void;
   resetBuildFlow: () => void;
 }
 
@@ -369,14 +493,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [portalSignal, setPortalSignal] = useState<{ deptK: string; n: number } | null>(null);
   // Chat starts closed by default; the floating button opens it on demand.
   const [copilotCollapsed, setCopilotCollapsed] = useState(true);
-  const [sideCollapsed, setSideCollapsed] = useState(false);
   // Onboarding is shown only to users who haven't completed it. It starts false
   // and is flipped true after hydration iff the company has no `onboardedAt`
   // stamp — so returning users go straight to the app.
   const [onboarding, setOnboarding] = useState(false);
   const [installed, setInstalled] = useState(false);
-  // The founder's chosen companion character (hydrated from Firestore; default byte).
-  const [companionId, setCompanionId] = useState<string>(DEFAULT_COMPANION_ID);
+  // Voice is per-department now (see lib/companions companionForDept); there is no global
+  // companion pick. The chrome shows byte as the neutral default mark, so this is pinned.
+  const companionId = DEFAULT_COMPANION_ID;
   // Whether THIS account has seen the Overview first-run intro (hydrated from
   // Firestore; drives introInitialPhase). Default false ⇒ a fresh account sees it.
   const [introSeen, setIntroSeen] = useState(false);
@@ -394,7 +518,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       if (localStorage.getItem('codepet:installed') === '1') setInstalled(true);
-      if (localStorage.getItem('codepet:sidecollapsed') === '1') setSideCollapsed(true);
     } catch {}
   }, []);
 
@@ -418,6 +541,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Library + business brief are owned here as state, hydrated from Firestore.
   const [library, setLibrary] = useState<LibItem[]>([]);
+  const [events, setEvents] = useState<LedgerEvent[]>([]);
   const [tracking, setTracking] = useState<TrackingSummary>(EMPTY_TRACKING);
   const [projects, setProjects] = useState<string[]>([]);
   const [brief, setBrief] = useState<CompanyBrief>({});
@@ -430,6 +554,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Durable decisions byte maintains (hydrated from Firestore; founder-curatable).
   const [decisions, setDecisions] = useState<DecisionEntry[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  // byte's per-company roadmap (generated once, else the canonical template). Owned here so the
+  // beacon, the chat's next-step, and the after-completion nudge all derive "what's next" from the
+  // SAME roadmap — one source of truth, no drift.
+  const [roadmapDefs, setRoadmapDefs] = useState<RoadmapTaskDef[] | null>(null);
 
   // byte chat: messages (hydrated from Firestore) + a streaming guard.
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -439,6 +567,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [chatHistoryOpen, setChatHistoryOpen] = useState(false);
   const pendingThreadRef = useRef(false); // true ⇒ active thread not yet written to Firestore
+  // Live mirror of `threads` for reads inside async callbacks — a background summarize can
+  // resolve after the thread was deleted, and state updaters run async, so a ref reads current.
+  const threadsRef = useRef<ThreadMeta[]>([]);
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
 
   // Every persisted chat message carries the active thread id. Route all persistence
   // through here so no call site forgets it.
@@ -480,6 +614,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   });
   const [buildStep, setBuildStep] = useState<BuildStep>(restoredBuild?.step ?? 'during');
   const [buildProject, setBuildProject] = useState(restoredBuild?.project ?? '');
+  const [buildRepo, setBuildRepo] = useState<{ owner: string; name: string } | null>(null);
+  // Demo "Let's build" (a throwaway ~/codepet-demo landing page) is retired: every build now
+  // goes through the New/Existing project fork into a real project. Kept as a const `false` so
+  // the (now unreachable) demo branches in armBuild still compile — they can be deleted in a
+  // follow-up cleanup.
+  const demoLetsBuild = false;
   const [buildBrief, setBuildBrief] = useState(restoredBuild?.brief ?? '');
   const [buildPlan, setBuildPlanState] = useState<BytePlan | null>(restoredBuild?.plan ?? null);
   const [buildSessionId, setBuildSessionId] = useState<string | null>(
@@ -493,6 +633,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [buildProjectDir, setBuildProjectDir] = useState(restoredBuild?.projectDir ?? '');
   const [buildArming, setBuildArming] = useState(false);
   const [buildIntakeActive, setBuildIntakeActive] = useState(false);
+  // Which side of the New-vs-Existing fork the founder picked this intake (repo-cloud only).
+  const [buildTarget, setBuildTarget] = useState<'new' | 'existing' | null>(null);
+  // The running brainstorm transcript (Byte questions + founder answers) that
+  // /api/build-brainstorm reasons over. In-memory only, like buildBrief — an
+  // interrupted intake just falls back to typing more.
+  const [buildIntakeLog, setBuildIntakeLog] = useState<BrainstormTurn[]>([]);
   const [buildResumed, setBuildResumed] = useState(!!restoredBuild);
   // A git snapshot of the project taken right before a local build, so the founder can
   // rewind everything the build changed. null when the project isn't a git repo.
@@ -576,10 +722,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   ]);
 
   // byte's single next step — the one value the beacon AND chat read, so they can
-  // never disagree. Set instantly to the authored golden path (so nothing is ever
-  // blank), then swapped to byte's own pick when /api/next-step resolves. Recomputed
-  // on hydrate and after every approval. On failure the authored fallback stands.
+  // never disagree. Derived synchronously from the roadmap itself (computeRoadmapNext →
+  // selectRoadmap().move), so it's instant and never blank. Recomputed on hydrate and
+  // after every completion. Carries the roadmap node id so the beacon resolves it exactly.
   const [nextStep, setNextStep] = useState<NextStep | null>(null);
+  // byte's model availability, so the hub can show ONE honest "offline" state up front instead
+  // of per-message "temporarily unavailable" confusion. Set to the failure code (e.g.
+  // 'ai_unavailable' = out of credits, 'rate_limited' = daily cap) when a chat/run call fails
+  // that way; cleared the moment any AI call succeeds again.
+  const [aiOffline, setAiOffline] = useState<{ code: string; at: number } | null>(null);
   // Whether the map reflects a plan byte generated from THIS founder's product, vs. the
   // built-in example seed. Set from the persisted `scaffoldedAt` on hydrate, flipped true
   // the moment a scaffold succeeds. `scaffoldFailure` carries *why* a scaffold attempt
@@ -591,19 +742,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Cleared on both success and failure (.finally), never left stuck on.
   const [regenerating, setRegenerating] = useState(false);
   const regenInFlightRef = useRef(false);
+  // The roadmap's own next move, derived live from the current roadmap + department state — THE
+  // one source of "what's next" so the beacon (via nextStep), the chat, and the after-completion
+  // nudge never disagree. Reads live DEPTS, so it's correct the instant after a task completes.
+  const computeRoadmapNext = useCallback(() => {
+    const defs = roadmapDefs ?? ROADMAP_TEMPLATE;
+    // Same selector the Overview beacon renders from → chat, greeting, and nudge can't disagree.
+    return selectRoadmap(defs, stageToPhase(brief.stage), DEPTS).move;
+  }, [roadmapDefs, brief.stage]);
   const computeNextStep = useCallback(() => {
-    const fb = nextAction();
-    const fallback: NextStep | null = fb
-      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
-      : null;
-    setNextStep(fallback);
-    if (!fallback) return; // nothing open
-    fetchNextStep()
-      .then((pick) => {
-        if (pick) setNextStep(pick);
-      })
-      .catch((err) => console.error('[store] next-step failed — keeping authored fallback', err));
-  }, []);
+    const move = computeRoadmapNext();
+    setNextStep(
+      move ? { deptK: move.deptK, taskTitle: move.title, nodeId: move.id, why: '' } : null,
+    );
+  }, [computeRoadmapNext]);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstApproveTracked = useRef(false);
@@ -633,14 +785,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           activeThreadId: loadedActive,
           decisions: dec,
           projectAnalysis: pa,
-          companionId: cId,
           introSeenAt,
+          events: loadedEvents,
         }) => {
           if (cancelled) return;
           setLibrary(lib);
-          setBrief(b);
+          setBrief(normalizeBrief(b)); // clean the persisted brief once, at the store boundary
           setDecisions(dec);
-          setCompanionId(cId ?? DEFAULT_COMPANION_ID);
+          setEvents(loadedEvents ?? []);
           setIntroSeen(Boolean(introSeenAt));
           introSeenRef.current = Boolean(introSeenAt);
           // Reset (or hydrate) the one-time analysis for this account — an overwrite either
@@ -705,6 +857,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [companyId, bump, computeNextStep]);
 
+  // Load byte's per-company roadmap once, after hydration: use the saved one if present; else
+  // generate a fresh one — unless the founder already has progress (a mismatched fresh plan would
+  // orphan it), in which case keep the template, a stable constant.
+  useEffect(() => {
+    if (!hydrated) return;
+    let live = true;
+    loadSavedRoadmap().then((saved) => {
+      if (!live) return;
+      if (saved) {
+        setRoadmapDefs(saved);
+        return;
+      }
+      const hasProgress = DEPTS.some((d) => d.tasks.some((t) => t.roadmapNodeId));
+      if (hasProgress) return;
+      generateRoadmap().then((fresh) => {
+        if (live && fresh) setRoadmapDefs(fresh);
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [hydrated]);
+
   const show = useCallback((v: View) => {
     setView(v);
   }, []);
@@ -756,19 +931,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId],
   );
   const closeStage = useCallback(() => setDrawerOpen(false), []);
-  // Set the active companion (optimistic, persists non-blocking).
-  const setCompanion = useCallback(
-    (id: string) => {
-      setCompanionId(id);
-      track('companion.select', { id });
-      if (companyId) {
-        persistCompanion(companyId, id).catch((err) =>
-          console.error('[store] persist companion failed', err),
-        );
-      }
-    },
-    [companyId],
-  );
   const markIntroSeen = useCallback(() => {
     if (introSeenRef.current) return; // already seen — no state churn, no write
     introSeenRef.current = true;
@@ -782,65 +944,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const toggleCopilot = useCallback((collapsed?: boolean) => {
     setCopilotCollapsed((c) => (collapsed === undefined ? !c : collapsed));
   }, []);
-  const toggleSide = useCallback((collapsed?: boolean) => {
-    setSideCollapsed((c) => {
-      const next = collapsed === undefined ? !c : collapsed;
-      try {
-        if (next) localStorage.setItem('codepet:sidecollapsed', '1');
-        else localStorage.removeItem('codepet:sidecollapsed');
-      } catch {}
-      return next;
-    });
-  }, []);
 
   // The "best first move" hand-off: byte's landing greeting with the single best first
-  // move as a one-tap INLINE action (produces the deliverable in-thread). Seeds immediately
-  // from the authored fallback, then upgrades to byte's own pick when /api/next-step
-  // resolves — the greeting message updates in place (stable id). Runs AFTER the first-run
-  // enrichment interview, or immediately when the brief already has every plan-shaping field.
-  const seedBestFirstMove = useCallback((briefData: CompanyBrief) => {
-    const gid = newId();
-    // Fire firstrun.action_offered at most once — when an action first appears,
-    // whether it came from the synchronous authored fallback or the async byte pick.
-    let offered = false;
-    const seed = (ns: NextStep | null) => {
-      const g = buildFirstRunGreeting(briefData, ns);
-      setChatMessages((prev) => {
-        const msg: ChatMessage = {
-          id: gid,
-          role: 'byte',
-          text: g.text,
-          ts: Date.now(),
-          action: g.action,
-        };
-        const i = prev.findIndex((m) => m.id === gid);
-        return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
-      });
-      if (g.action && !offered) {
-        offered = true;
-        track('firstrun.action_offered', { dept: g.action.deptK });
-      }
-    };
-    const fb = nextAction();
-    const fallback: NextStep | null = fb
-      ? { deptK: fb.dept.k, taskTitle: fb.task.t, why: '' }
-      : null;
-    setNextStep(fallback);
-    seed(fallback);
-    // Always ask byte for the best first move — even when the synchronous authored
-    // fallback is momentarily null (e.g. the roadmap isn't settled the instant
-    // onboarding finishes). Recovering the action here keeps the greeting's
-    // "Do it with me" — the whole B→C bridge — from silently vanishing.
-    // fetchNextStep resolves to null when nothing is open, leaving a correct nudge.
-    fetchNextStep()
-      .then((pick) => {
-        if (pick) {
-          setNextStep(pick);
-          seed(pick);
+  // move as a one-tap INLINE action (produces the deliverable in-thread). The move comes
+  // straight from the roadmap (computeRoadmapNext), so it matches the beacon exactly. Runs
+  // AFTER the first-run enrichment interview, or immediately when the brief already has every
+  // plan-shaping field.
+  const seedBestFirstMove = useCallback(
+    (briefData: CompanyBrief) => {
+      const gid = newId();
+      // Fire firstrun.action_offered at most once — when an action first appears,
+      // whether it came from the synchronous authored fallback or the async byte pick.
+      let offered = false;
+      const seed = (ns: NextStep | null) => {
+        const g = buildFirstRunGreeting(briefData, ns);
+        setChatMessages((prev) => {
+          const msg: ChatMessage = {
+            id: gid,
+            role: 'byte',
+            text: g.text,
+            ts: Date.now(),
+            action: g.action,
+          };
+          const i = prev.findIndex((m) => m.id === gid);
+          return i === -1 ? [...prev, msg] : prev.map((m) => (m.id === gid ? msg : m));
+        });
+        if (g.action && !offered) {
+          offered = true;
+          track('firstrun.action_offered', { dept: g.action.deptK });
         }
-      })
-      .catch((err) => console.error('[store] greetFirstRun next-step failed', err));
-  }, []);
+      };
+      // The first move comes from the roadmap itself, so the greeting's "Do it with me" points at
+      // the same next step the beacon shows (one source of truth for "what's next").
+      const move = computeRoadmapNext();
+      const next: NextStep | null = move
+        ? { deptK: move.deptK, taskTitle: move.title, nodeId: move.id, why: '' }
+        : null;
+      setNextStep(next);
+      seed(next);
+    },
+    [computeRoadmapNext],
+  );
 
   // Progress of the first-run enrichment interview: the empty gaps to ask, which one we're
   // on, and the brief accumulating byte's distilled answers. Null when no interview is active.
@@ -872,7 +1016,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       interviewRef.current = { gaps, idx: 0, brief: briefData };
       const who = briefData.founderName?.trim();
-      const proj = briefData.projectName?.trim() || 'your product';
+      const proj = cleanCompanyName(briefData.projectName) ?? 'your product';
       const lead =
         `${who ? `${who}, your` : 'Your'} company for ${proj} is ready. ` +
         `A couple quick questions first, so I plan the right moves — not generic ones.`;
@@ -901,7 +1045,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           askInterviewGap(st.gaps[next]);
         } else {
           interviewRef.current = null;
-          setBrief(brief); // the enriched brief now grounds every run + chat
+          setBrief(normalizeBrief(brief)); // the enriched brief now grounds every run + chat
           seedBestFirstMove(brief);
         }
       };
@@ -955,7 +1099,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (briefData?: CompanyBrief) => {
       setOnboarding(false);
       if (briefData) {
-        setBrief(briefData);
+        setBrief(normalizeBrief(briefData));
         setStageWatermark(roadmapWatermarkFor(briefData.stage));
       }
       // Stamp completion (and brief, if any) so onboarding never shows again —
@@ -1096,10 +1240,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const next = nextStageOf(brief.stage);
     if (!next) return;
     const prevBrief = brief;
-    const company = brief.projectName?.trim() || 'your company';
+    const company = cleanCompanyName(brief.projectName) ?? 'your company';
     const updated = { ...brief, stage: next };
     const noteId = newId();
-    setBrief(updated);
+    setBrief(normalizeBrief(updated));
     setStageWatermark(roadmapWatermarkFor(next));
     bump(); // move the map now (overlay phase + roadmap "you are here")
     // Clear the advance prompt(s), then post a "re-planning…" note (updated on settle).
@@ -1122,6 +1266,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           label: 'persistBrief',
           failMessage: 'Couldn’t save your project details — they may not persist.',
         });
+        // Ledger: the milestone the company just crossed (keyed by stage name).
+        const stageEv = eventFromStageAdvance(next, next, Date.now());
+        void appendEvent(companyId, stageEv);
+        setEvents((prev) => [stageEv, ...prev.filter((e) => e.refId !== stageEv.refId)]);
         bump();
         computeNextStep();
         setChatMessages((prev) =>
@@ -1139,7 +1287,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else {
         // Re-plan failed and nothing was persisted — roll the stage back so the founder
         // stays consistent (current stage + current tasks), and offer a retry.
-        setBrief(prevBrief);
+        setBrief(normalizeBrief(prevBrief));
         setStageWatermark(roadmapWatermarkFor(prevBrief.stage));
         bump();
         setChatMessages((prev) =>
@@ -1284,6 +1432,236 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [briefDepartment],
   );
 
+  // The spine of the roadmap↔work link: resolve the concrete task a roadmap node realizes —
+  // matching an existing one (by the stable node link, else by title) or CREATING it on demand
+  // in the department — and stamp the reverse link so the Overview tracks it exactly. Returns the
+  // runnable task (its exact title feeds runTaskInChat), or null if the department is unknown.
+  const ensureRoadmapTask = useCallback(
+    (deptK: string, title: string, nodeId: string, actor?: string): Task | null => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      if (!d || !nodeId) return null;
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const existing =
+        d.tasks.find((x) => x.roadmapNodeId === nodeId) ||
+        d.tasks.find((x) => nm(x.t) === nm(title)) ||
+        null;
+      if (existing) {
+        if (existing.roadmapNodeId !== nodeId) {
+          existing.roadmapNodeId = nodeId; // stamp the link so tracking is exact from here on
+          bump();
+          if (companyId)
+            persistDepartmentTasks(companyId, d).catch((err) =>
+              console.error('[store] link roadmap task failed', err),
+            );
+        }
+        return existing;
+      }
+      // Create-on-demand: a real, runnable task so byte can do it in-thread and the node tracks
+      // it. No explicit kind — artType defaults it to a runnable deliverable (doc / prep).
+      const created: Task = {
+        t: title,
+        d: '',
+        who: actor === 'you' ? 'you' : 'does',
+        out: '',
+        done: false,
+        roadmapNodeId: nodeId,
+      };
+      d.tasks.push(created);
+      d.later = false; // the department now has live work
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] create roadmap task failed', err),
+        );
+      return created;
+    },
+    [companyId, bump],
+  );
+
+  // Assisted founder tasks: a "needs your input" step gets a generated how-to + a capture form
+  // instead of a shrug. Fetched once per node (cached for the session — one AI call per task),
+  // posted as the brief. Degrades to a plain "this one's yours" brief + done chip when the guide
+  // can't be fetched (offline / limit / bad generation), so it's never a dead-end.
+  const taskHelpCache = useRef<Map<string, TaskHelp>>(new Map());
+  const openTaskHelp = useCallback(
+    async (deptK: string, title: string, nodeId?: string, actor?: string) => {
+      const d = DEPTS.find((x) => x.k === deptK) || null;
+      const t = nodeId
+        ? ensureRoadmapTask(deptK, title, nodeId, actor)
+        : d?.tasks.find((x) => x.t === title) || null;
+      const doneChip: Partial<ChatMessage> = t
+        ? { action: { label: `I've done “${t.t}”`, deptK, taskTitle: t.t, done: true } }
+        : {};
+      const post = (text: string, extra: Partial<ChatMessage> = {}) => {
+        toggleCopilot(false); // open the chat so the guidance is visible
+        setChatMessages((prev) => [
+          ...prev.filter((m) => !m.brief),
+          { id: newId(), role: 'byte', text, ts: Date.now(), brief: true, ...extra },
+        ]);
+      };
+      // When the how-to can't be generated (paused / usage limit / bad generation), say so plainly
+      // so it reads as a degraded state — not as if nothing happened — then still let them finish it.
+      const staticFallback = () =>
+        post(
+          `I can't pull up the step-by-step for “${title}” right now — I'm paused for a bit (usage limit or connection). Meanwhile it's yours to do${d?.need ? ` — ${d.need}` : ''}: tap below when it's done and I'll mark it.`,
+          doneChip,
+        );
+      const intro = `Here's how to tackle “${title}”. Tell me what you land on and I'll remember it for later steps.`;
+
+      const cacheKey = nodeId || `${deptK}:${title}`;
+      const cached = taskHelpCache.current.get(cacheKey);
+      if (cached) {
+        post(intro, {
+          ...doneChip,
+          help: { deptK, taskTitle: t?.t ?? title, nodeId, data: cached },
+        });
+        return;
+      }
+      if (aiOffline) {
+        staticFallback();
+        return;
+      }
+      post(`Pulling together how to tackle “${title}”…`);
+      try {
+        const data = await fetchTaskHelp({
+          taskTitle: title,
+          taskHint: t?.d,
+          deptName: d?.name,
+          deptKey: deptK,
+          brief,
+          companionId,
+        });
+        taskHelpCache.current.set(cacheKey, data);
+        setAiOffline(null); // a successful fetch means byte is reachable again
+        post(intro, { ...doneChip, help: { deptK, taskTitle: t?.t ?? title, nodeId, data } });
+      } catch (err) {
+        const code = err instanceof GenerateError ? err.code : '';
+        if (code === 'rate_limited' || code === 'http_429' || code === 'ai_unavailable')
+          setAiOffline({ code, at: Date.now() });
+        staticFallback();
+      }
+    },
+    [ensureRoadmapTask, toggleCopilot, aiOffline, brief, companionId],
+  );
+
+  // The roadmap as a control surface: clicking a cell routes by its state into the chat, so the
+  // founder either completes the task in-thread or is told exactly what's blocking it — never a
+  // dead-end. A shipped task opens where it lives; a locked one points at its prerequisite.
+  const guideRoadmapTask = useCallback(
+    (input: {
+      deptK: string;
+      title: string;
+      state: string;
+      blockedBy?: string;
+      nodeId?: string;
+      actor?: string;
+    }) => {
+      const { deptK, title, state, blockedBy, nodeId, actor } = input;
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const d = DEPTS.find((x) => x.k === deptK) || null;
+      // Match the scaffolded task loosely (normalized title) so byte can run it in-thread even
+      // when the roadmap's canonical wording differs slightly from the department's.
+      const realT = d?.tasks.find((x) => nm(x.t) === nm(title)) || null;
+      const dn = d?.name ?? 'its department';
+      const brief = (text: string, extra: Partial<ChatMessage> = {}) => {
+        toggleCopilot(false); // open the chat so the guidance / run is visible
+        setChatMessages((prev) => [
+          ...prev.filter((m) => !m.brief),
+          { id: newId(), role: 'byte', text, ts: Date.now(), brief: true, ...extra },
+        ]);
+      };
+
+      switch (state) {
+        case 'done': {
+          // Open the finished deliverable to view/reopen — the runtime item if it's still in
+          // memory, else the saved one from the library (matched by dept + title). Fall back to
+          // the department when there's no artifact (e.g. a founder task the founder marked done).
+          const dt =
+            (nodeId ? d?.tasks.find((x) => x.roadmapNodeId === nodeId) : undefined) ||
+            d?.tasks.find((x) => nm(x.t) === nm(title)) ||
+            null;
+          const item =
+            dt?._item ||
+            (dt && library.find((li) => li.k === deptK && nm(li.title) === nm(dt.t))) ||
+            library.find((li) => li.k === deptK && nm(li.title) === nm(title));
+          if (item) viewItem(item);
+          else openDept(deptK);
+          return;
+        }
+        case 'locked': {
+          const prereq = blockedBy && d?.tasks.find((x) => nm(x.t) === nm(blockedBy));
+          // If the prerequisite is already drafted (just not approved yet), point to
+          // that draft to review/approve — NOT "Start", which would re-run and
+          // duplicate it.
+          const prereqDrafted = !!prereq && !!prereq.out?.trim();
+          brief(
+            blockedBy
+              ? prereqDrafted
+                ? `“${title}” unlocks once you approve “${blockedBy}” — let's review that draft.`
+                : `“${title}” unlocks once “${blockedBy}” is done — let's start there.`
+              : `“${title}” needs an earlier step finished first.`,
+            prereq
+              ? {
+                  action: {
+                    label: `${prereqDrafted ? 'Review' : 'Start'}: ${prereq.t}`,
+                    deptK,
+                    taskTitle: prereq.t,
+                    inline: true,
+                  },
+                }
+              : {},
+          );
+          return;
+        }
+        case 'needsYou': {
+          // Founder-owned — byte can't run it, but it can help. Post a generated how-to + a capture
+          // form for the task's output (openTaskHelp ensures the task exists, keeps the "I've done
+          // it" chip, and falls back to a plain brief when the guide can't be fetched).
+          void openTaskHelp(deptK, title, nodeId, actor);
+          return;
+        }
+        case 'approve': {
+          // Resolve (or link) the drafted task; review it in-thread.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          brief(`I've drafted “${title}”. Let's review it${d ? ` in ${dn}` : ''}.`, {
+            action: {
+              label: `Review: ${(t ?? realT)?.t ?? title}`,
+              deptK,
+              taskTitle: (t ?? realT)?.t ?? title,
+              inline: true,
+            },
+          });
+          return;
+        }
+        default: {
+          // available / current — byte can do this. The spine guarantees a runnable task: match
+          // an existing one or create it on demand, so one tap always runs it in-thread (and the
+          // node then tracks that task's real state). Only fall back to a plain brief if there's
+          // no node/department to hang a task on.
+          const t = nodeId ? ensureRoadmapTask(deptK, title, nodeId, actor) : realT;
+          if (t)
+            brief(`Let's do “${title}”${d ? ` in ${dn}` : ''} — ready when you are.`, {
+              action: { label: `Start: ${t.t}`, deptK, taskTitle: t.t, inline: true },
+            });
+          else
+            brief(
+              `“${title}” is your next move${d ? ` in ${dn}` : ''}.${d?.need ? ` ${d.need}` : ''} Ask me anything about it and I'll walk you through it.`,
+            );
+          return;
+        }
+      }
+    },
+    [toggleCopilot, openDept, ensureRoadmapTask, library, viewItem, openTaskHelp],
+  );
+
   // Open the run loop for a task named by an in-chat action chip.
   const runBriefedTask = useCallback(
     (deptK: string, taskTitle: string) => {
@@ -1303,7 +1681,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!stageComplete()) return;
     const next = nextStageOf(brief.stage);
     const stageName = brief.stage?.trim();
-    const company = brief.projectName?.trim() || 'your company';
+    const company = cleanCompanyName(brief.projectName) ?? 'your company';
     setChatMessages((prev) => {
       if (prev.some((m) => m.advance)) return prev; // one prompt at a time
       const text = next
@@ -1323,8 +1701,88 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleCopilot(false);
   }, [brief, toggleCopilot]);
 
+  // After a task is completed but the stage isn't finished, byte speaks up in the chat —
+  // acknowledges it and points to (and offers to run) the next move — so finishing a task never
+  // leaves the founder staring at a silent panel. The stage-complete moment is handled instead by
+  // maybeOfferAdvance's advance prompt, so we skip this then to avoid two messages at once.
+  const guideAfterCompletion = useCallback(
+    (completedTitle: string) => {
+      if (stageComplete()) return;
+      // The SAME next move the beacon shows — so byte's nudge and the roadmap always agree.
+      const move = computeRoadmapNext();
+      const nm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, ' ')
+          .trim();
+      const d = move ? DEPTS.find((x) => x.k === move.deptK) : null;
+      const realT = move && d ? d.tasks.find((x) => nm(x.t) === nm(move.title)) : null;
+      const runnable = !!realT && !realT.done && liveKind(artType(realT)) !== null;
+      toggleCopilot(false); // keep the chat open so the nudge is seen
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          text: move
+            ? `Nice — “${completedTitle}” is done. Next up: “${move.title}”${d ? ` in ${d.name}` : ''}${runnable ? ' — want me to take it on?' : ' — it’s lit on the roadmap; hit Start when you’re ready.'}`
+            : `Nice — “${completedTitle}” is done. That’s this phase wrapped — check the roadmap for what’s next.`,
+          ts: Date.now(),
+          action:
+            runnable && realT && d
+              ? { label: `Start: ${realT.t}`, deptK: d.k, taskTitle: realT.t, inline: true }
+              : undefined,
+        },
+      ]);
+    },
+    [toggleCopilot, computeRoadmapNext],
+  );
+
+  // One-time, subtle BYOK nudge: once the founder has approved a few deliverables (they're
+  // invested) and hasn't set a key, drop ONE dismissible chat card offering to run byte's
+  // lighter BACKGROUND work on their own Anthropic key. Transient (never persisted, no persistMsg)
+  // + gated by a per-account localStorage flag → appears at most once. Honest framing (no
+  // "more runs" promise); the key never touches deliverables/chat.
+  const maybeNudgeByok = useCallback(
+    async (deliverableCount: number) => {
+      if (deliverableCount < 3 || !companyId) return;
+      const seenKey = `codepet:byokNudge:${companyId}`;
+      try {
+        if (localStorage.getItem(seenKey)) return;
+      } catch {
+        return;
+      }
+      // Fetch only at the moment we'd nudge (not on every load). Mark seen either way so this
+      // never re-checks; if a key is already set, don't nudge.
+      const status = await getByok();
+      try {
+        localStorage.setItem(seenKey, '1');
+      } catch {}
+      if (status.present) return;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: newId(),
+          role: 'byte',
+          ts: Date.now(),
+          byokNudge: true,
+          text: `Small optional thing — I just picked your next step and quietly logged a couple of decisions in the background. If you like, that lighter background work can run on your own Anthropic key; your deliverables and our chats always stay on me. No pressure — it just helps keep byte snappy. You can add a key anytime in Billing & Usage.`,
+        },
+      ]);
+    },
+    [companyId],
+  );
+  const dismissByokNudge = useCallback((msgId: string) => {
+    setChatMessages((prev) => prev.filter((m) => m.id !== msgId));
+  }, []);
+
   const approveTask = useCallback(
     (t: Task, d: Dept, type: string) => {
+      // If this is the current beacon step being completed off the portal (chat/dept view),
+      // stamp the exact roadmap node link so the map advances by node id — robust to title
+      // drift/collision — instead of relying on a title heuristic. No-op for any other task.
+      const beaconNode = beaconLinkFor(nextStep, DEPTS, d.k, d.tasks.indexOf(t));
+      if (beaconNode) t.roadmapNodeId = beaconNode;
       t.done = true;
       d.pend = Math.max(0, (d.pend || 0) - 1);
       if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
@@ -1346,12 +1804,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         email: t.email,
         calendar: t.calendar,
         legal: t.legal,
+        doc: t.doc,
         dms: t.dms,
         checklist: t.checklist,
         plan: t.plan,
       };
       t._item = item;
       setLibrary((prev) => [item, ...prev]);
+      void maybeNudgeByok(library.length + 1); // after a few approvals, offer BYOK once
       const next = d.tasks.find((x) => !x.done);
       bump();
       track('task.approved', { dept: d.k, type });
@@ -1364,6 +1824,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           label: 'persistApproval',
           failMessage: 'Saved here, but syncing failed — it may not persist.',
         });
+        // Ledger emit: keyed by the same id persistApproval assigns (`${d.k}-${approvedAt}`),
+        // so this live node and the backfill's node for the same deliverable never duplicate.
+        const ev = eventFromLibItem(
+          { id: `${d.k}-${approvedAt}`, title: item.title, k: d.k, createdAt: approvedAt },
+          d.k,
+        );
+        void appendEvent(companyId, ev);
+        setEvents((prev) => [ev, ...prev.filter((e) => e.refId !== ev.refId)]);
         // Fire-and-forget: let byte extract any durable decision this deliverable locks
         // in (server-gated by AI_MEMORY_ENABLED; never blocks or surfaces errors).
         rememberApproval({
@@ -1375,9 +1843,77 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       computeNextStep(); // this task is done now — advance the next step
       maybeOfferAdvance(); // …and if that was the last one, offer to move up a stage
+      guideAfterCompletion(t.t); // …otherwise byte acknowledges it + nudges the next move in chat
       return { item, next };
     },
-    [companyId, bump, toast, computeNextStep, maybeOfferAdvance],
+    [
+      companyId,
+      bump,
+      toast,
+      computeNextStep,
+      maybeOfferAdvance,
+      guideAfterCompletion,
+      library,
+      maybeNudgeByok,
+      nextStep,
+    ],
+  );
+
+  // Founder-owned tasks (incorporate, open a bank account, …) are the founder's to do — byte
+  // can't produce a deliverable for them. This is the completion path that fulfills byte's
+  // "tell me when it's done and I'll mark it" promise: flip the task (and its linked roadmap
+  // node) to Done, unlock its dependents live, and offer to advance if the stage just finished.
+  const markTaskDone = useCallback(
+    (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t || t.done) return;
+      // Same beacon-step link as approveTask: stamp the exact node id before completing so a
+      // founder-task done off the portal still advances the map by node link (see beaconLinkFor).
+      const beaconNode = beaconLinkFor(nextStep, DEPTS, d.k, d.tasks.indexOf(t));
+      if (beaconNode) t.roadmapNodeId = beaconNode;
+      t.done = true;
+      t.drafted = false;
+      d.pend = Math.max(0, (d.pend || 0) - 1);
+      if (d.pend === 0 && d.status === 'attention') d.status = 'ready';
+      bump();
+      if (companyId)
+        persistDepartmentTasks(companyId, d).catch((err) =>
+          console.error('[store] mark task done failed', err),
+        );
+      setChatMessages((prev) => prev.filter((m) => !m.brief));
+      computeNextStep(); // it's done now — advance the next step
+      maybeOfferAdvance(); // …and if that finished the stage, offer to move up
+      guideAfterCompletion(taskTitle); // …otherwise acknowledge it + nudge the next move in chat
+    },
+    [companyId, bump, computeNextStep, maybeOfferAdvance, guideAfterCompletion, nextStep],
+  );
+
+  // The literal "add your input": save a founder task's captured OUTPUTS into company memory
+  // (decisions — read by every downstream generation via composeProjectModel), then mark the task
+  // done. So completing "Business bank account" leaves "Bank: Mercury" behind for billing/invoices
+  // to build on. Non-sensitive values only (the capture form + prompt enforce that upstream).
+  const captureTaskInput = useCallback(
+    (deptK: string, taskTitle: string, values: { key: string; label: string; value: string }[]) => {
+      const extracted = values
+        .filter((v) => v.value.trim())
+        .map((v) => ({
+          topic: v.key.trim(),
+          statement: `${v.label.trim()}: ${v.value.trim()}`,
+          source: 'input' as const,
+        }))
+        .filter((e) => e.topic && e.statement);
+      if (extracted.length) {
+        setDecisions((prev) => {
+          const next = mergeDecisions(prev, extracted, Date.now());
+          if (companyId) persistDecisions(companyId, next).catch(() => {});
+          return next;
+        });
+      }
+      // markTaskDone clears the brief (and thus the help card) and posts the acknowledgment/nudge.
+      markTaskDone(deptK, taskTitle);
+    },
+    [companyId, markTaskDone],
   );
 
   const toggleEnv = useCallback(
@@ -1453,6 +1989,69 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, bump],
   );
 
+  const [liveRun, setLiveRun] = useState<LiveRun | null>(null);
+
+  // Run a task in the theater. Same generation as runTaskInChat (runByteTaskStreaming →
+  // applyResult), but the phases stream into a LiveRun the theater renders, and the
+  // founder stays on a full-width surface instead of a 320px card.
+  const startRunInTheater = useCallback(
+    async (deptK: string, taskTitle: string) => {
+      const d = DEPTS.find((x) => x.k === deptK);
+      const t = d?.tasks.find((x) => x.t === taskTitle);
+      if (!d || !t) return;
+      const type = artType(t);
+      const kind = liveKind(type);
+      if (!kind) return; // not producible here — the chat path explains why
+      setLiveRun(
+        newRun({
+          deptK,
+          taskTitle: t.t,
+          deptName: d.name,
+          type,
+          startedAt: Date.now(),
+        }),
+      );
+      setView('run');
+      track('run.theater_open', { dept: d.k, type });
+      try {
+        const res = await runByteTaskStreaming(
+          {
+            kind,
+            taskTitle: t.t,
+            taskHint: t.d,
+            deptName: d.name,
+            deptKey: d.k,
+            brief,
+            companionId,
+          },
+          (ev) => setLiveRun((prev) => (prev ? reduceRun(prev, ev, Date.now()) : prev)),
+        );
+        applyResult(t, type, res);
+        creditToolkitUse(t.t, type);
+        bump();
+        persistTaskDraft(d.k, t.t);
+        setAiOffline(null);
+      } catch (err) {
+        const code = err instanceof GenerateError ? err.code : 'generation_failed';
+        const limited = code === 'rate_limited' || code === 'http_429';
+        if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
+        // The stream may already have delivered an `error` event; reduceRun ignores a
+        // second one because a finished run is immutable.
+        setLiveRun((prev) => (prev ? reduceRun(prev, { type: 'error', code }, Date.now()) : prev));
+      }
+    },
+    [brief, bump, persistTaskDraft, creditToolkitUse, companionId],
+  );
+
+  const closeRunTheater = useCallback(() => {
+    setLiveRun(null);
+    setView('overview');
+  }, []);
+
+  const retryRun = useCallback(() => {
+    if (liveRun) startRunInTheater(liveRun.deptK, liveRun.taskTitle);
+  }, [liveRun, startRunInTheater]);
+
   // Produce a task's deliverable INLINE in chat — byte's "run it from here." Runs the
   // exact same generation the department panel uses (runByteTask → applyResult), then
   // leaves a result card in the thread for the founder to approve. Reads live DEPTS, so
@@ -1474,6 +2073,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             role: 'byte',
             text: `“${t.t}” isn’t one I can produce right here — open it in ${d.name} and I’ll help you finish it.`,
             ts: Date.now(),
+          },
+        ]);
+        return;
+      }
+      // Idempotent: if this task already has a draft, surface THAT instead of
+      // re-generating. Re-running duplicates the deliverable (and its saved library
+      // copy) — the bug when a locked step's "Start: <prereq>" is tapped for a prereq
+      // that's already drafted-but-not-approved. Show the existing draft so the founder
+      // can approve/revise it, not a second copy.
+      if (t.out?.trim()) {
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: msgId,
+            role: 'byte',
+            text: `You already have a draft of “${t.t}” — here it is. Approve it (or Revise) to move on.`,
+            ts: Date.now(),
+            result: { deptK, taskTitle, type },
           },
         ]);
         return;
@@ -1506,10 +2123,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         bump();
         persistTaskDraft(d.k, t.t);
         track('chat.run_task', { dept: d.k, type });
+        setAiOffline(null); // a successful run means byte is reachable again
         setChatMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, running: false } : m)));
       } catch (err) {
         const code = err instanceof GenerateError ? err.code : '';
         const limited = code === 'rate_limited' || code === 'http_429';
+        if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
         const msg = limited
           ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this up then.'
           : 'I hit a snag producing that — want me to try again?';
@@ -1716,18 +2335,68 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     [companyId, activeThreadId, threads, openThread, newChat],
   );
 
+  const clearAllChats = useCallback(() => {
+    if (!companyId) return;
+    // Cancel any in-flight stream first — same reason as deleteThread: a stream-end
+    // persistMsg could otherwise re-create a just-deleted thread.
+    chatAbort.current?.abort();
+    setChatStreaming(false);
+    const ids = threads.map((t) => t.id);
+    setThreads([]);
+    ids.forEach((id) =>
+      deleteThreadAndMessages(companyId, id).catch((err) =>
+        console.error('[store] deleteThreadAndMessages failed', err),
+      ),
+    );
+    // Drop into a fresh empty chat (also closes the history list).
+    newChat();
+  }, [companyId, threads, newChat]);
+
+  // The department in focus drives BOTH the Copilot's voice-per-department persona and its
+  // avatar/name: the department being viewed → else the CURRENT NEXT STEP's department →
+  // else undefined (byte). One source of truth so the chat's face never disagrees with its tone.
+  const focusDeptKey = (view === 'dept' ? deptKey : null) ?? nextStep?.deptK ?? undefined;
+  const focusCompanionId = companionForDept(focusDeptKey).id;
+
   // byte chat. Appends the founder's message, streams byte's reply in place, and
   // persists both. One turn at a time — guarded by chatStreaming.
   // The streaming engine both sendChat and retryChat drive: run byte's reply into an
   // existing byte bubble (`byteMsgId`) against `history`. Aborts any prior in-flight stream,
   // handles action/nav/setup/memory events, gives distinct copy per failure, and flags the
   // bubble for Retry when it fails. Company context is snapshotted fresh on each run.
+  // Long-thread memory: once a batch of turns has scrolled past the chat window, fold them
+  // into the thread's rolling summary (best-effort — a failure just leaves the summary as-is
+  // and the next batch retries). The summary rides along on the next chat call as grounding.
+  const maybeSummarizeThread = useCallback(
+    async (threadId: string, turns: TurnRef[]) => {
+      if (!companyId) return;
+      const thread = threadsRef.current.find((t) => t.id === threadId);
+      if (!thread) return;
+      const plan = planThreadSummary(turns, thread.summarizedThroughTs ?? 0);
+      if (plan.turns.length === 0) return;
+      const summary = await summarizeThread(thread.summary ?? '', plan.turns);
+      if (summary == null || !summary.trim()) return;
+      // The thread may have been deleted while we were summarizing — never resurrect it via
+      // persistThread's setDoc (GAP-1). Re-read the live ref and bail if it's gone; also build
+      // the update from the latest meta so a concurrent rename/updatedAt isn't clobbered.
+      const latest = threadsRef.current.find((t) => t.id === threadId);
+      if (!latest) return;
+      const updated: ThreadMeta = { ...latest, summary, summarizedThroughTs: plan.throughTs };
+      setThreads((prev) => prev.map((t) => (t.id === threadId ? updated : t)));
+      persistThread(companyId, updated).catch((err) =>
+        console.error('[store] persistThread(summary) failed', err),
+      );
+    },
+    [companyId],
+  );
+
   const runByteStream = useCallback(
-    (byteMsgId: string, byteTs: number, history: { role: 'me' | 'byte'; text: string }[]) => {
+    (byteMsgId: string, byteTs: number, history: TurnRef[]) => {
       chatAbort.current?.abort();
       const ac = new AbortController();
       chatAbort.current = ac;
       setChatStreaming(true);
+      const activeThread = threads.find((t) => t.id === activeThreadId);
 
       // A compact snapshot of the departments so byte talks about THIS company — plus the
       // single next step byte already picked, so chat and the map beacon never disagree.
@@ -1735,11 +2404,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         (d) => `- ${d.name} (${d.status}, ${d.pend} to do): ${d.need}`,
       ).join('\n');
       const focusDept = nextStep ? DEPTS.find((d) => d.k === nextStep.deptK)?.name : undefined;
+      // Lead with the single agreed next step so it survives the route's length cap — the
+      // department lines below can be long and would otherwise push this grounding past the
+      // slice, leaving byte to invent a different "first step" than the map beacon shows.
       const focus =
         nextStep && focusDept
-          ? `\n\nCURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do next, this is the answer; you may sequence or add detail, but do not contradict it.`
+          ? `CURRENT NEXT STEP (the founder's single focus right now): "${nextStep.taskTitle}" in ${focusDept}${nextStep.why ? ` — ${nextStep.why}` : ''}. If they ask what to do or focus on — first, next, or right now — name THIS exact task and department as your headline answer; you may add sequencing or detail, but never lead with a different task.\n\n`
           : '';
-      const deptSummary = deptLines + focus;
+      const deptSummary = focus + deptLines;
       const openTasks = DEPTS.flatMap((d) =>
         d.tasks
           .filter((t) => !t.done && liveKind(artType(t)) !== null)
@@ -1761,7 +2433,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             deptSummary,
             openTasks,
             envSetup,
-            companionId,
+            focusDeptKey,
+            activeThread?.summary,
             ac.signal,
           )) {
             if (ev.type === 'action') {
@@ -1808,6 +2481,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                 }
                 return [...byTopic.values()];
               });
+              if (companyId) {
+                for (const c of ev.items) {
+                  const decEv = eventFromDecision({
+                    topic: c.topic,
+                    statement: c.statement,
+                    source: 'chat',
+                    updatedAt: now,
+                  });
+                  void appendEvent(companyId, decEv);
+                  setEvents((prev) => [decEv, ...prev.filter((e) => e.refId !== decEv.refId)]);
+                }
+              }
               continue;
             }
             acc += ev.text;
@@ -1822,6 +2507,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           failed = true;
           errCode = err instanceof ChatError ? err.code : 'network';
         }
+        // Track byte's availability globally so the hub shows one honest offline state: a
+        // credit/quota failure marks it offline; any success clears it.
+        if (!failed) setAiOffline(null);
+        else if (errCode === 'ai_unavailable' || errCode === 'rate_limited')
+          setAiOffline({ code: errCode, at: Date.now() });
         const fallback =
           errCode === 'rate_limited'
             ? 'We’ve hit today’s usage limit — it resets tomorrow. Let’s pick this back up then.'
@@ -1865,16 +2555,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         );
         setChatStreaming(false);
         chatAbort.current = null;
-        // Persist byte's reply if it's a real answer or a run lead-in (not the error
-        // fallback). The inline result card itself is transient, like the briefings.
-        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild)) {
+        // Persist byte's reply: a real answer, a run lead-in, OR an honest failure line. We
+        // persist the error fallback too (byteMsgId is stable, so a later Retry overwrites it)
+        // — otherwise the founder's question, which sendChat already persisted, is left dangling
+        // with no reply after a reload. The inline result card itself stays transient.
+        if (companyId && (acc.trim() || pending || navChip || setupChip || offerBuild || errored)) {
           persistMsg({ id: byteMsgId, role: 'byte', text: finalText, ts: byteTs });
+        }
+        // Long-thread memory: after a real exchange, fold any turns that have scrolled past
+        // the window into the thread's rolling summary (best-effort, only when a batch drops).
+        if (!failed && activeThreadId) {
+          const turns: TurnRef[] = acc.trim()
+            ? [...history, { role: 'byte' as const, text: acc, ts: byteTs }]
+            : history;
+          void maybeSummarizeThread(activeThreadId, turns);
         }
         // byte decided to run a task — produce it inline now.
         if (pending) runTaskInChat(pending.deptK, pending.taskTitle);
       })();
     },
-    [companyId, nextStep, runTaskInChat, companionId, persistMsg],
+    [
+      companyId,
+      nextStep,
+      focusDeptKey,
+      runTaskInChat,
+      persistMsg,
+      threads,
+      activeThreadId,
+      maybeSummarizeThread,
+    ],
   );
 
   const sendChat = useCallback(
@@ -1884,10 +2593,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
-      const byteMsg: ChatMessage = { id: newId(), role: 'byte', text: '', ts: now + 1 };
+      // Pin the reply to whoever is in focus now, so it keeps that pet's face in the thread
+      // even after the founder navigates to another department.
+      const byteMsg: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: '',
+        ts: now + 1,
+        companionId: focusCompanionId,
+      };
 
       // Build the history to send BEFORE the empty byte placeholder is added.
-      const history = [...chatMessages, userMsg].map((m) => ({ role: m.role, text: m.text }));
+      const history = [...chatMessages, userMsg].map((m) => ({
+        role: m.role,
+        text: m.text,
+        ts: m.ts,
+      }));
       setChatMessages((prev) => [...prev, userMsg, byteMsg]);
       track('chat.send', {});
 
@@ -1910,7 +2631,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       runByteStream(byteMsg.id, byteMsg.ts, history);
     },
-    [companyId, chatMessages, chatStreaming, runByteStream, persistMsg, activeThreadId],
+    [
+      companyId,
+      chatMessages,
+      chatStreaming,
+      focusCompanionId,
+      runByteStream,
+      persistMsg,
+      activeThreadId,
+    ],
   );
 
   // Re-run a byte reply that failed: rebuild the history up to (and ending on) the user turn
@@ -1922,7 +2651,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!target) return;
       const history = chatMessages
         .filter((m) => m.id !== byteMsgId)
-        .map((m) => ({ role: m.role, text: m.text }));
+        .map((m) => ({ role: m.role, text: m.text, ts: m.ts }));
       setChatMessages((prev) =>
         prev.map((m) =>
           m.id === byteMsgId
@@ -1937,9 +2666,74 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   );
 
   const startBuildIntake = useCallback(() => {
+    // Idempotent: an intake already in progress must never stack a second opener.
+    if (buildIntakeActive) return;
     setBuildIntakeActive(true);
     setBuildBrief('');
+    setBuildIntakeLog([{ role: 'byte', text: INTAKE_OPENING }]);
     setBuildPlanState(null);
+    setBuildTarget(null);
+    // Repo-cloud (non-demo) builds ask New-vs-Existing first; the brainstorm opener is
+    // deferred to chooseBuildTarget. Capability/remote isn't known synchronously here, so
+    // the MVP gate is cloudRepoBuild && !demoLetsBuild — the arm step handles remote.
+    if (cloudRepoBuild && !demoLetsBuild) {
+      const fork: ChatMessage = {
+        id: newId(),
+        role: 'byte',
+        text: FORK_PROMPT,
+        ts: Date.now(),
+        fork: true,
+      };
+      setChatMessages((prev) => [...stripBuildButtons(prev), fork]);
+      persistMsg({ id: fork.id, role: 'byte', text: fork.text, ts: fork.ts });
+      track('build.intake.start', {});
+      return;
+    }
+    const opening: ChatMessage = {
+      id: newId(),
+      role: 'byte',
+      text: INTAKE_OPENING,
+      ts: Date.now(),
+    };
+    // Strip the "Let's build it" trigger(s) as we open, so they can't be tapped
+    // again to re-append the opener (the source of the duplicated intake message).
+    setChatMessages((prev) => [...stripBuildButtons(prev), opening]);
+    persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
+    track('build.intake.start', {});
+  }, [companyId, persistMsg, buildIntakeActive, demoLetsBuild]);
+
+  const chooseBuildTarget = useCallback(
+    (t: 'new' | 'existing') => {
+      setBuildTarget(t);
+      // Drop the fork buttons: strip build triggers AND clear the `fork` flag so the
+      // choice can't be re-tapped.
+      setChatMessages((prev) =>
+        stripBuildButtons(prev).map((m) => (m.fork ? { ...m, fork: false } : m)),
+      );
+      // Existing project: pick the repo FIRST (scan repos / connect GitHub) before the
+      // brainstorm, so the founder chooses which project they're adding to up front. New
+      // project: straight into the brainstorm (the repo is created from a name at the arm step).
+      const msg: ChatMessage =
+        t === 'existing'
+          ? {
+              id: newId(),
+              role: 'byte',
+              text: 'Which project are we building into? Pick one of your repos below — or connect GitHub to grant access.',
+              ts: Date.now(),
+              pickRepo: true,
+            }
+          : { id: newId(), role: 'byte', text: INTAKE_OPENING, ts: Date.now() };
+      setChatMessages((prev) => [...prev, msg]);
+      persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+      track('build.fork.choose', { target: t });
+    },
+    [persistMsg],
+  );
+
+  // Existing-project path: the repo was chosen up front — drop the picker and open the
+  // brainstorm (posts INTAKE_OPENING, same opener the New path and startBuildIntake use).
+  const confirmRepoAndBrainstorm = useCallback(() => {
+    setChatMessages((prev) => prev.map((m) => (m.pickRepo ? { ...m, pickRepo: false } : m)));
     const opening: ChatMessage = {
       id: newId(),
       role: 'byte',
@@ -1948,8 +2742,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     setChatMessages((prev) => [...prev, opening]);
     persistMsg({ id: opening.id, role: 'byte', text: opening.text, ts: opening.ts });
-    track('build.intake.start', {});
-  }, [companyId, persistMsg]);
+  }, [persistMsg]);
 
   const cancelBuildIntake = useCallback(() => {
     setBuildIntakeActive(false);
@@ -1969,27 +2762,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     (raw: string) => {
       const text = raw.trim();
       if (!text) return;
-      const first = buildBrief.trim().length === 0;
       setBuildBrief((b) => appendBrief(b, text));
+
+      const nextLog: BrainstormTurn[] = [...buildIntakeLog, { role: 'user', text }];
+      setBuildIntakeLog(nextLog);
+      const userTurns = nextLog.filter((t) => t.role === 'user').length;
+
       const now = Date.now();
       const userMsg: ChatMessage = { id: newId(), role: 'me', text, ts: now };
+      const thinkingId = newId();
       setChatMessages((prev) => [
         ...stripBuildButtons(prev),
         userMsg,
-        // After the first answer, Byte nudges once and surfaces the "to plan" button.
-        {
-          id: newId(),
-          role: 'byte',
-          text: first ? INTAKE_FOLLOWUP : 'Got it — added. 👍',
-          ts: now + 1,
-          buildAction: { kind: 'to-plan', label: 'Turn this into a plan →' },
-        },
+        // Transient "thinking" bubble, swapped for Byte's question/summary below.
+        { id: thinkingId, role: 'byte', text: 'Byte is thinking…', ts: now + 1 },
       ]);
-      // Persist the founder's real answer; the byte follow-up carries an in-memory-only
-      // buildAction button (dead after reload) so it stays transient, like result cards.
+      // Persist only the founder's real answer; Byte's turns are transient like
+      // the result cards (they carry in-memory-only buttons and reload dead).
       persistMsg({ id: userMsg.id, role: 'me', text, ts: userMsg.ts });
+
+      (async () => {
+        let reply = null as Awaited<ReturnType<typeof requestBuildBrainstorm>> | null;
+        try {
+          reply = await requestBuildBrainstorm({
+            conversation: nextLog,
+            project: buildProject || undefined,
+          });
+        } catch {
+          reply = null; // Any failure → static fallback via decideIntakeStep.
+        }
+        const step = decideIntakeStep(reply, userTurns);
+        // Only a follow-up question needs to re-enter the transcript (so the next
+        // API turn sees it). A ready/fallback reflect-back is derived from turns
+        // already in the log and is terminal — the founder builds next — so it's
+        // deliberately not appended.
+        if (step.mode === 'question') {
+          setBuildIntakeLog((prev) => [...prev, { role: 'byte', text: step.text }]);
+        }
+        setChatMessages((prev) =>
+          prev.map((m) =>
+            m.id === thinkingId
+              ? {
+                  ...m,
+                  text: step.text,
+                  ...(step.mode === 'question'
+                    ? {}
+                    : {
+                        buildAction: {
+                          kind: 'to-plan' as const,
+                          label: step.mode === 'ready' ? 'Build this →' : 'Turn this into a plan →',
+                        },
+                      }),
+                }
+              : m,
+          ),
+        );
+      })();
     },
-    [buildBrief, companyId, persistMsg],
+    [buildIntakeLog, buildProject, persistMsg],
   );
 
   const generateBuildPlan = useCallback(() => {
@@ -2041,62 +2871,304 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setBuildPlanState((p) => (p ? { ...p, steps } : p));
   }, []);
 
-  const armBuild = useCallback(() => {
-    // A project is required — never fall back to '.' (the app server's own cwd),
-    // which would let Byte build inside whatever directory the server runs from.
-    if (!buildPlan || !companyId || buildArming || !buildProject.trim()) return;
-    setBuildArming(true);
-    buildEndedNudged.current = false;
-    setBuildResumed(false);
-    (async () => {
-      try {
-        const id = crypto.randomUUID();
-        const dirs = await loadProjectDirs(companyId);
-        const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
-        setBuildProjectDir(dir);
-        const cap = await getCapability();
-        if (cap.mode === 'local') {
-          // Snapshot the project BEFORE the session touches anything, so END can offer
-          // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
-          setBuildCheckpoint(await createCheckpoint(dir));
-          setBuildLocal(true);
-          setBuildLaunchCommand(null);
-          setBuildSessionId(id);
-          setBuildLive(null);
-          setBuildStep('during');
-        } else {
-          setBuildLocal(false);
-          const command = terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief));
-          const token = await ensureIngestToken(companyId);
-          const res = await armBuildSession({
-            buildSessionId: id,
-            projectDir: dir,
-            plan: buildPlan,
-            brief: buildBrief,
-            companyId,
-            token,
-            apiUrl: window.location.origin,
-          });
-          setBuildLaunchCommand(res.ok && res.launched ? null : command);
-          setBuildSessionId(id);
-          setBuildLive(null);
-          setBuildStep('during');
+  // Kicks off the GitHub App install: fetches a signed install URL from
+  // /api/github/connect (the server mints it from the verified Firebase token — never
+  // trust a companyId supplied by the client) and navigates the browser there. GitHub
+  // redirects back to /api/github/callback once the founder finishes installing.
+  const connectGithub = useCallback(async () => {
+    // Open the GitHub install in a NEW tab so the current tab keeps the build-intake state
+    // (a full-page redirect here would drop the in-progress fork/plan). Open the tab
+    // synchronously inside the click — before the await — so the popup blocker doesn't kill
+    // it; then point it at the install URL once fetched. If the popup was blocked (win is
+    // null), fall back to a same-tab redirect so connecting still works.
+    // (No 'noopener' — that makes window.open return null, and we need the handle to point
+    // the tab at the install URL after the fetch. The target is GitHub's own install page.)
+    const win = window.open('about:blank', '_blank');
+    const res = await fetch('/api/github/connect', {
+      headers: { ...(await cloudBuildAuthHeader()) },
+    });
+    if (!res.ok) {
+      if (win) win.close();
+      return;
+    }
+    const { url } = (await res.json()) as { url: string };
+    if (win) win.location.href = url;
+    else window.location.href = url;
+  }, []);
+
+  // Lists the connected GitHub App installation's repos for the "Build into: [repo]"
+  // picker. A 404 (or any non-OK response) reads as "not connected" so the UI falls back
+  // to the Connect GitHub button rather than showing a broken/empty picker.
+  const loadRepos = useCallback(async (): Promise<
+    { repos: { owner: string; name: string }[] } | { notConnected: true }
+  > => {
+    const res = await fetch('/api/github/repos', {
+      headers: { ...(await cloudBuildAuthHeader()) },
+    });
+    if (!res.ok) return { notConnected: true };
+    const { repos } = (await res.json()) as { repos: { owner: string; name: string }[] };
+    return { repos };
+  }, []);
+
+  const armBuild = useCallback(
+    (repoOverride?: { owner: string; name: string }) => {
+      // A project is required — never fall back to '.' (the app server's own cwd),
+      // which would let Byte build inside whatever directory the server runs from.
+      // (Demo mode is the one exception: it targets a fixed, throwaway ~/codepet-demo dir.)
+      // A build needs a target: a demo, a local project, OR (repo-cloud) a selected repo.
+      // Without the buildRepo exception the repo-cloud branch below is unreachable.
+      // repoOverride lets createProject arm into a freshly-created repo without waiting
+      // for the setBuildRepo state update to flush (avoids a stale-closure no-op). Guard
+      // against being passed a React event (onClick={armBuild}) — only accept a real repo.
+      const effectiveRepo =
+        repoOverride && typeof repoOverride === 'object' && 'owner' in repoOverride
+          ? repoOverride
+          : buildRepo;
+      if (
+        !buildPlan ||
+        !companyId ||
+        buildArming ||
+        (!demoLetsBuild && !buildProject.trim() && !(cloudRepoBuild && effectiveRepo))
+      )
+        return;
+      setBuildArming(true);
+      buildEndedNudged.current = false;
+      setBuildResumed(false);
+      (async () => {
+        try {
+          const id = crypto.randomUUID();
+          // Non-null only in remote mode (a copy-paste command is shown); drives the honest
+          // "paste this" message vs the local "I'm watching" one.
+          let launchCommand: string | null = null;
+          // Posts a byte chat message and signals the caller to STOP arming (no state is
+          // touched — buildArming still flips off via the outer `finally`).
+          const stopWithMessage = (text: string) => {
+            const now = Date.now();
+            const msg: ChatMessage = { id: newId(), role: 'byte', text, ts: now };
+            setChatMessages((prev) => [...prev, msg]);
+            persistMsg({ id: msg.id, role: 'byte', text: msg.text, ts: msg.ts });
+          };
+          if (demoLetsBuild) {
+            const cap = await getCapability();
+            if (cap.mode === 'local') {
+              const dir = await scaffoldDemoProject(); // creates + seeds ~/codepet-demo
+              setBuildProjectDir(dir);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              setBuildLocal(true);
+              setBuildLaunchCommand(null);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else if (cloudDemoBuild) {
+              // Hosted demo: boot a cloud (E2B) sandbox instead of showing a copy-paste
+              // terminal command — no local toolkit required. The server derives companyId
+              // from the verified Firebase token; NEVER send companyId in the body (a prior
+              // review flagged that as a cross-tenant IDOR).
+              setBuildLocal(false);
+              setBuildProjectDir(DEMO_DIR);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              const res = await fetch('/api/build/cloud-start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+                body: JSON.stringify({ plan: buildPlan, brief: buildBrief }),
+              });
+              if (res.status === 402) {
+                stopWithMessage(
+                  "You're out of build credits — top up in Billing to keep building.",
+                );
+                return;
+              }
+              if (res.status === 409) {
+                stopWithMessage("A build's already running — let's finish that one first.");
+                return;
+              }
+              if (!res.ok) {
+                stopWithMessage(
+                  "Byte couldn't start the cloud build just now — try again in a moment.",
+                );
+                return;
+              }
+              const { buildSessionId: cloudSessionId } = (await res.json()) as {
+                buildSessionId: string;
+              };
+              setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+              setBuildSessionId(cloudSessionId);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else {
+              setBuildLocal(false);
+              setBuildProjectDir(DEMO_DIR);
+              setBuildCheckpoint(null); // throwaway target — no rewind
+              const token = await ensureIngestToken(companyId);
+              await armBuildSession({
+                buildSessionId: id,
+                projectDir: DEMO_DIR,
+                plan: buildPlan,
+                brief: buildBrief,
+                companyId,
+                token,
+                apiUrl: window.location.origin,
+              });
+              // Self-seeding copy-paste command (the app can't touch the tester's machine remotely).
+              launchCommand = demoTerminalCommand(buildOpeningPrompt(buildPlan, buildBrief), {
+                apiUrl: window.location.origin,
+                companyId,
+                buildSessionId: id,
+                token,
+              });
+              setBuildLaunchCommand(launchCommand);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            }
+          } else {
+            const dirs = await loadProjectDirs(companyId);
+            const dir = dirs.find((p) => p.name === buildProject)?.path ?? buildProject.trim();
+            setBuildProjectDir(dir);
+            const cap = await getCapability();
+            if (cap.mode === 'local') {
+              // Snapshot the project BEFORE the session touches anything, so END can offer
+              // a rewind. Best-effort: null (non-repo / git missing) just hides the button.
+              setBuildCheckpoint(await createCheckpoint(dir));
+              setBuildLocal(true);
+              setBuildLaunchCommand(null);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else if (cloudRepoBuild) {
+              // GitHub-backed cloud build: boots into the founder's OWN connected repo
+              // (via /api/build/repo-start) instead of showing a copy-paste terminal
+              // command — no local toolkit required. The server derives companyId from
+              // the verified Firebase token; NEVER send companyId in the body (same IDOR
+              // guard as cloudDemoBuild's /api/build/cloud-start call above).
+              if (!effectiveRepo) {
+                stopWithMessage('Pick a GitHub repo (or connect GitHub) to build in the cloud.');
+                return;
+              }
+              const res = await fetch('/api/build/repo-start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+                body: JSON.stringify({ repo: effectiveRepo, plan: buildPlan, brief: buildBrief }),
+              });
+              if (res.status === 402) {
+                stopWithMessage("You're out of build credits — top up in Billing.");
+                return;
+              }
+              if (res.status === 403) {
+                stopWithMessage(
+                  "That repo isn't connected to Codepet — pick one you've granted access to.",
+                );
+                return;
+              }
+              if (res.status === 404) {
+                stopWithMessage('Connect GitHub first to build in the cloud.');
+                return;
+              }
+              if (res.status === 409) {
+                stopWithMessage("A build's already running — let's finish that one first.");
+                return;
+              }
+              if (!res.ok) {
+                stopWithMessage("Byte couldn't start the cloud build just now — try again.");
+                return;
+              }
+              const { buildSessionId: repoSessionId } = (await res.json()) as {
+                buildSessionId: string;
+              };
+              setBuildLocal(false);
+              setBuildLaunchCommand(null); // no terminal command — the sandbox is already running
+              setBuildSessionId(repoSessionId);
+              setBuildLive(null);
+              setBuildStep('during');
+            } else {
+              setBuildLocal(false);
+              const token = await ensureIngestToken(companyId);
+              // Self-report tokens too (best-effort, same as the demo path) so remote testers'
+              // real usage shows up without a toolkit install.
+              const command =
+                terminalCommand(dir, buildOpeningPrompt(buildPlan, buildBrief)) +
+                tokenReportSuffix({
+                  apiUrl: window.location.origin,
+                  companyId,
+                  buildSessionId: id,
+                  token,
+                });
+              const res = await armBuildSession({
+                buildSessionId: id,
+                projectDir: dir,
+                plan: buildPlan,
+                brief: buildBrief,
+                companyId,
+                token,
+                apiUrl: window.location.origin,
+              });
+              launchCommand = res.ok && res.launched ? null : command;
+              setBuildLaunchCommand(launchCommand);
+              setBuildSessionId(id);
+              setBuildLive(null);
+              setBuildStep('during');
+            }
+          }
+          setView('build');
+          const live: ChatMessage = {
+            id: newId(),
+            role: 'byte',
+            text: launchCommand
+              ? 'Copy the command below into your terminal and run it — byte will build there. (This live view fills in only when you run the app locally.)'
+              : "We're live! I'm watching your session in the main panel — every step lands there. 👀",
+            ts: Date.now(),
+          };
+          setChatMessages((prev) => [...prev, live]);
+          persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
+          track('build.arm', { demo: demoLetsBuild });
+        } finally {
+          setBuildArming(false);
         }
-        setView('build');
-        const live: ChatMessage = {
-          id: newId(),
-          role: 'byte',
-          text: "We're live! I'm watching your session in the main panel — every step lands there. 👀",
-          ts: Date.now(),
-        };
-        setChatMessages((prev) => [...prev, live]);
-        persistMsg({ id: live.id, role: 'byte', text: live.text, ts: live.ts });
-        track('build.arm', {});
-      } finally {
-        setBuildArming(false);
+      })();
+    },
+    [
+      buildPlan,
+      companyId,
+      buildArming,
+      buildProject,
+      buildBrief,
+      demoLetsBuild,
+      buildRepo,
+      persistMsg,
+    ],
+  );
+
+  // Create a brand-new GitHub repo from the Codepet starter template, then arm the build
+  // into it. On failure, Byte says so in-chat (400 ⇒ reconnect GitHub; else a soft retry).
+  const createProject = useCallback(
+    async (name: string) => {
+      const res = await fetch('/api/github/repos', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', ...(await cloudBuildAuthHeader()) },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const { repo } = (await res.json()) as { repo: { owner: string; name: string } };
+        setBuildRepo(repo);
+        armBuild(repo);
+        return;
       }
-    })();
-  }, [buildPlan, companyId, buildArming, buildProject, buildBrief, persistMsg]);
+      // Distinguish the two 400s: a bad name is the founder's to fix, a missing user
+      // token means the GitHub connection needs re-doing — conflating them tells someone
+      // who typed "my app" to go reconnect GitHub, which is just wrong.
+      const err = (await res.json().catch(() => null))?.error as string | undefined;
+      const text =
+        err === 'reconnect_github'
+          ? "Couldn't create the project — reconnect GitHub and try again."
+          : err === 'bad_request'
+            ? "That project name won't work — use letters, numbers, dots, dashes or underscores (no spaces)."
+            : "Byte couldn't create the project just now — try again in a moment.";
+      const m: ChatMessage = { id: newId(), role: 'byte', text, ts: Date.now() };
+      setChatMessages((prev) => [...prev, m]);
+      persistMsg({ id: m.id, role: 'byte', text: m.text, ts: m.ts });
+    },
+    [armBuild, persistMsg],
+  );
 
   // Advance a local in-UI build to the recap. (Remote builds flip via the live-doc
   // subscription; local mode has no such feed, so this is the explicit "wrap up".)
@@ -2159,8 +3231,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
-      sideCollapsed,
-      toggleSide,
       onboarding,
       finishOnboarding,
       openOnboarding,
@@ -2169,6 +3239,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerating,
       planTailored,
       scaffoldFailure,
+      aiOffline,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
@@ -2182,13 +3253,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalled: setInstalledFlag,
       companionId,
-      setCompanion,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
       library,
+      events,
       tracking,
       projects,
       modal,
@@ -2196,6 +3268,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       briefDepartment,
       portalSignal,
       portalToTask,
+      guideRoadmapTask,
+      markTaskDone,
+      openTaskHelp,
+      captureTaskInput,
+      dismissByokNudge,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2214,8 +3291,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
+      liveRun,
+      startRunInTheater,
+      closeRunTheater,
+      retryRun,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
@@ -2225,11 +3307,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       undoNoted,
       persistTaskDraft,
       nextStep,
+      roadmapDefs,
       toastMsg,
       toast,
       buildStep,
       buildProject,
       setBuildProject,
+      buildRepo,
+      setBuildRepo,
+      connectGithub,
+      loadRepos,
+      demoLetsBuild,
       buildBrief,
       buildPlan,
       setBuildPlanSteps,
@@ -2243,6 +3331,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      buildTarget,
+      chooseBuildTarget,
+      confirmRepoAndBrainstorm,
+      createProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,
@@ -2268,8 +3360,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       closeStage,
       copilotCollapsed,
       toggleCopilot,
-      sideCollapsed,
-      toggleSide,
       onboarding,
       finishOnboarding,
       openOnboarding,
@@ -2278,6 +3368,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       regenerating,
       planTailored,
       scaffoldFailure,
+      aiOffline,
       advanceStage,
       growthSignal,
       clearGrowthSignal,
@@ -2291,13 +3382,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       installed,
       setInstalledFlag,
       companionId,
-      setCompanion,
+      focusCompanionId,
       introSeen,
       markIntroSeen,
       installPromptOpen,
       openInstallPrompt,
       closeInstallPrompt,
       library,
+      events,
       tracking,
       projects,
       modal,
@@ -2305,6 +3397,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       briefDepartment,
       portalSignal,
       portalToTask,
+      guideRoadmapTask,
+      markTaskDone,
+      openTaskHelp,
+      captureTaskInput,
+      dismissByokNudge,
       runBriefedTask,
       viewItem,
       closeModal,
@@ -2323,8 +3420,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       openThread,
       renameThread,
       deleteThread,
+      clearAllChats,
       toggleChatHistory,
       retryChat,
+      liveRun,
+      startRunInTheater,
+      closeRunTheater,
+      retryRun,
       runTaskInChat,
       reviseTaskInChat,
       approveChatResult,
@@ -2334,11 +3436,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       undoNoted,
       persistTaskDraft,
       nextStep,
+      roadmapDefs,
       toastMsg,
       toast,
       buildStep,
       buildProject,
       setBuildProject,
+      buildRepo,
+      setBuildRepo,
+      connectGithub,
+      loadRepos,
+      demoLetsBuild,
       buildBrief,
       buildPlan,
       setBuildPlanSteps,
@@ -2352,6 +3460,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       buildResumed,
       applyLocalLive,
       startBuildIntake,
+      buildTarget,
+      chooseBuildTarget,
+      confirmRepoAndBrainstorm,
+      createProject,
       cancelBuildIntake,
       addIntakeTurn,
       generateBuildPlan,

@@ -1,168 +1,81 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/lib/firebase/auth';
-import { useApp } from '@/lib/store';
-import { SupportModal } from './SupportModal';
+import { useApp, type View } from '@/lib/store';
+import { DEPTS, ENV } from '@/lib/data';
+import { companionById } from '@/lib/companions';
+import { AccountMenu } from './AccountMenu';
+
+// Primary navigation now lives in the topbar as horizontal tabs (the sidebar was
+// retired to hand its whole column to the roadmap + chat). Counts are computed the
+// same way the old sidebar did.
+const NAV: { view: View; label: string; count?: () => number }[] = [
+  { view: 'overview', label: 'Overview' },
+  { view: 'home', label: 'Company' },
+  {
+    view: 'tasks',
+    label: 'Tasks',
+    count: () =>
+      DEPTS.reduce(
+        (a, d) =>
+          a + d.tasks.filter((t) => !t.done && (t.who === 'you' || t.who === 'draft')).length,
+        0,
+      ),
+  },
+  { view: 'library', label: 'Library' },
+  { view: 'env', label: 'Environment' },
+];
 
 export function Topbar() {
-  const { user, signOutUser } = useAuth();
-  const { show, installed, openInstallPrompt } = useApp();
-  const [open, setOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
-  const [support, setSupport] = useState(false);
-  const ref = useRef<HTMLButtonElement>(null);
-
-  // Close the menu on a click OUTSIDE it. The listener is attached only while the
-  // menu is open and added after the opening click, so it can't immediately
-  // re-close the menu (the previous always-on listener did exactly that).
-  useEffect(() => {
-    if (!open) return;
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('click', onDoc);
-    return () => document.removeEventListener('click', onDoc);
-  }, [open]);
-
-  // Esc cancels the sign-out confirmation.
-  useEffect(() => {
-    if (!confirming) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setConfirming(false);
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [confirming]);
-
-  // Real identity from the signed-in user (was hardcoded "Mona").
-  const name = user?.displayName || user?.email?.split('@')[0] || 'You';
-  const email = user?.email ?? '';
-  const initial = (name.trim()[0] || 'Y').toUpperCase();
-
-  // Open the confirmation step rather than signing out on the first click.
-  const askSignOut = () => {
-    setOpen(false);
-    setConfirming(true);
-  };
-  const confirmSignOut = () => {
-    setSigningOut(true);
-    // On success, onAuthStateChanged unmounts this tree and routes back to the splash.
-    signOutUser().catch((err) => {
-      console.error('[topbar] sign out failed', err);
-      setSigningOut(false);
-      setConfirming(false);
-    });
-  };
+  const { view, show, installed, openInstallPrompt, companionId, library, tick } = useApp();
+  void tick; // re-read mutable DEPTS/ENV on each store change
+  const companionName = companionById(companionId).name;
+  const envPending = ['skills', 'connectors', 'agents'].reduce(
+    (a, k) => a + ENV[k].filter((x) => !x.s).length,
+    0,
+  );
+  // Library and Environment counts come from live store/derived values, not the
+  // static NAV entry; the rest use their own count fn.
+  const countFor = (n: (typeof NAV)[number]): number =>
+    n.view === 'library' ? library.length : n.view === 'env' ? envPending : n.count ? n.count() : 0;
 
   return (
-    <>
-      <div className="topbar">
-        <span className="proj">Codepet</span>
-        <button
-          ref={ref}
-          className={`tb-prof${open ? ' open' : ''}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen((o) => !o);
-          }}
-        >
-          <span className="av">{initial}</span>
-          {name}
-          <svg className="cv" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M4 6l4 4 4-4"
-              stroke="currentColor"
-              strokeWidth="1.6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-          <div className="tb-menu" onClick={(e) => e.stopPropagation()}>
-            <div className="who">
-              <b>{name}</b>
-              {email && <span>{email}</span>}
-            </div>
-            <div className="tb-sep" />
-            <a
-              onClick={() => {
-                setOpen(false);
-                show('settings');
-              }}
-            >
-              Settings
-            </a>
-            <a
-              onClick={() => {
-                setOpen(false);
-                show('billing');
-              }}
-            >
-              Billing &amp; Usage
-            </a>
-            <a
-              onClick={() => {
-                setOpen(false);
-                setSupport(true);
-              }}
-            >
-              Support
-            </a>
-            <div className="tb-sep" />
-            <a onClick={askSignOut}>Log out</a>
-          </div>
-        </button>
-        <span className="right">
-          {/* Install-later path for the one-time popup: stays until the toolkit
-              is actually installed, then disappears. */}
-          {!installed && (
+    <div className="topbar">
+      <div className="tb-brand">
+        <span className="nm pixel">Codepet</span>
+      </div>
+      <AccountMenu />
+      <nav className="tb-nav" aria-label="Primary">
+        {NAV.map((n) => {
+          const c = countFor(n);
+          return (
             <button
-              className="tb-install"
-              onClick={() => {
-                setOpen(false);
-                openInstallPrompt();
-              }}
+              key={n.view}
+              className={`tb-tab${view === n.view ? ' on' : ''}`}
+              aria-current={view === n.view ? 'page' : undefined}
+              onClick={() => show(n.view)}
             >
-              <span className="tb-install-dot" />⚡ Wake byte up
+              {n.label}
+              {c ? <span className="ct">{c}</span> : null}
             </button>
-          )}
+          );
+        })}
+      </nav>
+      <span className="right">
+        {/* Install-later path for the one-time popup: stays until the toolkit is actually
+            installed, then disappears. */}
+        {!installed && (
           <button
-            className="upg"
+            className="tb-install"
             onClick={() => {
-              setOpen(false);
-              show('billing');
+              openInstallPrompt();
             }}
           >
-            Upgrade
+            <span className="tb-install-dot" />⚡ Wake {companionName} up
           </button>
-        </span>
-      </div>
-      {confirming && (
-        <div
-          className="so-overlay"
-          onClick={() => {
-            if (!signingOut) setConfirming(false);
-          }}
-        >
-          <div className="so-modal" onClick={(e) => e.stopPropagation()}>
-            <h3>Sign out of Codepet?</h3>
-            <p>You&apos;ll need to sign back in to reach your company.</p>
-            <div className="so-acts">
-              <button
-                className="so-cancel"
-                onClick={() => setConfirming(false)}
-                disabled={signingOut}
-              >
-                Cancel
-              </button>
-              <button className="so-confirm" onClick={confirmSignOut} disabled={signingOut}>
-                {signingOut ? 'Signing out…' : 'Sign out'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      <SupportModal open={support} onClose={() => setSupport(false)} />
-    </>
+        )}
+        <button className="upg" onClick={() => show('billing')}>
+          Upgrade
+        </button>
+      </span>
+    </div>
   );
 }

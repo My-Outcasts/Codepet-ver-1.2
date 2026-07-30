@@ -25,7 +25,11 @@ import {
   buildTaskPrompt,
   type TaskFields,
 } from '@/lib/ai/runTaskPrompt';
-import { personaOverride } from '@/lib/companions';
+import { companionForDept, personaOverride } from '@/lib/companions';
+import { briefStep, priorWorkStep, generateStep, type RunEvent } from '@/lib/ai/runTrace';
+import { encodeEvent } from '@/lib/ai/runStream';
+import { creditCostForRoute } from '@/lib/ai/credits';
+import type { CompanyBrief } from '@/lib/firebase/schema';
 
 export const runtime = 'nodejs';
 
@@ -84,6 +88,8 @@ export async function POST(req: Request): Promise<Response> {
     return Response.json({ error: 'unauthorized' }, { status: 401 });
   }
 
+  // Deliverable generation is a CORE ("important") route — it always runs on Codepet's key and
+  // keeps the daily cap, so the product experience is premium and consistent for every account.
   let client: ReturnType<typeof getClient>;
   try {
     client = getClient();
@@ -146,48 +152,91 @@ export async function POST(req: Request): Promise<Response> {
       decisions: company.decisions,
       shipped: library,
     }) || CODEPET_CONTEXT;
-  const priorWork = composePriorWorkContext(
-    selectPriorWork(library, {
-      deptName: fields.deptName,
-      excludeTitle: fields.taskTitle,
-      // Rank prior work by relevance to what this task is actually about, so byte grounds
-      // on the pieces it must stay consistent with (across departments), not just recency.
-      query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
-    }),
-  );
+  // Hoisted so the run trace can report the prior work that was ACTUALLY selected —
+  // the titles streamed to the client are these same objects, not a re-derivation.
+  const selected = selectPriorWork(library, {
+    deptName: fields.deptName,
+    excludeTitle: fields.taskTitle,
+    // Rank prior work by relevance to what this task is actually about, so byte grounds
+    // on the pieces it must stay consistent with (across departments), not just recency.
+    query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
+  });
+  const priorWork = composePriorWorkContext(selected);
   const { schema, instruction } = KINDS[kind];
-  const companionId = typeof body.companionId === 'string' ? body.companionId : undefined;
-  // Cache-safe split: the stable company context goes in the system (cached across the
-  // session's generations); only the per-task prompt varies call to call. The persona
-  // override is appended last so it wins over the "You are byte…" opening; it feeds
-  // BOTH generation call sites below (structured + plain text) since they share `system`.
-  const system = composeRunSystem(context) + personaOverride(companionId);
+  // Voice-per-department: the persona is the department's fixed pet (byte for Engineering,
+  // Nova for Marketing, …), resolved from deptKey — not a global companion pick.
+  // Cache-safe split: the stable company context (byte system + company model) is the cached
+  // prefix; the per-department persona goes in the volatile block so consecutive runs in
+  // different departments still hit that prefix instead of fragmenting it. Feeds BOTH
+  // generation call sites below (structured + plain text) since they share `system`.
+  const system = {
+    stable: composeRunSystem(context),
+    volatile: personaOverride(companionForDept(fields.deptKey).id),
+  };
   const prompt = buildTaskPrompt({ instruction, priorWork, fields });
   const onUsage = usageSink(uid, idToken, 'runTask');
 
-  try {
-    if (schema) {
-      const payload = await generateJson({
-        client,
-        system,
-        prompt,
-        maxTokens: 4096,
-        label: `run-task:${kind}`,
-        schema,
-        onUsage,
-      });
-      return Response.json({ payload });
-    }
-    const text = await generateText({
-      client,
-      system,
-      prompt,
-      maxTokens: 4096,
-      label: `run-task:${kind}`,
-      onUsage,
-    });
-    return Response.json({ text });
-  } catch (err) {
-    return aiErrorResponse(err, 'generation_failed');
-  }
+  // The response is an NDJSON stream: the founder sees each phase the moment the server
+  // finishes it, and the last line carries the deliverable in the same shape the
+  // non-streaming route returned. Errors raised after the headers are sent become an
+  // `error` event — the status line is already committed by then.
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (ev: RunEvent) => controller.enqueue(encoder.encode(encodeEvent(ev)));
+      try {
+        // Grounding already happened above — report exactly what it used. Same precedence
+        // as the generation context: the persisted brief wins over the client's.
+        const briefForTrace = company.brief ?? (body.brief as CompanyBrief | undefined);
+        const bStep = briefStep(briefForTrace);
+        if (bStep) send({ type: 'step', step: bStep });
+        const pStep = priorWorkStep(selected);
+        if (pStep) send({ type: 'step', step: pStep });
+
+        send({ type: 'active', phase: 'generate' });
+        send({ type: 'usage', credits: creditCostForRoute('runTask') });
+
+        if (schema) {
+          const payload = await generateJson({
+            client,
+            system,
+            prompt,
+            maxTokens: 4096,
+            label: `run-task:${kind}`,
+            schema,
+            onUsage,
+          });
+          send({ type: 'step', step: generateStep(kind, fields.deptName) });
+          send({ type: 'result', payload });
+        } else {
+          const text = await generateText({
+            client,
+            system,
+            prompt,
+            maxTokens: 4096,
+            label: `run-task:${kind}`,
+            onUsage,
+          });
+          send({ type: 'step', step: generateStep(kind, fields.deptName) });
+          send({ type: 'result', text });
+        }
+      } catch (err) {
+        // Mirror aiErrorResponse's code so the client's existing GenerateError handling
+        // (rate_limited / ai_unavailable) keeps working over the stream.
+        const res = aiErrorResponse(err, 'generation_failed');
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        send({ type: 'error', code: data.error || 'generation_failed' });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'content-type': 'application/x-ndjson; charset=utf-8',
+      'cache-control': 'no-store, no-transform',
+      // Defeat proxy buffering so phases arrive as they happen rather than all at once.
+      'x-accel-buffering': 'no',
+    },
+  });
 }

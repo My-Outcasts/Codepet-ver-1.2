@@ -34,6 +34,10 @@ export interface Task {
   doc?: { title?: string; call: string; sections: { h: string; p: string }[]; next?: string[] };
   dms?: any[];
   checklist?: any[];
+  // Stable link back to the Overview roadmap node this task realizes (RoadmapTaskDef.id).
+  // Set when a roadmap cell is acted on (matched to an existing task, or created on demand),
+  // so the Overview reports Done and unlocks dependents from real task state — not a title guess.
+  roadmapNodeId?: string;
   // runtime annotations:
   _item?: LibItem;
   _rev?: string;
@@ -1019,7 +1023,12 @@ export const OB_NOTES: string[] = [
   "I'll help you grow distribution and tighten the funnel.",
   "I'll focus on scaling what already works.",
 ];
-export const OB_PHASES: string[] = ['About you', 'Your project', 'byte reads it', 'Your company'];
+export const OB_PHASES: string[] = [
+  'About you',
+  'Your project',
+  'Codepet reads it',
+  'Your company',
+];
 // Quick-select product categories shown as chips on the project step.
 export const OB_CATEGORIES: string[] = [
   'Web app',
@@ -1051,7 +1060,7 @@ export const ENV: Record<string, EnvItem[]> = {
     {
       n: 'Web research',
       ab: 'Wr',
-      d: 'byte searches the web and cites sources in its drafts.',
+      d: 'Codepet searches the web and cites sources in its drafts.',
       s: 0,
       fits: ['post', 'doc', 'plan', 'sheet', 'email'],
     },
@@ -1061,7 +1070,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Turn a rough idea into a structured product spec.',
       s: 1,
       rec: 1,
-      why: 'Turn each beta feature into a clear spec before byte builds it.',
+      why: 'Turn each beta feature into a clear spec before Codepet builds it.',
       fits: ['plan', 'doc', 'prep', 'build'],
     },
     {
@@ -1088,7 +1097,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Read repos, open PRs, track issues.',
       s: 1,
       rec: 1,
-      why: 'byte reads your repo and opens PRs as it ships beta work.',
+      why: 'Codepet reads your repo and opens PRs as it ships beta work.',
       fits: ['build', 'site'],
     },
     {
@@ -1097,7 +1106,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Sync briefs, roadmaps, and docs.',
       s: 0,
       rec: 1,
-      why: 'You collect beta feedback in Notion — connect it so byte can write there.',
+      why: 'You collect beta feedback in Notion — connect it so Codepet can write there.',
       fits: ['doc', 'plan', 'prep', 'post', 'dms', 'checklist', 'calendar'],
     },
     {
@@ -1143,7 +1152,7 @@ export const ENV: Record<string, EnvItem[]> = {
       d: 'Generates tests for new code.',
       s: 0,
       rec: 1,
-      why: 'Writes tests as byte ships each new beta feature.',
+      why: 'Writes tests as Codepet ships each new beta feature.',
       fits: ['build'],
     },
     {
@@ -1167,9 +1176,9 @@ export const ENV_CATS: [string, string, string, string, string][] = [
   ['agents', 'Agents', 'ag', 'Enable', 'Enabled'],
 ];
 export const ENV_META: Record<string, { label: string; col: string; add: string; on: string }> = {
-  skills: { label: 'Skill', col: '--accent', add: 'Turn on', on: 'byte turned this on' },
+  skills: { label: 'Skill', col: '--accent', add: 'Turn on', on: 'Codepet turned this on' },
   connectors: { label: 'Connector', col: '--blue', add: 'Connect', on: 'Connected' },
-  agents: { label: 'Agent', col: '--teal', add: 'Turn on', on: 'byte turned this on' },
+  agents: { label: 'Agent', col: '--teal', add: 'Turn on', on: 'Codepet turned this on' },
 };
 
 /* ===== site revision variants + pure revisers ===== */
@@ -1277,7 +1286,11 @@ export const LIB_TC: Record<string, string> = {
 };
 /* per-type preview skin — light hue tint + same-hue border + readable label ink */
 export const LIB_SKIN: Record<string, { tint: string; line: string; ink: string }> = {
-  site: { tint: '#fff', line: 'var(--hairline)', ink: 'var(--accent-deep)' },
+  // Accent-tinted panel (like sheet/dms) so the browser-chrome mock inside — which stays
+  // var(--surface) — pops as a lighter "window" on a coloured ground, matching every other preview.
+  // Was hardcoded '#fff' (stark white block in dark); a plain var(--surface) then made it a flat
+  // panel the same colour as its own mock, with nothing to pop against.
+  site: { tint: 'var(--accent-tint)', line: 'var(--accent-line)', ink: 'var(--accent-deep)' },
   screens: { tint: 'var(--violet-tint)', line: 'var(--violet-line)', ink: '#7A23C0' },
   sheet: { tint: 'var(--accent-tint)', line: 'var(--accent-line)', ink: 'var(--accent-deep)' },
   plan: { tint: 'var(--blue-tint)', line: 'var(--blue-line)', ink: '#1D4ED8' },

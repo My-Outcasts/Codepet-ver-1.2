@@ -45,3 +45,96 @@ function shq(s: string): string {
 export function terminalCommand(projectDir: string, prompt: string): string {
   return `cd "${shq(projectDir)}" && claude "${shq(prompt)}"`;
 }
+
+export const DEMO_DIR = '~/codepet-demo';
+export const DEMO_PORT = 4321;
+export const DEMO_URL = 'http://localhost:4321';
+
+// A minimal but real starter landing page — byte builds this out during the demo.
+export const DEMO_SEED_HTML = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Demo — built with Codepet</title>
+  </head>
+  <body>
+    <!-- Starter page. byte will build this out. -->
+    <main>
+      <h1>Coming soon</h1>
+      <p>This page is a throwaway demo target for Codepet's "Let's build".</p>
+    </main>
+  </body>
+</html>
+`;
+
+// Best-effort: sum this session's tokens from the newest claude transcript and POST them, so
+// remote testers see real token usage with no toolkit install. Single-line python (no try/except):
+// a malformed line makes it error out and `|| echo 0` yields 0.
+export function tokenReportSuffix(report: {
+  apiUrl: string;
+  companyId: string;
+  buildSessionId: string;
+  token: string;
+}): string {
+  const url = `${report.apiUrl.replace(/\/$/, '')}/api/track/demo-recap`;
+  const py =
+    'import json,sys;print(sum(' +
+    "(lambda u:u.get('input_tokens',0)+u.get('output_tokens',0)+u.get('cache_creation_input_tokens',0)+u.get('cache_read_input_tokens',0))" +
+    "((json.loads(l).get('message') or {}).get('usage') or {}) for l in open(sys.argv[1])))";
+  return (
+    ` ; TF=$(find ~/.claude/projects -name '*.jsonl' -newermt '-30 minutes' 2>/dev/null | xargs ls -t 2>/dev/null | head -1)` +
+    ` ; tokens=$(python3 -c "${py}" "$TF" 2>/dev/null || echo 0)` +
+    ` ; curl -s -X POST ${url} -H 'content-type: application/json'` +
+    ` -d '{"companyId":"${report.companyId}","token":"${report.token}","buildSessionId":"${report.buildSessionId}","tokens":'"\${tokens:-0}"'}'` +
+    ` >/dev/null 2>&1`
+  );
+}
+
+// A single copy-paste command (remote mode): make the demo dir, seed index.html only if
+// it's missing (so re-runs keep byte's progress), then run the real claude session.
+// The seed is base64-embedded to avoid shell-escaping the HTML.
+export function demoTerminalCommand(
+  prompt: string,
+  report?: { apiUrl: string; companyId: string; buildSessionId: string; token: string },
+): string {
+  const b64 = btoa(unescape(encodeURIComponent(DEMO_SEED_HTML)));
+  // Only when we're going to self-report do we need the demo dir to be a git repo at
+  // all — no-report copy-paste commands stay exactly as they were (no git, no curl).
+  const gitInit = report
+    ? ` && (git -C ${DEMO_DIR} rev-parse --git-dir >/dev/null 2>&1 || git -C ${DEMO_DIR} init -q)`
+    : '';
+  const base =
+    `mkdir -p ${DEMO_DIR} && cd ${DEMO_DIR} && ` +
+    `{ [ -f index.html ] || echo '${b64}' | base64 -d > index.html; }` +
+    gitInit +
+    ` && claude "${shq(prompt)}"`;
+  // Best-effort self-report: commit whatever claude just built, then tally the demo
+  // dir's git history and POST it to the recap endpoint so the session shows real
+  // progress even though the app can't watch the tester's machine directly. The
+  // `-c user.*` identity means this works even with no global git config on the
+  // tester's machine; both the add and the commit are best-effort (2>/dev/null) so an
+  // empty/no-op build ("nothing to commit") fails harmlessly instead of aborting the
+  // chain. $commits/$files are shell-substituted at run time; the ids/token/url below
+  // are JS-interpolated at build time. The `-d` payload is built as single-quoted JSON
+  // with the two numeric fields spliced in via `'"$var"'` (break out of the single
+  // quotes just long enough for the shell to expand the variable) — this keeps the
+  // static JSON free of backslash-escaped quotes while still letting the numbers be
+  // substituted at run time.
+  const selfReport = report
+    ? ` ; git -C ${DEMO_DIR} add -A 2>/dev/null` +
+      ` ; git -C ${DEMO_DIR} -c user.email=demo@codepet.local -c user.name='Codepet Demo' commit -q -m 'demo build' 2>/dev/null` +
+      ` ; commits=$(git -C ${DEMO_DIR} rev-list --count HEAD 2>/dev/null || echo 0)` +
+      ` ; files=$(git -C ${DEMO_DIR} ls-files 2>/dev/null | wc -l | tr -d ' ')` +
+      ` ; curl -s -X POST ${report.apiUrl.replace(/\/$/, '')}/api/track/demo-recap` +
+      ` -H 'content-type: application/json'` +
+      ` -d '{"companyId":"${report.companyId}","token":"${report.token}",` +
+      `"buildSessionId":"${report.buildSessionId}","commits":'"\${commits:-0}"',` +
+      `"filesChanged":'"\${files:-0}"'}'` +
+      ` >/dev/null 2>&1`
+    : '';
+  const tokenReport = report ? tokenReportSuffix(report) : '';
+  // Serve the built page (background) and open it, so the tester can view + re-view it.
+  const serve = ` ; python3 -m http.server ${DEMO_PORT} >/dev/null 2>&1 & sleep 1 && open ${DEMO_URL}`;
+  return base + selfReport + tokenReport + serve;
+}

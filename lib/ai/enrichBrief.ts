@@ -6,6 +6,7 @@
 // product. Pure + dependency-free (schema/prompt/merge) so it unit-tests in plain node;
 // the model call + persistence live in /api/scaffold.
 import type { CompanyBrief } from '../firebase/schema';
+import { cleanCompanyName } from '../companyName';
 
 /** byte's structured read of the founder's product. */
 export interface BriefEnrichment {
@@ -48,7 +49,7 @@ const clip = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(
 /** Build the prompt that asks byte to read the founder's inputs into a structured brief. */
 export function buildEnrichPrompt(brief: CompanyBrief): string {
   const lines = [
-    `Product name: ${clip(brief.projectName, 120) || '(unnamed)'}`,
+    `Product name: ${cleanCompanyName(clip(brief.projectName, 120)) ?? '(unnamed)'}`,
     brief.oneLiner ? `Founder's one-liner: ${clip(brief.oneLiner, 300)}` : null,
     brief.categories?.length ? `Founder-picked categories: ${brief.categories.join(', ')}` : null,
     brief.audience ? `Founder-stated audience: ${clip(brief.audience, 200)}` : null,

@@ -49,13 +49,21 @@ export async function* streamByteChat(
   deptSummary?: string,
   openTasks?: RunnableTask[],
   envSetup?: SetupItem[],
-  companionId?: string,
+  focusDeptKey?: string,
+  threadSummary?: string,
   signal?: AbortSignal,
 ): AsyncGenerator<ChatEvent> {
   const res = await fetch('/api/chat', {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(await authHeader()) },
-    body: JSON.stringify({ messages: history, deptSummary, openTasks, envSetup, companionId }),
+    body: JSON.stringify({
+      messages: history,
+      deptSummary,
+      openTasks,
+      envSetup,
+      focusDeptKey,
+      threadSummary,
+    }),
     signal,
   });
   if (!res.ok || !res.body) {
@@ -129,6 +137,7 @@ export async function* streamByteChat(
         target?: unknown;
         setup?: unknown;
         noted?: unknown;
+        offerBuild?: unknown;
       };
       // The action tools are mutually exclusive; memory (noted) is orthogonal and may
       // accompany any of them, so it's yielded independently of the action branch.
@@ -156,8 +165,34 @@ export async function* streamByteChat(
           .map((n) => ({ topic: n.topic, statement: n.statement }));
         if (items.length) yield { type: 'noted', items };
       }
+      // A build offer folded into the action mark (byte captured a fact AND offered to build in
+      // one turn). Orthogonal to the action/noted branches, so yield it independently.
+      if (a.offerBuild === true) yield { type: 'build-offer' };
     } catch {
       /* malformed action payload — ignore, byte's text still delivered */
     }
+  }
+}
+
+/**
+ * Fold a batch of scrolled-off turns into the thread's rolling summary via
+ * /api/summarize-thread. Best-effort: any failure returns null and the caller keeps the
+ * prior summary (long-thread memory just doesn't advance this round).
+ */
+export async function summarizeThread(
+  priorSummary: string,
+  turns: ChatTurn[],
+): Promise<string | null> {
+  try {
+    const res = await fetch('/api/summarize-thread', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(await authHeader()) },
+      body: JSON.stringify({ priorSummary, turns }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => ({}))) as { summary?: unknown };
+    return typeof data.summary === 'string' ? data.summary : null;
+  } catch {
+    return null;
   }
 }

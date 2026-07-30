@@ -3,8 +3,20 @@
 // eyeballed on the Vercel preview without touching the (concurrently-evolving) Overview.
 // Not linked from anywhere in the app — reach it directly at /roadmap-preview.
 import RoadmapView from '@/components/views/overview/RoadmapView';
+import { ROADMAP_TEMPLATE } from '@/lib/overview/roadmapTemplate';
+import { applyProgress, stageToPhase } from '@/lib/overview/roadmapProgress';
 
 export const metadata = { title: 'Roadmap preview — Codepet' };
+
+// Derive states from a founder's position — as the live app will (brief.stage → phase,
+// selectRoadmap → the current move, real DEPTS → the per-task overrides). Here: a founder
+// at the "Private beta" stage (Ship phase), billing is byte's next move, and two Ship tasks
+// carry richer states an override would supply.
+const tasks = applyProgress(ROADMAP_TEMPLATE, {
+  currentPhase: stageToPhase('Private beta'),
+  currentTaskId: 'ship-billing',
+  overrides: { 'ship-terms': 'needsYou', 'ship-help': 'approve' },
+});
 
 export default function RoadmapPreviewPage() {
   return (
@@ -14,14 +26,14 @@ export default function RoadmapPreviewPage() {
         background:
           'radial-gradient(1100px 620px at 78% -8%, rgba(139,92,246,0.16), transparent 60%), #05040b',
         color: '#f5f3ff',
-        fontFamily: 'ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif',
+        fontFamily: 'var(--sans)',
         padding: '40px 28px 80px',
       }}
     >
       <div style={{ maxWidth: 1160, margin: '0 auto' }}>
         <div
           style={{
-            fontFamily: 'ui-monospace, monospace',
+            fontFamily: 'var(--mono)',
             fontSize: 11,
             letterSpacing: '0.2em',
             textTransform: 'uppercase',
@@ -32,7 +44,7 @@ export default function RoadmapPreviewPage() {
         </div>
         <h1
           style={{
-            fontFamily: 'Georgia, serif',
+            fontFamily: 'var(--sans)',
             fontSize: 30,
             fontWeight: 600,
             margin: '10px 0 4px',
@@ -49,7 +61,7 @@ export default function RoadmapPreviewPage() {
           }}
         >
           Read-only render of the canonical journey — phases across, departments per task, the
-          critical path lit out of byte&rsquo;s current move. Data + geometry come from the pure,
+          critical path lit out of Codepet&rsquo;s current move. Data + geometry come from the pure,
           unit-tested layout engine.
         </p>
         <div
@@ -61,7 +73,7 @@ export default function RoadmapPreviewPage() {
             padding: 16,
           }}
         >
-          <RoadmapView projectName="Fernweh" />
+          <RoadmapView tasks={tasks} projectName="Fernweh" />
         </div>
       </div>
     </main>

@@ -68,6 +68,7 @@ function seedLibrary(): LibraryDoc[] {
         email: t.email,
         calendar: t.calendar,
         legal: t.legal,
+        doc: t.doc,
         dms: t.dms,
         checklist: t.checklist,
         plan: t.plan,

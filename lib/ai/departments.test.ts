@@ -64,4 +64,8 @@ describe('departmentBrief', () => {
   it('unknown key -> empty string', () => {
     expect(departmentBrief('nope')).toBe('');
   });
+  it('tolerates a null/undefined key -> empty string (chat with no department in focus)', () => {
+    expect(departmentBrief(undefined)).toBe('');
+    expect(departmentBrief(null)).toBe('');
+  });
 });

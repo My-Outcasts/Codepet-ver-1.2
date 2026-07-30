@@ -33,7 +33,9 @@ import {
   type ScannedProject,
   type ChatMessageDoc,
   type ThreadMeta,
+  type LedgerEvent,
 } from './schema';
+import { eventKey } from '../overview/ledger';
 import { deriveThreadTitle, needsBackfill, sortThreadsByRecent } from '../chat/threads';
 import { projectNames } from '../projects';
 import {
@@ -45,6 +47,7 @@ import {
 } from '../tracking';
 import { normalizeDecisions, type DecisionEntry } from '../ai/projectModel';
 import { dayKey } from '../ai/rateLimit';
+import { creditsFromUsage, type UsageDocData } from '../billing';
 
 // ---- serialization (Firestore rejects undefined; drop runtime-only fields) ----
 function clean<T extends object>(obj: T): T {
@@ -175,6 +178,23 @@ export interface CompanyData {
   activeThreadId: string | null;
   /** Durable company decisions byte maintains (the memory the founder can curate). */
   decisions: DecisionEntry[];
+  /** Second Brain event ledger, newest-first. */
+  events: LedgerEvent[];
+}
+
+/** Append a ledger event. Idempotent when the event carries refType+refId; fail-open —
+ *  a ledger write must never block or surface an error on the main flow. */
+export async function appendEvent(companyId: string, event: LedgerEvent): Promise<void> {
+  try {
+    const db = getDb();
+    if (event.refType && event.refId) {
+      await setDoc(doc(db, paths.event(companyId, eventKey(event.refType, event.refId))), event);
+    } else {
+      await addDoc(collection(db, paths.events(companyId)), event);
+    }
+  } catch (err) {
+    console.warn('[second-brain] appendEvent failed (ignored)', err);
+  }
 }
 
 /** How many recent chat messages to hydrate on load. */
@@ -193,11 +213,12 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   // Start from a clean per-account baseline before applying this account's data.
   resetCompanyData();
   const db = getDb();
-  const [deptSnap, libSnap, companySnap, threadSnap] = await Promise.all([
+  const [deptSnap, libSnap, companySnap, threadSnap, eventsSnap] = await Promise.all([
     getDocs(collection(db, paths.departments(companyId))),
     getDocs(query(collection(db, paths.library(companyId)), orderBy('createdAt', 'desc'))),
     getDoc(doc(db, paths.company(companyId))),
     getDocs(collection(db, paths.threads(companyId))),
+    getDocs(query(collection(db, paths.events(companyId)), orderBy('ts', 'desc'))),
   ]);
 
   applyDepartments(deptSnap.docs.map((d) => d.data() as DepartmentDoc));
@@ -214,7 +235,10 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
   });
 
   // Threads + the active thread's messages. Migrate legacy flat chat on first load.
-  let threads = threadSnap.docs.map((d) => d.data() as ThreadMeta);
+  // The doc key is the authoritative thread id (persistThread writes to
+  // paths.thread(.../id)); force it so a legacy doc whose payload lacks `id` never
+  // yields a thread with an undefined id (which breaks the History list's React key).
+  let threads = threadSnap.docs.map((d) => ({ ...(d.data() as ThreadMeta), id: d.id }));
   if (threads.length === 0) {
     const migrated = await backfillLegacyThread(companyId);
     if (migrated) threads = [migrated];
@@ -235,6 +259,7 @@ export async function loadCompanyData(companyId: string): Promise<CompanyData> {
     activeThreadId,
     decisions: normalizeDecisions(company?.decisions),
     projectAnalysis: company?.projectAnalysis as ProjectAnalysis | undefined,
+    events: eventsSnap.docs.map((d) => d.data() as LedgerEvent),
   };
 }
 
@@ -271,7 +296,9 @@ export async function persistChatMessage(
 
 export async function loadThreads(companyId: string): Promise<ThreadMeta[]> {
   const snap = await getDocs(collection(getDb(), paths.threads(companyId)));
-  return snap.docs.map((d) => d.data() as ThreadMeta);
+  // The doc key is the authoritative thread id — force it so a payload missing `id`
+  // never yields an undefined id (which breaks the History list's React key).
+  return snap.docs.map((d) => ({ ...(d.data() as ThreadMeta), id: d.id }));
 }
 
 export async function loadThreadMessages(
@@ -436,6 +463,26 @@ export async function loadTodayUsage(companyId: string): Promise<number> {
   const snap = await getDoc(doc(getDb(), `companies/${companyId}/usage/${dayKey(new Date())}`));
   const n = snap.exists() ? (snap.data() as { n?: unknown }).n : 0;
   return typeof n === 'number' && Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Credits consumed in the current billing month, computed from the per-route call counts
+ * already recorded on the daily usage docs (one doc per active day). Reads the usage
+ * subcollection and sums only this month's docs (id is `yyyy-mm-dd`). Infrequent (opened
+ * from the Billing view), so a full subcollection read is acceptable for now. NOTE: this
+ * is a read-only view of what usage WOULD cost in credits — enforcement still runs on the
+ * daily generation cap until the credit engine is wired (see Notion roadmap Phase 2).
+ */
+export async function loadPeriodCredits(
+  companyId: string,
+  now: Date = new Date(),
+): Promise<number> {
+  const monthPrefix = dayKey(now).slice(0, 7); // 'yyyy-mm'
+  const snaps = await getDocs(collection(getDb(), `companies/${companyId}/usage`));
+  const docs = snaps.docs
+    .filter((d) => d.id.startsWith(monthPrefix))
+    .map((d) => d.data() as UsageDocData);
+  return creditsFromUsage(docs);
 }
 
 /** Local projects for the Build Coach's "Which project?" picker. Prefers the

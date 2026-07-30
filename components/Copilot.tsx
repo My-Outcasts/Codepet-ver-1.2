@@ -3,14 +3,20 @@ import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
 import { track } from '@/lib/analytics';
 import { DEPTS, ENV, ENV_META } from '@/lib/data';
+import { cleanCompanyName } from '@/lib/companyName';
 import { resolveEnvIndex } from '@/lib/ai/envSetup';
 import { QUESTION_FOR } from '@/lib/ai/enrichInterview';
 import { Companion } from './Companion';
-import { companionById } from '@/lib/companions';
+import { companionById, companionForDept } from '@/lib/companions';
 import { ExecLog, StaticLog } from './artifact/ExecLog';
 import { stepCountLabel } from '@/lib/helpers';
 import type { ChatMessage } from '@/lib/store';
 import { sortThreadsByRecent, relativeTime } from '@/lib/chat/threads';
+
+// GitHub-backed cloud build (Task 12/13): when on, the start-building block offers a
+// repo picker instead of a local project picker. Mirrors the same public flag read in
+// lib/store.tsx's armBuild — gated so demo-only/local/self-hosted installs are untouched.
+const cloudRepoBuild = process.env.NEXT_PUBLIC_CLOUD_REPO_BUILD === '1';
 
 // Quick-start prompts shown only before the first message — they send to byte.
 const CHIPS = [
@@ -55,6 +61,8 @@ const REVISE_CHIPS = ['Shorter', 'More detail', 'Punchier'];
 // typed or chip note (empty = plain regenerate) and updates this card in place.
 function ResultCard({ m }: { m: ChatMessage }) {
   const { reviseTaskInChat, approveChatResult, openChatResult } = useApp();
+  // A deliverable is voiced by the pet of the task's own department, not the current focus.
+  const companionName = companionById(companionForDept(m.result?.deptK).id).name;
   const [revising, setRevising] = useState(false);
   const [note, setNote] = useState('');
   const [reviseBusy, setReviseBusy] = useState(false);
@@ -108,7 +116,9 @@ function ResultCard({ m }: { m: ChatMessage }) {
         hasSteps ? (
           <ExecLog
             steps={steps!}
-            title={reviseBusy ? 'byte is revising…' : 'byte is doing the work…'}
+            title={
+              reviseBusy ? `${companionName} is revising…` : `${companionName} is doing the work…`
+            }
             onDone={() => setLogDone(true)}
           />
         ) : (
@@ -126,14 +136,30 @@ function ResultCard({ m }: { m: ChatMessage }) {
                 onClick={() => setShowRecord((v) => !v)}
                 aria-expanded={showRecord}
               >
-                {showRecord ? '▾' : '▸'} What byte did · {stepCountLabel(steps!)}
+                {showRecord ? '▾' : '▸'} What {companionName} did · {stepCountLabel(steps!)}
               </button>
               {showRecord && <StaticLog steps={steps!} />}
             </div>
           )}
           {preview && <div className="cres-prev">{preview}</div>}
           {r.approved ? (
-            <div className="cres-saved">Saved to your library</div>
+            <button
+              type="button"
+              className="cres-saved"
+              onClick={() => openChatResult(r.deptK, r.taskTitle)}
+              title="Open this in your library"
+              style={{
+                fontFamily: 'inherit',
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                textUnderlineOffset: 2,
+              }}
+            >
+              Saved to your library — open it
+            </button>
           ) : revising ? (
             <div className="cres-rev">
               <div className="cres-rev-chips">
@@ -147,7 +173,7 @@ function ResultCard({ m }: { m: ChatMessage }) {
                 <input
                   className="cres-rev-in"
                   autoFocus
-                  placeholder="Tell byte what to change…"
+                  placeholder={`Tell ${companionName} what to change…`}
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   onKeyDown={(e) => {
@@ -271,6 +297,137 @@ function InterviewCard({ m }: { m: ChatMessage }) {
   );
 }
 
+// Assisted founder task: a generated how-to (why-now + steps + optional provider options) plus a
+// capture form for the task's non-sensitive OUTPUT. Submitting saves those values to company
+// memory (decisions) and marks the task done. Self-contained inline styles so it doesn't depend on
+// the concurrently-evolving globals.css. Accent-token driven, so it follows the active companion.
+function TaskHelpCard({ m }: { m: ChatMessage }) {
+  const { captureTaskInput, markTaskDone } = useApp();
+  const h = m.help!;
+  const { guide, capture } = h.data;
+  const [vals, setVals] = useState<Record<string, string>>({});
+  const submit = () => {
+    if (capture) {
+      captureTaskInput(
+        h.deptK,
+        h.taskTitle,
+        capture.fields.map((f) => ({ key: f.key, label: f.label, value: vals[f.key] || '' })),
+      );
+    } else {
+      markTaskDone(h.deptK, h.taskTitle);
+    }
+  };
+  const label = { fontSize: 11, fontWeight: 700, color: 'var(--t-2)', marginBottom: 4 } as const;
+  return (
+    <div className="bub" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {m.text ? <div style={{ lineHeight: 1.45 }}>{plain(m.text)}</div> : null}
+
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 650, color: 'var(--t-1)' }}>{guide.call}</span>
+        {guide.est ? (
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: 'var(--accent)',
+              background: 'var(--accent-tint)',
+              border: '1px solid var(--accent-line)',
+              borderRadius: 999,
+              padding: '1px 8px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {guide.est}
+          </span>
+        ) : null}
+      </div>
+
+      {guide.steps.length > 0 && (
+        <ol
+          style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 7 }}
+        >
+          {guide.steps.map((s, i) => (
+            <li key={i} style={{ fontSize: 12.5, lineHeight: 1.4 }}>
+              <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>{s.h}</span>
+              {s.p ? <span style={{ color: 'var(--t-2)' }}> — {s.p}</span> : null}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {guide.options && guide.options.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+          <div style={label}>Options</div>
+          {guide.options.map((o, i) => (
+            <div key={i} style={{ fontSize: 12, lineHeight: 1.4 }}>
+              <span style={{ fontWeight: 650, color: 'var(--t-1)' }}>{o.name}</span>
+              <span style={{ color: 'var(--t-2)' }}> — {o.why}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {capture && (
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 9,
+            padding: '11px 12px',
+            borderRadius: 10,
+            background: 'var(--well)',
+            border: '1px solid var(--hairline)',
+          }}
+        >
+          <div style={label}>Save what you decide</div>
+          {capture.fields.map((f) => (
+            <label key={f.key} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <span style={{ fontSize: 11.5, color: 'var(--t-2)' }}>{f.label}</span>
+              <input
+                value={vals[f.key] || ''}
+                placeholder={f.placeholder}
+                onChange={(e) => setVals((p) => ({ ...p, [f.key]: e.target.value }))}
+                style={{
+                  fontFamily: 'var(--sans)',
+                  fontSize: 12.5,
+                  padding: '7px 10px',
+                  borderRadius: 8,
+                  border: '1px solid var(--hairline)',
+                  background: 'var(--surface)',
+                  color: 'var(--t-1)',
+                }}
+              />
+            </label>
+          ))}
+          {capture.note ? (
+            <div style={{ fontSize: 10.5, color: 'var(--t-3)', lineHeight: 1.35 }}>
+              {capture.note}
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      <button
+        onClick={submit}
+        style={{
+          alignSelf: 'flex-start',
+          fontFamily: 'var(--sans)',
+          fontSize: 12.5,
+          fontWeight: 700,
+          color: 'var(--on-accent)',
+          background: 'var(--accent)',
+          border: 'none',
+          borderRadius: 9,
+          padding: '8px 16px',
+          cursor: 'pointer',
+        }}
+      >
+        {capture ? 'Save & mark done' : "I've done this"}
+      </button>
+    </div>
+  );
+}
+
 // A "Noted" chip: a durable fact/decision byte captured from the founder's last message
 // into company memory. Subtle by design (byte quietly got smarter), with an undo so the
 // founder stays in control of what byte remembers. Strikes to "Removed" once undone.
@@ -292,8 +449,254 @@ function NotedChip({ m }: { m: ChatMessage }) {
   );
 }
 
+// One-time, subtle nudge to add your own Anthropic key. Honest framing: it powers byte's lighter
+// background work only. "Add my key" opens Billing & Usage; "Not now" dismisses it for good.
+function ByokNudgeCard({ m }: { m: ChatMessage }) {
+  const { show, dismissByokNudge } = useApp();
+  return (
+    <div className="bub" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ lineHeight: 1.45 }}>{plain(m.text)}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => {
+            show('billing');
+            dismissByokNudge(m.id);
+          }}
+          style={{
+            fontFamily: 'var(--sans)',
+            fontSize: 12.5,
+            fontWeight: 700,
+            color: 'var(--on-accent)',
+            background: 'var(--accent)',
+            border: 'none',
+            borderRadius: 8,
+            padding: '7px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          Add my key
+        </button>
+        <button
+          type="button"
+          onClick={() => dismissByokNudge(m.id)}
+          style={{
+            fontFamily: 'var(--sans)',
+            fontSize: 12.5,
+            fontWeight: 600,
+            color: 'var(--t-2)',
+            background: 'transparent',
+            border: '1px solid var(--hairline)',
+            borderRadius: 8,
+            padding: '7px 14px',
+            cursor: 'pointer',
+          }}
+        >
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// GitHub-backed cloud build's repo picker: fetches the connected GitHub App
+// installation's repos on mount and renders either a "Connect GitHub" button (not
+// connected yet) or a "Build into: owner/name" dropdown, defaulting to the first repo
+// once loaded so armBuild always has a target. Replaces the demo notice / local project
+// picker for a repo-cloud build (see the start-building block below).
+function RepoPicker() {
+  const { buildRepo, setBuildRepo, connectGithub, loadRepos } = useApp();
+  const [repos, setRepos] = useState<{ owner: string; name: string }[] | null>(null);
+  const [notConnected, setNotConnected] = useState(false);
+  // Read the *current* selection inside the (mount-time) fetch closure, so a re-scan on
+  // refocus never overwrites a repo the founder already picked.
+  const buildRepoRef = useRef(buildRepo);
+  useEffect(() => {
+    buildRepoRef.current = buildRepo;
+  }, [buildRepo]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () => {
+      loadRepos().then((res) => {
+        if (cancelled) return;
+        if ('notConnected' in res) {
+          setNotConnected(true);
+          return;
+        }
+        setNotConnected(false);
+        setRepos(res.repos);
+        // Default to the first repo so the arm button has a target without forcing a
+        // choice — the founder can still switch via the dropdown before arming.
+        if (!buildRepoRef.current && res.repos.length > 0) setBuildRepo(res.repos[0]);
+      });
+    };
+    refresh();
+    // Connect GitHub opens a NEW tab; when the founder finishes there and returns, re-scan
+    // on focus so the freshly-granted repos appear without a manual reload.
+    const onFocus = () => refresh();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', onFocus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (notConnected) {
+    return (
+      <div className="cop-proj">
+        <span>Connect GitHub to build into your own repo</span>
+        <button className="bub-act" onClick={connectGithub}>
+          Connect GitHub
+        </button>
+      </div>
+    );
+  }
+
+  if (!repos) {
+    return (
+      <div className="cop-proj">
+        <span>Loading your repos…</span>
+      </div>
+    );
+  }
+
+  return (
+    <label className="cop-proj">
+      <span>Build into:</span>
+      {repos.length > 0 ? (
+        <select
+          value={buildRepo ? `${buildRepo.owner}/${buildRepo.name}` : ''}
+          onChange={(e) => {
+            const found = repos.find((r) => `${r.owner}/${r.name}` === e.target.value);
+            if (found) setBuildRepo(found);
+          }}
+        >
+          <option value="" disabled>
+            Choose a repo…
+          </option>
+          {repos.map((r) => (
+            <option key={`${r.owner}/${r.name}`} value={`${r.owner}/${r.name}`}>
+              {r.owner}/{r.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span>No repos found — grant Codepet access to a repo on GitHub first.</span>
+      )}
+    </label>
+  );
+}
+
+// Existing-project step, rendered inline in chat right after the founder picks "Existing":
+// scan/pick a repo (or Connect GitHub), then Continue into the brainstorm. Continue stays
+// disabled until a repo is selected, so a build always has a target.
+function RepoPickStep() {
+  const { buildRepo, confirmRepoAndBrainstorm } = useApp();
+  return (
+    <>
+      <RepoPicker />
+      <button className="bub-act" disabled={!buildRepo} onClick={confirmRepoAndBrainstorm}>
+        Continue
+      </button>
+    </>
+  );
+}
+
+// The "How hands-on?" autonomy dial, shared by the existing-repo/local arm step and the
+// new-project form so both fork sides offer the same choice.
+function AutonomyPicker() {
+  const { buildAutonomy, setBuildAutonomy } = useApp();
+  return (
+    <div className="cop-auto">
+      <span>How hands-on?</span>
+      <div className="cop-auto-opts">
+        {(
+          [
+            ['suggest', 'Ask me', 'Approve each risky step'],
+            ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
+            ['autopilot', 'Autopilot', 'Run everything without asking'],
+          ] as const
+        ).map(([mode, label, hint]) => (
+          <button
+            key={mode}
+            className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
+            onClick={() => {
+              // Autopilot grants full unattended authority (incl. deleting files) — confirm
+              // before arming it, since a hover hint alone is easy to miss and there's no
+              // per-step stop afterward.
+              if (
+                mode === 'autopilot' &&
+                buildAutonomy !== 'autopilot' &&
+                !window.confirm(
+                  'Autopilot runs every step without asking — including risky ones like deleting files — and can’t be stopped mid-step. Turn it on?',
+                )
+              )
+                return;
+              setBuildAutonomy(mode);
+            }}
+            title={hint}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// New-project fork (buildTarget === 'new'): the founder names a project and Byte creates a
+// fresh Next.js repo on their GitHub, then arms the build into it (createProject → armBuild).
+// Replaces RepoPicker's slot in the start-building block for the "New project" side.
+function NewProjectForm() {
+  const { createProject } = useApp();
+  const [name, setName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const create = () => {
+    const n = name.trim();
+    if (!n || creating) return;
+    setCreating(true);
+    // createProject navigates the flow on success; reset on the error path so the button
+    // becomes usable again if creation failed.
+    createProject(n).finally(() => setCreating(false));
+  };
+  return (
+    <>
+      <label className="cop-proj">
+        <span>New project name</span>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="my-next-app"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              create();
+            }
+          }}
+          autoFocus
+        />
+        <span>A new Next.js project will be created on your GitHub.</span>
+      </label>
+      <AutonomyPicker />
+      <button className="bub-act" onClick={create} disabled={!name.trim() || creating}>
+        {creating ? 'Creating your project…' : 'Create & build'}
+      </button>
+    </>
+  );
+}
+
 function ThreadList() {
-  const { threads, activeThreadId, newChat, openThread, renameThread, deleteThread } = useApp();
+  const {
+    threads,
+    activeThreadId,
+    newChat,
+    openThread,
+    renameThread,
+    deleteThread,
+    clearAllChats,
+  } = useApp();
   // Stamp "now" once at mount via a lazy initializer — calling Date.now() directly in
   // render is an impure call the React Compiler lint rejects. The list remounts each
   // time History opens, so the relative times refresh then.
@@ -301,9 +704,22 @@ function ThreadList() {
   const rows = sortThreadsByRecent(threads);
   return (
     <div className="cthreads">
-      <button className="cthreads-new" onClick={newChat}>
-        + New chat
-      </button>
+      <div className="cthreads-actions">
+        <button className="cthreads-new" onClick={newChat}>
+          + New chat
+        </button>
+        {rows.length > 0 && (
+          <button
+            className="cthreads-clear"
+            title="Delete every chat"
+            onClick={() => {
+              if (window.confirm('Delete all chats? This cannot be undone.')) clearAllChats();
+            }}
+          >
+            Clear all
+          </button>
+        )}
+      </div>
       <ul className="cthreads-list">
         {rows.map((t) => (
           <li key={t.id} className={`cthreads-row${t.id === activeThreadId ? ' is-active' : ''}`}>
@@ -338,7 +754,7 @@ function ThreadList() {
   );
 }
 
-export function Copilot() {
+export function Copilot({ inline = false }: { inline?: boolean } = {}) {
   const {
     toggleCopilot,
     brief,
@@ -348,6 +764,7 @@ export function Copilot() {
     retryChat,
     runBriefedTask,
     runTaskInChat,
+    markTaskDone,
     dismissChatAction,
     advanceStage,
     buildIntakeActive,
@@ -360,19 +777,33 @@ export function Copilot() {
     projects,
     buildProject,
     setBuildProject,
+    buildRepo,
+    buildTarget,
+    chooseBuildTarget,
+    demoLetsBuild,
     buildPlan,
     setBuildPlanSteps,
-    buildAutonomy,
-    setBuildAutonomy,
     navigateTo,
-    companionId,
+    focusCompanionId,
     chatHistoryOpen,
     toggleChatHistory,
   } = useApp();
   // Speak to THIS account, from its own brief — never the hardcoded demo founder/company.
   const founder = brief.founderName?.trim();
-  const company = brief.projectName?.trim() || 'your company';
-  const c = companionById(companionId);
+  const company = cleanCompanyName(brief.projectName) ?? 'your company';
+  // The current focus pet — used for live/streaming states (thinking, input placeholder).
+  const c = companionById(focusCompanionId);
+  // Which pet a given turn belongs to: its own stamp, else the task's department pet (for
+  // deliverables/actions), else the current focus. Drives the per-message avatar + name.
+  const whoFor = (m: ChatMessage): string =>
+    m.companionId ??
+    (m.result
+      ? companionForDept(m.result.deptK).id
+      : m.help
+        ? companionForDept(m.help.deptK).id
+        : m.action
+          ? companionForDept(m.action.deptK).id
+          : focusCompanionId);
 
   const [draft, setDraft] = useState('');
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -427,11 +858,10 @@ export function Copilot() {
   const empty = chatMessages.length === 0;
 
   return (
-    <aside className="copilot">
+    <aside className={`copilot${inline ? ' inline' : ''}`}>
       <div className="cop-h">
-        <Companion id={companionId} size="s28" />
         <div>
-          <div className="pn">{c.name}</div>
+          <div className="pn">Your team</div>
           <div className="st">
             <span className="d" />
             guiding · {company}
@@ -476,231 +906,311 @@ export function Copilot() {
               </div>
             )}
 
-            {chatMessages.map((m) => {
-              if (m.result) return <ResultCard key={m.id} m={m} />;
-              if (m.interview) return <InterviewCard key={m.id} m={m} />;
-              if (m.noted) return <NotedChip key={m.id} m={m} />;
-              if (m.setup)
-                return (
-                  <div key={m.id}>
-                    {m.text ? <div className="bub">{plain(m.text)}</div> : null}
-                    <SetupCard m={m} />
-                  </div>
-                );
-              if (m.advance) {
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <button className="bub-adv" onClick={advanceStage}>
-                      Advance to {m.advance.toStage}
-                    </button>
-                  </div>
-                );
-              }
-              const streamingByte = chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
-              if (streamingByte && !m.text) {
-                return (
-                  <div key={m.id} className="bub byte-thinking">
-                    {c.name} is thinking…
-                  </div>
-                );
-              }
-              if (m.buildPlan) {
-                // While this is the live plan card (before arming), edit the store's plan so
-                // the founder can refine the steps; older/armed cards read as static history.
-                const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
-                const plan = editable ? buildPlan! : m.buildPlan;
-                const steps = plan.steps;
-                const unsure = new Set<number>(plan.uncertain ?? []);
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <div className="cop-plan">
-                      <div className="cop-plan-h">{plan.title}</div>
-                      {editable ? (
-                        <div className="cop-steps">
-                          {steps.map((s, i) => (
-                            <div
-                              className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
-                              key={i}
-                              title={
-                                unsure.has(i)
-                                  ? "Byte isn't fully sure here — tweak it if needed"
-                                  : undefined
-                              }
-                            >
-                              <span className="cop-step-n">{i + 1}</span>
-                              <textarea
-                                className="cop-step-in"
-                                rows={1}
-                                value={s}
-                                onChange={(e) =>
-                                  setBuildPlanSteps(
-                                    steps.map((x, j) => (j === i ? e.target.value : x)),
-                                  )
-                                }
-                              />
-                              <button
-                                className="cop-step-x"
-                                title="Remove this step"
-                                aria-label="Remove this step"
-                                onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            className="cop-step-add"
-                            onClick={() => setBuildPlanSteps([...steps, ''])}
-                          >
-                            + Add a step
-                          </button>
-                        </div>
-                      ) : (
-                        <ol>
-                          {steps.map((s, i) => (
-                            <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
-                              {s}
-                              {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
-                            </li>
-                          ))}
-                        </ol>
-                      )}
+            {chatMessages.map((m, msgIdx) => {
+              const node = (() => {
+                if (m.result) return <ResultCard key={m.id} m={m} />;
+                if (m.interview) return <InterviewCard key={m.id} m={m} />;
+                if (m.help) return <TaskHelpCard key={m.id} m={m} />;
+                if (m.byokNudge) return <ByokNudgeCard key={m.id} m={m} />;
+                if (m.noted) return <NotedChip key={m.id} m={m} />;
+                if (m.setup)
+                  return (
+                    <div key={m.id}>
+                      {m.text ? <div className="bub">{plain(m.text)}</div> : null}
+                      <SetupCard m={m} />
                     </div>
-                    {m.buildAction?.kind === 'start-building' && (
-                      <>
-                        <label className="cop-proj">
-                          <span>Which project?</span>
-                          {projects.length > 0 ? (
-                            <select
-                              value={buildProject}
-                              onChange={(e) => setBuildProject(e.target.value)}
-                            >
-                              {/* A project is required — building "nowhere" would land
-                                  in the app server's own folder. */}
-                              <option value="" disabled>
-                                Choose a project…
-                              </option>
-                              {projects.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              value={buildProject}
-                              onChange={(e) => setBuildProject(e.target.value)}
-                              placeholder="Type a project folder path (or run the project scan)…"
-                            />
-                          )}
-                        </label>
-                        <div className="cop-auto">
-                          <span>How hands-on?</span>
-                          <div className="cop-auto-opts">
-                            {(
-                              [
-                                ['suggest', 'Ask me', 'Approve each risky step'],
-                                ['copilot', 'Co-pilot', 'Auto-approve safe work, ask on risky'],
-                                ['autopilot', 'Autopilot', 'Run everything without asking'],
-                              ] as const
-                            ).map(([mode, label, hint]) => (
-                              <button
-                                key={mode}
-                                className={`cop-auto-opt${buildAutonomy === mode ? ' on' : ''}`}
-                                onClick={() => setBuildAutonomy(mode)}
-                                title={hint}
+                  );
+                if (m.fork) {
+                  // New-vs-Existing fork: the two choices seed buildTarget, drop these
+                  // buttons, and open the brainstorm (chooseBuildTarget, Task 6).
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-act" onClick={() => chooseBuildTarget('new')}>
+                        ✨ New project
+                      </button>
+                      <button className="bub-act" onClick={() => chooseBuildTarget('existing')}>
+                        🔧 Existing project
+                      </button>
+                    </div>
+                  );
+                }
+                if (m.pickRepo) {
+                  // Existing-project: choose the repo up front (scan / Connect GitHub), then
+                  // Continue to the brainstorm.
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <RepoPickStep />
+                    </div>
+                  );
+                }
+                if (m.advance) {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-adv" onClick={advanceStage}>
+                        Advance to {m.advance.toStage}
+                      </button>
+                    </div>
+                  );
+                }
+                const streamingByte =
+                  chatStreaming && m.role === 'byte' && m === chatMessages.at(-1);
+                if (streamingByte && !m.text) {
+                  return (
+                    <div key={m.id} className="bub byte-thinking">
+                      {c.name} is thinking…
+                    </div>
+                  );
+                }
+                if (m.buildPlan) {
+                  // While this is the live plan card (before arming), edit the store's plan so
+                  // the founder can refine the steps; older/armed cards read as static history.
+                  const editable = m.buildAction?.kind === 'start-building' && !!buildPlan;
+                  const plan = editable ? buildPlan! : m.buildPlan;
+                  const steps = plan.steps;
+                  const unsure = new Set<number>(plan.uncertain ?? []);
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <div className="cop-plan">
+                        <div className="cop-plan-h">{plan.title}</div>
+                        {editable ? (
+                          <div className="cop-steps">
+                            {steps.map((s, i) => (
+                              <div
+                                className={`cop-step${unsure.has(i) ? ' unsure' : ''}`}
+                                key={i}
+                                title={
+                                  unsure.has(i)
+                                    ? `${c.name} isn't fully sure here — tweak it if needed`
+                                    : undefined
+                                }
                               >
-                                {label}
-                              </button>
+                                <span className="cop-step-n">{i + 1}</span>
+                                <textarea
+                                  className="cop-step-in"
+                                  rows={1}
+                                  value={s}
+                                  onChange={(e) =>
+                                    setBuildPlanSteps(
+                                      steps.map((x, j) => (j === i ? e.target.value : x)),
+                                    )
+                                  }
+                                />
+                                <button
+                                  className="cop-step-x"
+                                  title="Remove this step"
+                                  aria-label="Remove this step"
+                                  onClick={() => setBuildPlanSteps(steps.filter((_, j) => j !== i))}
+                                >
+                                  ×
+                                </button>
+                                {unsure.has(i) && (
+                                  <span className="cop-step-unsure">
+                                    🤔 {c.name} isn&apos;t sure here — tweak if needed
+                                  </span>
+                                )}
+                              </div>
                             ))}
+                            <button
+                              className="cop-step-add"
+                              onClick={() => setBuildPlanSteps([...steps, ''])}
+                            >
+                              + Add a step
+                            </button>
                           </div>
-                        </div>
-                        <button
-                          className="bub-act"
-                          onClick={armBuild}
-                          disabled={
-                            buildArming || steps.every((s) => !s.trim()) || !buildProject.trim()
+                        ) : (
+                          <ol>
+                            {steps.map((s, i) => (
+                              <li key={i} className={unsure.has(i) ? 'unsure' : undefined}>
+                                {s}
+                                {unsure.has(i) && <span className="cop-unsure"> 🤔 not sure</span>}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                      </div>
+                      {m.buildAction?.kind === 'start-building' &&
+                        (() => {
+                          // A repo-cloud build boots into the founder's own connected GitHub
+                          // repo instead of a demo dir or a local project — see armBuild's
+                          // cloudRepoBuild branch in lib/store.tsx.
+                          const isRepoCloudBuild = cloudRepoBuild && !demoLetsBuild;
+                          const needsProject = !demoLetsBuild && !isRepoCloudBuild;
+                          const needsRepo = isRepoCloudBuild && !buildRepo;
+                          // The "New project" fork side names + creates a repo, then arms
+                          // itself (NewProjectForm/createProject) — so it supplies its own
+                          // autonomy dial + Create button and skips the shared arm step.
+                          const isNewProject = isRepoCloudBuild && buildTarget === 'new';
+                          return (
+                            <>
+                              {demoLetsBuild ? (
+                                // Demo mode targets a throwaway ~/codepet-demo, so no project
+                                // pick — showing one would confuse internal testers.
+                                <div className="cop-proj">
+                                  <span>
+                                    Demo — builds a throwaway page in <code>~/codepet-demo</code>
+                                  </span>
+                                </div>
+                              ) : isNewProject ? (
+                                <NewProjectForm />
+                              ) : isRepoCloudBuild ? (
+                                // 'existing' — and the safe default when buildTarget is null.
+                                <RepoPicker />
+                              ) : (
+                                <label className="cop-proj">
+                                  <span>Which project?</span>
+                                  {projects.length > 0 ? (
+                                    <select
+                                      value={buildProject}
+                                      onChange={(e) => setBuildProject(e.target.value)}
+                                    >
+                                      {/* A project is required — building "nowhere" would land
+                                        in the app server's own folder. */}
+                                      <option value="" disabled>
+                                        Choose a project…
+                                      </option>
+                                      {projects.map((name) => (
+                                        <option key={name} value={name}>
+                                          {name}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <input
+                                      value={buildProject}
+                                      onChange={(e) => setBuildProject(e.target.value)}
+                                      placeholder="Type a project folder path (or run the project scan)…"
+                                    />
+                                  )}
+                                </label>
+                              )}
+                              {/* The new-project form carries its own autonomy dial + Create
+                                  button; the existing/local/demo paths use the shared arm step. */}
+                              {!isNewProject && (
+                                <>
+                                  <AutonomyPicker />
+                                  <button
+                                    className="bub-act"
+                                    onClick={() => armBuild()}
+                                    disabled={
+                                      buildArming ||
+                                      steps.every((s) => !s.trim()) ||
+                                      (needsProject && !buildProject.trim()) ||
+                                      needsRepo
+                                    }
+                                    title={
+                                      needsProject && !buildProject.trim()
+                                        ? 'Pick a project first'
+                                        : needsRepo
+                                          ? 'Pick a repo first'
+                                          : undefined
+                                    }
+                                  >
+                                    {buildArming
+                                      ? 'Opening your session…'
+                                      : needsProject && !buildProject.trim()
+                                        ? 'Pick a project to start'
+                                        : needsRepo
+                                          ? 'Pick a repo to start'
+                                          : m.buildAction.label}
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+                    </div>
+                  );
+                }
+                if (m.buildAction?.kind === 'to-plan') {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-act" onClick={generateBuildPlan}>
+                        {m.buildAction.label}
+                      </button>
+                    </div>
+                  );
+                }
+                if (m.buildAction?.kind === 'begin-intake') {
+                  return (
+                    <div key={m.id} className="bub">
+                      {plain(m.text)}
+                      <button className="bub-act" onClick={startBuildIntake}>
+                        {m.buildAction.label}
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
+                    {m.role === 'byte' ? plain(m.text) : m.text}
+                    {m.action && (
+                      <button
+                        className="bub-act"
+                        onClick={() => {
+                          if (m.action!.done) {
+                            markTaskDone(m.action!.deptK, m.action!.taskTitle);
+                            dismissChatAction(m.id);
+                          } else if (m.action!.inline) {
+                            track('firstrun.action_clicked', { dept: m.action!.deptK });
+                            runTaskInChat(m.action!.deptK, m.action!.taskTitle);
+                            dismissChatAction(m.id);
+                          } else {
+                            runBriefedTask(m.action!.deptK, m.action!.taskTitle);
                           }
-                          title={!buildProject.trim() ? 'Pick a project first' : undefined}
-                        >
-                          {buildArming
-                            ? 'Opening your session…'
-                            : !buildProject.trim()
-                              ? 'Pick a project to start'
-                              : m.buildAction.label}
-                        </button>
-                      </>
+                        }}
+                      >
+                        {m.action.label}
+                      </button>
+                    )}
+                    {m.nav && (
+                      <button
+                        className="bub-act"
+                        onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}
+                      >
+                        {m.nav.label}
+                      </button>
+                    )}
+                    {m.error && (
+                      <button
+                        className="bub-retry"
+                        onClick={() => retryChat(m.id)}
+                        disabled={chatStreaming}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
+                          <path
+                            d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
+                            stroke="currentColor"
+                            strokeWidth="1.6"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        Retry
+                      </button>
                     )}
                   </div>
                 );
-              }
-              if (m.buildAction?.kind === 'to-plan') {
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <button className="bub-act" onClick={generateBuildPlan}>
-                      {m.buildAction.label}
-                    </button>
-                  </div>
-                );
-              }
-              if (m.buildAction?.kind === 'begin-intake') {
-                return (
-                  <div key={m.id} className="bub">
-                    {plain(m.text)}
-                    <button className="bub-act" onClick={startBuildIntake}>
-                      {m.buildAction.label}
-                    </button>
-                  </div>
-                );
-              }
+              })();
+              // 'me' turns render as-is (right-aligned bubble). byte turns get the speaking
+              // pet's avatar + name, collapsed when the same pet speaks twice in a row.
+              if (m.role !== 'byte') return node;
+              const who = whoFor(m);
+              const prev = chatMessages[msgIdx - 1];
+              const showWho = !prev || prev.role !== 'byte' || whoFor(prev) !== who;
               return (
-                <div key={m.id} className={m.role === 'me' ? 'bub me' : 'bub'}>
-                  {m.role === 'byte' ? plain(m.text) : m.text}
-                  {m.action && (
-                    <button
-                      className="bub-act"
-                      onClick={() => {
-                        if (m.action!.inline) {
-                          track('firstrun.action_clicked', { dept: m.action!.deptK });
-                          runTaskInChat(m.action!.deptK, m.action!.taskTitle);
-                          dismissChatAction(m.id);
-                        } else {
-                          runBriefedTask(m.action!.deptK, m.action!.taskTitle);
-                        }
-                      }}
-                    >
-                      {m.action.label}
-                    </button>
+                <div key={m.id} className="cop-turn">
+                  {showWho && (
+                    <div className="cop-who">
+                      <Companion id={who} size="s28" />
+                      <span>{companionById(who).name}</span>
+                    </div>
                   )}
-                  {m.nav && (
-                    <button
-                      className="bub-act"
-                      onClick={() => navigateTo(m.nav!.dest, m.nav!.target)}
-                    >
-                      {m.nav.label}
-                    </button>
-                  )}
-                  {m.error && (
-                    <button
-                      className="bub-retry"
-                      onClick={() => retryChat(m.id)}
-                      disabled={chatStreaming}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" aria-hidden>
-                        <path
-                          d="M13 8a5 5 0 1 1-1.46-3.54M13 2v3h-3"
-                          stroke="currentColor"
-                          strokeWidth="1.6"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                      Retry
-                    </button>
-                  )}
+                  {node}
                 </div>
               );
             })}
@@ -748,16 +1258,20 @@ export function Copilot() {
               </div>
             )}
             <div className="composer">
-              <input
+              <textarea
+                className="composer-in"
+                rows={1}
                 placeholder={
                   buildIntakeActive
                     ? 'Tell Byte what to build — every message adds to the brief…'
-                    : 'Ask byte anything about your company…'
+                    : `Ask ${c.name} anything about your company…`
                 }
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  // Enter sends; Shift+Enter inserts a newline so a longer message can
+                  // wrap and stay fully visible (the box grows via CSS field-sizing).
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     submit();
                   }

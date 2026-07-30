@@ -4,6 +4,7 @@ import {
   initialLive,
   eventKindFor,
   sanitizeLiveEvent,
+  sanitizeDemoRecap,
   RECENT_TOOLS_CAP,
 } from './liveBuild';
 
@@ -177,5 +178,69 @@ describe('sanitizeLiveEvent — narration', () => {
     });
     expect(e).not.toHaveProperty('say');
     expect(e).not.toHaveProperty('ask');
+  });
+});
+
+describe('sanitizeDemoRecap', () => {
+  it('keeps only the numeric keys present (partial)', () => {
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', tokens: 1200 })).toEqual({
+      buildSessionId: 'b',
+      recap: { tokens: 1200 },
+    });
+    expect(sanitizeDemoRecap({ buildSessionId: 'b', commits: 3, filesChanged: 7 })).toEqual({
+      buildSessionId: 'b',
+      recap: { commits: 3, filesChanged: 7 },
+    });
+  });
+  it('rejects a missing buildSessionId', () => {
+    expect(sanitizeDemoRecap({ tokens: 1 })).toBeNull();
+    expect(sanitizeDemoRecap(null)).toBeNull();
+  });
+  it('clamps present numbers', () => {
+    expect(
+      sanitizeDemoRecap({ buildSessionId: 'b', commits: '5', filesChanged: -2, tokens: 3.9 }),
+    ).toEqual({ buildSessionId: 'b', recap: { commits: 5, filesChanged: 0, tokens: 3 } });
+  });
+});
+
+describe('previewUrl survives live events', () => {
+  it('carries previewUrl through a reduce', () => {
+    const withPreview = { ...initialLive(0), previewUrl: 'https://app/preview/b1' };
+    const next = reduceLive(withPreview, {
+      buildSessionId: 'b1',
+      sessionId: 's',
+      kind: 'tool',
+      tool: 'Edit',
+      ts: 1,
+    });
+    expect(next.previewUrl).toBe('https://app/preview/b1');
+  });
+});
+
+describe('mode/companyId survive a start event', () => {
+  it('a start event preserves mode, companyId, and previewUrl from the prior state', () => {
+    const prior = {
+      ...initialLive(0, 's1'),
+      mode: 'cloud',
+      companyId: 'co1',
+      previewUrl: 'u',
+    };
+    const next = reduceLive(prior, { ...base, kind: 'start', ts: 100 });
+    expect(next.mode).toBe('cloud');
+    expect(next.companyId).toBe('co1');
+    expect(next.previewUrl).toBe('u');
+    // A start still resets the activity counters.
+    expect(next.ended).toBe(false);
+    expect(next.actionCount).toBe(0);
+    expect(next.startedAt).toBe(100);
+  });
+});
+
+describe('prUrl + repo survive live events', () => {
+  it('carries prUrl and repo through a start reset', () => {
+    const s = { ...initialLive(0), prUrl: 'https://gh/pr/1', repo: { owner: 'acme', name: 'web' } };
+    const next = reduceLive(s, { buildSessionId: 'b1', sessionId: 's', kind: 'start', ts: 1 });
+    expect(next.prUrl).toBe('https://gh/pr/1');
+    expect(next.repo).toEqual({ owner: 'acme', name: 'web' });
   });
 });

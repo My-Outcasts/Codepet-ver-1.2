@@ -1,18 +1,16 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import { AppProvider, useApp } from '@/lib/store';
 import { AuthProvider, useAuth } from '@/lib/firebase/auth';
 import { SignIn } from './auth/SignIn';
 import { Splash } from './Splash';
 import { LoadingScreen } from './LoadingScreen';
 import { Topbar } from './Topbar';
-import { Sidebar } from './Sidebar';
 import { Copilot } from './Copilot';
 import { Onboarding } from './Onboarding';
 import { Toast } from './Toast';
-import { Companion } from './Companion';
 import { companionById } from '@/lib/companions';
+import { ThemeProvider } from '@/lib/theme';
 import { ArtifactModal } from './artifact/ArtifactModal';
 import { SummaryView } from './views/SummaryView';
 import { CompanyView } from './views/CompanyView';
@@ -24,38 +22,15 @@ import { InstallModal } from './InstallModal';
 import { SettingsView } from './views/SettingsView';
 import { BillingView } from './views/BillingView';
 import { BuildCoachView } from './views/BuildCoachView';
+import { RunTheater } from './run/RunTheater';
 
-// 3D graph view — client-only (three.js / WebGL), lazy-loaded so three.js
-// is fetched only when the Overview tab is opened.
-const OverviewView = dynamic(() => import('./views/OverviewView'), {
-  ssr: false,
-  loading: () => (
-    <div
-      style={{
-        position: 'absolute',
-        inset: 0,
-        background: '#0c0a17',
-        display: 'grid',
-        placeItems: 'center',
-        color: 'rgba(245,243,255,.5)',
-        fontSize: 13,
-      }}
-    >
-      Building your company map…
-    </div>
-  ),
-});
+// Overview tab — the roadmap (default) with the 3D force-graph behind a "Map" sub-tab.
+// OverviewSection lazy-loads the three.js map internally, so WebGL is fetched only when
+// the map is opened.
+import OverviewSection from './views/OverviewSection';
 
 function Shell() {
-  const {
-    view,
-    show,
-    buildSessionId,
-    copilotCollapsed,
-    toggleCopilot,
-    sideCollapsed,
-    companionId,
-  } = useApp();
+  const { view, show, buildSessionId, copilotCollapsed, toggleCopilot, companionId } = useApp();
   // A build session is live once armed (until Start over). Keep its view mounted across
   // navigation so switching tabs doesn't tear down (and kill) the running session.
   const buildActive = buildSessionId != null;
@@ -69,7 +44,7 @@ function Shell() {
     view === 'summary' ? (
       <SummaryView />
     ) : view === 'overview' ? (
-      <OverviewView />
+      <OverviewSection />
     ) : view === 'home' ? (
       <CompanyView />
     ) : view === 'dept' ? (
@@ -78,6 +53,8 @@ function Shell() {
       <TasksView />
     ) : view === 'build' ? null : view === 'library' ? ( // Rendered by the persistent keep-alive slot below, not here.
       <LibraryView />
+    ) : view === 'run' ? (
+      <RunTheater />
     ) : view === 'settings' ? (
       <SettingsView />
     ) : view === 'billing' ? (
@@ -89,10 +66,7 @@ function Shell() {
   return (
     <div className="app">
       <Topbar />
-      <div
-        className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}${sideCollapsed ? ' side-collapsed' : ''}`}
-      >
-        <Sidebar />
+      <div className={`shell${copilotCollapsed ? ' cop-collapsed' : ''}`}>
         <main className="main" id="main" ref={mainRef}>
           {ActiveView}
           {(buildActive || view === 'build') && (
@@ -103,13 +77,13 @@ function Shell() {
         </main>
         <Copilot />
       </div>
+      {/* The floating "Ask" launcher opens the companion chat on demand. */}
       <button
         className={`cop-open${copilotCollapsed ? ' show' : ''}`}
         aria-label={`Open ${c.name} chat`}
         onClick={() => toggleCopilot(false)}
       >
-        <Companion id={companionId} size="s28" />
-        Ask {c.name}
+        <img className="cop-logo" src="/c-logo.svg" alt={`Ask ${c.name}`} draggable={false} />
       </button>
       {buildActive && view !== 'build' && (
         <button className="build-return" onClick={() => show('build')}>
@@ -153,8 +127,10 @@ function Gate() {
 
 export default function AppRoot() {
   return (
-    <AuthProvider>
-      <Gate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <Gate />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

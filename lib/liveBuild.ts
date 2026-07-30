@@ -33,6 +33,28 @@ export interface LiveState {
   lastSay?: string;
   /** Set while Claude is waiting on the user; cleared when a tool event lands. */
   pendingAsk?: string;
+  /** Sum of Claude's per-message usage token counts (local, exact path). */
+  tokens?: number;
+  /** Real recap stats self-reported by the demo copy-paste command (no toolkit
+   *  install required), so remote testers see real commits/files-changed. */
+  recap?: DemoRecap;
+  /** Hosted preview URL, set by the finalize route; preserved through live events. */
+  previewUrl?: string;
+  /** Durable per-build field set by cloud-start ('cloud' for a cloud demo build);
+   *  preserved across events so the single-flight query keeps matching. */
+  mode?: string;
+  /** Durable per-build field set by cloud-start; preserved across events. */
+  companyId?: string;
+  /** Durable per-build field: GitHub PR URL, preserved across events. */
+  prUrl?: string;
+  /** Durable per-build field: repository owner and name, preserved across events. */
+  repo?: { owner: string; name: string };
+}
+
+export interface DemoRecap {
+  commits: number;
+  filesChanged: number;
+  tokens: number;
 }
 
 export function initialLive(ts: Millis, sessionId = ''): LiveState {
@@ -63,7 +85,21 @@ function prune(state: LiveState): LiveState {
  *  event's session id. Never mutates the input. */
 export function reduceLive(state: LiveState | null, event: LiveEvent): LiveState {
   const sessionId = event.sessionId || state?.sessionId || '';
-  if (event.kind === 'start') return initialLive(event.ts, sessionId);
+  if (event.kind === 'start') {
+    const fresh = initialLive(event.ts, sessionId);
+    // Preserve the durable fields cloud-start wrote (and any previewUrl a prior
+    // finalize set) across a `start` event — otherwise the first live event after
+    // boot wipes them and the single-flight query (mode=='cloud', ended==false)
+    // stops matching, and a late start would erase a previewUrl/ended already set.
+    return prune({
+      ...fresh,
+      mode: state?.mode,
+      companyId: state?.companyId,
+      previewUrl: state?.previewUrl,
+      prUrl: state?.prUrl,
+      repo: state?.repo,
+    });
+  }
   const s = state ?? initialLive(event.ts, sessionId);
   if (event.kind === 'tool') {
     const recentTools = event.tool
@@ -137,4 +173,27 @@ export function sanitizeLiveEvent(raw: unknown): LiveEvent | null {
   if (say !== undefined) out.say = say;
   if (ask !== undefined) out.ask = ask;
   return out;
+}
+
+/** Coerce an untrusted demo-recap body into a clamped {buildSessionId, recap}. Returns
+ *  null when the buildSessionId is missing. Only the numeric keys present in the body are
+ *  included in `recap` (partial), so a tokens-only POST from a remote build doesn't imply
+ *  zeroed commits/filesChanged. Numbers are floored, non-negative, capped. */
+export function sanitizeDemoRecap(
+  raw: unknown,
+): { buildSessionId: string; recap: Partial<DemoRecap> } | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as Record<string, unknown>;
+  const buildSessionId =
+    typeof r.buildSessionId === 'string' ? r.buildSessionId.trim().slice(0, 128) : '';
+  if (!buildSessionId) return null;
+  const int = (v: unknown, cap: number) => {
+    const n = typeof v === 'number' ? v : Number(v);
+    return Number.isFinite(n) && n >= 0 ? Math.min(Math.floor(n), cap) : 0;
+  };
+  const recap: Partial<DemoRecap> = {};
+  if (r.commits != null) recap.commits = int(r.commits, 100000);
+  if (r.filesChanged != null) recap.filesChanged = int(r.filesChanged, 100000);
+  if (r.tokens != null) recap.tokens = int(r.tokens, 2_000_000_000);
+  return { buildSessionId, recap };
 }

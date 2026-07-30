@@ -95,6 +95,9 @@ export interface CompanyDoc {
   /** Shared secret the local Claude Code hook presents to POST /api/track. Minted
    *  server-side; the installer bakes it into the machine's hook config. */
   ingestToken?: string;
+  /** GitHub App installation connected to this company, for cloud builds. Absent ⇒
+   *  no GitHub connection yet. */
+  github?: { installationId: string; login: string; connectedAt: Millis; userToken?: string };
   /** Local projects reported by the scan CLI (POST /api/projects) — names + paths
    *  only, never file contents. Feeds the Build Coach's "Which project?" picker. */
   projects?: ScannedProject[];
@@ -147,9 +150,39 @@ export interface ThreadMeta {
   createdAt: Millis;
   /** Bumped on each new message; drives list sort + relative time. */
   updatedAt: Millis;
+  /** Rolling summary of turns that have scrolled past the chat window — long-thread memory
+   *  so byte keeps a long conversation's earlier context. Maintained by /api/summarize-thread. */
+  summary?: string;
+  /** Timestamp of the newest turn already folded into `summary` (incremental high-water mark).
+   *  A ts (not a count) so it survives the CHAT_LOAD_LIMIT reload cap — see planThreadSummary. */
+  summarizedThroughTs?: number;
 }
 
 // ---- Collection / document path helpers (single source of truth) ----
+export type LedgerEventType =
+  | 'deliverable_approved'
+  | 'decision_made'
+  | 'fact_remembered'
+  | 'task_run'
+  | 'build_session'
+  | 'toolkit_used'
+  | 'stage_advanced';
+
+// One append-only entry in the Second Brain event ledger (companies/{cid}/events).
+// The timestamp that done/drafted booleans never carried, plus a pointer back to the
+// source record and a one-sentence `summary` reserved for P2 embedding & recall.
+export interface LedgerEvent {
+  ts: Millis;
+  type: LedgerEventType;
+  actor: 'byte' | 'founder';
+  deptK?: string;
+  refType?: string; // 'library' | 'decision' | 'trackEvent' | 'task' | 'fact' | 'stage'
+  refId?: string;
+  title: string;
+  summary: string;
+  vec?: number[]; // embedding of `summary` (P2 recall); absent until the embed route fills it
+}
+
 export const paths = {
   user: (uid: string) => `users/${uid}`,
   users: () => `users`,
@@ -162,6 +195,8 @@ export const paths = {
   trackEvents: (companyId: string) => `companies/${companyId}/trackEvents`,
   trackEvent: (companyId: string, eventId: string) =>
     `companies/${companyId}/trackEvents/${eventId}`,
+  events: (companyId: string) => `companies/${companyId}/events`,
+  event: (companyId: string, eventId: string) => `companies/${companyId}/events/${eventId}`,
   liveBuilds: (companyId: string) => `companies/${companyId}/liveBuilds`,
   liveBuild: (companyId: string, buildSessionId: string) =>
     `companies/${companyId}/liveBuilds/${buildSessionId}`,

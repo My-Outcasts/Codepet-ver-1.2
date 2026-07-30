@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/lib/store';
+import { companionById } from '@/lib/companions';
 import { useAuth } from '@/lib/firebase/auth';
 import { ensureIngestToken } from '@/lib/firebase/companyData';
 import { Byte } from './Byte';
@@ -33,7 +34,8 @@ type Result = {
 };
 
 export function InstallModal() {
-  const { installPromptOpen, closeInstallPrompt, setInstalled } = useApp();
+  const { installPromptOpen, closeInstallPrompt, setInstalled, companionId } = useApp();
+  const companionName = companionById(companionId).name;
   const { companyId } = useAuth();
   const [cap, setCap] = useState<Cap | null>(null);
   const [toolkit, setToolkit] = useState<Item[]>([]);
@@ -133,7 +135,7 @@ export function InstallModal() {
         <div className="ins-hero">
           <Byte size="s56" className={allInstalled ? 'cheer' : ''} />
           <div className="ins-h-txt">
-            <b>{allInstalled ? "byte's awake! 🎉" : "Hi, I'm byte 🐣"}</b>
+            <b>{allInstalled ? `${companionName} is awake! 🎉` : `Hi, I'm ${companionName} 🐣`}</b>
             <span>
               {allInstalled
                 ? `${installedSet.size} item${installedSet.size === 1 ? '' : 's'} installed in ~/.claude`
@@ -155,7 +157,7 @@ export function InstallModal() {
           <>
             {!allInstalled ? (
               <button className="ins-btn" disabled={busy} onClick={run}>
-                {busy ? 'Installing…' : '▶ Wake byte up'}
+                {busy ? 'Installing…' : `▶ Wake ${companionName} up`}
               </button>
             ) : (
               <button className="ins-btn" disabled={busy} onClick={remove}>
