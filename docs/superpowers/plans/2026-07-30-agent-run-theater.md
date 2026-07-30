@@ -27,38 +27,40 @@
 
 **Create:**
 
-| Path | Responsibility |
-|---|---|
-| `lib/ai/runTrace.ts` | Pure. Turns loaded server state (brief, decisions, selected prior work, kind, dept, usage) into `RunEvent[]`. The single source of truth for what a step says and what evidence it carries. No I/O. |
-| `lib/ai/runTrace.test.ts` | Unit tests for the above — the guarantee that no line is fabricated. |
-| `lib/ai/runStream.ts` | Pure. NDJSON encode (`encodeEvent`) + incremental decode (`createEventDecoder`) shared by route and client, so framing bugs are tested once. |
-| `lib/ai/runStream.test.ts` | Unit tests for framing: split chunks, partial lines, trailing newline, malformed line. |
-| `lib/ai/liveRun.ts` | Pure. `LiveRun` state + `reduceRun(state, event)` — the state machine the theater renders. Tested without React. |
-| `lib/ai/liveRun.test.ts` | Unit tests for the reducer across running / done / failed / rate-limited. |
-| `components/run/RunTheater.tsx` | The theater view: header + status pill, preview canvas, step rail, action bar. Presentational — takes a `LiveRun`, emits callbacks. |
-| `components/run/StepRail.tsx` | The rail: step rows, glyphs, expandable evidence, elapsed/credits footer. |
-| `components/run/RunCanvas.tsx` | The preview canvas: outline of the deliverable's sections, filled on completion. |
+| Path                            | Responsibility                                                                                                                                                                                      |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lib/ai/runTrace.ts`            | Pure. Turns loaded server state (brief, decisions, selected prior work, kind, dept, usage) into `RunEvent[]`. The single source of truth for what a step says and what evidence it carries. No I/O. |
+| `lib/ai/runTrace.test.ts`       | Unit tests for the above — the guarantee that no line is fabricated.                                                                                                                                |
+| `lib/ai/runStream.ts`           | Pure. NDJSON encode (`encodeEvent`) + incremental decode (`createEventDecoder`) shared by route and client, so framing bugs are tested once.                                                        |
+| `lib/ai/runStream.test.ts`      | Unit tests for framing: split chunks, partial lines, trailing newline, malformed line.                                                                                                              |
+| `lib/ai/liveRun.ts`             | Pure. `LiveRun` state + `reduceRun(state, event)` — the state machine the theater renders. Tested without React.                                                                                    |
+| `lib/ai/liveRun.test.ts`        | Unit tests for the reducer across running / done / failed / rate-limited.                                                                                                                           |
+| `components/run/RunTheater.tsx` | The theater view: header + status pill, preview canvas, step rail, action bar. Presentational — takes a `LiveRun`, emits callbacks.                                                                 |
+| `components/run/StepRail.tsx`   | The rail: step rows, glyphs, expandable evidence, elapsed/credits footer.                                                                                                                           |
+| `components/run/RunCanvas.tsx`  | The preview canvas: outline of the deliverable's sections, filled on completion.                                                                                                                    |
 
 **Modify:**
 
-| Path | Change |
-|---|---|
-| `app/api/run-task/route.ts:174-198` | Replace the two `Response.json` returns with a streamed NDJSON body emitting the trace, then the terminal result. Auth/cap/grounding above line 174 unchanged. |
-| `lib/ai/runTask.ts:58-68` | Add `runByteTaskStreaming(args, onEvent)` alongside `runByteTask`; keep `runByteTask` exactly as-is as the fallback. |
-| `lib/store.tsx:202-212` | Add `'run'` to `View`. |
-| `lib/store.tsx` (new state + action) | Add `liveRun` state, `startRunInTheater(deptK, taskTitle)`, `closeRunTheater()` to the context. |
-| `components/AppRoot.tsx:43-57` | Render `RunTheater` when `view === 'run'`. |
-| `app/globals.css` | Theater styles (`.rt-*`), tokens only — no new hex values outside the existing palette. |
+| Path                                 | Change                                                                                                                                                         |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/api/run-task/route.ts:174-198`  | Replace the two `Response.json` returns with a streamed NDJSON body emitting the trace, then the terminal result. Auth/cap/grounding above line 174 unchanged. |
+| `lib/ai/runTask.ts:58-68`            | Add `runByteTaskStreaming(args, onEvent)` alongside `runByteTask`; keep `runByteTask` exactly as-is as the fallback.                                           |
+| `lib/store.tsx:202-212`              | Add `'run'` to `View`.                                                                                                                                         |
+| `lib/store.tsx` (new state + action) | Add `liveRun` state, `startRunInTheater(deptK, taskTitle)`, `closeRunTheater()` to the context.                                                                |
+| `components/AppRoot.tsx:43-57`       | Render `RunTheater` when `view === 'run'`.                                                                                                                     |
+| `app/globals.css`                    | Theater styles (`.rt-*`), tokens only — no new hex values outside the existing palette.                                                                        |
 
 ---
 
 ### Task 1: Truthful trace events
 
 **Files:**
+
 - Create: `lib/ai/runTrace.ts`
 - Test: `lib/ai/runTrace.test.ts`
 
 **Interfaces:**
+
 - Consumes: `PriorItem` from `lib/ai/priorWork.ts:11`; `CompanyBrief` from `lib/firebase/schema.ts:31`; `TokenUsage` from `lib/ai/client.ts:27`.
 - Produces:
   - `type RunPhase = 'brief' | 'prior' | 'generate' | 'verify'`
@@ -79,7 +81,10 @@ import { briefStep, priorWorkStep, generateStep } from './runTrace';
 
 describe('briefStep', () => {
   it('quotes only the brief fields that are actually present', () => {
-    const step = briefStep({ oneLiner: 'A macOS companion that runs your company', audience: 'Solo technical founders' });
+    const step = briefStep({
+      oneLiner: 'A macOS companion that runs your company',
+      audience: 'Solo technical founders',
+    });
     expect(step).not.toBeNull();
     expect(step!.label).toBe('Read your Business Brief');
     expect(step!.source).toBe('Brief');
@@ -121,7 +126,9 @@ describe('priorWorkStep', () => {
   });
 
   it('uses the singular when one item was selected', () => {
-    const step = priorWorkStep([{ title: 'Brand & voice', dept: 'Marketing', k: 'mkt', type: 'doc', out: 'x' }]);
+    const step = priorWorkStep([
+      { title: 'Brand & voice', dept: 'Marketing', k: 'mkt', type: 'doc', out: 'x' },
+    ]);
     expect(step!.label).toBe('Pulled 1 piece of your approved work');
   });
 
@@ -249,10 +256,12 @@ git commit -m "feat(run): derive a truthful run trace from real grounding state"
 ### Task 2: NDJSON framing
 
 **Files:**
+
 - Create: `lib/ai/runStream.ts`
 - Test: `lib/ai/runStream.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RunEvent` from Task 1 (`lib/ai/runTrace.ts`).
 - Produces:
   - `function encodeEvent(ev: RunEvent): string` — one JSON object plus `\n`.
@@ -368,10 +377,12 @@ git commit -m "feat(run): NDJSON framing shared by the run route and client"
 ### Task 3: The live-run reducer
 
 **Files:**
+
 - Create: `lib/ai/liveRun.ts`
 - Test: `lib/ai/liveRun.test.ts`
 
 **Interfaces:**
+
 - Consumes: `RunEvent`, `RunStep`, `RunPhase` from `lib/ai/runTrace.ts`.
 - Produces:
   - `type RunStatus = 'running' | 'done' | 'failed' | 'limited'`
@@ -390,7 +401,13 @@ import { newRun, reduceRun, isFinished } from './liveRun';
 import type { RunStep } from './runTrace';
 
 const base = () =>
-  newRun({ deptK: 'mkt', taskTitle: 'Landing site', deptName: 'Marketing', type: 'doc', startedAt: 1000 });
+  newRun({
+    deptK: 'mkt',
+    taskTitle: 'Landing site',
+    deptName: 'Marketing',
+    type: 'doc',
+    startedAt: 1000,
+  });
 
 const briefStep: RunStep = {
   phase: 'brief',
@@ -585,40 +602,42 @@ git commit -m "feat(run): live-run reducer — failed runs keep the work they fi
 ### Task 4: Stream the real phases from `/api/run-task`
 
 **Files:**
+
 - Modify: `app/api/run-task/route.ts:174-198`
 - Modify: `app/api/run-task/route.ts:1-30` (imports + header comment)
 
 **Interfaces:**
+
 - Consumes: `briefStep`, `priorWorkStep`, `generateStep`, `RunEvent` (Task 1); `encodeEvent` (Task 2); existing `selectPriorWork` (`lib/ai/priorWork.ts:114`), `creditCostForRoute` (`lib/ai/credits.ts:45`).
 - Produces: a `content-type: application/x-ndjson` response whose final event is `{ type: 'result', text? , payload? }`. Non-200 JSON errors (`unauthorized`, `bad_request`, `rate_limited`, `not_configured`) keep their exact current shape and status codes.
 
-**Context the implementer needs:** the route currently computes everything the trace needs *before* generating — `company` (line 137), `library` (line 137), `priorWork` (line 151), `fields.deptName` (line 115), `kind` (line 103). `selectPriorWork` is called inline at line 152; hoist that call into a named `selected` const so the trace can report the items that were genuinely chosen.
+**Context the implementer needs:** the route currently computes everything the trace needs _before_ generating — `company` (line 137), `library` (line 137), `priorWork` (line 151), `fields.deptName` (line 115), `kind` (line 103). `selectPriorWork` is called inline at line 152; hoist that call into a named `selected` const so the trace can report the items that were genuinely chosen.
 
 - [ ] **Step 1: Hoist the selected prior work so it can be reported**
 
 In `app/api/run-task/route.ts`, replace lines 151-159:
 
 ```ts
-  const priorWork = composePriorWorkContext(
-    selectPriorWork(library, {
-      deptName: fields.deptName,
-      excludeTitle: fields.taskTitle,
-      query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
-    }),
-  );
+const priorWork = composePriorWorkContext(
+  selectPriorWork(library, {
+    deptName: fields.deptName,
+    excludeTitle: fields.taskTitle,
+    query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
+  }),
+);
 ```
 
 with:
 
 ```ts
-  // Hoisted so the run trace can report the prior work that was ACTUALLY selected —
-  // the titles below are the same objects fed to the model, not a re-derivation.
-  const selected = selectPriorWork(library, {
-    deptName: fields.deptName,
-    excludeTitle: fields.taskTitle,
-    query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
-  });
-  const priorWork = composePriorWorkContext(selected);
+// Hoisted so the run trace can report the prior work that was ACTUALLY selected —
+// the titles below are the same objects fed to the model, not a re-derivation.
+const selected = selectPriorWork(library, {
+  deptName: fields.deptName,
+  excludeTitle: fields.taskTitle,
+  query: [fields.taskTitle, fields.taskHint, fields.reviseNote].filter(Boolean).join(' '),
+});
+const priorWork = composePriorWorkContext(selected);
 ```
 
 - [ ] **Step 2: Add the imports**
@@ -636,67 +655,67 @@ import { creditCostForRoute } from '@/lib/ai/credits';
 Replace lines 174-198 (the whole `try { … } catch { … }` block) with:
 
 ```ts
-  // The response is an NDJSON stream: the founder sees each phase the moment the server
-  // finishes it, and the last line carries the deliverable in the same shape the
-  // non-streaming route returned. Errors after headers are sent become an `error` event
-  // (the status line is already committed by then).
-  const encoder = new TextEncoder();
-  const body = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const send = (ev: RunEvent) => controller.enqueue(encoder.encode(encodeEvent(ev)));
-      try {
-        // Grounding already happened above — report exactly what it used.
-        const bStep = briefStep(company.brief ?? (body.brief as never));
-        if (bStep) send({ type: 'step', step: bStep });
-        const pStep = priorWorkStep(selected);
-        if (pStep) send({ type: 'step', step: pStep });
+// The response is an NDJSON stream: the founder sees each phase the moment the server
+// finishes it, and the last line carries the deliverable in the same shape the
+// non-streaming route returned. Errors after headers are sent become an `error` event
+// (the status line is already committed by then).
+const encoder = new TextEncoder();
+const body = new ReadableStream<Uint8Array>({
+  async start(controller) {
+    const send = (ev: RunEvent) => controller.enqueue(encoder.encode(encodeEvent(ev)));
+    try {
+      // Grounding already happened above — report exactly what it used.
+      const bStep = briefStep(company.brief ?? (body.brief as never));
+      if (bStep) send({ type: 'step', step: bStep });
+      const pStep = priorWorkStep(selected);
+      if (pStep) send({ type: 'step', step: pStep });
 
-        send({ type: 'active', phase: 'generate' });
-        send({ type: 'usage', credits: creditCostForRoute('runTask') });
+      send({ type: 'active', phase: 'generate' });
+      send({ type: 'usage', credits: creditCostForRoute('runTask') });
 
-        if (schema) {
-          const payload = await generateJson({
-            client,
-            system,
-            prompt,
-            maxTokens: 4096,
-            label: `run-task:${kind}`,
-            schema,
-            onUsage,
-          });
-          send({ type: 'step', step: generateStep(kind, fields.deptName) });
-          send({ type: 'result', payload });
-        } else {
-          const text = await generateText({
-            client,
-            system,
-            prompt,
-            maxTokens: 4096,
-            label: `run-task:${kind}`,
-            onUsage,
-          });
-          send({ type: 'step', step: generateStep(kind, fields.deptName) });
-          send({ type: 'result', text });
-        }
-      } catch (err) {
-        // Mirror aiErrorResponse's code so the client's existing GenerateError handling
-        // (rate_limited / ai_unavailable) keeps working over the stream.
-        const res = aiErrorResponse(err, 'generation_failed');
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        send({ type: 'error', code: data.error || 'generation_failed' });
-      } finally {
-        controller.close();
+      if (schema) {
+        const payload = await generateJson({
+          client,
+          system,
+          prompt,
+          maxTokens: 4096,
+          label: `run-task:${kind}`,
+          schema,
+          onUsage,
+        });
+        send({ type: 'step', step: generateStep(kind, fields.deptName) });
+        send({ type: 'result', payload });
+      } else {
+        const text = await generateText({
+          client,
+          system,
+          prompt,
+          maxTokens: 4096,
+          label: `run-task:${kind}`,
+          onUsage,
+        });
+        send({ type: 'step', step: generateStep(kind, fields.deptName) });
+        send({ type: 'result', text });
       }
-    },
-  });
-  return new Response(body, {
-    headers: {
-      'content-type': 'application/x-ndjson; charset=utf-8',
-      'cache-control': 'no-store, no-transform',
-      // Defeat proxy buffering so phases arrive as they happen rather than all at once.
-      'x-accel-buffering': 'no',
-    },
-  });
+    } catch (err) {
+      // Mirror aiErrorResponse's code so the client's existing GenerateError handling
+      // (rate_limited / ai_unavailable) keeps working over the stream.
+      const res = aiErrorResponse(err, 'generation_failed');
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      send({ type: 'error', code: data.error || 'generation_failed' });
+    } finally {
+      controller.close();
+    }
+  },
+});
+return new Response(body, {
+  headers: {
+    'content-type': 'application/x-ndjson; charset=utf-8',
+    'cache-control': 'no-store, no-transform',
+    // Defeat proxy buffering so phases arrive as they happen rather than all at once.
+    'x-accel-buffering': 'no',
+  },
+});
 ```
 
 Note the name collision: the request body is already bound to `body` at line 96-98. Rename the stream variable to `stream` and use `return new Response(stream, …)`, keeping the request `body` untouched. Make that rename now so the file typechecks.
@@ -707,8 +726,8 @@ Run: `npx tsc --noEmit`
 Expected: no errors. If `company.brief ?? (body.brief as never)` complains, use the same precedence the route documents at lines 131-134:
 
 ```ts
-        const briefForTrace = company.brief ?? (body.brief as CompanyBrief | undefined);
-        const bStep = briefStep(briefForTrace);
+const briefForTrace = company.brief ?? (body.brief as CompanyBrief | undefined);
+const bStep = briefStep(briefForTrace);
 ```
 
 and add `import type { CompanyBrief } from '@/lib/firebase/schema';`.
@@ -730,9 +749,11 @@ git commit -m "feat(run): stream real grounding phases from /api/run-task"
 ### Task 5: Client stream reader
 
 **Files:**
+
 - Modify: `lib/ai/runTask.ts` (append after `runByteTask`, line 68)
 
 **Interfaces:**
+
 - Consumes: `RunEvent` (Task 1), `createEventDecoder` (Task 2), existing `RunArgs`/`RunResult`/`GenerateError` (`lib/ai/runTask.ts:32-56`).
 - Produces: `function runByteTaskStreaming(args: RunArgs, onEvent: (ev: RunEvent) => void): Promise<RunResult>` — resolves with the same `RunResult` as `runByteTask`; throws `GenerateError` on a non-200 or on a streamed `error` event.
 
@@ -815,10 +836,12 @@ git commit -m "feat(run): client reader for the streamed run, with a non-streami
 ### Task 6: Theater state in the store
 
 **Files:**
+
 - Modify: `lib/store.tsx:202-212` (View type)
 - Modify: `lib/store.tsx` (context interface near line 331, provider body near line 1980, context value near line 3197 and 3322)
 
 **Interfaces:**
+
 - Consumes: `newRun`, `reduceRun`, `LiveRun` (Task 3); `runByteTaskStreaming` (Task 5); existing `artType`, `liveKind`, `applyResult`, `creditToolkitUse`, `bump`, `persistTaskDraft`, `setAiOffline`, `track`, `GenerateError`.
 - Produces on the context:
   - `liveRun: LiveRun | null`
@@ -880,60 +903,60 @@ In the context interface, immediately after `runTaskInChat: (deptK: string, task
 In the provider body, directly above `const runTaskInChat = useCallback(` (line 1980), add:
 
 ```ts
-  const [liveRun, setLiveRun] = useState<LiveRun | null>(null);
+const [liveRun, setLiveRun] = useState<LiveRun | null>(null);
 
-  // Run a task in the theater. Same generation as runTaskInChat (runByteTaskStreaming →
-  // applyResult), but the phases stream into a LiveRun the theater renders, and the
-  // founder stays on a full-width surface instead of a 320px card.
-  const startRunInTheater = useCallback(
-    async (deptK: string, taskTitle: string) => {
-      const d = DEPTS.find((x) => x.k === deptK);
-      const t = d?.tasks.find((x) => x.t === taskTitle);
-      if (!d || !t) return;
-      const type = artType(t);
-      const kind = liveKind(type);
-      if (!kind) return; // not producible here — the chat path explains why
-      setLiveRun(
-        newRun({
-          deptK,
-          taskTitle: t.t,
-          deptName: d.name,
-          type,
-          startedAt: Date.now(),
-        }),
+// Run a task in the theater. Same generation as runTaskInChat (runByteTaskStreaming →
+// applyResult), but the phases stream into a LiveRun the theater renders, and the
+// founder stays on a full-width surface instead of a 320px card.
+const startRunInTheater = useCallback(
+  async (deptK: string, taskTitle: string) => {
+    const d = DEPTS.find((x) => x.k === deptK);
+    const t = d?.tasks.find((x) => x.t === taskTitle);
+    if (!d || !t) return;
+    const type = artType(t);
+    const kind = liveKind(type);
+    if (!kind) return; // not producible here — the chat path explains why
+    setLiveRun(
+      newRun({
+        deptK,
+        taskTitle: t.t,
+        deptName: d.name,
+        type,
+        startedAt: Date.now(),
+      }),
+    );
+    setView('run');
+    track('run.theater_open', { dept: d.k, type });
+    try {
+      const res = await runByteTaskStreaming(
+        { kind, taskTitle: t.t, taskHint: t.d, deptName: d.name, deptKey: d.k, brief, companionId },
+        (ev) => setLiveRun((prev) => (prev ? reduceRun(prev, ev, Date.now()) : prev)),
       );
-      setView('run');
-      track('run.theater_open', { dept: d.k, type });
-      try {
-        const res = await runByteTaskStreaming(
-          { kind, taskTitle: t.t, taskHint: t.d, deptName: d.name, deptKey: d.k, brief, companionId },
-          (ev) => setLiveRun((prev) => (prev ? reduceRun(prev, ev, Date.now()) : prev)),
-        );
-        applyResult(t, type, res);
-        creditToolkitUse(t.t, type);
-        bump();
-        persistTaskDraft(d.k, t.t);
-        setAiOffline(null);
-      } catch (err) {
-        const code = err instanceof GenerateError ? err.code : 'generation_failed';
-        const limited = code === 'rate_limited' || code === 'http_429';
-        if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
-        // The stream may already have delivered an `error` event; reduceRun ignores a
-        // second one because a finished run is immutable.
-        setLiveRun((prev) => (prev ? reduceRun(prev, { type: 'error', code }, Date.now()) : prev));
-      }
-    },
-    [brief, bump, persistTaskDraft, creditToolkitUse, companionId],
-  );
+      applyResult(t, type, res);
+      creditToolkitUse(t.t, type);
+      bump();
+      persistTaskDraft(d.k, t.t);
+      setAiOffline(null);
+    } catch (err) {
+      const code = err instanceof GenerateError ? err.code : 'generation_failed';
+      const limited = code === 'rate_limited' || code === 'http_429';
+      if (limited || code === 'ai_unavailable') setAiOffline({ code, at: Date.now() });
+      // The stream may already have delivered an `error` event; reduceRun ignores a
+      // second one because a finished run is immutable.
+      setLiveRun((prev) => (prev ? reduceRun(prev, { type: 'error', code }, Date.now()) : prev));
+    }
+  },
+  [brief, bump, persistTaskDraft, creditToolkitUse, companionId],
+);
 
-  const closeRunTheater = useCallback(() => {
-    setLiveRun(null);
-    setView('overview');
-  }, []);
+const closeRunTheater = useCallback(() => {
+  setLiveRun(null);
+  setView('overview');
+}, []);
 
-  const retryRun = useCallback(() => {
-    if (liveRun) startRunInTheater(liveRun.deptK, liveRun.taskTitle);
-  }, [liveRun, startRunInTheater]);
+const retryRun = useCallback(() => {
+  if (liveRun) startRunInTheater(liveRun.deptK, liveRun.taskTitle);
+}, [liveRun, startRunInTheater]);
 ```
 
 - [ ] **Step 5: Expose them on the context value**
@@ -957,10 +980,12 @@ git commit -m "feat(run): live run state + theater actions in the store"
 ### Task 7: The step rail
 
 **Files:**
+
 - Create: `components/run/StepRail.tsx`
 - Modify: `app/globals.css` (append a `/* run theater */` section)
 
 **Interfaces:**
+
 - Consumes: `LiveRun` (Task 3), `RunPhase`/`RunStep` (Task 1).
 - Produces: `export function StepRail({ run, elapsed }: { run: LiveRun; elapsed: string }): JSX.Element`.
 
@@ -1025,7 +1050,8 @@ export function StepRail({ run, elapsed }: { run: LiveRun; elapsed: string }) {
       <div className="rt-steps">
         {PENDING.map(([phase, fallback]) => {
           const step = done.get(phase);
-          const failedHere = run.status === 'failed' && run.activePhase === null && !step && phase === 'generate';
+          const failedHere =
+            run.status === 'failed' && run.activePhase === null && !step && phase === 'generate';
           const glyph: Glyph = step
             ? 'done'
             : run.activePhase === phase
@@ -1042,7 +1068,9 @@ export function StepRail({ run, elapsed }: { run: LiveRun; elapsed: string }) {
               label={step ? step.label : fallback}
               source={step?.source}
               open={open === phase}
-              onToggle={step?.evidence.length ? () => setOpen(open === phase ? null : phase) : undefined}
+              onToggle={
+                step?.evidence.length ? () => setOpen(open === phase ? null : phase) : undefined
+              }
             >
               {step?.evidence.length
                 ? step.evidence.map((e, i) => (
@@ -1262,10 +1290,12 @@ git commit -m "feat(run): step rail with expandable real evidence"
 ### Task 8: The preview canvas
 
 **Files:**
+
 - Create: `components/run/RunCanvas.tsx`
 - Modify: `app/globals.css` (extend the run-theater section)
 
 **Interfaces:**
+
 - Consumes: `LiveRun` (Task 3).
 - Produces: `export function RunCanvas({ run }: { run: LiveRun }): JSX.Element`.
 
@@ -1307,9 +1337,7 @@ export function RunCanvas({ run }: { run: LiveRun }) {
         {text ? (
           <div className="rt-out">{text}</div>
         ) : (
-          <div className="rt-out rt-muted">
-            Ready — open it to read the full deliverable.
-          </div>
+          <div className="rt-out rt-muted">Ready — open it to read the full deliverable.</div>
         )}
       </section>
     );
@@ -1318,7 +1346,11 @@ export function RunCanvas({ run }: { run: LiveRun }) {
   return (
     <section className="rt-canvas" aria-label="Deliverable preview">
       {sections.map((s, i) => (
-        <div className="rt-sec" key={s} data-s={run.activePhase === 'generate' && i === 0 ? 'active' : 'pending'}>
+        <div
+          className="rt-sec"
+          key={s}
+          data-s={run.activePhase === 'generate' && i === 0 ? 'active' : 'pending'}
+        >
           <div className="rt-sec-h">{s}</div>
           {run.activePhase === 'generate' && i === 0 ? (
             <div className="rt-skel" aria-hidden="true">
@@ -1441,11 +1473,13 @@ git commit -m "feat(run): preview canvas — true outline while the run writes"
 ### Task 9: The theater, mounted
 
 **Files:**
+
 - Create: `components/run/RunTheater.tsx`
 - Modify: `components/AppRoot.tsx:43-57`
 - Modify: `app/globals.css` (extend the run-theater section)
 
 **Interfaces:**
+
 - Consumes: `useApp()` (`lib/store.tsx`) for `liveRun`, `closeRunTheater`, `retryRun`, `approveChatResult`, `openChatResult`; `StepRail` (Task 7); `RunCanvas` (Task 8).
 - Produces: `export function RunTheater(): JSX.Element | null`.
 
@@ -1507,8 +1541,8 @@ export function RunTheater() {
 
       {run.status === 'limited' ? (
         <div className="rt-banner">
-          <b>Paused.</b> This workspace is out of AI credits. The finished steps are kept —
-          topping up resumes from where it stopped.
+          <b>Paused.</b> This workspace is out of AI credits. The finished steps are kept — topping
+          up resumes from where it stopped.
         </div>
       ) : null}
 
@@ -1529,7 +1563,11 @@ export function RunTheater() {
           >
             Approve
           </button>
-          <button className="rt-b" type="button" onClick={() => openChatResult(run.deptK, run.taskTitle)}>
+          <button
+            className="rt-b"
+            type="button"
+            onClick={() => openChatResult(run.deptK, run.taskTitle)}
+          >
             Read
           </button>
         </div>
@@ -1712,9 +1750,11 @@ git commit -m "feat(run): mount the run theater as its own view"
 ### Task 10: A way in, and the preview deploy
 
 **Files:**
+
 - Modify: `components/views/TasksView.tsx` (add the entry point)
 
 **Interfaces:**
+
 - Consumes: `startRunInTheater` from `useApp()` (Task 6).
 - Produces: nothing downstream — this is the last task.
 
@@ -1794,7 +1834,7 @@ EOF
 Per `docs`/team convention, first-run and streaming behavior must be checked on the PR's Vercel preview (StrictMode double-mount and HMR distort `next dev`). On the preview URL:
 
 1. Sign in, go to Tasks, click **Run it here** on a runnable task.
-2. Confirm the rail's phases appear *one at a time* (not all at once) — that proves the stream is not being buffered by the CDN.
+2. Confirm the rail's phases appear _one at a time_ (not all at once) — that proves the stream is not being buffered by the CDN.
 3. Expand a completed step and confirm the quoted text matches your actual brief.
 4. Confirm elapsed ticks and stops, and the credit line reads `4 credits for this run`.
 
@@ -1804,22 +1844,22 @@ Per `docs`/team convention, first-run and streaming behavior must be checked on 
 
 **Spec coverage:**
 
-| Spec requirement | Task |
-|---|---|
-| Theater in the main column, chat stays | 9 (mounted as a view alongside the persistent Copilot) |
-| Step rail with 6 glyph states | 7 (done/active/pending/fail/hold; `ask` is out of scope — see below) |
-| Expandable evidence naming its source | 1 + 7 |
-| Preview canvas: outline first, then content | 8 |
-| Elapsed + credits, live | 7 + 9 |
-| Running → Done → Approved | 6 + 9 |
-| Failed mid-run keeps progress, retry resumes | 3 (`reduceRun` keeps `steps`) + 9 (`retryRun`) |
-| Paused — out of credits | 3 (`limited`) + 9 (banner) |
-| Motion off under reduced-motion | 7 + 8 |
-| Distinguishable without color | 7 (glyph + text per state) |
+| Spec requirement                             | Task                                                                 |
+| -------------------------------------------- | -------------------------------------------------------------------- |
+| Theater in the main column, chat stays       | 9 (mounted as a view alongside the persistent Copilot)               |
+| Step rail with 6 glyph states                | 7 (done/active/pending/fail/hold; `ask` is out of scope — see below) |
+| Expandable evidence naming its source        | 1 + 7                                                                |
+| Preview canvas: outline first, then content  | 8                                                                    |
+| Elapsed + credits, live                      | 7 + 9                                                                |
+| Running → Done → Approved                    | 6 + 9                                                                |
+| Failed mid-run keeps progress, retry resumes | 3 (`reduceRun` keeps `steps`) + 9 (`retryRun`)                       |
+| Paused — out of credits                      | 3 (`limited`) + 9 (banner)                                           |
+| Motion off under reduced-motion              | 7 + 8                                                                |
+| Distinguishable without color                | 7 (glyph + text per state)                                           |
 
 **Known gaps, deliberately deferred and NOT silently dropped:**
 
-1. **"Needs your input" mid-run** (spec state 4) has no task here. It requires the model to be able to *ask* mid-generation, which the current single-shot `generateJson` cannot do. It needs its own spec.
+1. **"Needs your input" mid-run** (spec state 4) has no task here. It requires the model to be able to _ask_ mid-generation, which the current single-shot `generateJson` cannot do. It needs its own spec.
 2. **Retry does not literally resume** — `retryRun` re-runs the task from a clean trace. The spec's "resumes from the step it died on" needs server-side partial-result persistence. The UI is honest about this: the button says "Try again", not "Resume".
 3. **Section-by-section fill** is the outline + one reveal, per the scope decision. True per-section streaming was the option not taken.
 4. **`buildLog`'s fabricated lines still ship** in the chat card. This plan does not remove them; that is a follow-up once the theater proves out.
